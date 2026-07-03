@@ -18,7 +18,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
 import { AppNotification } from '../../components/AppNotification'
@@ -26,7 +26,7 @@ import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUp
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
-import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
+import { searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -55,8 +55,7 @@ import {
   fetchProvincialPermitDetailTabs,
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
-import { runReport } from '@/service/report-service'
-import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { triggerBrowserDownload } from '@/utils/download'
 
 const formatAmount = (value: number): string => {
   return value.toLocaleString(undefined, {
@@ -92,7 +91,6 @@ const PERMIT_DETAIL_TAB_INDEX = {
 } as const
 
 const ProvincialPermitDetailsPage = () => {
-  const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { permitNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -105,12 +103,10 @@ const ProvincialPermitDetailsPage = () => {
   const [documentsInvoicesErrorMessage, setDocumentsInvoicesErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
-  const [isOpeningPermitReport, setIsOpeningPermitReport] = useState(false)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [invoiceDraftNumber, setInvoiceDraftNumber] = useState('')
   const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
-  const [invoiceUploadConversionRate, setInvoiceUploadConversionRate] = useState('1.00')
   const [isAddingInvoice, setIsAddingInvoice] = useState(false)
   const [selectedPermitTabIndex, setSelectedPermitTabIndex] = useState(
     PERMIT_DETAIL_TAB_INDEX.summary,
@@ -122,7 +118,6 @@ const ProvincialPermitDetailsPage = () => {
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
   const beginAddInvoiceRequest = useLatestRequestGuard()
-  const beginInvoiceUploadRequest = useLatestRequestGuard()
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
   const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
@@ -130,10 +125,6 @@ const ProvincialPermitDetailsPage = () => {
   const boicFilter = searchParams.get('boicFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const invoicesFilter = searchParams.get('invoicesFilter') ?? ''
-  const withCurrentSearch = useCallback(
-    (path: string): string => appendSearchParamsToPath(path, searchParams),
-    [searchParams],
-  )
   const updateFilterParam = useCallback(
     (
       key:
@@ -366,39 +357,6 @@ const ProvincialPermitDetailsPage = () => {
       showInvoiceValidationErrors,
     )
 
-  const onOpenPermitReport = useCallback(async () => {
-    if (!detail) {
-      return
-    }
-
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setIsOpeningPermitReport(true)
-    try {
-      const runResult = await runReport({
-        reportId: 'permitReport',
-        actionMapping: 'generate',
-        values: {
-          permitNumber: String(detail.permitNumber ?? permitNumber ?? ''),
-          outputFormat: 'PDF',
-        },
-      })
-
-      const opened = openBlobInNewTab(runResult.blob, 'permitReportWindow')
-      if (!opened) {
-        triggerBrowserDownload(runResult.blob, runResult.filename)
-        setActionErrorMessage(
-          'Popup blocked while opening permit report preview. Downloaded the report file instead.',
-        )
-      }
-    } catch (error) {
-      console.error(error)
-      setActionErrorMessage('Unable to generate permit report.')
-    } finally {
-      setIsOpeningPermitReport(false)
-    }
-  }, [detail, permitNumber])
-
   const refreshPermitDocuments = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
     if (!resolvedPermitNumber) {
@@ -411,19 +369,6 @@ const ProvincialPermitDetailsPage = () => {
     setInvoiceRows(invoicesResult.rows)
     setDocumentsInvoicesErrorMessage('')
   }, [detail?.permitNumber, permitNumber])
-
-  const onOpenPermitUpload = useCallback(() => {
-    if (!detail?.permitNumber) {
-      return
-    }
-
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setSelectedPermitTabIndex(PERMIT_DETAIL_TAB_INDEX.documents)
-    window.setTimeout(() => {
-      document.getElementById('permitDocumentUpload')?.scrollIntoView({ block: 'start' })
-    }, 0)
-  }, [detail?.permitNumber])
 
   const onOpenDocument = useCallback(async (row: PermitDocumentRow) => {
     setActionErrorMessage('')
@@ -584,38 +529,6 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
   ])
 
-  const onOpenInvoiceUpload = useCallback(async () => {
-    if (!detail?.permitNumber) {
-      return
-    }
-
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    const isLatestRequest = beginInvoiceUploadRequest()
-    let conversionRate = '1.00'
-    try {
-      const conversionResult = await fetchPermitInvoiceConversionRate()
-      if (!isLatestRequest()) {
-        return
-      }
-      conversionRate = conversionResult.conversionRate || conversionRate
-    } catch (error) {
-      if (!isLatestRequest()) {
-        return
-      }
-      console.error(error)
-      setActionInfoMessage('Unable to retrieve conversion rate. Using 1.00 for invoice upload.')
-    }
-
-    if (isLatestRequest()) {
-      setInvoiceUploadConversionRate(conversionRate)
-      setSelectedPermitTabIndex(PERMIT_DETAIL_TAB_INDEX.invoices)
-      window.setTimeout(() => {
-        document.getElementById('permitInvoiceUpload')?.scrollIntoView({ block: 'start' })
-      }, 0)
-    }
-  }, [beginInvoiceUploadRequest, detail?.permitNumber])
-
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
@@ -657,84 +570,6 @@ const ProvincialPermitDetailsPage = () => {
 
       {!loading && detail && (
         <>
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">Actions</h2>
-              <div className="legacy-search-actions">
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={
-                    !detail.applicationNumber ||
-                    !canPerform('/applicationSearch') ||
-                    !canPerform('/applicationDetails')
-                  }
-                  onClick={() => {
-                    if (detail.applicationNumber) {
-                      navigate(
-                        withCurrentSearch(`/provincial/application/${detail.applicationNumber}`),
-                      )
-                    }
-                  }}
-                >
-                  Open Application Detail
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={
-                    !detail.exemptionNumber ||
-                    !canPerform('/exemptionSearch') ||
-                    !canPerform('/exemptionDetails')
-                  }
-                  onClick={() => {
-                    if (detail.exemptionNumber) {
-                      navigate(
-                        withCurrentSearch(
-                          `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
-                        ),
-                      )
-                    }
-                  }}
-                >
-                  Open Exemption Detail
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canPerform('/permitSearch')}
-                  onClick={() => navigate(withCurrentSearch('/provincial/permit'))}
-                >
-                  Back to Permit search Results
-                </Button>
-                <Button
-                  kind="primary"
-                  size="sm"
-                  disabled={isOpeningPermitReport || !canPerform('/permitReport')}
-                  onClick={() => void onOpenPermitReport()}
-                >
-                  {isOpeningPermitReport ? 'Opening Permit Report...' : 'Open Permit Report'}
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!detail.permitNumber || !canPerform('/filePermitUpload')}
-                  onClick={onOpenPermitUpload}
-                >
-                  Upload Permit Document
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!detail.permitNumber || !canPerform('/fileInvoiceUpload')}
-                  onClick={() => void onOpenInvoiceUpload()}
-                >
-                  Upload Invoice
-                </Button>
-              </div>
-            </Tile>
-          </Column>
-
           {!!actionInfoMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
@@ -1242,7 +1077,6 @@ const ProvincialPermitDetailsPage = () => {
                             targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
                             inputId="permitInvoiceUpload"
                             disabled={!detail.permitNumber}
-                            initialInvoiceConversionRate={invoiceUploadConversionRate}
                             onUploadComplete={refreshPermitDocuments}
                           />
                         )}

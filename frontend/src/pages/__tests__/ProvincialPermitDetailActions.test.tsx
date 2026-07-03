@@ -20,7 +20,6 @@ import {
   removePermitDocument,
   removePermitInvoiceDocument,
 } from '@/service/provincial-permit-documents-invoices-service'
-import { runReport } from '@/service/report-service'
 import { submitAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
@@ -54,15 +53,9 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
   removePermitInvoiceDocument: vi.fn(),
 }))
 
-vi.mock('@/service/report-service', () => ({
-  runReport: vi.fn(),
-}))
-
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
 }))
-
-Element.prototype.scrollIntoView = vi.fn()
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
@@ -75,7 +68,6 @@ const mockedOpenPermitDocument = vi.mocked(openPermitDocument)
 const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationDocument)
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
 const mockedRemovePermitInvoiceDocument = vi.mocked(removePermitInvoiceDocument)
-const mockedRunReport = vi.mocked(runReport)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 
 const permitDetail: ProvincialPermitDetail = {
@@ -280,7 +272,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
   })
 
-  it('jumps from the permit document action to the embedded upload panel', async () => {
+  it('shows the embedded permit document upload panel on the documents tab without header actions', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -292,22 +284,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Permit Document' })
-    expect(uploadButton).toBeEnabled()
-    await userEvent.click(uploadButton)
+    await selectPermitDetailTab('Documents')
 
-    await waitFor(() => {
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
-    })
+    expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Upload Permit Document' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Permit Report' })).toBeNull()
     expect(await screen.findByText('Upload permit documents')).toBeInTheDocument()
   })
 
-  it('jumps to embedded invoice upload with conversion rate lookup', async () => {
-    mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
-      conversionRate: '1.37',
-      source: 'api',
-    })
-
+  it('shows the embedded invoice upload panel on the invoices tab without header actions', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -319,15 +304,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const uploadInvoiceButton = await screen.findByRole('button', { name: 'Upload Invoice' })
-    expect(uploadInvoiceButton).toBeEnabled()
-    await userEvent.click(uploadInvoiceButton)
+    await selectPermitDetailTab('Invoices')
 
-    await waitFor(() => {
-      expect(mockedFetchPermitInvoiceConversionRate).toHaveBeenCalledTimes(1)
-      expect(screen.getByLabelText('Upload invoice conversion rate')).toHaveValue('1.37')
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
-    })
+    expect(screen.queryByRole('button', { name: 'Upload Invoice' })).toBeNull()
+    expect(screen.getByLabelText('Upload invoice conversion rate')).toHaveValue('1.00')
+    expect(mockedFetchPermitInvoiceConversionRate).not.toHaveBeenCalled()
   })
 
   it('uploads invoice files inline and refreshes permit document data', async () => {
@@ -534,80 +515,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedRemovePermitDocument).not.toHaveBeenCalledWith('7777')
       expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalledWith('7777')
     })
-  })
-
-  it('uses report service blob response when opening permit report', async () => {
-    mockedFetchPermitInvoices.mockResolvedValue({
-      rows: [
-        {
-          id: 'INV-GBMS-1',
-          invoiceNumber: 'INV-GBMS',
-          exportValueCad: '10.00',
-          conversionRate: '1.00',
-          feeInLieu: '0.00',
-          invoiceFound: true,
-        },
-      ],
-      source: 'api',
-    })
-    mockedRunReport.mockResolvedValue({
-      source: 'api',
-      blob: new Blob(['permit-report']),
-      filename: 'permit-report.pdf',
-      contentType: 'application/pdf',
-    })
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reportButton = await screen.findByRole('button', { name: 'Open Permit Report' })
-    expect(reportButton).toBeEnabled()
-    await userEvent.click(reportButton)
-
-    expect(mockedRunReport).toHaveBeenCalledWith({
-      reportId: 'permitReport',
-      actionMapping: 'generate',
-      values: {
-        permitNumber: '777',
-        outputFormat: 'PDF',
-      },
-    })
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining('blob:'),
-      'permitReportWindow',
-      expect.any(String),
-    )
-  })
-
-  it('gates permit report action on the legacy permit report permission', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action !== '/permitReport',
-      }),
-    )
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reportButton = await screen.findByRole('button', { name: 'Open Permit Report' })
-    expect(reportButton).toBeDisabled()
   })
 
   it('shows detail error contract when permit detail endpoint fails', async () => {

@@ -114,8 +114,6 @@ vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
 }))
 
-Element.prototype.scrollIntoView = vi.fn()
-
 // This file renders the full provincial application detail page; several tests exercise
 // Carbon comboboxes and async child panels, which can exceed Vitest's 5s default in CI.
 vi.setConfig({ testTimeout: 20000 })
@@ -661,7 +659,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
   })
 
-  it('jumps from the header action to the embedded application upload panel', async () => {
+  it('shows the embedded application upload panel on the documents tab without header actions', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -673,13 +671,10 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const [uploadButton] = await screen.findAllByRole('button', {
-      name: 'Upload Application Document',
-    })
-    expect(uploadButton).toBeEnabled()
-    await userEvent.click(uploadButton)
+    await selectApplicationDetailTab('Documents')
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
   })
 
@@ -697,6 +692,9 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await selectApplicationDetailTab('Documents')
 
+    expect(
+      await screen.findByText('No documents are on file for this application yet.'),
+    ).toBeInTheDocument()
     expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
     expect(screen.getByLabelText('Document description')).toBeInTheDocument()
     expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
@@ -760,11 +758,9 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const [uploadButton] = await screen.findAllByRole('button', {
-      name: 'Upload Application Document',
-    })
+    await selectApplicationDetailTab('Documents')
 
-    expect(uploadButton).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(
       await screen.findByText(
         'Application document upload is unavailable for expired applications.',
@@ -800,10 +796,7 @@ describe('Provincial Application Detail Document Actions', () => {
     ).toBeInTheDocument()
 
     await selectApplicationDetailTab('Documents')
-    const [uploadButton] = screen.getAllByRole('button', {
-      name: 'Upload Application Document',
-    })
-    expect(uploadButton).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
   })
 
@@ -1127,17 +1120,14 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButtons = await screen.findAllByRole('button', {
-      name: 'Upload Application Document',
-    })
-    expect(uploadButtons[0]).toBeDisabled()
+    await selectApplicationDetailTab('Documents')
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(
       await screen.findByText(
         'Application document upload is unavailable for expired applications.',
       ),
     ).toBeInTheDocument()
 
-    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('expired-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -2841,10 +2831,9 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
-    expect(uploadButton).toBeDisabled()
-
     await selectApplicationDetailTab('Documents')
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
