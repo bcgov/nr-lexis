@@ -2216,6 +2216,11 @@ body {
   font-size: 0.75rem;
 }
 
+.cds--data-table .legacy-search-actions {
+  align-items: center;
+  margin-top: 0;
+}
+
 @media (max-width: 671px) {
   .app-shell,
   .app-shell.is-side-nav-collapsed {
