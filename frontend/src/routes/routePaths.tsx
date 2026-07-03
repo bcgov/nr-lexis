@@ -130,8 +130,8 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
   },
   {
     path: '/unauthorized',
-    id: 'Unauthorized',
-    element: <UnauthorizedPage />,
+    id: 'Unauthorized Login Redirect',
+    element: <Navigate to="/" replace />,
     isNavigation: false,
   },
   {
