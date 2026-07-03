@@ -929,7 +929,6 @@ body {
     font-size: 1.5rem;
     line-height: 1.875rem;
   }
-
 }
 
 @media (min-width: 1312px) {
@@ -1950,6 +1949,15 @@ body {
 
 .application-detail-documents .legacy-search-grid .legacy-search-actions {
   margin-top: 0;
+}
+
+.application-documents-upload-accordion {
+  margin-top: 1rem;
+}
+
+.application-documents-upload-accordion .cds--accordion__content {
+  padding-inline-end: 0;
+  padding-inline-start: 0;
 }
 
 .application-detail-remarks .legacy-search-actions {

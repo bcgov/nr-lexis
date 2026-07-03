@@ -141,4 +141,17 @@ describe('Protected route access matrix', () => {
       replace: true,
     })
   })
+
+  it('returns signed-out unauthorized redirects to the login shell', () => {
+    const publicUnauthorizedRoute = PUBLIC_ROUTES.find((entry) => entry.path === '/unauthorized')
+
+    expect(publicUnauthorizedRoute).toBeDefined()
+    expect(publicUnauthorizedRoute?.id).toBe('Unauthorized Login Redirect')
+    expect(isValidElement(publicUnauthorizedRoute?.element)).toBe(true)
+    expect((publicUnauthorizedRoute?.element as ReactElement).type).toBe(Navigate)
+    expect((publicUnauthorizedRoute?.element as ReactElement).props).toMatchObject({
+      to: '/',
+      replace: true,
+    })
+  })
 })

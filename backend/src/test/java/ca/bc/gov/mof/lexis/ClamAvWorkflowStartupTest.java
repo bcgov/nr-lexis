@@ -39,9 +39,9 @@ class ClamAvWorkflowStartupTest {
     assertThat(script)
         .contains("docker build --pull")
         .contains("/opt/app-root/clamdcheck.sh")
-        .contains("Eicar-Test-Signature")
+        .contains("ClamAv-Ci-Test-Signature")
         .contains("FOUND")
-        .contains("Expected ClamAV to detect the EICAR test payload.");
+        .contains("Expected ClamAV to detect the CI test payload.");
   }
 
   private static String read(String relativePath) throws IOException {

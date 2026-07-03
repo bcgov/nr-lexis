@@ -683,6 +683,65 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
   })
 
+  it('shows only the upload panel when an application has no documents', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+
+    expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
+    expect(screen.getByLabelText('Document description')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('No document rows matched the current filter.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows existing application documents before the upload accordion', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '900',
+          name: 'existing-doc.pdf',
+          description: 'Existing document',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    const documentName = await screen.findByText('existing-doc.pdf')
+    const uploadToggle = screen.getByRole('button', { name: 'Upload new documents' })
+
+    expect(screen.getByLabelText('Filter document rows')).toBeInTheDocument()
+    expect(
+      documentName.compareDocumentPosition(uploadToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+
+    await userEvent.click(uploadToggle)
+    expect(screen.getByLabelText('Document description')).toBeVisible()
+  })
+
   it('disables application upload for expired applications', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
