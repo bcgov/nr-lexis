@@ -175,30 +175,30 @@ describe('Admin tool access smoke', () => {
     expect(screen.queryByRole('link', { name: 'Manage in FAM' })).not.toBeInTheDocument()
   })
 
-  it('searches FAM user access and renders role assignments', async () => {
+  it('searches FAM user access and renders identity results', async () => {
     mockedSearchFamUserRoleAssignments.mockResolvedValue({
       results: [
         {
-          assignmentId: 88,
-          userId: 44,
+          assignmentId: null,
+          userId: null,
           userName: 'JSMITH',
-          userTypeCode: 'I',
+          userTypeCode: 'IDIR',
           userTypeDescription: 'IDIR',
           firstName: 'Jane',
           lastName: 'Smith',
           fullName: 'Jane Smith',
           email: 'jane.smith@gov.bc.ca',
-          roleId: 12,
-          roleName: 'LEXIS_ADMIN',
-          roleDisplayName: 'Administrator',
-          roleTypeCode: 'C',
-          forestClientNumber: '00012345',
-          forestClientName: 'ACME Timber',
-          forestClientStatusCode: 'ACT',
-          forestClientStatusDescription: 'Active',
-          scopeType: 'FOREST_CLIENT',
-          scopeValue: '00012345',
-          createDate: '2026-06-30T08:00:00Z',
+          roleId: null,
+          roleName: null,
+          roleDisplayName: null,
+          roleTypeCode: null,
+          forestClientNumber: null,
+          forestClientName: null,
+          forestClientStatusCode: null,
+          forestClientStatusDescription: null,
+          scopeType: null,
+          scopeValue: null,
+          createDate: null,
           expiryDate: null,
         },
       ],
@@ -216,7 +216,7 @@ describe('Admin tool access smoke', () => {
     expect(manageLink).toHaveAttribute('href', 'https://fam-dev.nrs.gov.bc.ca')
     expect(manageLink).toHaveAttribute('target', '_blank')
 
-    await userEvent.type(screen.getByLabelText('IDIR or Business BCeID username'), 'smith')
+    await userEvent.type(screen.getByLabelText('IDIR username'), 'smith')
     await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))
 
     expect(mockedSearchFamUserRoleAssignments).toHaveBeenCalledWith({
@@ -229,10 +229,6 @@ describe('Admin tool access smoke', () => {
     expect(await screen.findByText('JSMITH')).toBeInTheDocument()
     expect(screen.getByText('Jane Smith')).toBeInTheDocument()
     expect(screen.getByText('jane.smith@gov.bc.ca')).toBeInTheDocument()
-    expect(screen.getByText('Administrator')).toBeInTheDocument()
-    expect(screen.getByText('LEXIS_ADMIN')).toBeInTheDocument()
-    expect(screen.getByText('FOREST_CLIENT: 00012345')).toBeInTheDocument()
-    expect(screen.getByText('2026-06-30')).toBeInTheDocument()
   })
 
   it('keeps FAM access management read-only and delegates changes to FAM', () => {
@@ -263,7 +259,7 @@ describe('Admin tool access smoke', () => {
   it('validates FAM user access searches before calling the backend', async () => {
     renderPage()
 
-    await userEvent.type(screen.getByLabelText('IDIR or Business BCeID username'), 'ab')
+    await userEvent.type(screen.getByLabelText('IDIR username'), 'ab')
     await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))
 
     expect(mockedSearchFamUserRoleAssignments).not.toHaveBeenCalled()

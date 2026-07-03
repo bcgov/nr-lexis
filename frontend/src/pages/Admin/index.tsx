@@ -183,7 +183,7 @@ const roleScopeLabel = (assignment: FamUserRoleAssignment): string => {
       : assignment.scopeValue
   }
   if (!assignment.forestClientNumber && !assignment.forestClientName) {
-    return 'Application'
+    return '-'
   }
   const client = [assignment.forestClientNumber, assignment.forestClientName]
     .filter((value): value is string => Boolean(value?.trim()))
@@ -330,7 +330,9 @@ const AdminPage = () => {
             <div className="admin-section-heading">
               <div>
                 <h2 className="dashboard-title">FAM user access lookup</h2>
-                <p>Search IDIR or Business BCeID users to view their LEXIS role assignments.</p>
+                <p>
+                  Search IDIR users to confirm their FAM identity before managing access in FAM.
+                </p>
               </div>
               <Button
                 href={famManageUrl}
@@ -346,7 +348,7 @@ const AdminPage = () => {
             <div className="legacy-search-grid">
               <TextInput
                 id="famUserSearch"
-                labelText="IDIR or Business BCeID username"
+                labelText="IDIR username"
                 value={famSearchText}
                 onChange={(event) => setFamSearchText(event.target.value)}
                 onKeyDown={(event) => {
@@ -419,14 +421,14 @@ const AdminPage = () => {
                   <TableRow>
                     <TableCell colSpan={7}>
                       {famSearchResponse.configured
-                        ? 'No FAM role assignments matched the current search.'
+                        ? 'No FAM users matched the current search.'
                         : 'FAM user access lookup is not configured.'}
                     </TableCell>
                   </TableRow>
                 )}
                 {!famSearchResponse && (
                   <TableRow>
-                    <TableCell colSpan={7}>Search to view FAM role assignments.</TableCell>
+                    <TableCell colSpan={7}>Search to confirm a FAM IDIR user.</TableCell>
                   </TableRow>
                 )}
               </TableBody>

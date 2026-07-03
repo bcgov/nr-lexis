@@ -4,8 +4,11 @@ import ca.bc.gov.mof.lexis.dto.admin.LexisFamUserRoleAssignmentDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisFamUserRoleAssignmentSearchResponseDto;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -17,15 +20,28 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Service
 public class LexisFamUserAccessService {
 
-  private static final String USER_SEARCH_PATH = "/external/v1/users";
+  private static final Logger LOGGER = LoggerFactory.getLogger(LexisFamUserAccessService.class);
+
+  private static final String USER_SEARCH_PATH = "/external/v1/users/identity/idir/search";
   private static final int MIN_SEARCH_LENGTH = 3;
   private static final int MIN_PAGE_SIZE = 10;
   private static final int DEFAULT_PAGE_SIZE = 10;
   private static final int MAX_PAGE_SIZE = 100;
+  private static final int MAX_UPSTREAM_PAGE_SIZE = 500;
+  private static final String LOOKUP_FAILED_MESSAGE =
+      "FAM user access lookup failed while calling the FAM identity lookup API.";
+  private static final Comparator<LexisFamUserRoleAssignmentDto> USER_COMPARATOR =
+      Comparator.comparing(
+              LexisFamUserRoleAssignmentDto::fullName, Comparator.nullsLast(String::compareToIgnoreCase))
+          .thenComparing(
+              LexisFamUserRoleAssignmentDto::userName,
+              Comparator.nullsLast(String::compareToIgnoreCase));
 
   private final RestClient restClient;
   private final boolean configured;
@@ -60,42 +76,57 @@ public class LexisFamUserAccessService {
           "FAM user access lookup is not configured.");
     }
 
-    FamExternalUserSearchResponse response =
-        restClient
-            .get()
-            .uri(
-                uriBuilder -> {
-                  uriBuilder
-                      .path(USER_SEARCH_PATH)
-                      .queryParam("page", normalizedPageNumber)
-                      .queryParam("size", normalizedPageSize);
-                  if (normalizedSearch != null) {
-                    uriBuilder.queryParam("idpUsername", normalizedSearch);
-                  }
-                  return uriBuilder.build();
-                })
-            .header(HttpHeaders.AUTHORIZATION, "Bearer " + extractBearerToken())
-            .retrieve()
-            .body(FamExternalUserSearchResponse.class);
+    IdentityLookupResponse response;
+    try {
+      response =
+          restClient
+              .get()
+              .uri(
+                  uriBuilder -> {
+                    uriBuilder
+                        .path(USER_SEARCH_PATH)
+                        .queryParam(
+                            "pageSize",
+                            upstreamPageSize(normalizedPageNumber, normalizedPageSize));
+                    if (normalizedSearch != null) {
+                      String lookupValue = toIdentityLookupValue(normalizedSearch);
+                      uriBuilder.queryParam("userId", lookupValue).queryParam("username", lookupValue);
+                    }
+                    return uriBuilder.build();
+                  })
+              .header(HttpHeaders.AUTHORIZATION, "Bearer " + extractBearerToken())
+              .retrieve()
+              .body(IdentityLookupResponse.class);
+    } catch (RestClientResponseException exception) {
+      LOGGER.warn(
+          "FAM identity lookup failed with status {}: {}",
+          exception.getStatusCode(),
+          exception.getResponseBodyAsString());
+      return failedLookupResponse(normalizedPageNumber, normalizedPageSize);
+    } catch (RestClientException exception) {
+      LOGGER.warn("FAM identity lookup failed: {}", exception.getMessage());
+      return failedLookupResponse(normalizedPageNumber, normalizedPageSize);
+    }
 
     if (response == null) {
       return new LexisFamUserRoleAssignmentSearchResponseDto(
           List.of(), 0, normalizedPageNumber, normalizedPageSize, 0, true, null);
     }
 
-    FamPageMeta meta = response.meta();
-    int total = meta == null ? 0 : meta.total();
-    int returnedPage = meta == null ? normalizedPageNumber : Math.max(meta.page(), 1);
-    int returnedPageSize = meta == null ? normalizedPageSize : Math.max(meta.size(), MIN_PAGE_SIZE);
-    int pageCount = meta == null ? 0 : Math.max(meta.pageCount(), 0);
-    List<LexisFamUserRoleAssignmentDto> results =
-        response.users().stream()
+    List<LexisFamUserRoleAssignmentDto> allResults =
+        response.items().stream()
             .filter(Objects::nonNull)
-            .flatMap(user -> toDtos(user).stream())
+            .map(LexisFamUserAccessService::toDto)
+            .filter(Objects::nonNull)
+            .sorted(USER_COMPARATOR)
             .toList();
+    int total = toIntTotal(response.totalItems(), allResults.size());
+    int pageCount = total == 0 ? 0 : (int) Math.ceil((double) total / normalizedPageSize);
+    List<LexisFamUserRoleAssignmentDto> pageResults =
+        pageResults(allResults, normalizedPageNumber, normalizedPageSize);
 
     return new LexisFamUserRoleAssignmentSearchResponseDto(
-        results, total, returnedPage, returnedPageSize, pageCount, true, null);
+        pageResults, total, normalizedPageNumber, normalizedPageSize, pageCount, true, null);
   }
 
   private static RestClient buildRestClient(String baseUrl, Duration connectTimeout, Duration readTimeout) {
@@ -131,6 +162,19 @@ public class LexisFamUserAccessService {
     return Math.min(Math.max(pageSize, MIN_PAGE_SIZE), MAX_PAGE_SIZE);
   }
 
+  private static int upstreamPageSize(int pageNumber, int pageSize) {
+    long requested = (long) Math.max(pageNumber, 1) * Math.max(pageSize, MIN_PAGE_SIZE);
+    return (int) Math.min(Math.max(requested, MIN_PAGE_SIZE), MAX_UPSTREAM_PAGE_SIZE);
+  }
+
+  private static String toIdentityLookupValue(String search) {
+    int slashIndex = search.indexOf('\\');
+    if (slashIndex >= 0 && slashIndex < search.length() - 1) {
+      return search.substring(slashIndex + 1);
+    }
+    return search;
+  }
+
   private static String extractBearerToken() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
     if (authentication instanceof JwtAuthenticationToken jwtAuth) {
@@ -139,71 +183,57 @@ public class LexisFamUserAccessService {
     throw new IllegalStateException("No valid JWT bearer token in security context");
   }
 
-  private static List<LexisFamUserRoleAssignmentDto> toDtos(FamExternalUser user) {
-    if (user.roles().isEmpty()) {
-      return List.of(toDto(user, null));
+  private static LexisFamUserRoleAssignmentDto toDto(IdentityLookupUser user) {
+    String userName = trim(user.userId());
+    if (!StringUtils.hasText(userName)) {
+      return null;
     }
-    return user.roles().stream().filter(Objects::nonNull).map(role -> toDto(user, role)).toList();
-  }
-
-  private static LexisFamUserRoleAssignmentDto toDto(FamExternalUser user, FamExternalRole role) {
     String firstName = trim(user.firstName());
     String lastName = trim(user.lastName());
-    String userName = trim(user.idpUsername());
-    String idpType = trim(user.idpType());
-    String roleName = role == null ? null : trim(role.roleName());
-    String roleDisplayName = role == null ? null : trim(role.roleDisplayName());
-    String scopeType = role == null ? null : trim(role.scopeType());
-    String scopeValue = role == null ? null : joinValues(role.value());
-    boolean forestClientScope = "FOREST_CLIENT".equalsIgnoreCase(scopeType);
     return new LexisFamUserRoleAssignmentDto(
         null,
         null,
         userName,
-        idpType,
-        userTypeDescription(idpType),
+        "IDIR",
+        "IDIR",
         firstName,
         lastName,
         buildFullName(firstName, lastName, userName),
-        null,
-        null,
-        roleName,
-        roleDisplayName,
-        null,
-        forestClientScope ? scopeValue : null,
+        trim(user.email()),
         null,
         null,
         null,
-        scopeType,
-        scopeValue,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null,
         null);
   }
 
-  private static String userTypeDescription(String idpType) {
-    if (!StringUtils.hasText(idpType)) {
-      return null;
+  private static int toIntTotal(long upstreamTotal, int fallbackTotal) {
+    if (upstreamTotal <= 0) {
+      return fallbackTotal;
     }
-    return switch (idpType.trim().toUpperCase()) {
-      case "BCEID" -> "Business BCeID";
-      case "BCSC" -> "BC Services Card";
-      case "IDIR" -> "IDIR";
-      default -> idpType.trim();
-    };
+    return upstreamTotal > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) upstreamTotal;
   }
 
-  private static String joinValues(List<String> values) {
-    if (values == null || values.isEmpty()) {
-      return null;
+  private static List<LexisFamUserRoleAssignmentDto> pageResults(
+      List<LexisFamUserRoleAssignmentDto> results, int pageNumber, int pageSize) {
+    int fromIndex = (pageNumber - 1) * pageSize;
+    if (fromIndex >= results.size()) {
+      return List.of();
     }
-    String joined =
-        values.stream()
-            .map(LexisFamUserAccessService::trim)
-            .filter(StringUtils::hasText)
-            .distinct()
-            .reduce((left, right) -> left + ", " + right)
-            .orElse(null);
-    return StringUtils.hasText(joined) ? joined : null;
+    return results.subList(fromIndex, Math.min(fromIndex + pageSize, results.size()));
+  }
+
+  private static LexisFamUserRoleAssignmentSearchResponseDto failedLookupResponse(
+      int pageNumber, int pageSize) {
+    return new LexisFamUserRoleAssignmentSearchResponseDto(
+        List.of(), 0, pageNumber, pageSize, 0, true, LOOKUP_FAILED_MESSAGE);
   }
 
   private static String buildFullName(String firstName, String lastName, String fallback) {
@@ -223,40 +253,14 @@ public class LexisFamUserAccessService {
     return value == null ? null : value.trim();
   }
 
-  private record FamExternalUserSearchResponse(FamPageMeta meta, List<FamExternalUser> users) {
-    FamExternalUserSearchResponse {
-      if (users == null) {
-        users = Collections.emptyList();
+  private record IdentityLookupResponse(long totalItems, int pageSize, List<IdentityLookupUser> items) {
+    IdentityLookupResponse {
+      if (items == null) {
+        items = Collections.emptyList();
       }
     }
   }
 
-  private record FamPageMeta(int total, int pageCount, int page, int size) {}
-
-  private record FamExternalUser(
-      String firstName,
-      String lastName,
-      String idpUsername,
-      String idpUserGuid,
-      String idpType,
-      List<FamExternalRole> roles) {
-    FamExternalUser {
-      if (roles == null) {
-        roles = Collections.emptyList();
-      }
-    }
-  }
-
-  private record FamExternalRole(
-      String applicationName,
-      String roleName,
-      String roleDisplayName,
-      String scopeType,
-      List<String> value) {
-    FamExternalRole {
-      if (value == null) {
-        value = Collections.emptyList();
-      }
-    }
-  }
+  private record IdentityLookupUser(
+      String userId, String guid, String firstName, String lastName, String email) {}
 }
