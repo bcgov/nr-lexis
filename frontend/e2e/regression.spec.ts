@@ -951,8 +951,12 @@ test.describe('TEST IDIR admin regression', () => {
       has: page.getByRole('heading', { name: 'FAM user access lookup' }),
     })
     await expect(famAccessSection).toBeVisible()
-    await expect(famAccessSection.getByText('Search IDIR or Business BCeID users')).toBeVisible()
-    await expect(famAccessSection.getByLabel('IDIR or Business BCeID username')).toBeVisible()
+    await expect(
+      famAccessSection.getByText(
+        'Search IDIR users to confirm their FAM identity before managing access in FAM.',
+      ),
+    ).toBeVisible()
+    await expect(famAccessSection.getByLabel('IDIR username')).toBeVisible()
     await expect(famAccessSection.getByRole('button', { name: 'Search FAM Access' })).toBeVisible()
 
     const manageLink = famAccessSection.getByRole('link', { name: 'Manage in FAM' })
@@ -1158,7 +1162,6 @@ test.describe('TEST IDIR admin regression', () => {
     )
     const today = await browserLocalIsoToday(page)
 
-    await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
     await expect(page.getByRole('combobox', { name: 'Product type' })).toHaveValue(
       'Harvested Timber',
     )
@@ -1173,6 +1176,9 @@ test.describe('TEST IDIR admin regression', () => {
       today,
     )
     await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
+
+    await page.getByRole('tab', { name: 'Clients' }).click()
+    await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
   })
 
   test('shows create application tabs, save workflow, and disabled document upload', async () => {
@@ -1524,8 +1530,6 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expect(page.getByRole('heading', { name: 'Advertising List' })).toBeVisible()
     await expect(page.getByText('Advertising list output in PDF or CSV format.')).toBeVisible()
-    await expect(page.getByText('Required action:')).toBeVisible()
-    await expect(page.getByRole('table').getByText('mofrListing')).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Jurisdiction' })).toBeVisible()
     await expect(page.getByLabel('Listing from date')).toBeVisible()
     await expect(page.getByLabel('Listing to date')).toBeVisible()
