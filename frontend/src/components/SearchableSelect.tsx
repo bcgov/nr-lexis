@@ -24,10 +24,16 @@ const itemToString = (item: SearchableSelectOption | null | undefined): string =
 const shouldFilterItem = ({
   item,
   inputValue,
+  optionCount,
 }: {
   item: SearchableSelectOption
   inputValue: string | null
+  optionCount: number
 }): boolean => {
+  if (optionCount <= 5) {
+    return true
+  }
+
   const query = inputValue?.trim().toLowerCase()
   if (!query) {
     return true
@@ -58,7 +64,9 @@ export default function SearchableSelect({
       items={options}
       selectedItem={selectedItem}
       itemToString={itemToString}
-      shouldFilterItem={shouldFilterItem}
+      shouldFilterItem={({ item, inputValue }) =>
+        shouldFilterItem({ item, inputValue, optionCount: options.length })
+      }
       placeholder={placeholder}
       disabled={disabled}
       invalid={invalid}
