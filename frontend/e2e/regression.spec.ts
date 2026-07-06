@@ -1156,8 +1156,8 @@ test.describe('TEST IDIR admin regression', () => {
         'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
       ),
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Preview data' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Apply upload' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
   })
 
   test('shows selected natural resource region names across search filters', async () => {
