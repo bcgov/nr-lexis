@@ -11,13 +11,13 @@ import java.sql.Array;
 import java.nio.charset.StandardCharsets;
 import java.sql.CallableStatement;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,56 +47,10 @@ public class OracleLegacyCsvReportService {
       "{ call LEXIS_REPORTING.OFFERS_REPORT_CSV(?,?,?,?) }";
   private static final String FEE_SUMMARY_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.FEE_SUMMARY_RPT_CSV(?,?,?,?) }";
-  private static final String BIWEEKLY_CSV_QUERY = """
-      SELECT
-        ES.ADVERTISING_DATE AS ADVERTISING_DATE,
-        OU.ORG_UNIT_NAME AS REGION_NAME,
-        FC.CLIENT_NAME AS CLIENT_NAME,
-        CL.ADDRESS_1 AS CLIENT_ADDRESS_1,
-        CL.ADDRESS_2 AS CLIENT_ADDRESS_2,
-        CL.ADDRESS_3 AS CLIENT_ADDRESS_3,
-        CL.CITY AS CLIENT_CITY,
-        CL.PROVINCE AS CLIENT_PROVINCE,
-        CL.POSTAL_CODE AS CLIENT_POSTAL_CODE,
-        EEA.OWNER_CONTACT_NAME AS CLIENT_CONTACT_NAME,
-        CL.BUSINESS_PHONE AS CLIENT_CONTACT_PHONE,
-        CL.EMAIL_ADDRESS AS CLIENT_CONTACT_EMAIL,
-        EEA.EXPORT_JURISDICTION_CODE AS JURISDICTION_CODE,
-        NVL(EEA.FED_APPLICATION_NUMBER, EEA.APPLICATION_NUMBER) AS APPLICATION_NUMBER,
-        LEXIS_REPORTING.RETRIEVE_SPECIES_ENDUSE(EEA.APPLICATION_NUMBER) AS SPECIES_ENDUSE,
-        EPTC.DESCRIPTION AS PRODUCT_TYPE,
-        EEA.PRODUCT_LOCATION AS PRODUCT_LOCATION,
-        EEA.EXEMPTION_APPLICATION_VOLUME AS EXEMPTION_APPLICATION_VOLUME,
-        EEA.AVERAGE_LOG_VOLUME AS AVERAGE_LOG_VOLUME,
-        AFC.CLIENT_NAME AS AGENT_NAME,
-        ACL.BUSINESS_PHONE AS AGENT_PHONE,
-        EEA.AGENT_CONTACT_NAME AS AGENT_CONTACT_NAME,
-        ACL.EMAIL_ADDRESS AS AGENT_CONTACT_EMAIL,
-        EP.PACKAGE_NUMBER AS PACKAGE_NUMBER,
-        EP.PACKAGE_VOLUME AS PACKAGE_VOLUME,
-        EEA.EXPORT_GROWTH_TYPE_CODE AS AGE_CLASS,
-        EP.AVERAGE_LENGTH AS AVERAGE_LENGTH,
-        EP.AVERAGE_DIAMETER AS AVERAGE_DIAMETER
-      FROM EXPORT_EXEMPTION_APPLICATION EEA
-      LEFT OUTER JOIN EXPORT_PACKAGE EP
-        ON EEA.APPLICATION_NUMBER = EP.APPLICATION_NUMBER
-      INNER JOIN FOREST_CLIENT FC
-        ON EEA.OWNER_CLIENT_NUMBER = FC.CLIENT_NUMBER
-      INNER JOIN CLIENT_LOCATION CL
-        ON EEA.OWNER_CLIENT_NUMBER = CL.CLIENT_NUMBER
-       AND EEA.OWNER_CLIENT_LOCATION_CODE = CL.CLIENT_LOCN_CODE
-      LEFT JOIN FOREST_CLIENT AFC
-        ON EEA.AGENT_CLIENT_NUMBER = AFC.CLIENT_NUMBER
-      LEFT JOIN CLIENT_LOCATION ACL
-        ON EEA.AGENT_CLIENT_NUMBER = ACL.CLIENT_NUMBER
-       AND EEA.AGENT_CLIENT_LOCATION_CODE = ACL.CLIENT_LOCN_CODE
-      INNER JOIN EXPORT_SCHEDULE ES
-        ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
-      INNER JOIN EXPORT_PRODUCT_TYPE_CODE EPTC
-        ON EPTC.EXPORT_PRODUCT_TYPE_CODE = EEA.EXPORT_PRODUCT_TYPE_CODE
-      INNER JOIN ORG_UNIT OU
-        ON OU.ORG_UNIT_NO = EEA.ORG_UNIT_NO
-      """;
+  private static final String BIWEEKLY_CSV_PROCEDURE =
+      "{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }";
+  private static final String BIWEEKLY_REPORT_PROCEDURE =
+      "{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }";
   private static final String TRANSPORT_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.TRANSPORT_REPORT_CSV(?,?,?,?) }";
   private static final String EXEMPTIONS_CSV_PROCEDURE =
@@ -360,7 +314,8 @@ public class OracleLegacyCsvReportService {
     Map<String, String> parameters = requestParameters(request);
     DynamicWhere where = buildBiweeklyWhere(parameters);
     Optional<LegacyTabularReportData> dataOptional =
-        executeQuery(BIWEEKLY_CSV_QUERY, where);
+        executeDynamicCursorProcedure(BIWEEKLY_CSV_PROCEDURE, where)
+            .map(data -> addBiweeklyContactEmails(data, loadBiweeklyContactEmails(parameters)));
     if (dataOptional.isEmpty()) {
       return Optional.empty();
     }
@@ -378,6 +333,68 @@ public class OracleLegacyCsvReportService {
             LexisJasperReportDefinition.BIWEEKLY_LISTING.resolveFilename(LexisReportFormat.CSV),
             LexisReportFormat.CSV.mediaType(),
             content));
+  }
+
+  private LegacyTabularReportData addBiweeklyContactEmails(
+      LegacyTabularReportData data,
+      Map<String, BiweeklyContactEmails> contactEmailsByApplicationNumber) {
+    Map<String, Integer> indexes = columnIndexes(data.columnHeaders());
+    if (indexes.containsKey("CLIENT_CONTACT_EMAIL") || indexes.containsKey("AGENT_CONTACT_EMAIL")) {
+      return data;
+    }
+
+    int applicationNumberIndex = columnIndex(indexes, "APPLICATION_NUMBER");
+    int clientContactEmailIndex =
+        insertAfterHeader(data.columnHeaders(), "CLIENT_CONTACT_PHONE");
+
+    List<String> headers = new ArrayList<>(data.columnHeaders());
+    headers.add(clientContactEmailIndex, "CLIENT_CONTACT_EMAIL");
+    int agentContactEmailIndex = insertAfterHeader(headers, "AGENT_CONTACT_NAME");
+    headers.add(agentContactEmailIndex, "AGENT_CONTACT_EMAIL");
+
+    List<List<String>> rows = new ArrayList<>(data.rows().size());
+    for (List<String> row : data.rows()) {
+      BiweeklyContactEmails emails =
+          contactEmailsByApplicationNumber.get(normalizeApplicationNumber(valueAt(row, applicationNumberIndex)));
+      List<String> updatedRow = new ArrayList<>(row);
+      updatedRow.add(clientContactEmailIndex, emails == null ? "" : emails.clientContactEmail());
+      updatedRow.add(agentContactEmailIndex, emails == null ? "" : emails.agentContactEmail());
+      rows.add(updatedRow);
+    }
+
+    return new LegacyTabularReportData(headers, rows);
+  }
+
+  private Map<String, BiweeklyContactEmails> loadBiweeklyContactEmails(Map<String, String> parameters) {
+    Optional<LegacyTabularReportData> dataOptional =
+        executeCursorProcedure(
+            BIWEEKLY_REPORT_PROCEDURE,
+            cs -> {
+              cs.setString(2, defaultIfBlank(csvValue(parameters, "region", "orgUnitNumber"), ""));
+              setNullableString(cs, 3, first(parameters, "exportJurisdictionCode", "jurisdiction"));
+              cs.setString(4, defaultDate(first(parameters, "fromDate"), "0001-01-01"));
+              cs.setString(5, defaultDate(first(parameters, "toDate"), "9999-12-31"));
+            },
+            1);
+    if (dataOptional.isEmpty()) {
+      return Map.of();
+    }
+
+    LegacyTabularReportData data = dataOptional.orElseThrow();
+    Map<String, Integer> indexes = columnIndexes(data.columnHeaders());
+    int applicationNumberIndex = columnIndex(indexes, "APPLICATION_NUMBER");
+    int federalApplicationNumberIndex = columnIndex(indexes, "FED_APPLICATION_NUMBER");
+    int clientEmailIndex = columnIndex(indexes, "EMAIL_ADDRESS");
+    int agentEmailIndex = columnIndex(indexes, "AGENT_EMAIL");
+
+    Map<String, BiweeklyContactEmails> contactEmailsByApplicationNumber = new HashMap<>();
+    for (List<String> row : data.rows()) {
+      BiweeklyContactEmails emails =
+          new BiweeklyContactEmails(valueAt(row, clientEmailIndex), valueAt(row, agentEmailIndex));
+      putContactEmails(contactEmailsByApplicationNumber, valueAt(row, applicationNumberIndex), emails);
+      putContactEmails(contactEmailsByApplicationNumber, valueAt(row, federalApplicationNumberIndex), emails);
+    }
+    return contactEmailsByApplicationNumber;
   }
 
   private Optional<LexisGeneratedReport> generateTransportCsv(LexisReportRequestDto request) {
@@ -571,31 +588,6 @@ public class OracleLegacyCsvReportService {
     }
   }
 
-  private Optional<LegacyTabularReportData> executeQuery(String baseQuery, DynamicWhere where) {
-    String sql = baseQuery + " WHERE " + toPreparedStatementSql(where.sql());
-    try (Connection connection = dataSource.getConnection();
-        PreparedStatement ps = connection.prepareStatement(sql)) {
-      for (int index = 0; index < where.bindValues().size(); index++) {
-        ps.setString(index + 1, where.bindValues().get(index));
-      }
-
-      try (ResultSet rs = ps.executeQuery()) {
-        return Optional.of(readTabularData(rs));
-      }
-    } catch (SQLException ex) {
-      LOGGER.warn(
-          "CSV report query failed [{}]: {}; root cause: {}",
-          baseQuery,
-          ex.getMessage(),
-          rootCauseMessage(ex));
-      return Optional.empty();
-    }
-  }
-
-  private String toPreparedStatementSql(String sql) {
-    return sql.replaceAll(":\\d+", "?");
-  }
-
   private Optional<LegacyTabularReportData> executeCursorProcedure(
       String procedureCall,
       SqlStatementBinder binder,
@@ -685,6 +677,48 @@ public class OracleLegacyCsvReportService {
       return Map.of();
     }
     return request.parameters();
+  }
+
+  private Map<String, Integer> columnIndexes(List<String> headers) {
+    Map<String, Integer> indexes = new HashMap<>();
+    for (int index = 0; index < headers.size(); index++) {
+      String header = headers.get(index);
+      if (header != null) {
+        indexes.put(header.trim().toUpperCase(), index);
+      }
+    }
+    return indexes;
+  }
+
+  private int columnIndex(Map<String, Integer> indexes, String header) {
+    return indexes.getOrDefault(header, -1);
+  }
+
+  private int insertAfterHeader(List<String> headers, String afterHeader) {
+    Map<String, Integer> indexes = columnIndexes(headers);
+    int index = columnIndex(indexes, afterHeader);
+    return index < 0 ? headers.size() : index + 1;
+  }
+
+  private String valueAt(List<String> row, int index) {
+    if (index < 0 || index >= row.size()) {
+      return "";
+    }
+    return row.get(index);
+  }
+
+  private void putContactEmails(
+      Map<String, BiweeklyContactEmails> contactEmailsByApplicationNumber,
+      String applicationNumber,
+      BiweeklyContactEmails emails) {
+    String normalizedApplicationNumber = normalizeApplicationNumber(applicationNumber);
+    if (normalizedApplicationNumber != null) {
+      contactEmailsByApplicationNumber.putIfAbsent(normalizedApplicationNumber, emails);
+    }
+  }
+
+  private String normalizeApplicationNumber(String applicationNumber) {
+    return trimToNull(applicationNumber);
   }
 
   private String csvValue(Map<String, String> parameters, String... keys) {
@@ -815,6 +849,10 @@ public class OracleLegacyCsvReportService {
   private interface CsvValueResolver {
     String resolve(int index);
   }
+
+  private record BiweeklyContactEmails(
+      String clientContactEmail,
+      String agentContactEmail) {}
 
   private record DynamicWhere(String sql, List<String> bindValues) {}
 
