@@ -1438,6 +1438,10 @@ body {
   max-inline-size: 50%;
 }
 
+.admin-upload-fspts-page .admin-upload-validation-table-wrap {
+  max-inline-size: 100%;
+}
+
 .admin-upload-fspts-page .admin-upload-file-chip {
   border-radius: 2px;
 }
@@ -1739,19 +1743,27 @@ body {
   display: flex;
   gap: 0.75rem;
   max-inline-size: min(100%, 42rem);
-  margin: 0.75rem 0 0;
+  margin: 1rem 0 0;
   padding: 0.75rem 1rem;
-  background: var(--cds-layer);
+  background: var(--cds-notification-background-info, var(--cds-layer));
   border: 1px solid var(--cds-border-subtle);
   border-inline-start: 3px solid var(--cds-border-interactive);
   border-radius: 4px;
 }
 
+.admin-upload-validation--info {
+  border-color: var(--cds-notification-border-subtle-info, var(--cds-border-subtle));
+}
+
 .admin-upload-validation--success {
+  background: var(--cds-notification-background-success, var(--cds-layer));
+  border-color: var(--cds-notification-border-subtle-success, var(--cds-border-subtle));
   border-inline-start-color: var(--cds-support-success);
 }
 
 .admin-upload-validation--error {
+  background: var(--cds-notification-background-error, var(--cds-layer));
+  border-color: var(--cds-notification-border-subtle-error, var(--cds-border-subtle));
   border-inline-start-color: var(--cds-support-error);
 }
 
@@ -1784,24 +1796,84 @@ body {
 }
 
 .admin-upload-validation__content h3 {
-  font-size: 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.125rem;
 }
 
-.admin-upload-validation__issues {
-  display: grid;
-  gap: 0.35rem;
-  margin-block-start: 0.25rem;
+.admin-upload-validation-table-wrap {
+  margin-block-start: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--cds-border-subtle);
+  border-radius: 4px;
 }
 
-.admin-upload-validation__issues h3 {
+.admin-upload-validation-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  block-size: 3rem;
+  padding: 0 1rem 0 1.5rem;
+  background: var(--cds-layer);
+  border-block-end: 1px solid var(--cds-border-subtle);
+}
+
+.admin-upload-validation-table-header span {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.125rem;
+}
+
+.admin-upload-validation-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  color: var(--cds-text-primary);
   font-size: 0.875rem;
 }
 
-.admin-upload-validation__issues ul {
-  display: grid;
-  gap: 0.25rem;
-  margin: 0;
-  padding-inline-start: 1.25rem;
+.admin-upload-validation-table thead tr {
+  background: var(--cds-layer-accent);
+}
+
+.admin-upload-validation-table th {
+  block-size: 3rem;
+  padding: 0 1rem;
+  border-block-end: 1px solid var(--cds-border-subtle);
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.125rem;
+  text-align: start;
+  vertical-align: middle;
+}
+
+.admin-upload-validation-table td {
+  block-size: 3rem;
+  padding: 0.9375rem 1rem;
+  border-block-end: 1px solid var(--cds-border-subtle);
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.125rem;
+  vertical-align: middle;
+}
+
+.admin-upload-validation-table tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+.admin-upload-validation-table tbody tr:nth-child(even) td {
+  background: var(--cds-layer-accent);
+}
+
+.admin-upload-validation-table__issue,
+.admin-upload-validation-table__location {
+  inline-size: 15rem;
+  white-space: nowrap;
 }
 
 .admin-upload-preview-actions {
@@ -2153,7 +2225,8 @@ body {
 
   .admin-upload-fspts-page .admin-upload-drop-zone,
   .admin-upload-fspts-page .admin-upload-file-chip,
-  .admin-upload-fspts-page .admin-upload-validation {
+  .admin-upload-fspts-page .admin-upload-validation,
+  .admin-upload-fspts-page .admin-upload-validation-table-wrap {
     max-inline-size: 100%;
   }
 }

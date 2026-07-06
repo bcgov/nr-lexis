@@ -1139,6 +1139,25 @@ test.describe('TEST IDIR admin regression', () => {
   test('shows average monthly values upload-only workflow controls', async () => {
     const page = await authenticatedIdirPage()
 
+    await page.route('**/api/lexis/rtm/emslogamv/preview', async (route) => {
+      await route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'validation_failed',
+          fileName: 'invalid-amv.xlsx',
+          fileSize: 12,
+          message: 'Template is missing an update date.',
+          rowCount: 0,
+          retrievalDate: null,
+          updateDate: null,
+          errors: ['The update date is required in the uploaded template.'],
+          warnings: [],
+          rows: [],
+        }),
+      })
+    })
+
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expect(
       page.getByText(
@@ -1172,6 +1191,28 @@ test.describe('TEST IDIR admin regression', () => {
     ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
+
+    await page.getByLabel('Average monthly values upload spreadsheet').setInputFiles({
+      name: 'invalid-amv.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: Buffer.from('invalid average monthly values workbook'),
+    })
+
+    await expect(page.getByText('1 validation issue found')).toBeVisible()
+    await expect(
+      page.getByText('Correct the issues in your spreadsheet, then replace the file to continue.'),
+    ).toBeVisible()
+
+    const validationTable = page.getByRole('table', { name: 'Upload validation issues' })
+    await expect(validationTable).toBeVisible()
+    await expect(validationTable.getByRole('columnheader', { name: 'Issue' })).toBeVisible()
+    await expect(validationTable.getByRole('columnheader', { name: 'File location' })).toBeVisible()
+    await expect(validationTable.getByRole('columnheader', { name: 'Detail' })).toBeVisible()
+    await expect(validationTable.getByText('Error')).toBeVisible()
+    await expect(
+      validationTable.getByText('The update date is required in the uploaded template.'),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
   })
 
   test('shows selected natural resource region names across search filters', async () => {

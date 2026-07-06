@@ -57,6 +57,7 @@ type RtmReviewMatrixRow = {
 }
 
 type RtmReviewCellValues = Record<string, number | null>
+type UploadValidationIssueSeverity = 'Error' | 'Warning'
 
 const parseStatusTag = (status: string | undefined) => {
   if (!status) {
@@ -306,6 +307,65 @@ const UploadValidationMessage = ({
   )
 }
 
+const buildValidationIssueRows = (
+  details: string[],
+  severity: UploadValidationIssueSeverity,
+): Array<{ detail: string; key: string; severity: UploadValidationIssueSeverity }> => {
+  const occurrences = new Map<string, number>()
+
+  return details.map((detail) => {
+    const occurrence = (occurrences.get(detail) ?? 0) + 1
+    occurrences.set(detail, occurrence)
+
+    return {
+      detail,
+      key: `${severity}-${detail}-${occurrence}`,
+      severity,
+    }
+  })
+}
+
+const ValidationIssuesTable = ({ errors, warnings }: { errors: string[]; warnings: string[] }) => {
+  const issues = [
+    ...buildValidationIssueRows(errors, 'Error'),
+    ...buildValidationIssueRows(warnings, 'Warning'),
+  ]
+
+  if (issues.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="admin-upload-validation-table-wrap">
+      <div className="admin-upload-validation-table-header">
+        <span>Validation issues ({issues.length})</span>
+      </div>
+      <table className="admin-upload-validation-table" aria-label="Upload validation issues">
+        <thead>
+          <tr>
+            <th className="admin-upload-validation-table__issue" scope="col">
+              Issue
+            </th>
+            <th className="admin-upload-validation-table__location" scope="col">
+              File location
+            </th>
+            <th scope="col">Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {issues.map((issue) => (
+            <tr key={issue.key}>
+              <td className="admin-upload-validation-table__issue">{issue.severity}</td>
+              <td className="admin-upload-validation-table__location">-</td>
+              <td>{issue.detail}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 const UploadValidationStatus = ({
   isPreviewing,
   uploadError,
@@ -337,47 +397,31 @@ const UploadValidationStatus = ({
     return null
   }
 
-  const issueCount = previewResult.errors.length
+  const issueCount = previewResult.errors.length + previewResult.warnings.length
   const isAccepted = previewResult.status === 'accepted'
 
   return (
-    <UploadValidationMessage
-      kind={isAccepted ? 'success' : 'error'}
-      title={
-        isAccepted
-          ? 'Spreadsheet validated'
-          : `${issueCount} validation issue${issueCount === 1 ? '' : 's'} found`
-      }
-    >
-      <p>
-        {selectedUploadFile
-          ? `"${selectedUploadFile.name}" ${isAccepted ? 'is ready for review.' : 'needs correction before review.'}`
-          : previewResult.message}
-      </p>
-      <p>{previewResult.message}</p>
-
-      {previewResult.errors.length > 0 && (
-        <div className="admin-upload-validation__issues">
-          <h3>Errors</h3>
-          <ul>
-            {previewResult.errors.map((error) => (
-              <li key={error}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {previewResult.warnings.length > 0 && (
-        <div className="admin-upload-validation__issues">
-          <h3>Warnings</h3>
-          <ul>
-            {previewResult.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </UploadValidationMessage>
+    <>
+      <UploadValidationMessage
+        kind={isAccepted ? 'success' : 'error'}
+        title={
+          isAccepted
+            ? 'Spreadsheet validated'
+            : `${issueCount} validation issue${issueCount === 1 ? '' : 's'} found`
+        }
+      >
+        <p>
+          {selectedUploadFile
+            ? `"${selectedUploadFile.name}" ${isAccepted ? 'is ready for review.' : 'needs correction before review.'}`
+            : previewResult.message}
+        </p>
+        {!isAccepted && (
+          <p>Correct the issues in your spreadsheet, then replace the file to continue.</p>
+        )}
+        {isAccepted && <p>{previewResult.message}</p>}
+      </UploadValidationMessage>
+      <ValidationIssuesTable errors={previewResult.errors} warnings={previewResult.warnings} />
+    </>
   )
 }
 
