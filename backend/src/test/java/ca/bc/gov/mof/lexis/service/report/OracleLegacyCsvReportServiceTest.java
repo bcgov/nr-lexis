@@ -10,6 +10,7 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Types;
@@ -32,6 +33,7 @@ class OracleLegacyCsvReportServiceTest {
   @Mock private DataSource dataSource;
   @Mock private Connection connection;
   @Mock private CallableStatement callableStatement;
+  @Mock private PreparedStatement preparedStatement;
   @Mock private ResultSet resultSet;
   @Mock private ResultSetMetaData metaData;
   @Mock private OracleConnection oracleConnection;
@@ -454,48 +456,25 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
-  void shouldGenerateBiweeklyCsvFromLegacyProcedureWithReportEmailColumns() throws Exception {
-    CallableStatement csvStatement = Mockito.mock(CallableStatement.class);
-    CallableStatement reportStatement = Mockito.mock(CallableStatement.class);
-    ResultSet csvResultSet = Mockito.mock(ResultSet.class);
-    ResultSet reportResultSet = Mockito.mock(ResultSet.class);
-    ResultSetMetaData csvMetaData = Mockito.mock(ResultSetMetaData.class);
-    ResultSetMetaData reportMetaData = Mockito.mock(ResultSetMetaData.class);
+  void shouldGenerateBiweeklyCsvFromAdvertisingListQuery() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareStatement(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(preparedStatement);
+    when(preparedStatement.executeQuery()).thenReturn(resultSet);
 
-    when(dataSource.getConnection()).thenReturn(connection, connection);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }"))
-        .thenReturn(csvStatement);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
-        .thenReturn(reportStatement);
-    when(connection.unwrap(OracleConnection.class)).thenReturn(oracleConnection);
-    when(oracleConnection.createOracleArray(org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"), org.mockito.ArgumentMatchers.any()))
-        .thenReturn(bindArray);
-    when(csvStatement.getObject(4)).thenReturn(csvResultSet);
-    when(reportStatement.getObject(1)).thenReturn(reportResultSet);
-
-    when(csvResultSet.getMetaData()).thenReturn(csvMetaData);
-    when(csvMetaData.getColumnCount()).thenReturn(4);
-    when(csvMetaData.getColumnName(1)).thenReturn("APPLICATION_NUMBER");
-    when(csvMetaData.getColumnName(2)).thenReturn("CLIENT_CONTACT_PHONE");
-    when(csvMetaData.getColumnName(3)).thenReturn("AGENT_CONTACT_NAME");
-    when(csvMetaData.getColumnName(4)).thenReturn("PACKAGE_NUMBER");
-    when(csvResultSet.next()).thenReturn(true, false);
-    when(csvResultSet.getString(1)).thenReturn("A-1");
-    when(csvResultSet.getString(2)).thenReturn("250-555-0101");
-    when(csvResultSet.getString(3)).thenReturn("Agent Contact");
-    when(csvResultSet.getString(4)).thenReturn("PKG-1");
-
-    when(reportResultSet.getMetaData()).thenReturn(reportMetaData);
-    when(reportMetaData.getColumnCount()).thenReturn(4);
-    when(reportMetaData.getColumnName(1)).thenReturn("APPLICATION_NUMBER");
-    when(reportMetaData.getColumnName(2)).thenReturn("FED_APPLICATION_NUMBER");
-    when(reportMetaData.getColumnName(3)).thenReturn("EMAIL_ADDRESS");
-    when(reportMetaData.getColumnName(4)).thenReturn("AGENT_EMAIL");
-    when(reportResultSet.next()).thenReturn(true, false);
-    when(reportResultSet.getString(1)).thenReturn("A-1");
-    when(reportResultSet.getString(2)).thenReturn(null);
-    when(reportResultSet.getString(3)).thenReturn("owner@example.gov.bc.ca");
-    when(reportResultSet.getString(4)).thenReturn("agent@example.gov.bc.ca");
+    when(resultSet.getMetaData()).thenReturn(metaData);
+    when(metaData.getColumnCount()).thenReturn(5);
+    when(metaData.getColumnName(1)).thenReturn("CLIENT_CONTACT_PHONE");
+    when(metaData.getColumnName(2)).thenReturn("CLIENT_CONTACT_EMAIL");
+    when(metaData.getColumnName(3)).thenReturn("AGENT_CONTACT_NAME");
+    when(metaData.getColumnName(4)).thenReturn("AGENT_CONTACT_EMAIL");
+    when(metaData.getColumnName(5)).thenReturn("PACKAGE_NUMBER");
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString(1)).thenReturn("250-555-0101");
+    when(resultSet.getString(2)).thenReturn("owner@example.gov.bc.ca");
+    when(resultSet.getString(3)).thenReturn("Agent Contact");
+    when(resultSet.getString(4)).thenReturn("agent@example.gov.bc.ca");
+    when(resultSet.getString(5)).thenReturn("PKG-1");
 
     OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
     LexisReportRequestDto request =
@@ -518,23 +497,27 @@ class OracleLegacyCsvReportServiceTest {
     String csv = new String(report.orElseThrow().content());
     assertThat(csv)
         .contains(
-            "\"APPLICATION_NUMBER\",\"CLIENT_CONTACT_PHONE\",\"CLIENT_CONTACT_EMAIL\",\"AGENT_CONTACT_NAME\",\"AGENT_CONTACT_EMAIL\",\"PACKAGE_NUMBER\"");
-    assertThat(csv)
-        .contains(
-            "\"A-1\",\"250-555-0101\",\"owner@example.gov.bc.ca\",\"Agent Contact\",\"agent@example.gov.bc.ca\",\"PKG-1\"");
+            "\"CLIENT_CONTACT_PHONE\",\"CLIENT_CONTACT_EMAIL\",\"AGENT_CONTACT_NAME\",\"AGENT_CONTACT_EMAIL\",\"PACKAGE_NUMBER\"");
 
-    verify(csvStatement)
-        .setString(
-            org.mockito.ArgumentMatchers.eq(1),
-            org.mockito.ArgumentMatchers.contains("ES.ADVERTISING_DATE BETWEEN TO_DATE(:1, 'yyyy-mm-dd')"));
-    verify(csvStatement).setArray(2, bindArray);
-    verify(csvStatement).setInt(3, 8);
-    verify(csvStatement).registerOutParameter(4, Types.REF_CURSOR);
-    verify(reportStatement).registerOutParameter(1, Types.REF_CURSOR);
-    verify(reportStatement).setString(2, "1904,1905");
-    verify(reportStatement).setNull(3, Types.VARCHAR);
-    verify(reportStatement).setString(4, "2026-05-01");
-    verify(reportStatement).setString(5, "2026-05-31");
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(connection).prepareStatement(sqlCaptor.capture());
+    String sql = sqlCaptor.getValue();
+    assertThat(sql).contains("CL.EMAIL_ADDRESS AS CLIENT_CONTACT_EMAIL");
+    assertThat(sql).contains("ACL.EMAIL_ADDRESS AS AGENT_CONTACT_EMAIL");
+    assertThat(sql.indexOf("CL.BUSINESS_PHONE AS CLIENT_CONTACT_PHONE"))
+        .isLessThan(sql.indexOf("CL.EMAIL_ADDRESS AS CLIENT_CONTACT_EMAIL"));
+    assertThat(sql.indexOf("EEA.AGENT_CONTACT_NAME AS AGENT_CONTACT_NAME"))
+        .isLessThan(sql.indexOf("ACL.EMAIL_ADDRESS AS AGENT_CONTACT_EMAIL"));
+    assertThat(sql).contains("ES.ADVERTISING_DATE BETWEEN TO_DATE(?, 'yyyy-mm-dd')");
+
+    verify(preparedStatement).setString(1, "2026-05-01");
+    verify(preparedStatement).setString(2, "2026-05-31");
+    verify(preparedStatement).setString(3, "1904");
+    verify(preparedStatement).setString(4, "1905");
+    verify(preparedStatement).setString(5, "P");
+    verify(preparedStatement).setString(6, "F");
+    verify(preparedStatement).setString(7, "APP");
+    verify(preparedStatement).setString(8, "T");
   }
 
   @Test
