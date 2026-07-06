@@ -1326,6 +1326,122 @@ body {
   gap: 1.5rem;
 }
 
+.admin-upload-fspts-page {
+  margin-left: -2rem;
+  max-width: calc(100% + 2rem);
+  padding: 0;
+}
+
+.admin-upload-fspts-header {
+  padding: 2rem 2.5rem 0;
+  background: var(--cds-layer);
+  border-block-end: 1px solid var(--cds-border-subtle);
+}
+
+.admin-upload-fspts-header h1 {
+  margin: 0 0 0.5rem;
+  color: var(--cds-text-primary);
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 2.5rem;
+}
+
+.admin-upload-fspts-header > p {
+  margin: 0 0 1.5rem;
+  color: var(--csp-text-primary);
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.admin-upload-fspts-header .admin-upload-progress {
+  margin: 0 -2.5rem;
+}
+
+.admin-upload-fspts-header .admin-upload-progress__step {
+  padding-inline-start: 2.5rem;
+}
+
+.admin-upload-fspts-content {
+  padding: 1.5rem 2.5rem 0;
+}
+
+.admin-upload-section-heading {
+  margin-block-end: 1rem;
+}
+
+.admin-upload-section-heading h2 {
+  margin: 0 0 0.5rem;
+  color: var(--cds-text-primary);
+  font-size: 1.75rem;
+  font-weight: 400;
+  line-height: 2.25rem;
+}
+
+.admin-upload-section-heading p {
+  margin: 0;
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.admin-upload-field-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 0.75rem;
+}
+
+.admin-upload-field-header > div {
+  min-inline-size: 0;
+}
+
+.admin-upload-field-label {
+  display: block;
+  margin-block-end: 0.25rem;
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.admin-upload-field-helper {
+  margin: 0;
+  color: var(--csp-text-primary);
+  font-size: 0.75rem;
+  letter-spacing: 0.02rem;
+  line-height: 1rem;
+}
+
+.admin-upload-fspts-button-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0 0 1.5rem;
+  margin-block-start: 1rem;
+}
+
+.admin-upload-fspts-button-row--split {
+  justify-content: space-between;
+}
+
+.admin-upload-fspts-page .admin-upload-drop-zone {
+  display: flex;
+  align-items: flex-start;
+  max-inline-size: 50%;
+  min-block-size: 5rem;
+  margin-block-end: 0.75rem;
+}
+
+.admin-upload-fspts-page .admin-upload-file-chip,
+.admin-upload-fspts-page .admin-upload-validation {
+  max-inline-size: 50%;
+}
+
+.admin-upload-fspts-page .admin-upload-file-chip {
+  border-radius: 2px;
+}
+
 .admin-upload-progress {
   display: flex;
   min-inline-size: 0;
@@ -2011,6 +2127,34 @@ body {
 
   .admin-upload-drop-zone {
     grid-template-columns: 1fr;
+  }
+
+  .admin-upload-fspts-page {
+    margin-left: 0;
+    max-width: 100%;
+  }
+
+  .admin-upload-fspts-header,
+  .admin-upload-fspts-content {
+    padding-inline: 1rem;
+  }
+
+  .admin-upload-fspts-header .admin-upload-progress {
+    margin-inline: -1rem;
+  }
+
+  .admin-upload-fspts-header .admin-upload-progress__step {
+    padding-inline-start: 1rem;
+  }
+
+  .admin-upload-field-header {
+    display: grid;
+  }
+
+  .admin-upload-fspts-page .admin-upload-drop-zone,
+  .admin-upload-fspts-page .admin-upload-file-chip,
+  .admin-upload-fspts-page .admin-upload-validation {
+    max-inline-size: 100%;
   }
 }
 

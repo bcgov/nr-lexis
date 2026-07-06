@@ -148,7 +148,8 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.queryByRole('heading', { name: 'Manual entry' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save row' })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Upload Excel Spreadsheet' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Upload' })).toBeVisible()
+    expect(screen.getByText('Upload Excel Spreadsheet')).toBeVisible()
     expect(screen.queryByRole('heading', { name: 'Data Preview' })).not.toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', {
       name: 'Average monthly values upload workflow progress',
@@ -192,7 +193,7 @@ describe('RTM EMS Log AMV actions', () => {
     await waitFor(() => expect(reviewButton).toBeEnabled())
     await user.click(reviewButton)
 
-    expect(screen.getByRole('heading', { name: 'Review upload' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeVisible()
     const workflowProgress = screen.getByRole('list', {
       name: 'Average monthly values upload workflow progress',
     })

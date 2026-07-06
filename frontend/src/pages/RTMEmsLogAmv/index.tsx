@@ -13,7 +13,6 @@ import {
   Document,
   ErrorFilled,
   InformationFilled,
-  Upload,
 } from '@carbon/icons-react'
 import {
   Button,
@@ -694,8 +693,8 @@ const RTMEmsLogAmvPage = () => {
   const completedWorkflowSteps = uploadStep === 'review' ? ['upload'] : []
 
   return (
-    <Grid fullWidth className="default-grid">
-      <Column sm={4} md={8} lg={16}>
+    <Grid fullWidth className="default-grid admin-upload-fspts-page">
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header">
         <h1>Average Monthly Values</h1>
         <p>{RTM_UPLOAD_ONLY_DESCRIPTION}</p>
         <UploadWorkflowProgress
@@ -706,115 +705,102 @@ const RTMEmsLogAmvPage = () => {
         />
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
         {uploadStep === 'upload' ? (
-          <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
-            <div className="admin-upload-panel__header">
-              <div>
-                <h2 id="rtm-upload-title">Upload Excel Spreadsheet</h2>
-                <p>
-                  Select or drag and drop an XLSX spreadsheet to validate average monthly value rows
-                  before applying changes.
-                </p>
-              </div>
-              <a
-                className="cds--btn cds--btn--ghost"
-                href={RTM_TEMPLATE_DOWNLOAD_PATH}
-                download={RTM_TEMPLATE_DOWNLOAD_NAME}
-              >
-                Download template
-              </a>
+          <>
+            <div className="admin-upload-section-heading">
+              <h2 id="rtm-upload-title">Upload</h2>
+              <p>Select a spreadsheet to validate before reviewing average monthly values.</p>
             </div>
 
-            <input
-              ref={uploadInputRef}
-              key={uploadInputKey}
-              id="rtm-upload-file"
-              className="admin-upload-native-input"
-              type="file"
-              aria-label="Average monthly values upload spreadsheet"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              disabled={!canManage}
-              onChange={updateUploadFile}
-            />
-
-            <div
-              className={uploadDropZoneClassName}
-              role="button"
-              tabIndex={canManage ? 0 : -1}
-              aria-disabled={!canManage}
-              aria-label="Choose an average monthly values upload spreadsheet"
-              onClick={openUploadFileDialog}
-              onKeyDown={onUploadDropZoneKeyDown}
-              onDragEnter={(event) => {
-                event.preventDefault()
-                if (canManage) {
-                  setIsDraggingUpload(true)
-                }
-              }}
-              onDragOver={(event) => {
-                event.preventDefault()
-                if (canManage) {
-                  setIsDraggingUpload(true)
-                }
-              }}
-              onDragLeave={() => setIsDraggingUpload(false)}
-              onDrop={onDropUploadFile}
-            >
-              <div className="admin-upload-drop-zone__icon" aria-hidden="true">
-                <Upload size={32} />
-              </div>
-              <div className="admin-upload-drop-zone__copy">
-                <p>Drag and drop your Excel file here, or browse for files.</p>
-                <p>
-                  Supported format: .xlsx. Enter the update date and AMV values in the template;
-                  values apply to old and second growth.
-                </p>
-              </div>
-              <span
-                className={`cds--btn cds--btn--primary admin-upload-browse-button${
-                  !canManage ? ' cds--btn--disabled' : ''
-                }`}
-                aria-disabled={!canManage}
-              >
-                Browse files
-              </span>
-            </div>
-
-            {selectedUploadFile && (
-              <div
-                className="admin-upload-file-chip"
-                aria-label="Selected average monthly values upload file"
-              >
-                <Document size={16} aria-hidden="true" />
-                <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
-                <span className="admin-upload-file-chip__size">
-                  {selectedUploadFile.size.toLocaleString()} bytes
-                </span>
-                <button
-                  type="button"
-                  className="admin-upload-file-chip__remove"
-                  aria-label="Clear selected file"
-                  onClick={clearUploadState}
+            <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
+              <div className="admin-upload-field-header">
+                <div>
+                  <span className="admin-upload-field-label">Upload Excel Spreadsheet</span>
+                  <p className="admin-upload-field-helper">
+                    Supported format: .xlsx. Enter the update date and AMV values in the template;
+                    values apply to old and second growth.
+                  </p>
+                </div>
+                <a
+                  className="cds--btn cds--btn--ghost"
+                  href={RTM_TEMPLATE_DOWNLOAD_PATH}
+                  download={RTM_TEMPLATE_DOWNLOAD_NAME}
                 >
-                  <Close size={16} />
-                </button>
+                  Download template
+                </a>
               </div>
-            )}
 
-            <UploadValidationStatus
-              isPreviewing={isPreviewing}
-              uploadError={uploadError}
-              previewResult={previewResult}
-              selectedUploadFile={selectedUploadFile}
-            />
+              <input
+                ref={uploadInputRef}
+                key={uploadInputKey}
+                id="rtm-upload-file"
+                className="admin-upload-native-input"
+                type="file"
+                aria-label="Average monthly values upload spreadsheet"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                disabled={!canManage}
+                onChange={updateUploadFile}
+              />
 
-            <div className="admin-upload-preview-footer">
-              <span>
-                {selectedUploadFile
-                  ? 'Validation runs automatically when the selected file changes.'
-                  : 'Upload a spreadsheet to validate it before review.'}
-              </span>
+              <div
+                className={uploadDropZoneClassName}
+                role="button"
+                tabIndex={canManage ? 0 : -1}
+                aria-disabled={!canManage}
+                aria-label="Choose an average monthly values upload spreadsheet"
+                onClick={openUploadFileDialog}
+                onKeyDown={onUploadDropZoneKeyDown}
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  if (canManage) {
+                    setIsDraggingUpload(true)
+                  }
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  if (canManage) {
+                    setIsDraggingUpload(true)
+                  }
+                }}
+                onDragLeave={() => setIsDraggingUpload(false)}
+                onDrop={onDropUploadFile}
+              >
+                <div className="admin-upload-drop-zone__copy">
+                  <p>Drag and drop files here or click to upload</p>
+                </div>
+              </div>
+
+              {selectedUploadFile && (
+                <div
+                  className="admin-upload-file-chip"
+                  aria-label="Selected average monthly values upload file"
+                >
+                  <Document size={16} aria-hidden="true" />
+                  <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
+                  <span className="admin-upload-file-chip__size">
+                    {selectedUploadFile.size.toLocaleString()} bytes
+                  </span>
+                  <button
+                    type="button"
+                    className="admin-upload-file-chip__remove"
+                    aria-label="Clear selected file"
+                    onClick={clearUploadState}
+                  >
+                    <Close size={16} />
+                  </button>
+                </div>
+              )}
+
+              <UploadValidationStatus
+                isPreviewing={isPreviewing}
+                uploadError={uploadError}
+                previewResult={previewResult}
+                selectedUploadFile={selectedUploadFile}
+              />
+            </section>
+
+            <div className="admin-upload-fspts-button-row">
               <Button
                 kind="primary"
                 renderIcon={ArrowRight}
@@ -824,18 +810,33 @@ const RTMEmsLogAmvPage = () => {
                 Review upload
               </Button>
             </div>
-          </section>
+          </>
         ) : (
-          <section className="admin-upload-panel" aria-labelledby="rtm-review-title">
-            <div className="admin-upload-panel__header">
+          <>
+            <div className="admin-upload-section-heading">
+              <h2 id="rtm-review-title">Review</h2>
+              <p>Confirm the average monthly values parsed from the spreadsheet.</p>
+            </div>
+
+            <section className="admin-upload-panel" aria-labelledby="rtm-review-title">
+              {uploadError && (
+                <p className="landing-page-help-text landing-page-help-text--error">
+                  {uploadError}
+                </p>
+              )}
+
+              {previewResult && (
+                <ReviewUploadContent previewResult={previewResult} uploadResult={uploadResult} />
+              )}
+            </section>
+
+            <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split">
               <div>
-                <h2 id="rtm-review-title">Review upload</h2>
-                <p>Confirm the average monthly values parsed from the spreadsheet.</p>
-              </div>
-              <div className="admin-upload-preview-actions">
                 <Button kind="secondary" size="sm" onClick={() => setUploadStep('upload')}>
                   Back
                 </Button>
+              </div>
+              <div>
                 <Button
                   kind="primary"
                   size="sm"
@@ -848,15 +849,7 @@ const RTMEmsLogAmvPage = () => {
                 </Button>
               </div>
             </div>
-
-            {uploadError && (
-              <p className="landing-page-help-text landing-page-help-text--error">{uploadError}</p>
-            )}
-
-            {previewResult && (
-              <ReviewUploadContent previewResult={previewResult} uploadResult={uploadResult} />
-            )}
-          </section>
+          </>
         )}
       </Column>
 

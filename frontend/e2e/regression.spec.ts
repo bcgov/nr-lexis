@@ -1156,6 +1156,8 @@ test.describe('TEST IDIR admin regression', () => {
     })
     await expect(workflowProgress.getByText('1. Upload')).toBeVisible()
     await expect(workflowProgress.getByText('2. Review')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Upload' })).toBeVisible()
+    await expect(page.getByText('Upload Excel Spreadsheet')).toBeVisible()
 
     const templateLink = page.getByRole('link', { name: 'Download template' })
     await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
