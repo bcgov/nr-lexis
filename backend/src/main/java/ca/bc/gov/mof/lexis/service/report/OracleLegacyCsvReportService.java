@@ -11,6 +11,7 @@ import java.sql.Array;
 import java.nio.charset.StandardCharsets;
 import java.sql.CallableStatement;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -46,8 +47,56 @@ public class OracleLegacyCsvReportService {
       "{ call LEXIS_REPORTING.OFFERS_REPORT_CSV(?,?,?,?) }";
   private static final String FEE_SUMMARY_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.FEE_SUMMARY_RPT_CSV(?,?,?,?) }";
-  private static final String BIWEEKLY_CSV_PROCEDURE =
-      "{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }";
+  private static final String BIWEEKLY_CSV_QUERY = """
+      SELECT
+        ES.ADVERTISING_DATE AS ADVERTISING_DATE,
+        OU.ORG_UNIT_NAME AS REGION_NAME,
+        FC.CLIENT_NAME AS CLIENT_NAME,
+        CL.ADDRESS_1 AS CLIENT_ADDRESS_1,
+        CL.ADDRESS_2 AS CLIENT_ADDRESS_2,
+        CL.ADDRESS_3 AS CLIENT_ADDRESS_3,
+        CL.CITY AS CLIENT_CITY,
+        CL.PROVINCE AS CLIENT_PROVINCE,
+        CL.POSTAL_CODE AS CLIENT_POSTAL_CODE,
+        EEA.OWNER_CONTACT_NAME AS CLIENT_CONTACT_NAME,
+        CL.BUSINESS_PHONE AS CLIENT_CONTACT_PHONE,
+        CL.EMAIL_ADDRESS AS CLIENT_CONTACT_EMAIL,
+        EEA.EXPORT_JURISDICTION_CODE AS JURISDICTION_CODE,
+        NVL(EEA.FED_APPLICATION_NUMBER, EEA.APPLICATION_NUMBER) AS APPLICATION_NUMBER,
+        LEXIS_REPORTING.RETRIEVE_SPECIES_ENDUSE(EEA.APPLICATION_NUMBER) AS SPECIES_ENDUSE,
+        EPTC.DESCRIPTION AS PRODUCT_TYPE,
+        EEA.PRODUCT_LOCATION AS PRODUCT_LOCATION,
+        EEA.EXEMPTION_APPLICATION_VOLUME AS EXEMPTION_APPLICATION_VOLUME,
+        EEA.AVERAGE_LOG_VOLUME AS AVERAGE_LOG_VOLUME,
+        AFC.CLIENT_NAME AS AGENT_NAME,
+        ACL.BUSINESS_PHONE AS AGENT_PHONE,
+        EEA.AGENT_CONTACT_NAME AS AGENT_CONTACT_NAME,
+        ACL.EMAIL_ADDRESS AS AGENT_CONTACT_EMAIL,
+        EP.PACKAGE_NUMBER AS PACKAGE_NUMBER,
+        EP.PACKAGE_VOLUME AS PACKAGE_VOLUME,
+        EEA.EXPORT_GROWTH_TYPE_CODE AS AGE_CLASS,
+        EP.AVERAGE_LENGTH AS AVERAGE_LENGTH,
+        EP.AVERAGE_DIAMETER AS AVERAGE_DIAMETER
+      FROM EXPORT_EXEMPTION_APPLICATION EEA
+      LEFT OUTER JOIN EXPORT_PACKAGE EP
+        ON EEA.APPLICATION_NUMBER = EP.APPLICATION_NUMBER
+      INNER JOIN FOREST_CLIENT FC
+        ON EEA.OWNER_CLIENT_NUMBER = FC.CLIENT_NUMBER
+      INNER JOIN CLIENT_LOCATION CL
+        ON EEA.OWNER_CLIENT_NUMBER = CL.CLIENT_NUMBER
+       AND EEA.OWNER_CLIENT_LOCATION_CODE = CL.CLIENT_LOCN_CODE
+      LEFT JOIN FOREST_CLIENT AFC
+        ON EEA.AGENT_CLIENT_NUMBER = AFC.CLIENT_NUMBER
+      LEFT JOIN CLIENT_LOCATION ACL
+        ON EEA.AGENT_CLIENT_NUMBER = ACL.CLIENT_NUMBER
+       AND EEA.AGENT_CLIENT_LOCATION_CODE = ACL.CLIENT_LOCN_CODE
+      INNER JOIN EXPORT_SCHEDULE ES
+        ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
+      INNER JOIN EXPORT_PRODUCT_TYPE_CODE EPTC
+        ON EPTC.EXPORT_PRODUCT_TYPE_CODE = EEA.EXPORT_PRODUCT_TYPE_CODE
+      INNER JOIN ORG_UNIT OU
+        ON OU.ORG_UNIT_NO = EEA.ORG_UNIT_NO
+      """;
   private static final String TRANSPORT_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.TRANSPORT_REPORT_CSV(?,?,?,?) }";
   private static final String EXEMPTIONS_CSV_PROCEDURE =
@@ -311,7 +360,7 @@ public class OracleLegacyCsvReportService {
     Map<String, String> parameters = requestParameters(request);
     DynamicWhere where = buildBiweeklyWhere(parameters);
     Optional<LegacyTabularReportData> dataOptional =
-        executeDynamicCursorProcedure(BIWEEKLY_CSV_PROCEDURE, where);
+        executeQuery(BIWEEKLY_CSV_QUERY, where);
     if (dataOptional.isEmpty()) {
       return Optional.empty();
     }
@@ -520,6 +569,31 @@ public class OracleLegacyCsvReportService {
           rootCauseMessage(ex));
       return Optional.empty();
     }
+  }
+
+  private Optional<LegacyTabularReportData> executeQuery(String baseQuery, DynamicWhere where) {
+    String sql = baseQuery + " WHERE " + toPreparedStatementSql(where.sql());
+    try (Connection connection = dataSource.getConnection();
+        PreparedStatement ps = connection.prepareStatement(sql)) {
+      for (int index = 0; index < where.bindValues().size(); index++) {
+        ps.setString(index + 1, where.bindValues().get(index));
+      }
+
+      try (ResultSet rs = ps.executeQuery()) {
+        return Optional.of(readTabularData(rs));
+      }
+    } catch (SQLException ex) {
+      LOGGER.warn(
+          "CSV report query failed [{}]: {}; root cause: {}",
+          baseQuery,
+          ex.getMessage(),
+          rootCauseMessage(ex));
+      return Optional.empty();
+    }
+  }
+
+  private String toPreparedStatementSql(String sql) {
+    return sql.replaceAll(":\\d+", "?");
   }
 
   private Optional<LegacyTabularReportData> executeCursorProcedure(
