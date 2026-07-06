@@ -233,6 +233,7 @@ const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
 const famManageUrlPattern = /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
+const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -674,6 +675,42 @@ const latestExportScheduleAdvertisingDate = async (page: Page): Promise<string> 
     'export schedule regression needs at least one existing schedule row',
   ).toBeGreaterThan(0)
   return dates[dates.length - 1]
+}
+
+const firstCurrentScheduleAdvertisingDate = async (page: Page): Promise<string> => {
+  const reportOptions = await readJsonResponse<GenericOptionsResponse>(
+    await getWithAuth(page, '/api/lexis/reports/options'),
+  )
+  const currentSchedules = asRecordArray(reportOptions.currentSchedules)
+  expectCurrentScheduleOptions(currentSchedules, 'advertising list report generation')
+
+  const scheduleDate = optionName(currentSchedules.find((schedule) => optionCode(schedule)) ?? {})
+  expect(scheduleDate, 'advertising list report generation needs a dated current schedule').toMatch(
+    isoDatePattern,
+  )
+  return scheduleDate
+}
+
+const postAdvertisingListReport = async (
+  page: Page,
+  format: 'PDF' | 'CSV',
+): Promise<APIResponse> => {
+  const advertisingDate = await firstCurrentScheduleAdvertisingDate(page)
+  return postWithCsrf(page, advertisingListReportEndpoint, {
+    data: {
+      parameters: {
+        fromDate: advertisingDate,
+        toDate: advertisingDate,
+      },
+      format,
+    },
+  })
+}
+
+const readReportBody = async (response: APIResponse, source: string): Promise<Buffer> => {
+  const body = await response.body()
+  expect(response.status(), `${source}: ${redactedTextSnippet(body.toString('utf8'))}`).toBe(200)
+  return body
 }
 
 const postRegressionSubmission = async (
@@ -1536,6 +1573,40 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('combobox', { name: 'Output format' })).toHaveValue('PDF')
     await expect(page.getByRole('button', { name: 'Generate Report' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Reset Fields' })).toBeVisible()
+  })
+
+  test('generates advertising list PDF report', async () => {
+    const page = await authenticatedIdirPage()
+
+    const response = await postAdvertisingListReport(page, 'PDF')
+    const body = await readReportBody(response, 'advertising list PDF report')
+    const headers = response.headers()
+
+    expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/pdf')
+    expect(headers['content-disposition'] ?? '').toContain('biweeklyListing.pdf')
+    expect(body.length, 'advertising list PDF should not be empty').toBeGreaterThan(100)
+    expect(body.toString('utf8', 0, 4)).toBe('%PDF')
+  })
+
+  test('generates advertising list CSV report with owner and agent email columns', async () => {
+    const page = await authenticatedIdirPage()
+
+    const response = await postAdvertisingListReport(page, 'CSV')
+    const body = await readReportBody(response, 'advertising list CSV report')
+    const headers = response.headers()
+    const csv = body.toString('utf8')
+    const header = csv.split(/\r?\n/, 1)[0] ?? ''
+
+    expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/vnd.ms-excel')
+    expect(headers['content-disposition'] ?? '').toMatch(/biweeklyListing\d{4}-\d{2}-\d{2}\.csv/)
+    expect(header).toContain('"CLIENT_CONTACT_EMAIL"')
+    expect(header).toContain('"AGENT_CONTACT_EMAIL"')
+    expect(header.indexOf('"CLIENT_CONTACT_PHONE"')).toBeLessThan(
+      header.indexOf('"CLIENT_CONTACT_EMAIL"'),
+    )
+    expect(header.indexOf('"AGENT_CONTACT_NAME"')).toBeLessThan(
+      header.indexOf('"AGENT_CONTACT_EMAIL"'),
+    )
   })
 
   // TODO: Re-enable this EXPORT_SCHEDULE write regression once TEST grants allow
