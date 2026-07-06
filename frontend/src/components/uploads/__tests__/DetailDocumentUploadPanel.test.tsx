@@ -29,7 +29,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getByLabelText('Document File')).toBeDisabled()
     expect(screen.getByText('Browse files')).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText('Upload access is read only.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Submit Upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save upload' })).toBeDisabled()
   })
 
   it('shows a visible refresh error after a successful upload when refresh fails', async () => {
@@ -52,7 +52,7 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -71,6 +71,46 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       screen.getByText('Documents uploaded, but the document list could not refresh.'),
     ).toBeInTheDocument()
+  })
+
+  it('replaces selected documents with the same file name before saving', async () => {
+    const firstFile = new File(['first document upload'], 'application-document.pdf', {
+      type: 'application/pdf',
+    })
+    const replacementFile = new File(['replacement document upload'], 'application-document.pdf', {
+      type: 'application/pdf',
+    })
+    mockedSubmitAdminUpload.mockResolvedValue({
+      status: 'success',
+      message: 'Application document upload submitted.',
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
+    await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
+
+    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+    expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file: replacementFile,
+        }),
+      )
+    })
+    expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
   })
 
   it('shows plain-language backend upload errors in the queue', async () => {
@@ -96,7 +136,7 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     expect(await screen.findByText('Upload error')).toBeInTheDocument()
     expect(screen.getByText('1 file failed. Review the queue for details.')).toBeInTheDocument()

@@ -57,8 +57,8 @@ function UploadQueuePreview({
   emptyStateTitle = 'No data uploaded yet',
   emptyStateDescription = 'Upload files to see them here.',
   itemNoun = 'file',
-  submitLabel = 'Submit Upload',
-  submittingLabel = 'Submitting...',
+  submitLabel = 'Save upload',
+  submittingLabel = 'Saving upload...',
   removeLabel = 'Remove',
   pendingMessage = 'Not submitted yet.',
   canRemoveItem = () => true,
@@ -126,7 +126,7 @@ function UploadQueuePreview({
             {items.length === 0
               ? emptyDescription
               : `Review ${selectedItemLabel} before ${
-                  isSubmissionQueue ? 'finalizing' : 'submitting'
+                  isSubmissionQueue ? 'finalizing' : 'saving'
                 }.`}
           </p>
         </div>

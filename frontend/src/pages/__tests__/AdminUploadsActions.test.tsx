@@ -120,7 +120,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText('Permit 5001').length).toBeGreaterThan(0)
     expect(screen.getByText(/PDF \| 13 B \| Added/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -220,7 +220,7 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['application upload'], 'application.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -267,7 +267,7 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['exemption upload'], 'exemption.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -316,7 +316,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.type(screen.getByLabelText('Invoice number'), 'INV123')
     await userEvent.type(screen.getByLabelText('Export value (CAD)'), '1000')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -339,7 +339,7 @@ describe('Admin upload workflow smoke', () => {
     expect(
       screen.getByText('Attach an invoice file and invoice values to an existing permit.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Submit Upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save upload' })).toBeDisabled()
   })
 
   it('shows a data preview empty state before files are selected', () => {
@@ -410,7 +410,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText(/PDF \| 25 B \| Added/)).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -430,7 +430,7 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/admin/uploads?type=permit')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
     expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
@@ -451,7 +451,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.clear(screen.getByLabelText('Fee in lieu'))
     await userEvent.type(screen.getByLabelText('Fee in lieu'), '0')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     expect(screen.getByText('Invoice number must be 9 characters or fewer.')).toBeInTheDocument()
     expect(screen.getAllByText('Use a positive numeric value.').length).toBeGreaterThanOrEqual(3)
@@ -1057,7 +1057,7 @@ describe('Admin upload workflow smoke', () => {
       ).length,
     ).toBeGreaterThan(0)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     expect(
       screen.getAllByText('1 queued file needs attention before upload.').length,

@@ -11,10 +11,12 @@ import { buildLexisXmlPreviewMessage } from '@/components/uploads/lexisXmlPrevie
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
+  DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
   extractUploadErrorDetails,
   GENERIC_SUBMISSION_FAILURE_MESSAGE,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   getFileExtension,
+  uploadQueueFileKey,
 } from '@/components/uploads/uploadQueueHelpers'
 import type {
   UploadQueueItem,
@@ -363,8 +365,6 @@ const uploadTargetSummary = (
 const defaultSuccessTitle = (workflowType: UploadWorkflowType): string =>
   workflowType === 'applicationSubmission' ? 'Application submission complete' : 'Upload submitted'
 
-const uploadQueueFileKey = (file: File): string => file.name.trim().toLocaleLowerCase()
-
 function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPageProps) {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -444,13 +444,13 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         : hasQueuedLexisSubmissions || !hasValidatedLexisSubmissions
           ? `Validate ${applicationSubmissionActionNoun}`
           : `Finalize ${applicationSubmissionActionNoun}`
-      : 'Submit Upload'
+      : 'Save upload'
   const submittingButtonLabel =
     selectedWorkflowType === 'applicationSubmission' && hasQueuedLexisSubmissions
       ? `Validating ${applicationSubmissionActionNoun}...`
       : selectedWorkflowType === 'applicationSubmission'
         ? `Finalizing ${applicationSubmissionActionNoun}...`
-        : 'Submitting...'
+        : 'Saving upload...'
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
@@ -541,17 +541,25 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     const nextItemsByFileName = new Map<string, UploadQueueItem>()
     Array.from(files).forEach((file, index) => {
       const validationMessage = validateQueuedFile(file, selectedWorkflowType)
+      const isApplicationSubmission = selectedWorkflowType === 'applicationSubmission'
+      const validDocumentMessage = isApplicationSubmission ? '' : DOCUMENT_UPLOAD_VALIDATED_MESSAGE
 
       nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
         workflowLabel: selectedWorkflow.label,
         queuedAt,
-        status: validationMessage ? ('invalid' as const) : ('queued' as const),
-        message: validationMessage ?? '',
+        status: validationMessage
+          ? ('invalid' as const)
+          : isApplicationSubmission
+            ? ('queued' as const)
+            : ('validated' as const),
+        message: validationMessage || validDocumentMessage,
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
-          : undefined,
+          : validDocumentMessage
+            ? { summary: validDocumentMessage }
+            : undefined,
       })
     })
     const nextItems = Array.from(nextItemsByFileName.values())
