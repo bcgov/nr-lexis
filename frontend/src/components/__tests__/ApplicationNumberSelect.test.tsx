@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import ApplicationNumberSelect from '../ApplicationNumberSelect'
@@ -51,5 +51,64 @@ describe('ApplicationNumberSelect', () => {
     )
 
     expect(onChange).toHaveBeenLastCalledWith('28077')
+  })
+
+  it('shows every loaded option for short result lists when a value is already selected', async () => {
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
+      {
+        value: '28077',
+        label: '28077 - Approved - Owner 00016245 - Region RKB',
+        status: 'Approved',
+        applicantClientNumber: '',
+        ownerClientNumber: '00016245',
+        region: 'RKB',
+        listingDate: '2012-05-11',
+        exemptionNumber: '',
+      },
+      {
+        value: '28078',
+        label: '28078 - New - Owner 00016245 - Region RKB',
+        status: 'New',
+        applicantClientNumber: '',
+        ownerClientNumber: '00016245',
+        region: 'RKB',
+        listingDate: '2012-05-12',
+        exemptionNumber: '',
+      },
+    ])
+
+    render(
+      <ApplicationNumberSelect
+        id="applicationNumber"
+        labelText="Application Number (required)"
+        value="28077"
+        onChange={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplicationNumberOptions).toHaveBeenLastCalledWith('28077')
+    })
+
+    const input = screen.getByRole('combobox', { name: 'Application Number (required)' })
+    await waitFor(() => {
+      expect(input).toHaveValue('28077 - Approved - Owner 00016245 - Region RKB')
+    })
+    await userEvent.click(input)
+
+    const listboxId = input.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+
+    expect(listbox).not.toBeNull()
+    expect(
+      within(listbox as HTMLElement).getByRole('option', {
+        name: '28077 - Approved - Owner 00016245 - Region RKB',
+      }),
+    ).toBeVisible()
+    expect(
+      within(listbox as HTMLElement).getByRole('option', {
+        name: '28078 - New - Owner 00016245 - Region RKB',
+      }),
+    ).toBeVisible()
   })
 })

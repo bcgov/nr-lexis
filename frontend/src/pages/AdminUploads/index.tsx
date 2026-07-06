@@ -3,6 +3,7 @@ import { Column, ComboBox, Grid, Tag, TextArea, TextInput } from '@carbon/react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
+import { shouldFilterSearchableDropdownItem } from '../../components/dropdown-filtering'
 import SearchableSelect from '../../components/SearchableSelect'
 import MultiFileDropZone from '../../components/uploads/MultiFileDropZone'
 import UploadQueuePreview from '../../components/uploads/UploadQueuePreview'
@@ -210,21 +211,6 @@ const uploadTargetItemToString = (
   return item?.label ?? ''
 }
 
-const shouldFilterUploadTargetItem = ({
-  item,
-  inputValue,
-}: {
-  item: UploadTargetNumberOption
-  inputValue: string | null
-}): boolean => {
-  const query = inputValue?.trim().toLowerCase()
-  if (!query) {
-    return true
-  }
-
-  return item.label.toLowerCase().includes(query) || item.value.toLowerCase().includes(query)
-}
-
 function UploadTargetNumberSelect({
   id,
   labelText,
@@ -283,7 +269,9 @@ function UploadTargetNumberSelect({
       items={options}
       selectedItem={selectedItem}
       itemToString={uploadTargetItemToString}
-      shouldFilterItem={shouldFilterUploadTargetItem}
+      shouldFilterItem={({ item, inputValue }) =>
+        shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: options.length })
+      }
       placeholder={isLoading ? 'Loading matches...' : 'Search by number'}
       allowCustomValue
       invalid={invalid}

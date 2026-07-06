@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -132,6 +132,56 @@ describe('Admin upload workflow smoke', () => {
     })
 
     expect(screen.getByText('Upload submitted')).toBeInTheDocument()
+  })
+
+  it('shows every loaded permit number option for short result lists', async () => {
+    mockUploadAccess('/filePermitUpload')
+    mockedSearchProvincialPermitNumberOptions.mockResolvedValue([
+      {
+        value: '5001',
+        label: '5001 - Active - Owner 00016245 - Region RKB',
+        status: 'Active',
+        applicantClientNumber: '',
+        ownerClientNumber: '00016245',
+        totalVolume: 10,
+        issueDate: '2026-06-01',
+        region: 'RKB',
+      },
+      {
+        value: '5002',
+        label: '5002 - Issued - Owner 00016245 - Region RKB',
+        status: 'Issued',
+        applicantClientNumber: '',
+        ownerClientNumber: '00016245',
+        totalVolume: 20,
+        issueDate: '2026-06-02',
+        region: 'RKB',
+      },
+    ])
+
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialPermitNumberOptions).toHaveBeenLastCalledWith('5001')
+    })
+
+    const input = screen.getByRole('combobox', { name: 'Permit number' })
+    await userEvent.click(input)
+
+    const listboxId = input.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+
+    expect(listbox).not.toBeNull()
+    expect(
+      within(listbox as HTMLElement).getByRole('option', {
+        name: '5001 - Active - Owner 00016245 - Region RKB',
+      }),
+    ).toBeVisible()
+    expect(
+      within(listbox as HTMLElement).getByRole('option', {
+        name: '5002 - Issued - Owner 00016245 - Region RKB',
+      }),
+    ).toBeVisible()
   })
 
   it('searches application numbers for application document uploads', async () => {

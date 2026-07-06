@@ -1,5 +1,6 @@
 import { ComboBox } from '@carbon/react'
 import type { ReactNode } from 'react'
+import { shouldFilterSearchableDropdownItem } from './dropdown-filtering'
 
 export type SearchableSelectOption = {
   value: string
@@ -20,27 +21,6 @@ export type SearchableSelectProps = {
 }
 
 const itemToString = (item: SearchableSelectOption | null | undefined): string => item?.label ?? ''
-
-const shouldFilterItem = ({
-  item,
-  inputValue,
-  optionCount,
-}: {
-  item: SearchableSelectOption
-  inputValue: string | null
-  optionCount: number
-}): boolean => {
-  if (optionCount <= 5) {
-    return true
-  }
-
-  const query = inputValue?.trim().toLowerCase()
-  if (!query) {
-    return true
-  }
-
-  return item.label.toLowerCase().includes(query) || item.value.toLowerCase().includes(query)
-}
 
 export default function SearchableSelect({
   id,
@@ -65,7 +45,7 @@ export default function SearchableSelect({
       selectedItem={selectedItem}
       itemToString={itemToString}
       shouldFilterItem={({ item, inputValue }) =>
-        shouldFilterItem({ item, inputValue, optionCount: options.length })
+        shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: options.length })
       }
       placeholder={placeholder}
       disabled={disabled}

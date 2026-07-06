@@ -6,16 +6,18 @@ import SearchableSelect from '../SearchableSelect'
 Element.prototype.scrollIntoView = vi.fn()
 
 describe('SearchableSelect', () => {
-  it('shows every option for short lists when a value is already selected', async () => {
+  it('shows every option for lists with fewer than ten items when a value is already selected', async () => {
+    const options = Array.from({ length: 9 }, (_, index) => ({
+      value: `OPT-${index + 1}`,
+      label: `Option ${index + 1}`,
+    }))
+
     render(
       <SearchableSelect
         id="output-format"
         labelText="Output format"
-        value="PDF"
-        options={[
-          { value: 'PDF', label: 'PDF' },
-          { value: 'CSV', label: 'CSV' },
-        ]}
+        value="OPT-1"
+        options={options}
         onChange={vi.fn()}
       />,
     )
@@ -27,7 +29,39 @@ describe('SearchableSelect', () => {
     const listbox = listboxId ? document.getElementById(listboxId) : null
 
     expect(listbox).not.toBeNull()
-    expect(within(listbox as HTMLElement).getByRole('option', { name: 'PDF' })).toBeVisible()
-    expect(within(listbox as HTMLElement).getByRole('option', { name: 'CSV' })).toBeVisible()
+    for (const option of options) {
+      expect(
+        within(listbox as HTMLElement).getByRole('option', { name: option.label }),
+      ).toBeVisible()
+    }
+  })
+
+  it('keeps filtering longer lists by the current input value', async () => {
+    const options = Array.from({ length: 10 }, (_, index) => ({
+      value: `OPT-${index + 1}`,
+      label: `Option ${index + 1}`,
+    }))
+
+    render(
+      <SearchableSelect
+        id="application-status"
+        labelText="Application status"
+        value="OPT-1"
+        options={options}
+        onChange={vi.fn()}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: 'Application status' })
+    await userEvent.click(combobox)
+
+    const listboxId = combobox.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+
+    expect(listbox).not.toBeNull()
+    expect(within(listbox as HTMLElement).getByRole('option', { name: 'Option 1' })).toBeVisible()
+    expect(
+      within(listbox as HTMLElement).queryByRole('option', { name: 'Option 2' }),
+    ).not.toBeInTheDocument()
   })
 })
