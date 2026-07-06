@@ -1323,17 +1323,17 @@ body {
 
 .admin-upload-workflow {
   display: grid;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .admin-upload-progress {
   display: flex;
   min-inline-size: 0;
-  margin: 1rem 0 0;
+  margin: 1.5rem 0 0;
 }
 
 .admin-upload-panel > .admin-upload-progress {
-  margin: 0 1rem;
+  margin: 0 0 1.5rem;
 }
 
 .admin-upload-progress__step {
@@ -1400,8 +1400,8 @@ body {
 
 .admin-upload-workspace {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
-  gap: 1rem;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
   align-items: start;
   min-inline-size: 0;
 }
@@ -1411,14 +1411,15 @@ body {
 }
 
 .admin-upload-settings-grid {
-  padding: 1rem;
+  margin-block-start: 1rem;
+  padding: 0;
 }
 
 .admin-upload-summary-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin: 1rem 1rem 0;
+  gap: 1rem;
+  margin: 0 0 1.5rem;
   overflow: hidden;
   border: 0;
   background: transparent;
@@ -1428,8 +1429,9 @@ body {
   display: grid;
   gap: 0.25rem;
   min-inline-size: 0;
-  padding: 0.75rem;
-  background: var(--cds-layer-accent);
+  padding: 0 0 0 0.75rem;
+  background: transparent;
+  border-inline-start: 3px solid var(--cds-border-interactive);
 }
 
 .admin-upload-summary-strip span {
@@ -1448,12 +1450,18 @@ body {
 }
 
 .admin-upload-panel__header h2 {
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  font-weight: 400;
+  line-height: 2.25rem;
 }
 
 .admin-upload-panel {
   min-inline-size: 0;
-  background: transparent;
+  padding: 2rem;
+  background: var(--cds-layer);
+  border: 1px solid var(--cds-border-subtle);
+  border-radius: 8px;
 }
 
 .admin-upload-panel__header {
@@ -1461,7 +1469,7 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem;
+  padding: 0 0 1rem;
 }
 
 .admin-upload-panel__header > div {
@@ -1479,11 +1487,20 @@ body {
   grid-template-columns: auto minmax(0, 1fr) max-content;
   gap: 1rem;
   align-items: center;
+  max-inline-size: min(100%, 42rem);
   min-inline-size: 0;
-  margin: 1rem;
-  padding: 1.5rem;
-  background: var(--cds-layer-accent);
-  border: 2px dashed var(--cds-border-subtle);
+  min-block-size: 5rem;
+  margin: 0;
+  padding: 1rem;
+  background: transparent;
+  border: 1px dashed var(--cds-border-subtle);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.admin-upload-drop-zone:focus {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
 }
 
 .admin-upload-drop-zone.is-dragging {
@@ -1495,18 +1512,16 @@ body {
   color: var(--cds-text-disabled);
   background: var(--cds-layer);
   border-color: var(--cds-border-disabled);
+  cursor: not-allowed;
 }
 
 .admin-upload-drop-zone__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 3rem;
-  block-size: 3rem;
-  color: var(--cds-icon-secondary);
-  background: var(--cds-layer);
-  border: 1px solid var(--cds-border-subtle);
-  border-radius: 50%;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  color: var(--cds-link-primary);
 }
 
 .admin-upload-drop-zone__copy {
@@ -1519,7 +1534,7 @@ body {
 }
 
 .admin-upload-drop-zone__copy p:first-child {
-  color: var(--cds-text-primary);
+  color: var(--cds-link-primary);
 }
 
 .admin-upload-drop-zone__copy p:last-child {
@@ -1548,7 +1563,7 @@ body {
 }
 
 .admin-upload-file-error {
-  margin: 0 1rem 1rem;
+  margin: 0.75rem 0 0;
 }
 
 .admin-upload-queue-summary {
@@ -1561,13 +1576,14 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  max-inline-size: min(100%, 42rem);
   min-inline-size: 0;
-  margin: 0 1rem 1rem;
+  margin: 0.75rem 0 0;
   padding: 0.5rem 0.75rem;
   color: var(--cds-text-primary);
   background: var(--cds-layer);
   border: 1px solid var(--cds-border-subtle);
-  border-radius: 2px;
+  border-radius: 4px;
 }
 
 .admin-upload-file-chip__name {
@@ -1606,10 +1622,13 @@ body {
 .admin-upload-validation {
   display: flex;
   gap: 0.75rem;
-  margin: 0 1rem 1rem;
+  max-inline-size: min(100%, 42rem);
+  margin: 0.75rem 0 0;
   padding: 0.75rem 1rem;
   background: var(--cds-layer);
+  border: 1px solid var(--cds-border-subtle);
   border-inline-start: 3px solid var(--cds-border-interactive);
+  border-radius: 4px;
 }
 
 .admin-upload-validation--success {
@@ -1678,7 +1697,7 @@ body {
 }
 
 .admin-upload-preview-filter {
-  padding: 1rem 1rem 0;
+  padding: 0 0 1rem;
 }
 
 .admin-upload-empty-state {
@@ -1687,6 +1706,8 @@ body {
   gap: 0.5rem;
   padding: 3rem 1rem;
   color: var(--csp-text-primary);
+  background: var(--cds-layer-accent);
+  border-radius: 4px;
   text-align: center;
 }
 
@@ -1742,7 +1763,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  padding: 1.5rem 0 0;
   color: var(--csp-text-primary);
   font-size: 0.875rem;
 }
@@ -1756,7 +1777,7 @@ body {
 .admin-upload-review {
   display: grid;
   gap: 0.75rem;
-  padding: 1rem;
+  padding: 0;
 }
 
 .admin-upload-review--rtm {
@@ -1789,7 +1810,7 @@ body {
 .admin-upload-review__item {
   background: var(--cds-layer);
   border: 1px solid var(--cds-border-subtle);
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .admin-upload-review__item--failed,
@@ -1915,9 +1936,12 @@ body {
 .admin-upload-result {
   display: grid;
   gap: 0.5rem;
+  margin-block-start: 0.75rem;
   padding: 0.75rem 1rem;
   background: var(--cds-layer);
+  border: 1px solid var(--cds-border-subtle);
   border-inline-start: 3px solid var(--cds-border-interactive);
+  border-radius: 4px;
 }
 
 .admin-upload-result p {
@@ -1931,17 +1955,18 @@ body {
 }
 
 .detail-document-upload__workspace {
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  grid-template-columns: 1fr;
 }
 
 .detail-document-upload .admin-upload-panel__header h2 {
-  font-size: 1rem;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
 }
 
 .detail-document-upload .admin-upload-panel .cds--text-area__wrapper {
   inline-size: auto;
   max-inline-size: none;
-  margin: 1rem;
+  margin: 1rem 0 0;
 }
 
 .detail-document-upload .admin-upload-panel .cds--text-area {
@@ -1950,7 +1975,8 @@ body {
 }
 
 .detail-document-upload__invoice-fields {
-  padding: 1rem 1rem 0;
+  margin-block-start: 1rem;
+  padding: 0;
 }
 
 @media (max-width: 671px) {

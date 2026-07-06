@@ -167,6 +167,9 @@ describe('RTM EMS Log AMV actions', () => {
         'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
       ),
     ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
+    ).toBeVisible()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })

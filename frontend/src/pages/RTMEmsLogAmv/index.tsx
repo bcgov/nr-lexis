@@ -1,4 +1,11 @@
-import { useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import {
   ArrowRight,
   CheckmarkFilled,
@@ -476,6 +483,7 @@ const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const validationRequestRef = useRef(0)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
   const [uploadStep, setUploadStep] = useState<RtmUploadStep>('upload')
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -557,6 +565,23 @@ const RTMEmsLogAmvPage = () => {
       return
     }
     void validateUploadFile(event.dataTransfer.files?.[0] ?? null)
+  }
+
+  const openUploadFileDialog = () => {
+    if (!canManage) {
+      return
+    }
+
+    uploadInputRef.current?.click()
+  }
+
+  const onUploadDropZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+
+    event.preventDefault()
+    openUploadFileDialog()
   }
 
   const clearUploadState = () => {
@@ -701,8 +726,26 @@ const RTMEmsLogAmvPage = () => {
               </a>
             </div>
 
+            <input
+              ref={uploadInputRef}
+              key={uploadInputKey}
+              id="rtm-upload-file"
+              className="admin-upload-native-input"
+              type="file"
+              aria-label="Average monthly values upload spreadsheet"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              disabled={!canManage}
+              onChange={updateUploadFile}
+            />
+
             <div
               className={uploadDropZoneClassName}
+              role="button"
+              tabIndex={canManage ? 0 : -1}
+              aria-disabled={!canManage}
+              aria-label="Choose an average monthly values upload spreadsheet"
+              onClick={openUploadFileDialog}
+              onKeyDown={onUploadDropZoneKeyDown}
               onDragEnter={(event) => {
                 event.preventDefault()
                 if (canManage) {
@@ -728,30 +771,14 @@ const RTMEmsLogAmvPage = () => {
                   values apply to old and second growth.
                 </p>
               </div>
-              <input
-                key={uploadInputKey}
-                id="rtm-upload-file"
-                className="admin-upload-native-input"
-                type="file"
-                aria-label="Average monthly values upload spreadsheet"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                disabled={!canManage}
-                onChange={updateUploadFile}
-              />
-              <label
+              <span
                 className={`cds--btn cds--btn--primary admin-upload-browse-button${
                   !canManage ? ' cds--btn--disabled' : ''
                 }`}
-                htmlFor={canManage ? 'rtm-upload-file' : undefined}
                 aria-disabled={!canManage}
-                onClick={(event) => {
-                  if (!canManage) {
-                    event.preventDefault()
-                  }
-                }}
               >
                 Browse files
-              </label>
+              </span>
             </div>
 
             {selectedUploadFile && (

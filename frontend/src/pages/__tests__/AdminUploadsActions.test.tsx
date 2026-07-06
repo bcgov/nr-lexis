@@ -113,6 +113,7 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByRole('combobox', { name: 'Permit number' })).toHaveValue('5001')
     expect(screen.getByText('Allowed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Choose files for Upload Documents' })).toBeVisible()
 
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
