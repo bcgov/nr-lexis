@@ -363,6 +363,8 @@ const uploadTargetSummary = (
 const defaultSuccessTitle = (workflowType: UploadWorkflowType): string =>
   workflowType === 'applicationSubmission' ? 'Application submission complete' : 'Upload submitted'
 
+const uploadQueueFileKey = (file: File): string => file.name.trim().toLocaleLowerCase()
+
 function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPageProps) {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -531,10 +533,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     }
 
     const queuedAt = Date.now()
-    const nextItems: UploadQueueItem[] = Array.from(files).map((file, index) => {
+    const nextItemsByFileName = new Map<string, UploadQueueItem>()
+    Array.from(files).forEach((file, index) => {
       const validationMessage = validateQueuedFile(file, selectedWorkflowType)
 
-      return {
+      nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
         workflowLabel: selectedWorkflow.label,
@@ -544,10 +547,15 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
           : undefined,
-      }
+      })
     })
+    const nextItems = Array.from(nextItemsByFileName.values())
+    const replacementFileNames = new Set(nextItems.map((item) => uploadQueueFileKey(item.file)))
 
-    setUploadQueue((current) => [...current, ...nextItems])
+    setUploadQueue((current) => [
+      ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
+      ...nextItems,
+    ])
     if (selectedWorkflowType === 'applicationSubmission') {
       nextItems
         .filter((item) => item.status === 'queued')

@@ -389,6 +389,40 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Showing 0 of 2 files')).toBeInTheDocument()
   })
 
+  it('replaces queued document uploads with the same file name', async () => {
+    mockUploadAccess('/filePermitUpload')
+
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+
+    const firstFile = new File(['first permit upload'], 'permit.pdf', {
+      type: 'application/pdf',
+    })
+    const replacementFile = new File(['replacement permit upload'], 'permit.pdf', {
+      type: 'application/pdf',
+    })
+
+    await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
+    await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
+
+    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+    expect(screen.getByText(/PDF \| 25 B \| Added/)).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'permit',
+        expect.objectContaining({
+          permitNumber: '5001',
+          file: replacementFile,
+          fileDescription: 'Permit evidence',
+        }),
+      )
+    })
+    expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
+  })
+
   it('shows field validation for missing permit upload inputs', async () => {
     mockUploadAccess('/filePermitUpload')
 
@@ -544,6 +578,39 @@ describe('Admin upload workflow smoke', () => {
       'href',
       '/provincial/application/9001',
     )
+  })
+
+  it('replaces queued application submissions with the same file name before validation', async () => {
+    mockUploadAccess('uploadApplicationSubmission')
+    mockedValidateApplicationSubmissionUpload.mockResolvedValue({
+      message:
+        'LEXIS application submission validated for package TEST23-652-7D-2 with 3 scale rows.',
+      packageNumber: 'TEST23-652-7D-2',
+      scaleRows: 3,
+    })
+
+    renderPage('/provincial/application/upload')
+
+    const firstFile = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
+    const replacementFile = new File([XML_PREVIEW_FIXTURE], 'submission.xml', {
+      type: 'application/xml',
+    })
+
+    await userEvent.upload(screen.getByLabelText('Application submission file'), firstFile)
+    await userEvent.upload(screen.getByLabelText('Application submission file'), replacementFile)
+
+    expect(screen.getByText('Showing 1 of 1 submission')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
+
+    await waitFor(() => {
+      expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          file: replacementFile,
+        }),
+      )
+    })
+    expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(1)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
   it('cancels a validated application submission and clears review state', async () => {
