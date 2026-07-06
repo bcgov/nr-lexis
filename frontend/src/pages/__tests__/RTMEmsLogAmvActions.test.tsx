@@ -58,6 +58,7 @@ const chooseFirstComboBoxOption = async (labelText: string, optionName: string):
 describe('RTM EMS Log AMV actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.config = {}
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedSearchRtmEmsLogAmv.mockResolvedValue([])
     mockedSaveRtmEmsLogAmv.mockResolvedValue({
@@ -87,6 +88,22 @@ describe('RTM EMS Log AMV actions', () => {
     )
     expect(screen.getByRole('button', { name: 'Preview data' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Apply upload' })).toBeDisabled()
+  })
+
+  it('shows only upload controls in production RTM-only mode', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+
+    render(<RTMEmsLogAmvPage />)
+
+    await screen.findByRole('heading', { name: 'Average Monthly Values' })
+
+    expect(screen.queryByRole('heading', { name: 'Query rows' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Manual entry' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Upload Excel Spreadsheet' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Data Preview' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save row' })).not.toBeInTheDocument()
+    expect(mockedSearchRtmEmsLogAmv).not.toHaveBeenCalled()
   })
 
   it('searches average monthly values with retrieval and update dates from the query form', async () => {

@@ -27,6 +27,7 @@ import {
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect, { type SearchableSelectOption } from '../../components/SearchableSelect'
+import { isProdRtmOnlyMode } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   isValidIsoDate,
@@ -150,6 +151,9 @@ const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 const RTM_MODULE_DESCRIPTION =
   'Query current and historical average monthly value rows, make manual create/update entries, and generate an upload preview from XLSX files.'
 
+const RTM_UPLOAD_ONLY_DESCRIPTION =
+  'Generate an upload preview from XLSX files and apply validated average monthly value changes.'
+
 const RTM_GROWTH_INDICATOR_OPTIONS: SearchableSelectOption[] = [
   { value: 'O', label: 'O - Old growth' },
   { value: 'S', label: 'S - Second growth' },
@@ -167,6 +171,7 @@ const toSpeciesOption = (item: ApplicationCodeOption): SearchableSelectOption =>
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
+  const isUploadOnlyMode = isProdRtmOnlyMode()
   const [filters, setFilters] = useState<RtmEmsLogAmvFilters>(() => createInitialFilters())
   const [rows, setRows] = useState<RtmEmsLogAmvRow[]>([])
   const [speciesOptions, setSpeciesOptions] = useState<SearchableSelectOption[]>([])
@@ -243,6 +248,10 @@ const RTMEmsLogAmvPage = () => {
   )
 
   const runSearch = useCallback(async (nextFilters: RtmEmsLogAmvFilters) => {
+    if (isProdRtmOnlyMode()) {
+      return
+    }
+
     setSearchError('')
 
     if (!hasRequiredSearchFilters(nextFilters)) {
@@ -325,6 +334,11 @@ const RTMEmsLogAmvPage = () => {
 
   const submitSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (isUploadOnlyMode) {
+      setManualError('Manual average monthly value entry is not available in this environment.')
+      return
+    }
+
     if (!canManage) {
       setManualError('You do not have permission to save average monthly value rows.')
       return
@@ -465,6 +479,7 @@ const RTMEmsLogAmvPage = () => {
       )
       setNotification(createResultMessage(response.status, response.message, response.errors))
       if (
+        !isUploadOnlyMode &&
         (response.status === 'accepted' || response.status === 'validation_failed') &&
         filters.species.trim().length > 0
       ) {
@@ -528,256 +543,262 @@ const RTMEmsLogAmvPage = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Average Monthly Values</h1>
-        <p>{RTM_MODULE_DESCRIPTION}</p>
+        <p>{isUploadOnlyMode ? RTM_UPLOAD_ONLY_DESCRIPTION : RTM_MODULE_DESCRIPTION}</p>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Query rows</h2>
+      {!isUploadOnlyMode && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Query rows</h2>
 
-          <div className="legacy-search-grid">
-            {speciesOptions.length > 0 ? (
-              <SearchableSelect
-                id="rtm-species"
-                labelText="Species"
-                value={filters.species}
-                options={speciesOptions}
-                placeholder="Search species code"
-                onChange={(value) => updateFilter('species', value)}
-              />
-            ) : (
-              <TextInput
-                id="rtm-species"
-                labelText="Species"
-                value={filters.species}
-                onChange={(event) => updateFilter('species', event.target.value)}
-                helperText={hasSpeciesLookupFailed ? 'Species lookup unavailable.' : undefined}
-              />
-            )}
-
-            <SearchableSelect
-              id="rtm-growth-indicator"
-              labelText="Growth indicator"
-              value={filters.growthIndicator}
-              options={RTM_GROWTH_INDICATOR_OPTIONS}
-              placeholder="Search growth indicator"
-              onChange={(value) => updateFilter('growthIndicator', value)}
-            />
-
-            <IsoDatePicker
-              id="rtm-retrieval-date"
-              labelText="Retrieval date"
-              value={filters.retrievalDate}
-              onChange={(value) => updateFilter('retrievalDate', value)}
-            />
-
-            <IsoDatePicker
-              id="rtm-update-date"
-              labelText="Update date"
-              value={filters.updateDate}
-              onChange={(value) => updateFilter('updateDate', value)}
-            />
-
-            <Button
-              size="sm"
-              onClick={() => {
-                void runSearch(filters)
-              }}
-              disabled={isLoading || hasSearchDateError}
-            >
-              Search
-            </Button>
-
-            <Button
-              kind="secondary"
-              size="sm"
-              onClick={() => {
-                const nextFilters = createInitialFilters()
-                setFilters(nextFilters)
-                setRows([])
-                setSearchError('')
-                setHasSearched(false)
-              }}
-            >
-              Clear
-            </Button>
-          </div>
-
-          {searchError && (
-            <p className="landing-page-help-text landing-page-help-text--error">{searchError}</p>
-          )}
-
-          <div className="legacy-search-grid" style={{ marginTop: '0.75rem' }}>
-            <strong>Rows returned:</strong>
-            <span>{pageSummary.resultCount}</span>
-            <span>Filtered:</span>
-            <span>{pageSummary.hasFilter ? 'Yes' : 'No'}</span>
-          </div>
-
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Species</TableHeader>
-                <TableHeader>Grade</TableHeader>
-                <TableHeader>Growth</TableHeader>
-                <TableHeader>Retrieval date</TableHeader>
-                <TableHeader>Update date</TableHeader>
-                <TableHeader>Current value</TableHeader>
-                <TableHeader>New value</TableHeader>
-                <TableHeader>Actions</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => {
-                const key = `${row.species ?? ''}-${row.grade ?? ''}-${row.growthIndicator ?? ''}-${
-                  row.retrievalDate ?? ''
-                }-${row.updateDate ?? ''}`
-                return (
-                  <TableRow key={key}>
-                    <TableCell>{row.species ?? ''}</TableCell>
-                    <TableCell>{row.grade ?? ''}</TableCell>
-                    <TableCell>{row.growthIndicator ?? ''}</TableCell>
-                    <TableCell>{row.retrievalDate ?? ''}</TableCell>
-                    <TableCell>{row.updateDate ?? ''}</TableCell>
-                    <TableCell>{formatMoney(row.currentValue)}</TableCell>
-                    <TableCell>{formatMoney(row.newValue)}</TableCell>
-                    <TableCell>
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        onClick={() => {
-                          loadManualFormFromRow(row)
-                        }}
-                        disabled={!canManage}
-                      >
-                        Edit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-
-              {rows.length === 0 && !isLoading && !searchError && (
-                <TableRow>
-                  <TableCell colSpan={8}>
-                    {hasSearched
-                      ? 'No rows match your current search.'
-                      : 'Enter a species and retrieval date to query average monthly value rows.'}
-                  </TableCell>
-                </TableRow>
-              )}
-
-              {isLoading && (
-                <TableRow>
-                  <TableCell colSpan={8}>Loading rows…</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Manual entry</h2>
-          <form onSubmit={submitSave} noValidate>
             <div className="legacy-search-grid">
               {speciesOptions.length > 0 ? (
                 <SearchableSelect
-                  id="rtm-manual-species"
+                  id="rtm-species"
                   labelText="Species"
-                  value={manualForm.species}
+                  value={filters.species}
                   options={speciesOptions}
                   placeholder="Search species code"
-                  onChange={(value) => updateManualField('species', value)}
-                  disabled={!canManage}
+                  onChange={(value) => updateFilter('species', value)}
                 />
               ) : (
                 <TextInput
-                  id="rtm-manual-species"
+                  id="rtm-species"
                   labelText="Species"
-                  value={manualForm.species}
-                  onChange={(event) => updateManualField('species', event.target.value)}
-                  disabled={!canManage}
+                  value={filters.species}
+                  onChange={(event) => updateFilter('species', event.target.value)}
                   helperText={hasSpeciesLookupFailed ? 'Species lookup unavailable.' : undefined}
                 />
               )}
-              <TextInput
-                id="rtm-manual-grade"
-                labelText="Grade"
-                value={manualForm.grade}
-                onChange={(event) => updateManualField('grade', event.target.value)}
-                disabled={!canManage}
-              />
+
               <SearchableSelect
-                id="rtm-manual-growth"
+                id="rtm-growth-indicator"
                 labelText="Growth indicator"
-                value={manualForm.growthIndicator}
+                value={filters.growthIndicator}
                 options={RTM_GROWTH_INDICATOR_OPTIONS}
                 placeholder="Search growth indicator"
-                onChange={(value) => updateManualField('growthIndicator', value)}
-                disabled={!canManage}
+                onChange={(value) => updateFilter('growthIndicator', value)}
               />
+
               <IsoDatePicker
-                id="rtm-manual-retrieval-date"
+                id="rtm-retrieval-date"
                 labelText="Retrieval date"
-                value={manualForm.retrievalDate}
-                onChange={(value) => updateManualField('retrievalDate', value)}
-                disabled={!canManage}
+                value={filters.retrievalDate}
+                onChange={(value) => updateFilter('retrievalDate', value)}
               />
-              <Select
-                id="rtm-save-mode"
-                labelText="Save mode"
-                value={manualForm.saveMode}
-                onChange={(event) =>
-                  updateManualField('saveMode', event.target.value as 'create' | 'update')
-                }
-                disabled={!canManage}
+
+              <IsoDatePicker
+                id="rtm-update-date"
+                labelText="Update date"
+                value={filters.updateDate}
+                onChange={(value) => updateFilter('updateDate', value)}
+              />
+
+              <Button
+                size="sm"
+                onClick={() => {
+                  void runSearch(filters)
+                }}
+                disabled={isLoading || hasSearchDateError}
               >
-                <SelectItem value="create" text="Create" />
-                <SelectItem value="update" text="Update" />
-              </Select>
-              {manualForm.saveMode === 'update' && (
-                <IsoDatePicker
-                  id="rtm-manual-update-date"
-                  labelText="Update date"
-                  value={manualForm.updateDate}
-                  onChange={(value) => updateManualField('updateDate', value)}
-                  disabled={!canManage}
-                />
-              )}
-              <TextInput
-                id="rtm-manual-new-value"
-                labelText="New value"
-                value={manualForm.newValue}
-                onChange={(event) => updateManualField('newValue', event.target.value)}
-                disabled={!canManage}
-              />
+                Search
+              </Button>
+
+              <Button
+                kind="secondary"
+                size="sm"
+                onClick={() => {
+                  const nextFilters = createInitialFilters()
+                  setFilters(nextFilters)
+                  setRows([])
+                  setSearchError('')
+                  setHasSearched(false)
+                }}
+              >
+                Clear
+              </Button>
             </div>
 
-            {manualError && (
-              <p className="landing-page-help-text landing-page-help-text--error">{manualError}</p>
+            {searchError && (
+              <p className="landing-page-help-text landing-page-help-text--error">{searchError}</p>
             )}
 
-            <Button kind="primary" type="submit" disabled={isSaving || !canManage}>
-              Save row
-            </Button>
+            <div className="legacy-search-grid" style={{ marginTop: '0.75rem' }}>
+              <strong>Rows returned:</strong>
+              <span>{pageSummary.resultCount}</span>
+              <span>Filtered:</span>
+              <span>{pageSummary.hasFilter ? 'Yes' : 'No'}</span>
+            </div>
 
-            {manualResult && (
-              <div style={{ marginTop: '0.75rem' }}>
-                <Tag type={parseStatusTag(manualResult.status)}>{manualResult.status}</Tag>
-                <p>
-                  {createResultMessage(
-                    manualResult.status,
-                    manualResult.message,
-                    manualResult.errors,
-                  )}
-                </p>
+            <Table useZebraStyles>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Species</TableHeader>
+                  <TableHeader>Grade</TableHeader>
+                  <TableHeader>Growth</TableHeader>
+                  <TableHeader>Retrieval date</TableHeader>
+                  <TableHeader>Update date</TableHeader>
+                  <TableHeader>Current value</TableHeader>
+                  <TableHeader>New value</TableHeader>
+                  <TableHeader>Actions</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((row) => {
+                  const key = `${row.species ?? ''}-${row.grade ?? ''}-${
+                    row.growthIndicator ?? ''
+                  }-${row.retrievalDate ?? ''}-${row.updateDate ?? ''}`
+                  return (
+                    <TableRow key={key}>
+                      <TableCell>{row.species ?? ''}</TableCell>
+                      <TableCell>{row.grade ?? ''}</TableCell>
+                      <TableCell>{row.growthIndicator ?? ''}</TableCell>
+                      <TableCell>{row.retrievalDate ?? ''}</TableCell>
+                      <TableCell>{row.updateDate ?? ''}</TableCell>
+                      <TableCell>{formatMoney(row.currentValue)}</TableCell>
+                      <TableCell>{formatMoney(row.newValue)}</TableCell>
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() => {
+                            loadManualFormFromRow(row)
+                          }}
+                          disabled={!canManage}
+                        >
+                          Edit
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+
+                {rows.length === 0 && !isLoading && !searchError && (
+                  <TableRow>
+                    <TableCell colSpan={8}>
+                      {hasSearched
+                        ? 'No rows match your current search.'
+                        : 'Enter a species and retrieval date to query average monthly value rows.'}
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={8}>Loading rows…</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Tile>
+        </Column>
+      )}
+
+      {!isUploadOnlyMode && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Manual entry</h2>
+            <form onSubmit={submitSave} noValidate>
+              <div className="legacy-search-grid">
+                {speciesOptions.length > 0 ? (
+                  <SearchableSelect
+                    id="rtm-manual-species"
+                    labelText="Species"
+                    value={manualForm.species}
+                    options={speciesOptions}
+                    placeholder="Search species code"
+                    onChange={(value) => updateManualField('species', value)}
+                    disabled={!canManage}
+                  />
+                ) : (
+                  <TextInput
+                    id="rtm-manual-species"
+                    labelText="Species"
+                    value={manualForm.species}
+                    onChange={(event) => updateManualField('species', event.target.value)}
+                    disabled={!canManage}
+                    helperText={hasSpeciesLookupFailed ? 'Species lookup unavailable.' : undefined}
+                  />
+                )}
+                <TextInput
+                  id="rtm-manual-grade"
+                  labelText="Grade"
+                  value={manualForm.grade}
+                  onChange={(event) => updateManualField('grade', event.target.value)}
+                  disabled={!canManage}
+                />
+                <SearchableSelect
+                  id="rtm-manual-growth"
+                  labelText="Growth indicator"
+                  value={manualForm.growthIndicator}
+                  options={RTM_GROWTH_INDICATOR_OPTIONS}
+                  placeholder="Search growth indicator"
+                  onChange={(value) => updateManualField('growthIndicator', value)}
+                  disabled={!canManage}
+                />
+                <IsoDatePicker
+                  id="rtm-manual-retrieval-date"
+                  labelText="Retrieval date"
+                  value={manualForm.retrievalDate}
+                  onChange={(value) => updateManualField('retrievalDate', value)}
+                  disabled={!canManage}
+                />
+                <Select
+                  id="rtm-save-mode"
+                  labelText="Save mode"
+                  value={manualForm.saveMode}
+                  onChange={(event) =>
+                    updateManualField('saveMode', event.target.value as 'create' | 'update')
+                  }
+                  disabled={!canManage}
+                >
+                  <SelectItem value="create" text="Create" />
+                  <SelectItem value="update" text="Update" />
+                </Select>
+                {manualForm.saveMode === 'update' && (
+                  <IsoDatePicker
+                    id="rtm-manual-update-date"
+                    labelText="Update date"
+                    value={manualForm.updateDate}
+                    onChange={(value) => updateManualField('updateDate', value)}
+                    disabled={!canManage}
+                  />
+                )}
+                <TextInput
+                  id="rtm-manual-new-value"
+                  labelText="New value"
+                  value={manualForm.newValue}
+                  onChange={(event) => updateManualField('newValue', event.target.value)}
+                  disabled={!canManage}
+                />
               </div>
-            )}
-          </form>
-        </Tile>
-      </Column>
+
+              {manualError && (
+                <p className="landing-page-help-text landing-page-help-text--error">
+                  {manualError}
+                </p>
+              )}
+
+              <Button kind="primary" type="submit" disabled={isSaving || !canManage}>
+                Save row
+              </Button>
+
+              {manualResult && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <Tag type={parseStatusTag(manualResult.status)}>{manualResult.status}</Tag>
+                  <p>
+                    {createResultMessage(
+                      manualResult.status,
+                      manualResult.message,
+                      manualResult.errors,
+                    )}
+                  </p>
+                </div>
+              )}
+            </form>
+          </Tile>
+        </Column>
+      )}
 
       <Column sm={4} md={8} lg={16}>
         <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
