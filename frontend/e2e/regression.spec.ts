@@ -1136,7 +1136,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Reject Application' })).toHaveCount(0)
   })
 
-  test('shows average monthly values date and template controls', async () => {
+  test('shows average monthly values upload-only workflow controls', async () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
@@ -1147,6 +1147,15 @@ test.describe('TEST IDIR admin regression', () => {
     ).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Query rows' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Manual entry' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Search' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Save row' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Data Preview' })).toHaveCount(0)
+
+    const workflowProgress = page.getByRole('list', {
+      name: 'Average monthly values upload workflow progress',
+    })
+    await expect(workflowProgress.getByText('1. Upload')).toBeVisible()
+    await expect(workflowProgress.getByText('2. Review')).toBeVisible()
 
     const templateLink = page.getByRole('link', { name: 'Download template' })
     await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
@@ -1155,6 +1164,9 @@ test.describe('TEST IDIR admin regression', () => {
       page.getByText(
         'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
       ),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
