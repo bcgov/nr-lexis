@@ -533,11 +533,30 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText('submission.xml').length).toBeGreaterThan(0)
     expect(screen.getByText('7 B')).toBeInTheDocument()
     expect(screen.getByText('Application summary')).toBeInTheDocument()
-    expect(screen.getByText('1074-03')).toBeInTheDocument()
-    expect(screen.getByText('CUSTOMER SERVICE')).toBeInTheDocument()
-    expect(screen.getByText('Source status')).toBeInTheDocument()
-    expect(screen.getByText('SUB')).toBeInTheDocument()
-    expect(screen.getByText('Exemption reason')).toBeInTheDocument()
+    const applicationDetailsTable = screen.getByRole('table', {
+      name: 'Application details review',
+    })
+    expect(
+      within(applicationDetailsTable).getByRole('rowheader', { name: 'Owner client' }),
+    ).toBeInTheDocument()
+    expect(within(applicationDetailsTable).getByText('1074-03')).toBeInTheDocument()
+    expect(within(applicationDetailsTable).getByText('CUSTOMER SERVICE')).toBeInTheDocument()
+    expect(
+      within(applicationDetailsTable).getByRole('rowheader', { name: 'Source status' }),
+    ).toBeInTheDocument()
+    expect(within(applicationDetailsTable).getByText('SUB')).toBeInTheDocument()
+    expect(
+      within(applicationDetailsTable).getByRole('rowheader', { name: 'Exemption reason' }),
+    ).toBeInTheDocument()
+    const productDetailsTable = screen.getByRole('table', { name: 'Product details review' })
+    expect(
+      within(productDetailsTable).getByRole('columnheader', { name: 'Product type' }),
+    ).toBeInTheDocument()
+    expect(
+      within(productDetailsTable).getByRole('columnheader', { name: 'Species' }),
+    ).toBeInTheDocument()
+    expect(within(productDetailsTable).getByText('HE, FI')).toBeInTheDocument()
+    expect(within(productDetailsTable).getByText('PL')).toBeInTheDocument()
     expect(screen.getByText('U')).toBeInTheDocument()
     expect(screen.getByText('Applicant type')).toBeInTheDocument()
     expect(screen.getByText('O')).toBeInTheDocument()

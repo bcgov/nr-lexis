@@ -1792,6 +1792,16 @@ body {
   overflow-wrap: anywhere;
 }
 
+.admin-upload-review__table-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin-upload-review__table-group h4 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
 .admin-upload-review__empty-result {
   margin: 0;
   color: var(--csp-text-primary);
@@ -1803,6 +1813,14 @@ body {
 
 .admin-upload-review-table table {
   min-inline-size: 56rem;
+}
+
+.admin-upload-review-field-table {
+  min-inline-size: 32rem;
+}
+
+.admin-upload-review-product-table {
+  min-inline-size: 64rem;
 }
 
 .rtm-review-cell-values {
