@@ -532,10 +532,34 @@ const ProvincialPermitDetailsPage = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Provincial permit details</h1>
-        <p>
-          Permit <code>{permitNumber}</code>
-        </p>
+        <div className="application-detail-title-row">
+          <div>
+            <h1>Provincial permit details</h1>
+            <p>
+              Permit <code>{permitNumber}</code>
+            </p>
+          </div>
+          {detail && (
+            <dl className="application-detail-header-metrics" aria-label="Permit highlights">
+              <div>
+                <dt>Status</dt>
+                <dd>{displayValue(detail.permitStatusDescription ?? detail.permitStatusCode)}</dd>
+              </div>
+              <div>
+                <dt>Application</dt>
+                <dd>{displayValue(detail.applicationNumber)}</dd>
+              </div>
+              <div>
+                <dt>Exemption</dt>
+                <dd>{displayValue(detail.exemptionNumber)}</dd>
+              </div>
+              <div>
+                <dt>Documents</dt>
+                <dd>{documentRows.length.toLocaleString()}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
       </Column>
 
       {loading && (

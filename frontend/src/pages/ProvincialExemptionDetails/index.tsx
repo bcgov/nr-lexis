@@ -241,10 +241,36 @@ const ProvincialExemptionDetailsPage = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Provincial exemption details</h1>
-        <p>
-          Exemption <code>{exemptionNumber}</code>
-        </p>
+        <div className="application-detail-title-row">
+          <div>
+            <h1>Provincial exemption details</h1>
+            <p>
+              Exemption <code>{exemptionNumber}</code>
+            </p>
+          </div>
+          {detail && (
+            <dl className="application-detail-header-metrics" aria-label="Exemption highlights">
+              <div>
+                <dt>Status</dt>
+                <dd>
+                  {displayValue(detail.exemptionStatusDescription ?? detail.exemptionStatusCode)}
+                </dd>
+              </div>
+              <div>
+                <dt>Type</dt>
+                <dd>{displayValue(detail.exemptionTypeDescription ?? detail.exemptionTypeCode)}</dd>
+              </div>
+              <div>
+                <dt>Permits</dt>
+                <dd>{detail.permitNumbers.length.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>Documents</dt>
+                <dd>{documentRows.length.toLocaleString()}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
       </Column>
 
       {loading && (

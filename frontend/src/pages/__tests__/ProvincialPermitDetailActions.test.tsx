@@ -207,6 +207,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ]) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    const permitHighlights = screen.getByLabelText('Permit highlights')
+    expect(within(permitHighlights).getByText('Status')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('Completed')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('Application')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('111')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('Exemption')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('EX-9')).toBeInTheDocument()
     await selectPermitDetailTab('Items')
     const invoiceNumberInput = await screen.findByLabelText('Invoice number')
     const exportValueInput = await screen.findByLabelText('Export value')

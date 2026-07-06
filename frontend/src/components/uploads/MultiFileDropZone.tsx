@@ -50,7 +50,7 @@ function MultiFileDropZone({
       <div className="admin-upload-panel__header">
         <div>
           <h2 id={`${inputId}-panel-title`}>{title}</h2>
-          <p>{description}. Multiple files can be queued and submitted together.</p>
+          <p>{description}. Multiple files can be queued and saved together.</p>
         </div>
       </div>
 

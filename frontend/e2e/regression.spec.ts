@@ -1241,9 +1241,7 @@ test.describe('TEST IDIR admin regression', () => {
     await page.getByRole('tab', { name: 'Documents' }).click()
     await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
     await expect(page.getByText('Upload documents')).toBeVisible()
-    await expect(
-      page.getByText('Multiple files can be queued and submitted together.'),
-    ).toBeVisible()
+    await expect(page.getByText('Multiple files can be queued and saved together.')).toBeVisible()
     await expect(page.getByText('Queued files')).toBeVisible()
     await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
     await expect(page.getByLabel('Document File')).toBeDisabled()
@@ -1588,7 +1586,13 @@ test.describe('TEST IDIR admin regression', () => {
     const body = await readReportBody(response, 'advertising list CSV report')
     const headers = response.headers()
     const csv = body.toString('utf8')
-    const header = csv.split(/\r?\n/, 1)[0] ?? ''
+    const header =
+      csv
+        .split(/\r?\n/)
+        .find(
+          (line) =>
+            line.includes('"CLIENT_CONTACT_PHONE"') && line.includes('"AGENT_CONTACT_NAME"'),
+        ) ?? ''
 
     expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/vnd.ms-excel')
     expect(headers['content-disposition'] ?? '').toMatch(/biweeklyListing\d{4}-\d{2}-\d{2}\.csv/)
@@ -1847,7 +1851,7 @@ test.describe('TEST IDIR admin regression', () => {
       ).toBeVisible()
       await expect(page.getByText('Upload documents').first()).toBeVisible()
       await expect(
-        page.getByText('Multiple files can be queued and submitted together.').first(),
+        page.getByText('Multiple files can be queued and saved together.').first(),
       ).toBeVisible()
       await expect(page.getByText('Queued files').first()).toBeVisible()
       await expect(page.getByText('Drag and drop files here, or browse for files.')).toBeVisible()
