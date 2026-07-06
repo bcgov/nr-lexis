@@ -29,6 +29,7 @@ import {
   type RtmEmsLogAmvUploadPreview,
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
+import UploadWorkflowProgress from '@/components/uploads/UploadWorkflowProgress'
 
 type PendingUploadValidation = {
   fileName: string
@@ -88,6 +89,11 @@ const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 
 const RTM_UPLOAD_ONLY_DESCRIPTION =
   'Generate an upload preview from XLSX files and apply validated average monthly value changes.'
+
+const RTM_UPLOAD_REVIEW_STEPS = [
+  { id: 'upload', label: 'Upload' },
+  { id: 'review', label: 'Review' },
+]
 
 const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'BA', label: 'Balsam', speciesCodes: ['BA'] },
@@ -660,12 +666,19 @@ const RTMEmsLogAmvPage = () => {
   ]
     .filter(Boolean)
     .join(' ')
+  const completedWorkflowSteps = uploadStep === 'review' ? ['upload'] : []
 
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Average Monthly Values</h1>
         <p>{RTM_UPLOAD_ONLY_DESCRIPTION}</p>
+        <UploadWorkflowProgress
+          steps={RTM_UPLOAD_REVIEW_STEPS}
+          currentStepId={uploadStep}
+          completedStepIds={completedWorkflowSteps}
+          ariaLabel="Average monthly values upload workflow progress"
+        />
       </Column>
 
       <Column sm={4} md={8} lg={16}>

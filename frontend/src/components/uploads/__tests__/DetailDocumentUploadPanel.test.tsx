@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
@@ -29,6 +29,10 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getByLabelText('Document File')).toBeDisabled()
     expect(screen.getByText('Browse files')).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText('Upload access is read only.')).toBeInTheDocument()
+    const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
+    expect(
+      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
     expect(screen.getByRole('button', { name: 'Save upload' })).toBeDisabled()
   })
 
@@ -97,6 +101,10 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
 
     expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+    const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
+    expect(
+      within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
     expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))

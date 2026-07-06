@@ -349,6 +349,12 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByRole('heading', { name: 'Data preview' })).toBeInTheDocument()
     expect(screen.getByText('No data uploaded yet')).toBeInTheDocument()
+    const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
+    expect(within(workflowProgress).getByText('1. Upload')).toBeVisible()
+    expect(within(workflowProgress).getByText('2. Review')).toBeVisible()
+    expect(
+      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
     expect(screen.queryByRole('columnheader', { name: 'File' })).not.toBeInTheDocument()
   })
 
@@ -377,6 +383,10 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText('permit.pdf').length).toBeGreaterThan(0)
     expect(screen.getAllByText('scale.csv').length).toBeGreaterThan(0)
     expect(screen.getByText('Showing 2 of 2 files')).toBeInTheDocument()
+    const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
+    expect(
+      within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
 
     await userEvent.type(screen.getByLabelText('Filter queued files'), 'scale')
 

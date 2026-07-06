@@ -150,6 +150,14 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.queryByRole('button', { name: 'Save row' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Upload Excel Spreadsheet' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: 'Data Preview' })).not.toBeInTheDocument()
+    const workflowProgress = screen.getByRole('list', {
+      name: 'Average monthly values upload workflow progress',
+    })
+    expect(within(workflowProgress).getByText('1. Upload')).toBeVisible()
+    expect(within(workflowProgress).getByText('2. Review')).toBeVisible()
+    expect(
+      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
     expect(screen.getByRole('link', { name: 'Download template' })).toHaveAttribute(
       'download',
       'rtm-ems-log-amv-template.xlsx',
@@ -182,6 +190,12 @@ describe('RTM EMS Log AMV actions', () => {
     await user.click(reviewButton)
 
     expect(screen.getByRole('heading', { name: 'Review upload' })).toBeVisible()
+    const workflowProgress = screen.getByRole('list', {
+      name: 'Average monthly values upload workflow progress',
+    })
+    expect(
+      within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
     const reviewTable = screen.getByRole('table', { name: 'Average monthly value upload review' })
     expect(reviewTable).toBeVisible()
     expect(within(reviewTable).getByRole('columnheader', { name: 'Balsam' })).toBeVisible()

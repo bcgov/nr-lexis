@@ -1326,6 +1326,78 @@ body {
   gap: 1rem;
 }
 
+.admin-upload-progress {
+  display: flex;
+  min-inline-size: 0;
+  margin: 1rem 0 0;
+}
+
+.admin-upload-panel > .admin-upload-progress {
+  margin: 0 1rem;
+}
+
+.admin-upload-progress__step {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  padding: 0.75rem 0;
+  border-block-start: 2px solid var(--cds-border-subtle);
+}
+
+.admin-upload-progress__step.is-current,
+.admin-upload-progress__step.is-complete {
+  border-block-start-color: var(--cds-border-interactive);
+}
+
+.admin-upload-progress__step-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+}
+
+.admin-upload-progress__dot {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1rem;
+  block-size: 1rem;
+  border: 1.5px solid var(--cds-border-strong);
+  border-radius: 50%;
+}
+
+.admin-upload-progress__step.is-current .admin-upload-progress__dot,
+.admin-upload-progress__step.is-complete .admin-upload-progress__dot {
+  background: var(--cds-border-interactive);
+  border-color: var(--cds-border-interactive);
+}
+
+.admin-upload-progress__step.is-current .admin-upload-progress__dot::after {
+  content: '';
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  background: var(--cds-layer);
+  border-radius: 50%;
+}
+
+.admin-upload-progress__step.is-complete .admin-upload-progress__dot::after {
+  content: '';
+  inline-size: 0.55rem;
+  block-size: 0.3rem;
+  border-block-end: 2px solid var(--cds-layer);
+  border-inline-start: 2px solid var(--cds-layer);
+  transform: rotate(-45deg) translate(0.05rem, -0.05rem);
+}
+
+.admin-upload-progress__label {
+  overflow: hidden;
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-upload-workspace {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
@@ -1888,6 +1960,14 @@ body {
 
   .detail-document-upload__workspace {
     grid-template-columns: 1fr;
+  }
+
+  .admin-upload-progress {
+    flex-direction: column;
+  }
+
+  .admin-upload-progress__step {
+    padding: 0.625rem 0;
   }
 
   .admin-upload-summary-strip {
