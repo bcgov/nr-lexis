@@ -183,6 +183,27 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(within(exemptionHighlights).getByText('Type 1')).toBeInTheDocument()
     expect(within(exemptionHighlights).getByText('Permits')).toBeInTheDocument()
     expect(within(exemptionHighlights).getByText('1')).toBeInTheDocument()
+    const exemptionSummaryTile = screen
+      .getByRole('heading', { name: 'Exemption summary' })
+      .closest('.cds--tile')
+    expect(exemptionSummaryTile).toBeTruthy()
+    expect(
+      within(exemptionSummaryTile as HTMLElement).getByText('Exemption number'),
+    ).toBeInTheDocument()
+    expect(within(exemptionSummaryTile as HTMLElement).getByText('EX-777')).toBeInTheDocument()
+    expect(
+      within(exemptionSummaryTile as HTMLElement).getByText('Application status'),
+    ).toBeInTheDocument()
+    expect(within(exemptionSummaryTile as HTMLElement).getByText('OPEN')).toBeInTheDocument()
+    expect(
+      within(exemptionSummaryTile as HTMLElement).getByText('Approved volume (m³)'),
+    ).toBeInTheDocument()
+    expect(
+      within(exemptionSummaryTile as HTMLElement).getByText('Remaining volume (m³)'),
+    ).toBeInTheDocument()
+    expect(
+      within(exemptionSummaryTile as HTMLElement).getByText('Blanket Order in Council'),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Upload Exemption Document' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open Approved Exemption Report' })).toBeNull()

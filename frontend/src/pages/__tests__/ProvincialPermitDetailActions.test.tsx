@@ -214,6 +214,25 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(permitHighlights).getByText('111')).toBeInTheDocument()
     expect(within(permitHighlights).getByText('Exemption')).toBeInTheDocument()
     expect(within(permitHighlights).getByText('EX-9')).toBeInTheDocument()
+    const permitSummaryTile = screen
+      .getByRole('heading', { name: 'Permit summary' })
+      .closest('.cds--tile')
+    expect(permitSummaryTile).toBeTruthy()
+    expect(within(permitSummaryTile as HTMLElement).getByText('Permit number')).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getByText('777')).toBeInTheDocument()
+    expect(
+      within(permitSummaryTile as HTMLElement).getByText('Application number'),
+    ).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getByText('Package number')).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getByText('PKG-9')).toBeInTheDocument()
+    const permitFinancialTile = screen
+      .getByRole('heading', { name: 'Financial and volume' })
+      .closest('.cds--tile')
+    expect(permitFinancialTile).toBeTruthy()
+    expect(
+      within(permitFinancialTile as HTMLElement).getByText('Permit volume (m³)'),
+    ).toBeInTheDocument()
+    expect(within(permitFinancialTile as HTMLElement).getByText('120')).toBeInTheDocument()
     await selectPermitDetailTab('Items')
     const invoiceNumberInput = await screen.findByLabelText('Invoice number')
     const exportValueInput = await screen.findByLabelText('Export value')

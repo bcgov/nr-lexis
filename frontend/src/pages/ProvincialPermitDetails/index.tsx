@@ -702,7 +702,7 @@ const ProvincialPermitDetailsPage = () => {
                       <DetailFieldTile
                         title="Financial and volume"
                         fields={[
-                          { label: 'Permit volume (m3)', value: displayValue(detail.permitVolume) },
+                          { label: 'Permit volume (m³)', value: displayValue(detail.permitVolume) },
                           { label: 'Number of pieces', value: displayValue(detail.numberOfPieces) },
                           { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
                           { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
@@ -747,7 +747,7 @@ const ProvincialPermitDetailsPage = () => {
                               <TableHeader>Species</TableHeader>
                               <TableHeader>Grade</TableHeader>
                               <TableHeader>Pieces</TableHeader>
-                              <TableHeader>Volume (m3)</TableHeader>
+                              <TableHeader>Volume (m³)</TableHeader>
                             </TableRow>
                           </TableHead>
                           <TableBody>
