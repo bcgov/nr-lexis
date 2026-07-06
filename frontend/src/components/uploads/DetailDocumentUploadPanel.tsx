@@ -4,8 +4,10 @@ import { AppNotification } from '../AppNotification'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
+  DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
   extractUploadErrorDetails,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
+  uploadQueueFileKey,
   validateDocumentUploadFile,
 } from './uploadQueueHelpers'
 import MultiFileDropZone from './MultiFileDropZone'
@@ -102,8 +104,12 @@ const DetailDocumentUploadPanel = ({
     () => uploadQueue.filter((item) => item.status === 'invalid').length,
     [uploadQueue],
   )
-  const queuedUploadCount = useMemo(
-    () => uploadQueue.filter((item) => item.status === 'queued' || item.status === 'failed').length,
+  const uploadableCount = useMemo(
+    () =>
+      uploadQueue.filter(
+        (item) =>
+          item.status === 'queued' || item.status === 'validated' || item.status === 'failed',
+      ).length,
     [uploadQueue],
   )
   const invoiceValidationErrors = useMemo(() => {
@@ -144,7 +150,7 @@ const DetailDocumentUploadPanel = ({
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
   const canSubmit =
-    !disabled && !!targetNumber.trim() && queuedUploadCount > 0 && invalidUploadCount === 0
+    !disabled && !!targetNumber.trim() && uploadableCount > 0 && invalidUploadCount === 0
 
   const addFilesToQueue = (files: FileList | null): void => {
     if (!files || files.length === 0) {
@@ -152,23 +158,29 @@ const DetailDocumentUploadPanel = ({
     }
 
     const queuedAt = Date.now()
-    const nextItems: UploadQueueItem[] = Array.from(files).map((file, index) => {
+    const nextItemsByFileName = new Map<string, UploadQueueItem>()
+    Array.from(files).forEach((file, index) => {
       const validationMessage = validateDocumentUploadFile(file)
 
-      return {
+      nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
         workflowLabel: copy.workflowLabel,
         queuedAt,
-        status: validationMessage ? ('invalid' as const) : ('queued' as const),
-        message: validationMessage ?? '',
+        status: validationMessage ? ('invalid' as const) : ('validated' as const),
+        message: validationMessage || DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
-          : undefined,
-      }
+          : { summary: DOCUMENT_UPLOAD_VALIDATED_MESSAGE },
+      })
     })
+    const nextItems = Array.from(nextItemsByFileName.values())
+    const replacementFileNames = new Set(nextItems.map((item) => uploadQueueFileKey(item.file)))
 
-    setUploadQueue((current) => [...current, ...nextItems])
+    setUploadQueue((current) => [
+      ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
+      ...nextItems,
+    ])
     setErrorMessage('')
     setSuccessMessage('')
     setFileInputKey((current) => current + 1)

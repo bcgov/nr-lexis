@@ -2984,7 +2984,7 @@ const ProvincialApplicationDetailsPage = () => {
                           <TableHead>
                             <TableRow>
                               <TableHeader>Package number</TableHeader>
-                              <TableHeader>Volume (m3)</TableHeader>
+                              <TableHeader>Volume (m³)</TableHeader>
                               <TableHeader>Pieces</TableHeader>
                               <TableHeader>Action</TableHeader>
                             </TableRow>

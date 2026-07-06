@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { Upload } from '@carbon/icons-react'
 
 export type MultiFileDropZoneProps = {
@@ -26,7 +26,25 @@ function MultiFileDropZone({
   disabledDescription = 'File upload is not available.',
   onFilesSelected,
 }: MultiFileDropZoneProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
+
+  const openFileDialog = () => {
+    if (disabled) {
+      return
+    }
+
+    inputRef.current?.click()
+  }
+
+  const onDropZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+
+    event.preventDefault()
+    openFileDialog()
+  }
 
   const onDropUploadFiles = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault()
@@ -50,12 +68,39 @@ function MultiFileDropZone({
       <div className="admin-upload-panel__header">
         <div>
           <h2 id={`${inputId}-panel-title`}>{title}</h2>
-          <p>{description}. Multiple files can be queued and submitted together.</p>
+          <p>{description}. Multiple files can be queued and saved together.</p>
         </div>
       </div>
 
+      <input
+        ref={inputRef}
+        key={inputKey}
+        id={inputId}
+        className="admin-upload-native-input"
+        type="file"
+        aria-label={inputLabel}
+        aria-invalid={!!invalidText}
+        aria-describedby={invalidText ? `${inputId}-error` : undefined}
+        accept={accept}
+        multiple
+        disabled={disabled}
+        onChange={(event) => {
+          const target = event.target as HTMLInputElement
+          if (disabled) {
+            return
+          }
+          onFilesSelected(target.files)
+        }}
+      />
+
       <div
         className={dropZoneClassName}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled}
+        aria-label={`Choose files for ${title}`}
+        onClick={openFileDialog}
+        onKeyDown={onDropZoneKeyDown}
         onDragEnter={(event) => {
           event.preventDefault()
           if (disabled) {
@@ -80,37 +125,12 @@ function MultiFileDropZone({
           <p>Drag and drop files here, or browse for files.</p>
           <p>{disabled ? disabledDescription : description}</p>
         </div>
-        <input
-          key={inputKey}
-          id={inputId}
-          className="admin-upload-native-input"
-          type="file"
-          aria-label={inputLabel}
-          aria-invalid={!!invalidText}
-          aria-describedby={invalidText ? `${inputId}-error` : undefined}
-          accept={accept}
-          multiple
-          disabled={disabled}
-          onChange={(event) => {
-            const target = event.target as HTMLInputElement
-            if (disabled) {
-              return
-            }
-            onFilesSelected(target.files)
-          }}
-        />
-        <label
+        <span
           className={`cds--btn cds--btn--primary admin-upload-browse-button${disabled ? ' cds--btn--disabled' : ''}`}
-          htmlFor={disabled ? undefined : inputId}
           aria-disabled={disabled}
-          onClick={(event) => {
-            if (disabled) {
-              event.preventDefault()
-            }
-          }}
         >
           Browse files
-        </label>
+        </span>
       </div>
 
       {invalidText && (

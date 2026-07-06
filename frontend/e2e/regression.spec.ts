@@ -1136,35 +1136,42 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Reject Application' })).toHaveCount(0)
   })
 
-  test('shows average monthly values date and template controls', async () => {
+  test('shows average monthly values upload-only workflow controls', async () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expect(
       page.getByText(
-        'Query current and historical average monthly value rows, make manual create/update entries, and generate an upload preview from XLSX files.',
+        'Generate an upload preview from XLSX files and apply validated average monthly value changes.',
       ),
     ).toBeVisible()
-    await expect(page.locator('#rtm-retrieval-date')).toBeVisible()
-    await expect(page.locator('#rtm-update-date')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Query rows' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Manual entry' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Search' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Save row' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Data Preview' })).toHaveCount(0)
 
-    const today = await browserLocalIsoToday(page)
-    await expect(page.locator('#rtm-retrieval-date')).toHaveValue(today)
-    await expect(page.locator('#rtm-update-date')).toHaveValue(today)
-    await expect(page.locator('#rtm-manual-retrieval-date')).toHaveValue(today)
-    await page.locator('#rtm-save-mode').selectOption('update')
-    await expect(page.locator('#rtm-manual-update-date')).toHaveValue(today)
+    const workflowProgress = page.getByRole('list', {
+      name: 'Average monthly values upload workflow progress',
+    })
+    await expect(workflowProgress.getByText('1. Upload')).toBeVisible()
+    await expect(workflowProgress.getByText('2. Review')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Upload' })).toBeVisible()
+    await expect(page.getByText('Upload Excel Spreadsheet')).toBeVisible()
 
     const templateLink = page.getByRole('link', { name: 'Download template' })
     await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
     await expect(templateLink).toHaveAttribute('download', 'rtm-ems-log-amv-template.xlsx')
     await expect(
       page.getByText(
-        'Supported format: .xlsx. The template includes retrieval and update date rows, and values apply to old and second growth.',
+        'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
       ),
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Preview data' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Apply upload' })).toBeDisabled()
+    await expect(
+      page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
   })
 
   test('shows selected natural resource region names across search filters', async () => {
@@ -1248,9 +1255,7 @@ test.describe('TEST IDIR admin regression', () => {
     await page.getByRole('tab', { name: 'Documents' }).click()
     await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
     await expect(page.getByText('Upload documents')).toBeVisible()
-    await expect(
-      page.getByText('Multiple files can be queued and submitted together.'),
-    ).toBeVisible()
+    await expect(page.getByText('Multiple files can be queued and saved together.')).toBeVisible()
     await expect(page.getByText('Queued files')).toBeVisible()
     await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
     await expect(page.getByLabel('Document File')).toBeDisabled()
@@ -1595,7 +1600,13 @@ test.describe('TEST IDIR admin regression', () => {
     const body = await readReportBody(response, 'advertising list CSV report')
     const headers = response.headers()
     const csv = body.toString('utf8')
-    const header = csv.split(/\r?\n/, 1)[0] ?? ''
+    const header =
+      csv
+        .split(/\r?\n/)
+        .find(
+          (line) =>
+            line.includes('"CLIENT_CONTACT_PHONE"') && line.includes('"AGENT_CONTACT_NAME"'),
+        ) ?? ''
 
     expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/vnd.ms-excel')
     expect(headers['content-disposition'] ?? '').toMatch(/biweeklyListing\d{4}-\d{2}-\d{2}\.csv/)
@@ -1854,7 +1865,7 @@ test.describe('TEST IDIR admin regression', () => {
       ).toBeVisible()
       await expect(page.getByText('Upload documents').first()).toBeVisible()
       await expect(
-        page.getByText('Multiple files can be queued and submitted together.').first(),
+        page.getByText('Multiple files can be queued and saved together.').first(),
       ).toBeVisible()
       await expect(page.getByText('Queued files').first()).toBeVisible()
       await expect(page.getByText('Drag and drop files here, or browse for files.')).toBeVisible()

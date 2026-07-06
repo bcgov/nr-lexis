@@ -18,6 +18,8 @@ export const GENERIC_UPLOAD_FAILURE_MESSAGE =
 export const GENERIC_SUBMISSION_FAILURE_MESSAGE =
   'Submission failed. Please try again. If the problem persists, contact your administrator.'
 
+export const DOCUMENT_UPLOAD_VALIDATED_MESSAGE = 'File passed validation. Review before saving.'
+
 const FILE_TOO_LARGE_UPLOAD_FAILURE_MESSAGE =
   'The selected file is too large. Choose a smaller file and try again.'
 
@@ -75,6 +77,8 @@ export const getFileExtension = (fileName: string): string => {
 
   return normalizedName.slice(extensionStart)
 }
+
+export const uploadQueueFileKey = (file: File): string => file.name.trim().toLocaleLowerCase()
 
 export const uploadQueueStatusTagType = (
   status: UploadQueueStatus,

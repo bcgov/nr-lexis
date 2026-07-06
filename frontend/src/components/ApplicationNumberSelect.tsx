@@ -1,5 +1,6 @@
 import { ComboBox } from '@carbon/react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { shouldFilterSearchableDropdownItem } from './dropdown-filtering'
 import {
   searchProvincialApplicationNumberOptions,
   type ProvincialApplicationNumberOption,
@@ -33,21 +34,6 @@ const itemToString = (item: ProvincialApplicationNumberOption | string | null | 
     return item
   }
   return item?.label ?? ''
-}
-
-const shouldFilterItem = ({
-  item,
-  inputValue,
-}: {
-  item: ProvincialApplicationNumberOption
-  inputValue: string | null
-}): boolean => {
-  const query = inputValue?.trim().toLowerCase()
-  if (!query) {
-    return true
-  }
-
-  return item.label.toLowerCase().includes(query) || item.value.includes(query)
 }
 
 export default function ApplicationNumberSelect({
@@ -112,7 +98,9 @@ export default function ApplicationNumberSelect({
       items={options}
       selectedItem={selectedItem}
       itemToString={itemToString}
-      shouldFilterItem={shouldFilterItem}
+      shouldFilterItem={({ item, inputValue }) =>
+        shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: options.length })
+      }
       placeholder={isLoading ? 'Loading applications...' : 'Search application number'}
       allowCustomValue
       disabled={disabled}

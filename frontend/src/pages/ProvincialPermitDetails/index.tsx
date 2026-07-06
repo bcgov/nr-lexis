@@ -532,10 +532,34 @@ const ProvincialPermitDetailsPage = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Provincial permit details</h1>
-        <p>
-          Permit <code>{permitNumber}</code>
-        </p>
+        <div className="application-detail-title-row">
+          <div>
+            <h1>Provincial permit details</h1>
+            <p>
+              Permit <code>{permitNumber}</code>
+            </p>
+          </div>
+          {detail && (
+            <dl className="application-detail-header-metrics" aria-label="Permit highlights">
+              <div>
+                <dt>Status</dt>
+                <dd>{displayValue(detail.permitStatusDescription ?? detail.permitStatusCode)}</dd>
+              </div>
+              <div>
+                <dt>Application</dt>
+                <dd>{displayValue(detail.applicationNumber)}</dd>
+              </div>
+              <div>
+                <dt>Exemption</dt>
+                <dd>{displayValue(detail.exemptionNumber)}</dd>
+              </div>
+              <div>
+                <dt>Documents</dt>
+                <dd>{documentRows.length.toLocaleString()}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
       </Column>
 
       {loading && (
@@ -678,7 +702,7 @@ const ProvincialPermitDetailsPage = () => {
                       <DetailFieldTile
                         title="Financial and volume"
                         fields={[
-                          { label: 'Permit volume (m3)', value: displayValue(detail.permitVolume) },
+                          { label: 'Permit volume (m³)', value: displayValue(detail.permitVolume) },
                           { label: 'Number of pieces', value: displayValue(detail.numberOfPieces) },
                           { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
                           { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
@@ -723,7 +747,7 @@ const ProvincialPermitDetailsPage = () => {
                               <TableHeader>Species</TableHeader>
                               <TableHeader>Grade</TableHeader>
                               <TableHeader>Pieces</TableHeader>
-                              <TableHeader>Volume (m3)</TableHeader>
+                              <TableHeader>Volume (m³)</TableHeader>
                             </TableRow>
                           </TableHead>
                           <TableBody>

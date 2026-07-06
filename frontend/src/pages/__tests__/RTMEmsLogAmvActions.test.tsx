@@ -1,195 +1,247 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import RTMEmsLogAmvPage from '@/pages/RTMEmsLogAmv'
-import { fetchApplicationSpeciesCodes } from '@/service/provincial-application-items-service'
-import { saveRtmEmsLogAmv, searchRtmEmsLogAmv } from '@/service/rtm-emslogamv-service'
+import {
+  previewRtmEmsLogAmvUpload,
+  uploadRtmEmsLogAmv,
+  type RtmEmsLogAmvUploadPreview,
+  type RtmEmsLogAmvUploadResult,
+} from '@/service/rtm-emslogamv-service'
 import { createTestAuthContext } from '@/test-utils/auth'
-import { formatLocalIsoDate } from '@/utils/date'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
-vi.mock('@/service/provincial-application-items-service', () => ({
-  fetchApplicationSpeciesCodes: vi.fn(),
-}))
-
 vi.mock('@/service/rtm-emslogamv-service', () => ({
   previewRtmEmsLogAmvUpload: vi.fn(),
   uploadRtmEmsLogAmv: vi.fn(),
-  saveRtmEmsLogAmv: vi.fn(),
-  searchRtmEmsLogAmv: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
-const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
-const mockedSearchRtmEmsLogAmv = vi.mocked(searchRtmEmsLogAmv)
-const mockedSaveRtmEmsLogAmv = vi.mocked(saveRtmEmsLogAmv)
+const mockedPreviewUpload = vi.mocked(previewRtmEmsLogAmvUpload)
+const mockedUpload = vi.mocked(uploadRtmEmsLogAmv)
 
-const chooseComboBoxElementOption = async (
-  combobox: HTMLElement,
-  optionName: string,
-): Promise<void> => {
-  await userEvent.click(combobox)
-  fireEvent.change(combobox, { target: { value: optionName } })
-  const listboxId = combobox.getAttribute('aria-controls')
-  const listbox = listboxId ? document.getElementById(listboxId) : null
-  const options = listbox
-    ? await within(listbox).findAllByRole('option', { name: optionName })
-    : await screen.findAllByRole('option', { name: optionName })
-  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+const acceptedPreview: RtmEmsLogAmvUploadPreview = {
+  status: 'accepted',
+  fileName: 'rtm-ems-log-amv-template.xlsx',
+  fileSize: 12,
+  message: 'Preview generated.',
+  rowCount: 8,
+  retrievalDate: '2026-07-06',
+  updateDate: '2026-06-01',
+  errors: [],
+  warnings: [],
+  rows: [
+    {
+      species: 'BA',
+      grade: 'A',
+      growthIndicator: 'O',
+      retrievalDate: '2026-07-06',
+      updateDate: '2026-06-01',
+      currentValue: null,
+      newValue: 10.25,
+      returnCode: null,
+    },
+    {
+      species: 'HE',
+      grade: 'A',
+      growthIndicator: 'O',
+      retrievalDate: '2026-07-06',
+      updateDate: '2026-06-01',
+      currentValue: null,
+      newValue: 20.5,
+      returnCode: null,
+    },
+    {
+      species: 'WH',
+      grade: 'A',
+      growthIndicator: 'O',
+      retrievalDate: '2026-07-06',
+      updateDate: '2026-06-01',
+      currentValue: null,
+      newValue: 30.75,
+      returnCode: null,
+    },
+    {
+      species: 'LO',
+      grade: 'A',
+      growthIndicator: 'O',
+      retrievalDate: '2026-07-06',
+      updateDate: '2026-06-01',
+      currentValue: null,
+      newValue: 30.75,
+      returnCode: null,
+    },
+    {
+      species: 'YE',
+      grade: 'A',
+      growthIndicator: 'O',
+      retrievalDate: '2026-07-06',
+      updateDate: '2026-06-01',
+      currentValue: null,
+      newValue: 30.75,
+      returnCode: null,
+    },
+    {
+      species: 'BA',
+      grade: 'A',
+      growthIndicator: 'S',
+      retrievalDate: '2026-07-06',
+      updateDate: '2026-06-01',
+      currentValue: null,
+      newValue: 10.25,
+      returnCode: null,
+    },
+    {
+      species: 'HE',
+      grade: 'A',
+      growthIndicator: 'S',
+      retrievalDate: '2026-07-06',
+      updateDate: '2026-06-01',
+      currentValue: null,
+      newValue: 20.5,
+      returnCode: null,
+    },
+    {
+      species: 'WH',
+      grade: 'A',
+      growthIndicator: 'S',
+      retrievalDate: '2026-07-06',
+      updateDate: '2026-06-01',
+      currentValue: null,
+      newValue: 30.75,
+      returnCode: null,
+    },
+  ],
 }
 
-const chooseComboBoxOption = async (
-  labelText: string,
-  optionName: string,
-  index: number,
-): Promise<void> => {
-  const combobox = screen.getAllByRole('combobox', { name: labelText })[index]
-  await chooseComboBoxElementOption(combobox, optionName)
-}
-
-const chooseFirstComboBoxOption = async (labelText: string, optionName: string): Promise<void> => {
-  await chooseComboBoxOption(labelText, optionName, 0)
+const acceptedUpload: RtmEmsLogAmvUploadResult = {
+  status: 'accepted',
+  fileName: 'rtm-ems-log-amv-template.xlsx',
+  fileSize: 12,
+  message: 'Upload applied.',
+  attemptedRowCount: 8,
+  uploadedRowCount: 8,
+  errors: [],
+  warnings: [],
+  rows: [],
 }
 
 describe('RTM EMS Log AMV actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.config = {}
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
-    mockedSearchRtmEmsLogAmv.mockResolvedValue([])
-    mockedSaveRtmEmsLogAmv.mockResolvedValue({
-      status: 'accepted',
-      message: 'Average monthly value row saved.',
-      errors: [],
-      rows: [],
-    })
-    mockedFetchApplicationSpeciesCodes.mockResolvedValue([
-      { code: 'FI', description: 'Douglas-fir' },
-    ])
+    mockedPreviewUpload.mockResolvedValue(acceptedPreview)
+    mockedUpload.mockResolvedValue(acceptedUpload)
   })
 
-  it('prefills search and manual date fields to the current date', async () => {
-    const today = formatLocalIsoDate(new Date())
-
+  it('renders upload-only average monthly value controls', async () => {
     render(<RTMEmsLogAmvPage />)
 
     await screen.findByRole('heading', { name: 'Average Monthly Values' })
 
-    expect(screen.getAllByLabelText('Retrieval date')[0]).toHaveValue(today)
-    expect(screen.getByLabelText('Update date')).toHaveValue(today)
-    expect(screen.getAllByLabelText('Retrieval date')[1]).toHaveValue(today)
+    expect(screen.queryByRole('heading', { name: 'Query rows' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Manual entry' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save row' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Upload' })).toBeVisible()
+    expect(screen.getByText('Upload Excel Spreadsheet')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Data Preview' })).not.toBeInTheDocument()
+    const workflowProgress = screen.getByRole('list', {
+      name: 'Average monthly values upload workflow progress',
+    })
+    expect(within(workflowProgress).getByText('1. Upload')).toBeVisible()
+    expect(within(workflowProgress).getByText('2. Review')).toBeVisible()
+    expect(
+      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
     expect(screen.getByRole('link', { name: 'Download template' })).toHaveAttribute(
       'download',
       'rtm-ems-log-amv-template.xlsx',
     )
-    expect(screen.getByRole('button', { name: 'Preview data' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Apply upload' })).toBeDisabled()
+    expect(
+      screen.getByText(
+        'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
+      ),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 
-  it('searches average monthly values with retrieval and update dates from the query form', async () => {
-    render(<RTMEmsLogAmvPage />)
-
-    await screen.findByRole('heading', { name: 'Average Monthly Values' })
-
-    await chooseFirstComboBoxOption('Species', 'FI - Douglas-fir')
-    await chooseFirstComboBoxOption('Growth indicator', 'O - Old growth')
-    fireEvent.change(screen.getAllByLabelText('Retrieval date')[0], {
-      target: { value: '2026-05-01' },
+  it('validates the selected file automatically before review and save', async () => {
+    const user = userEvent.setup()
+    const file = new File(['excel bytes'], 'rtm-ems-log-amv-template.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
-    fireEvent.change(screen.getByLabelText('Update date'), {
-      target: { value: '2026-06-01' },
-    })
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-
-    await waitFor(() => {
-      expect(mockedSearchRtmEmsLogAmv).toHaveBeenCalledWith({
-        species: 'FI',
-        growthIndicator: 'O',
-        retrievalDate: '2026-05-01',
-        updateDate: '2026-06-01',
-      })
-    })
-  })
-
-  it('loads existing row dates into the manual update form', async () => {
-    mockedSearchRtmEmsLogAmv.mockResolvedValueOnce([
-      {
-        species: 'FI',
-        grade: '1',
-        growthIndicator: 'O',
-        retrievalDate: '2026-05-01',
-        updateDate: '2026-06-01',
-        currentValue: 123.45,
-        newValue: 456.78,
-        returnCode: null,
-      },
-    ])
 
     render(<RTMEmsLogAmvPage />)
 
-    await screen.findByRole('heading', { name: 'Average Monthly Values' })
+    await user.upload(screen.getByLabelText('Average monthly values upload spreadsheet'), file)
 
-    await chooseFirstComboBoxOption('Species', 'FI - Douglas-fir')
-    fireEvent.change(screen.getAllByLabelText('Retrieval date')[0], {
-      target: { value: '2026-05-01' },
+    await waitFor(() => expect(mockedPreviewUpload).toHaveBeenCalledWith(file))
+    expect(await screen.findByText('Spreadsheet validated')).toBeVisible()
+    expect(screen.getByText('"rtm-ems-log-amv-template.xlsx" is ready for review.')).toBeVisible()
+
+    const reviewButton = screen.getByRole('button', { name: 'Review upload' })
+    await waitFor(() => expect(reviewButton).toBeEnabled())
+    await user.click(reviewButton)
+
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeVisible()
+    const workflowProgress = screen.getByRole('list', {
+      name: 'Average monthly values upload workflow progress',
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    expect(
+      within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
+    const reviewTable = screen.getByRole('table', { name: 'Average monthly value upload review' })
+    expect(reviewTable).toBeVisible()
+    expect(within(reviewTable).getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
+    expect(within(reviewTable).getByRole('columnheader', { name: 'Pine' })).toBeVisible()
+    expect(
+      within(reviewTable).queryByRole('columnheader', { name: 'Growth' }),
+    ).not.toBeInTheDocument()
+    expect(within(reviewTable).getAllByRole('row')).toHaveLength(2)
+    expect(within(reviewTable).queryByText('Old growth')).not.toBeInTheDocument()
+    expect(within(reviewTable).queryByText('Second growth')).not.toBeInTheDocument()
+    expect(within(reviewTable).getAllByText('10.25')).toHaveLength(1)
+    expect(within(reviewTable).getAllByText('30.75')).toHaveLength(1)
 
-    await screen.findByText('456.78')
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(screen.getByLabelText('Grade')).toHaveValue('1')
-    expect(screen.getByLabelText('Save mode')).toHaveValue('update')
-    expect(screen.getAllByLabelText('Retrieval date')[1]).toHaveValue('2026-05-01')
-    expect(screen.getAllByLabelText('Update date')[1]).toHaveValue('2026-06-01')
-    expect(screen.getByLabelText('New value')).toHaveValue('456.78')
+    await waitFor(() => expect(mockedUpload).toHaveBeenCalledWith({ file }))
+    await waitFor(() => expect(screen.getAllByText('Upload applied.')).toHaveLength(2))
   })
 
-  it('saves manual average monthly values with retrieval and update dates', async () => {
+  it('keeps users on upload when validation fails', async () => {
+    const user = userEvent.setup()
+    mockedPreviewUpload.mockResolvedValue({
+      ...acceptedPreview,
+      status: 'validation_failed',
+      message: 'Template is missing an update date.',
+      rowCount: 0,
+      errors: ['The update date is required in the uploaded template.'],
+      rows: [],
+    })
+
     render(<RTMEmsLogAmvPage />)
 
-    await screen.findByRole('heading', { name: 'Average Monthly Values' })
-
-    const manualEntry = screen.getByRole('heading', { name: 'Manual entry' }).closest('.cds--tile')
-    expect(manualEntry).not.toBeNull()
-    const manualControls = within(manualEntry as HTMLElement)
-
-    await chooseComboBoxElementOption(
-      manualControls.getByRole('combobox', { name: 'Species' }),
-      'FI - Douglas-fir',
+    await user.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      new File(['excel bytes'], 'invalid.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
     )
-    await userEvent.type(manualControls.getByLabelText('Grade'), '1')
-    await chooseComboBoxElementOption(
-      manualControls.getByRole('combobox', { name: 'Growth indicator' }),
-      'O - Old growth',
-    )
-    fireEvent.change(manualControls.getByLabelText('Retrieval date'), {
-      target: { value: '2026-05-01' },
-    })
-    fireEvent.change(manualControls.getByLabelText('Save mode'), {
-      target: { value: 'update' },
-    })
-    fireEvent.change(manualControls.getByLabelText('Update date'), {
-      target: { value: '2026-06-01' },
-    })
-    await userEvent.clear(manualControls.getByLabelText('New value'))
-    await userEvent.type(manualControls.getByLabelText('New value'), '456.78')
-    await userEvent.click(manualControls.getByRole('button', { name: 'Save row' }))
 
-    await waitFor(() => {
-      expect(mockedSaveRtmEmsLogAmv).toHaveBeenCalledWith({
-        species: 'FI',
-        grade: '1',
-        growthIndicator: 'O',
-        retrievalDate: '2026-05-01',
-        updateDate: '2026-06-01',
-        newValue: 456.78,
-        saveMode: 'update',
-      })
-    })
-    expect(await manualControls.findByText('Average monthly value row saved.')).toBeInTheDocument()
+    expect(await screen.findByText('1 validation issue found')).toBeVisible()
+    expect(screen.getByText('The update date is required in the uploaded template.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.queryByRole('heading', { name: 'Review upload' })).not.toBeInTheDocument()
   })
 })

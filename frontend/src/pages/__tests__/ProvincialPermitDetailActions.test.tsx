@@ -207,6 +207,32 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ]) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    const permitHighlights = screen.getByLabelText('Permit highlights')
+    expect(within(permitHighlights).getByText('Status')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('Completed')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('Application')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('111')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('Exemption')).toBeInTheDocument()
+    expect(within(permitHighlights).getByText('EX-9')).toBeInTheDocument()
+    const permitSummaryTile = screen
+      .getByRole('heading', { name: 'Permit summary' })
+      .closest('.cds--tile')
+    expect(permitSummaryTile).toBeTruthy()
+    expect(within(permitSummaryTile as HTMLElement).getByText('Permit number')).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getByText('777')).toBeInTheDocument()
+    expect(
+      within(permitSummaryTile as HTMLElement).getByText('Application number'),
+    ).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getByText('Package number')).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getByText('PKG-9')).toBeInTheDocument()
+    const permitFinancialTile = screen
+      .getByRole('heading', { name: 'Financial and volume' })
+      .closest('.cds--tile')
+    expect(permitFinancialTile).toBeTruthy()
+    expect(
+      within(permitFinancialTile as HTMLElement).getByText('Permit volume (m³)'),
+    ).toBeInTheDocument()
+    expect(within(permitFinancialTile as HTMLElement).getByText('120')).toBeInTheDocument()
     await selectPermitDetailTab('Items')
     const invoiceNumberInput = await screen.findByLabelText('Invoice number')
     const exportValueInput = await screen.findByLabelText('Export value')
@@ -334,7 +360,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(invoiceControls.getByLabelText('Upload invoice number'), 'INV123')
     await userEvent.type(invoiceControls.getByLabelText('Upload invoice export value'), '1000')
     await userEvent.upload(invoiceControls.getByLabelText('Document File'), file)
-    await userEvent.click(invoiceControls.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(invoiceControls.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(

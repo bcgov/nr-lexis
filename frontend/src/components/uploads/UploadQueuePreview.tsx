@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Button, Tag, TextInput } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
 import UploadQueueReviewAccordion from './UploadQueueReviewAccordion'
+import UploadWorkflowProgress from './UploadWorkflowProgress'
 import {
   formatUploadFileSize,
   formatUploadQueuedAt,
@@ -42,6 +43,11 @@ const formatFileType = (file: File): string => {
   return file.type || 'Unknown type'
 }
 
+const UPLOAD_REVIEW_STEPS = [
+  { id: 'upload', label: 'Upload' },
+  { id: 'review', label: 'Review' },
+]
+
 function UploadQueuePreview({
   items,
   targetSummary,
@@ -57,8 +63,8 @@ function UploadQueuePreview({
   emptyStateTitle = 'No data uploaded yet',
   emptyStateDescription = 'Upload files to see them here.',
   itemNoun = 'file',
-  submitLabel = 'Submit Upload',
-  submittingLabel = 'Submitting...',
+  submitLabel = 'Save upload',
+  submittingLabel = 'Saving upload...',
   removeLabel = 'Remove',
   pendingMessage = 'Not submitted yet.',
   canRemoveItem = () => true,
@@ -113,12 +119,21 @@ function UploadQueuePreview({
   const isSubmissionQueue = itemNoun === 'submission'
   const workflowColumnLabel = isSubmissionQueue ? 'Submission type' : 'Upload type'
   const fileColumnLabel = isSubmissionQueue ? 'Submission file' : 'File'
+  const currentWorkflowStep = items.length > 0 ? 'review' : 'upload'
+  const completedWorkflowSteps = items.length > 0 ? ['upload'] : []
   const selectedItemLabel = `${items.length} selected ${
     items.length === 1 ? itemNoun : itemNounPlural
   }`
 
   return (
     <section className="admin-upload-panel" aria-labelledby={previewTitleId}>
+      <UploadWorkflowProgress
+        steps={UPLOAD_REVIEW_STEPS}
+        currentStepId={currentWorkflowStep}
+        completedStepIds={completedWorkflowSteps}
+        ariaLabel="Upload queue workflow progress"
+      />
+
       <div className="admin-upload-panel__header">
         <div>
           <h2 id={previewTitleId}>{previewTitle}</h2>
@@ -126,7 +141,7 @@ function UploadQueuePreview({
             {items.length === 0
               ? emptyDescription
               : `Review ${selectedItemLabel} before ${
-                  isSubmissionQueue ? 'finalizing' : 'submitting'
+                  isSubmissionQueue ? 'finalizing' : 'saving'
                 }.`}
           </p>
         </div>
