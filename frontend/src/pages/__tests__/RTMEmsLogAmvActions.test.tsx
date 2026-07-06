@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
@@ -182,13 +182,18 @@ describe('RTM EMS Log AMV actions', () => {
     await user.click(reviewButton)
 
     expect(screen.getByRole('heading', { name: 'Review upload' })).toBeVisible()
-    expect(screen.getByRole('table', { name: 'Average monthly value upload review' })).toBeVisible()
-    expect(screen.getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
-    expect(screen.getByRole('columnheader', { name: 'Pine' })).toBeVisible()
-    expect(screen.getByText('Old growth')).toBeVisible()
-    expect(screen.getByText('Second growth')).toBeVisible()
-    expect(screen.getAllByText('10.25')).toHaveLength(2)
-    expect(screen.getAllByText('30.75')).toHaveLength(2)
+    const reviewTable = screen.getByRole('table', { name: 'Average monthly value upload review' })
+    expect(reviewTable).toBeVisible()
+    expect(within(reviewTable).getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
+    expect(within(reviewTable).getByRole('columnheader', { name: 'Pine' })).toBeVisible()
+    expect(
+      within(reviewTable).queryByRole('columnheader', { name: 'Growth' }),
+    ).not.toBeInTheDocument()
+    expect(within(reviewTable).getAllByRole('row')).toHaveLength(2)
+    expect(within(reviewTable).queryByText('Old growth')).not.toBeInTheDocument()
+    expect(within(reviewTable).queryByText('Second growth')).not.toBeInTheDocument()
+    expect(within(reviewTable).getAllByText('10.25')).toHaveLength(1)
+    expect(within(reviewTable).getAllByText('30.75')).toHaveLength(1)
 
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 

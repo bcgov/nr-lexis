@@ -46,9 +46,10 @@ type RtmReviewSpeciesColumn = {
 type RtmReviewMatrixRow = {
   key: string
   grade: string
-  growthIndicator: string
-  values: Record<string, Array<number | null>>
+  values: Record<string, RtmReviewCellValues>
 }
+
+type RtmReviewCellValues = Record<string, number | null>
 
 const parseStatusTag = (status: string | undefined) => {
   if (!status) {
@@ -124,6 +125,8 @@ const RTM_REVIEW_GRADE_ORDER = [
   '6',
 ]
 
+const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
+
 const normalizeKey = (value: string | null | undefined) => (value ?? '').trim().toUpperCase()
 
 const isAcceptedUploadFile = (file: File) => {
@@ -195,14 +198,7 @@ const compareMatrixRows = (left: RtmReviewMatrixRow, right: RtmReviewMatrixRow) 
     return normalizedLeftGradeIndex - normalizedRightGradeIndex
   }
 
-  const gradeComparison = left.grade.localeCompare(right.grade)
-  if (gradeComparison !== 0) {
-    return gradeComparison
-  }
-
-  return formatGrowthIndicator(left.growthIndicator).localeCompare(
-    formatGrowthIndicator(right.growthIndicator),
-  )
+  return left.grade.localeCompare(right.grade)
 }
 
 const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] => {
@@ -217,19 +213,18 @@ const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] =>
       return
     }
 
-    const matrixRowKey = `${grade}-${growthIndicator}`
+    const matrixRowKey = grade
     const matrixRow =
       matrixRows.get(matrixRowKey) ??
       ({
         key: matrixRowKey,
         grade,
-        growthIndicator,
         values: {},
       } satisfies RtmReviewMatrixRow)
 
-    const columnValues = matrixRow.values[speciesColumnKey] ?? []
-    if (!columnValues.some((value) => value === row.newValue)) {
-      columnValues.push(row.newValue)
+    const columnValues = matrixRow.values[speciesColumnKey] ?? {}
+    if (!(growthIndicator in columnValues)) {
+      columnValues[growthIndicator] = row.newValue
     }
     matrixRow.values[speciesColumnKey] = columnValues
     matrixRows.set(matrixRowKey, matrixRow)
@@ -238,12 +233,38 @@ const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] =>
   return Array.from(matrixRows.values()).sort(compareMatrixRows)
 }
 
-const formatReviewCell = (values: Array<number | null> | undefined) => {
-  if (!values || values.length === 0) {
+const growthSortIndex = (growthIndicator: string) => {
+  const index = RTM_REVIEW_GROWTH_ORDER.indexOf(growthIndicator)
+  return index === -1 ? RTM_REVIEW_GROWTH_ORDER.length : index
+}
+
+const formatReviewCell = (values: RtmReviewCellValues | undefined) => {
+  if (!values || Object.keys(values).length === 0) {
     return ''
   }
 
-  return Array.from(new Set(values.map((value) => formatMoney(value)).filter(Boolean))).join(', ')
+  const entries = Object.entries(values)
+    .filter(([, value]) => formatMoney(value))
+    .sort(([leftGrowth], [rightGrowth]) => {
+      const indexComparison = growthSortIndex(leftGrowth) - growthSortIndex(rightGrowth)
+      return indexComparison === 0 ? leftGrowth.localeCompare(rightGrowth) : indexComparison
+    })
+
+  const uniqueValues = Array.from(new Set(entries.map(([, value]) => formatMoney(value))))
+  if (uniqueValues.length <= 1) {
+    return uniqueValues[0] ?? ''
+  }
+
+  return (
+    <span className="rtm-review-cell-values">
+      {entries.map(([growthIndicator, value]) => (
+        <span key={growthIndicator}>
+          <span>{formatGrowthIndicator(growthIndicator)}</span>
+          <strong>{formatMoney(value)}</strong>
+        </span>
+      ))}
+    </span>
+  )
 }
 
 const UploadValidationMessage = ({
@@ -396,7 +417,6 @@ const ReviewUploadContent = ({
             <TableHead>
               <TableRow>
                 <TableHeader>Grade</TableHeader>
-                <TableHeader>Growth</TableHeader>
                 {speciesColumns.map((column) => (
                   <TableHeader key={column.key}>{column.label}</TableHeader>
                 ))}
@@ -406,7 +426,6 @@ const ReviewUploadContent = ({
               {matrixRows.map((row) => (
                 <TableRow key={row.key}>
                   <TableCell>{row.grade}</TableCell>
-                  <TableCell>{formatGrowthIndicator(row.growthIndicator)}</TableCell>
                   {speciesColumns.map((column) => (
                     <TableCell key={column.key}>
                       {formatReviewCell(row.values[column.key])}

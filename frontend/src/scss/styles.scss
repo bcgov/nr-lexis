@@ -1805,6 +1805,23 @@ body {
   min-inline-size: 56rem;
 }
 
+.rtm-review-cell-values {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.rtm-review-cell-values > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.rtm-review-cell-values span span {
+  color: var(--csp-text-primary);
+  font-size: 0.75rem;
+}
+
 .admin-upload-result {
   display: grid;
   gap: 0.5rem;
