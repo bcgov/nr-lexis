@@ -45,6 +45,8 @@ const mockedSearchProvincialExemptionNumberOptions = vi.mocked(
 )
 const mockedSearchProvincialPermitNumberOptions = vi.mocked(searchProvincialPermitNumberOptions)
 
+const pendingValidation = (): Promise<never> => new Promise(() => {})
+
 const mockUploadAccess = (allowedAction: string | null): void => {
   mockedUseAuth.mockReturnValue(
     createTestAuthContext({
@@ -508,10 +510,8 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
     expect(screen.getAllByText('Creates a new application').length).toBeGreaterThan(0)
-    expect(screen.getByText(/XML \| 7 B \| Added/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel submission' })).toBeInTheDocument()
     expect(screen.getByText('Review 1 selected submission before finalizing.')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
 
     await waitFor(() => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
@@ -580,14 +580,16 @@ describe('Admin upload workflow smoke', () => {
     )
   })
 
-  it('replaces queued application submissions with the same file name before validation', async () => {
+  it('replaces application submissions with the same file name while validation is pending', async () => {
     mockUploadAccess('uploadApplicationSubmission')
-    mockedValidateApplicationSubmissionUpload.mockResolvedValue({
-      message:
-        'LEXIS application submission validated for package TEST23-652-7D-2 with 3 scale rows.',
-      packageNumber: 'TEST23-652-7D-2',
-      scaleRows: 3,
-    })
+    mockedValidateApplicationSubmissionUpload
+      .mockReturnValueOnce(pendingValidation())
+      .mockResolvedValueOnce({
+        message:
+          'LEXIS application submission validated for package TEST23-652-7D-2 with 3 scale rows.',
+        packageNumber: 'TEST23-652-7D-2',
+        scaleRows: 3,
+      })
 
     renderPage('/provincial/application/upload')
 
@@ -597,19 +599,27 @@ describe('Admin upload workflow smoke', () => {
     })
 
     await userEvent.upload(screen.getByLabelText('Application submission file'), firstFile)
-    await userEvent.upload(screen.getByLabelText('Application submission file'), replacementFile)
-
-    expect(screen.getByText('Showing 1 of 1 submission')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
-
     await waitFor(() => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
         expect.objectContaining({
-          file: replacementFile,
+          file: firstFile,
         }),
       )
     })
-    expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(1)
+
+    await userEvent.upload(screen.getByLabelText('Application submission file'), replacementFile)
+
+    expect(screen.getByText('Showing 1 of 1 submission')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(2)
+    })
+    expect(mockedValidateApplicationSubmissionUpload).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        file: replacementFile,
+      }),
+    )
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
@@ -626,7 +636,6 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
 
     expect(await screen.findByText('Submission validated')).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeDisabled()
@@ -662,13 +671,6 @@ describe('Admin upload workflow smoke', () => {
     })
     await user.upload(screen.getByLabelText('Application submission file'), file)
 
-    expect(
-      (await screen.findAllByText('Preview: LEXIS XML structure detected, 2 scale rows.')).length,
-    ).toBeGreaterThan(0)
-    expect(screen.getByText(/DAT \|/)).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Validate submission' }))
-
     await waitFor(() => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -676,6 +678,7 @@ describe('Admin upload workflow smoke', () => {
         }),
       )
     })
+    expect(screen.getAllByText('submission.dat').length).toBeGreaterThan(0)
     expect(screen.getByText('Submission validated')).toBeInTheDocument()
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/2 scale rows/).length).toBeGreaterThan(0)
@@ -694,7 +697,6 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['zip-data'], 'submission.zip', { type: 'application/zip' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
 
     expect(await screen.findByText('Submission validated')).toBeInTheDocument()
     expect(
@@ -705,6 +707,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('previews safe structure from queued LEXIS XML files before submit', async () => {
     mockUploadAccess('uploadApplicationSubmission')
+    mockedValidateApplicationSubmissionUpload.mockReturnValue(pendingValidation())
 
     renderPage('/provincial/application/upload')
 
@@ -718,6 +721,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('previews safe structure from queued LEXIS GeoJSON files before submit', async () => {
     mockUploadAccess('uploadApplicationSubmission')
+    mockedValidateApplicationSubmissionUpload.mockReturnValue(pendingValidation())
 
     renderPage('/provincial/application/upload')
 
@@ -748,6 +752,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('does not echo XML preview fields that contain nested markup', async () => {
     mockUploadAccess('uploadApplicationSubmission')
+    mockedValidateApplicationSubmissionUpload.mockReturnValue(pendingValidation())
 
     renderPage('/provincial/application/upload')
 
@@ -769,6 +774,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('previews queued ZIP files as server-validated XML archives before submit', async () => {
     mockUploadAccess('uploadApplicationSubmission')
+    mockedValidateApplicationSubmissionUpload.mockReturnValue(pendingValidation())
 
     renderPage('/provincial/application/upload')
 
@@ -809,7 +815,6 @@ describe('Admin upload workflow smoke', () => {
       firstFile,
       secondFile,
     ])
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
 
     await waitFor(() => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(2)
@@ -886,7 +891,6 @@ describe('Admin upload workflow smoke', () => {
       firstFile,
       secondFile,
     ])
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
 
     await waitFor(() => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(2)
@@ -937,7 +941,6 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
 
     await waitFor(() => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
@@ -989,15 +992,6 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['not xml'], 'submission.pdf', { type: 'application/pdf' })
     await user.upload(screen.getByLabelText('Application submission file'), file)
 
-    expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
-    expect(
-      screen.getAllByText(
-        'Preview unavailable; server validation will inspect this submission file.',
-      ).length,
-    ).toBeGreaterThan(0)
-
-    await user.click(screen.getByRole('button', { name: 'Validate submission' }))
-
     await waitFor(() => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1029,7 +1023,6 @@ describe('Admin upload workflow smoke', () => {
       type: 'application/xml',
     })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
 
     await waitFor(() => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
@@ -1107,7 +1100,6 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
 
     expect(await screen.findByText('Upload error')).toBeInTheDocument()
     expect(screen.getAllByText('Package TEST23-652-7D-2 already exists.').length).toBeGreaterThan(0)

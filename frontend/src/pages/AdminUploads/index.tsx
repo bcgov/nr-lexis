@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Column, ComboBox, Grid, Tag, TextArea, TextInput } from '@carbon/react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
@@ -418,6 +418,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const hasQueuedLexisSubmissions =
     selectedWorkflowType === 'applicationSubmission' &&
     uploadQueue.some((item) => item.status === 'queued')
+  const hasValidatingLexisSubmissions =
+    selectedWorkflowType === 'applicationSubmission' &&
+    uploadQueue.some((item) => item.status === 'validating')
   const hasValidatedLexisSubmissions =
     selectedWorkflowType === 'applicationSubmission' &&
     uploadQueue.some((item) => item.status === 'validated')
@@ -436,9 +439,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     (selectedWorkflowType === 'applicationSubmission' && hasLockedLexisSubmissions)
   const submitButtonLabel =
     selectedWorkflowType === 'applicationSubmission'
-      ? hasQueuedLexisSubmissions || !hasValidatedLexisSubmissions
-        ? `Validate ${applicationSubmissionActionNoun}`
-        : `Finalize ${applicationSubmissionActionNoun}`
+      ? hasValidatingLexisSubmissions
+        ? `Validating ${applicationSubmissionActionNoun}...`
+        : hasQueuedLexisSubmissions || !hasValidatedLexisSubmissions
+          ? `Validate ${applicationSubmissionActionNoun}`
+          : `Finalize ${applicationSubmissionActionNoun}`
       : 'Submit Upload'
   const submittingButtonLabel =
     selectedWorkflowType === 'applicationSubmission' && hasQueuedLexisSubmissions
@@ -567,7 +572,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             setUploadQueue((current) =>
               current.map((currentItem) =>
                 currentItem.id === item.id &&
-                currentItem.status === 'queued' &&
+                (currentItem.status === 'queued' || currentItem.status === 'validating') &&
                 !currentItem.message
                   ? {
                       ...currentItem,
@@ -604,29 +609,32 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     clearUploadFeedback()
   }
 
-  const setQueueItemStatus = (
-    id: string,
-    status: UploadQueueStatus,
-    message = '',
-    resultApplicationNumber?: number,
-    targetSummary?: string,
-    details?: UploadQueueReviewDetails,
-  ): void => {
-    setUploadQueue((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status,
-              message,
-              details: details ?? item.details,
-              resultApplicationNumber,
-              targetSummary: targetSummary ?? item.targetSummary,
-            }
-          : item,
-      ),
-    )
-  }
+  const setQueueItemStatus = useCallback(
+    (
+      id: string,
+      status: UploadQueueStatus,
+      message = '',
+      resultApplicationNumber?: number,
+      targetSummary?: string,
+      details?: UploadQueueReviewDetails,
+    ): void => {
+      setUploadQueue((current) =>
+        current.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status,
+                message,
+                details: details ?? item.details,
+                resultApplicationNumber,
+                targetSummary: targetSummary ?? item.targetSummary,
+              }
+            : item,
+        ),
+      )
+    },
+    [],
+  )
 
   const submitQueuedFile = async (item: UploadQueueItem): Promise<QueuedUploadResult> => {
     const file = item.file
@@ -714,46 +722,62 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     }
   }
 
-  const validateQueuedLexisFile = async (file: File): Promise<QueuedUploadResult> => {
-    const result = await validateApplicationSubmissionUpload({
-      file,
-      userReference: formState.userReference.trim(),
-    })
-    if (isApplicationSubmissionValidationFailure(result)) {
-      const uploadError = extractUploadErrorDetails(
-        { response: { data: result } },
-        'Submission validation failed. Please try again. If the problem persists, contact your administrator.',
+  const validateQueuedLexisFile = useCallback(
+    async (file: File): Promise<QueuedUploadResult> => {
+      const result = await validateApplicationSubmissionUpload({
+        file,
+        userReference: formState.userReference.trim(),
+      })
+      if (isApplicationSubmissionValidationFailure(result)) {
+        const uploadError = extractUploadErrorDetails(
+          { response: { data: result } },
+          'Submission validation failed. Please try again. If the problem persists, contact your administrator.',
+        )
+        return {
+          message: uploadError.message,
+          details: uploadError.details,
+          failed: true,
+        }
+      }
+
+      const message = buildUploadResultMessage(
+        'applicationSubmission',
+        'LEXIS application submission validated. Review the summary before finalizing application submissions.',
+        result,
       )
       return {
-        message: uploadError.message,
-        details: uploadError.details,
-        failed: true,
+        message,
+        details: buildUploadReviewDetails(message, result),
       }
+    },
+    [formState.userReference],
+  )
+
+  const validateLexisQueue = useCallback(async (): Promise<void> => {
+    const queuedItems = uploadQueue.filter((item) => item.status === 'queued')
+    if (queuedItems.length === 0) {
+      return
     }
 
-    const message = buildUploadResultMessage(
-      'applicationSubmission',
-      'LEXIS application submission validated. Review the summary before finalizing application submissions.',
-      result,
-    )
-    return {
-      message,
-      details: buildUploadReviewDetails(message, result),
-    }
-  }
-
-  const validateLexisQueue = async (): Promise<void> => {
+    const queuedItemIds = new Set(queuedItems.map((item) => item.id))
     let successCount = 0
     let failureCount = 0
     let lastSuccessMessage = ''
 
-    for (const item of uploadQueue) {
-      if (item.status !== 'queued') {
-        continue
-      }
+    setUploadQueue((current) =>
+      current.map((item) =>
+        queuedItemIds.has(item.id)
+          ? {
+              ...item,
+              status: 'validating',
+              message: '',
+              targetSummary: currentUploadTargetSummary,
+            }
+          : item,
+      ),
+    )
 
-      setQueueItemStatus(item.id, 'validating', '', undefined, currentUploadTargetSummary)
-
+    for (const item of queuedItems) {
       try {
         const result = await validateQueuedLexisFile(item.file)
         if (result.failed) {
@@ -810,7 +834,26 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         `${failureCount} submission${failureCount === 1 ? '' : 's'} failed validation. Review the queue for details.`,
       )
     }
-  }
+  }, [currentUploadTargetSummary, setQueueItemStatus, uploadQueue, validateQueuedLexisFile])
+
+  useEffect(() => {
+    if (
+      selectedWorkflowType !== 'applicationSubmission' ||
+      !hasUploadAccess ||
+      isSubmitting ||
+      !hasQueuedLexisSubmissions
+    ) {
+      return
+    }
+
+    void validateLexisQueue()
+  }, [
+    hasQueuedLexisSubmissions,
+    hasUploadAccess,
+    isSubmitting,
+    selectedWorkflowType,
+    validateLexisQueue,
+  ])
 
   const submitValidatedLexisQueue = async (): Promise<void> => {
     let successCount = 0
@@ -896,7 +939,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     setIsSubmitting(true)
 
     if (selectedWorkflowType === 'applicationSubmission') {
-      if (uploadQueue.some((item) => item.status === 'queued')) {
+      if (uploadQueue.some((item) => item.status === 'validating')) {
+        setErrorMessage('Wait for validation to finish before finalizing submissions.')
+      } else if (uploadQueue.some((item) => item.status === 'queued')) {
         await validateLexisQueue()
       } else if (uploadQueue.some((item) => item.status === 'validated')) {
         await submitValidatedLexisQueue()
@@ -1223,7 +1268,10 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           <UploadQueuePreview
             items={uploadQueue}
             targetSummary={currentUploadTargetSummary}
-            canSubmit={hasUploadAccess}
+            canSubmit={
+              hasUploadAccess &&
+              (selectedWorkflowType !== 'applicationSubmission' || !hasValidatingLexisSubmissions)
+            }
             isSubmitting={isSubmitting}
             previewTitle={
               selectedWorkflowType === 'applicationSubmission' ? 'Submission summary' : undefined
