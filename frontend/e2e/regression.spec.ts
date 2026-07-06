@@ -1142,25 +1142,18 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expect(
       page.getByText(
-        'Query current and historical average monthly value rows, make manual create/update entries, and generate an upload preview from XLSX files.',
+        'Generate an upload preview from XLSX files and apply validated average monthly value changes.',
       ),
     ).toBeVisible()
-    await expect(page.locator('#rtm-retrieval-date')).toBeVisible()
-    await expect(page.locator('#rtm-update-date')).toBeVisible()
-
-    const today = await browserLocalIsoToday(page)
-    await expect(page.locator('#rtm-retrieval-date')).toHaveValue(today)
-    await expect(page.locator('#rtm-update-date')).toHaveValue(today)
-    await expect(page.locator('#rtm-manual-retrieval-date')).toHaveValue(today)
-    await page.locator('#rtm-save-mode').selectOption('update')
-    await expect(page.locator('#rtm-manual-update-date')).toHaveValue(today)
+    await expect(page.getByRole('heading', { name: 'Query rows' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Manual entry' })).toHaveCount(0)
 
     const templateLink = page.getByRole('link', { name: 'Download template' })
     await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
     await expect(templateLink).toHaveAttribute('download', 'rtm-ems-log-amv-template.xlsx')
     await expect(
       page.getByText(
-        'Supported format: .xlsx. The template includes retrieval and update date rows, and values apply to old and second growth.',
+        'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
       ),
     ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Preview data' })).toBeDisabled()

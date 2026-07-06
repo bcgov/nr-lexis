@@ -84,7 +84,7 @@ class OracleRtmEmsLogAmvServiceTest {
             anyString(),
             anyString(),
             anyString(),
-            eq(LocalDate.of(2026, 5, 1)),
+            eq(LocalDate.of(2026, 6, 23)),
             eq(LocalDate.of(2026, 6, 1)),
             any(BigDecimal.class));
     verify(repository, never())
@@ -118,7 +118,7 @@ class OracleRtmEmsLogAmvServiceTest {
             speciesCaptor.capture(),
             anyString(),
             anyString(),
-            eq(LocalDate.of(2026, 5, 1)),
+            eq(LocalDate.of(2026, 6, 23)),
             eq(LocalDate.of(2026, 6, 1)),
             any(BigDecimal.class));
     assertThat(speciesCaptor.getAllValues())

@@ -64,7 +64,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   private record ParsedCell(int column, String value) {}
   private record ParsedRow(int rowNumber, List<ParsedCell> cells) {}
   private record ParsedWorkbook(List<ParsedRow> rows) {}
-  private record UploadDateMetadata(LocalDate retrievalDate, LocalDate updateDate) {}
+  private record UploadDateMetadata(LocalDate updateDate) {}
 
   static Analysis analyze(InputStream inputStream) throws IOException {
     UploadParseResult result = parseForUpload(inputStream);
@@ -85,9 +85,9 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   }
 
   static UploadParseResult parseForUpload(
-      InputStream inputStream, LocalDate submissionMonth) throws IOException {
+      InputStream inputStream, LocalDate submissionDate) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return parseUploadSheet(parsedWorkbook.rows(), submissionMonth);
+    return parseUploadSheet(parsedWorkbook.rows(), submissionDate);
   }
 
   private static ParsedWorkbook readWorkbook(InputStream inputStream) throws IOException {
@@ -114,23 +114,14 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   }
 
   private static UploadParseResult parseUploadSheet(
-      List<ParsedRow> rows, LocalDate submissionMonth) {
+      List<ParsedRow> rows, LocalDate submissionDate) {
     int dataRows = 0;
     int numericCells = 0;
     boolean headerDetected = false;
     int headerRow = -1;
     UploadDateMetadata dateMetadata = parseUploadDateMetadata(rows);
-    LocalDate updateDate =
-        dateMetadata.updateDate() == null
-            ? (submissionMonth == null ? null : submissionMonth.withDayOfMonth(1))
-            : dateMetadata.updateDate();
-    LocalDate retrievalDate = dateMetadata.retrievalDate();
-    if (retrievalDate == null && updateDate != null) {
-      retrievalDate = updateDate.minusMonths(1).withDayOfMonth(1);
-    }
-    if (updateDate == null && retrievalDate != null) {
-      updateDate = retrievalDate.plusMonths(1).withDayOfMonth(1);
-    }
+    LocalDate updateDate = dateMetadata.updateDate();
+    LocalDate retrievalDate = submissionDate;
     Map<String, List<String>> speciesHeaderAliases = speciesHeaderAliases();
     Map<Integer, List<String>> speciesByColumn = new HashMap<>();
     List<String> errors = new ArrayList<>();
@@ -333,7 +324,6 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   }
 
   private static UploadDateMetadata parseUploadDateMetadata(List<ParsedRow> rows) {
-    LocalDate retrievalDate = null;
     LocalDate updateDate = null;
 
     for (ParsedRow row : rows) {
@@ -342,19 +332,16 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         break;
       }
 
-      if (retrievalDate == null && rowContainsLabel(cells, "RETRIEVAL DATE")) {
-        retrievalDate = parseDateFromRow(cells);
-      }
       if (updateDate == null && rowContainsLabel(cells, "UPDATE DATE")) {
         updateDate = parseDateFromRow(cells);
       }
 
-      if (retrievalDate != null && updateDate != null) {
+      if (updateDate != null) {
         break;
       }
     }
 
-    return new UploadDateMetadata(retrievalDate, updateDate);
+    return new UploadDateMetadata(updateDate);
   }
 
   private static boolean rowContainsLabel(List<ParsedCell> cells, String label) {
@@ -368,8 +355,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
   private static LocalDate parseDateFromRow(List<ParsedCell> cells) {
     for (ParsedCell cell : cells) {
-      if (rowContainsLabel(List.of(cell), "RETRIEVAL DATE")
-          || rowContainsLabel(List.of(cell), "UPDATE DATE")) {
+      if (rowContainsLabel(List.of(cell), "UPDATE DATE")) {
         continue;
       }
 

@@ -1381,8 +1381,7 @@ body {
 
 .admin-upload-panel {
   min-inline-size: 0;
-  border: 1px solid var(--cds-border-subtle);
-  background: var(--cds-layer);
+  background: transparent;
 }
 
 .admin-upload-panel__header {
@@ -1391,7 +1390,6 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem;
-  border-bottom: 1px solid var(--cds-border-subtle);
 }
 
 .admin-upload-panel__header > div {

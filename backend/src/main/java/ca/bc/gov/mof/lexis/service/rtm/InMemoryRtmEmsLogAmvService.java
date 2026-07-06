@@ -201,7 +201,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
           RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-              file.getInputStream(), currentSubmissionMonth());
+              file.getInputStream(), currentSubmissionDate());
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<RtmEmsLogAmvRowDto> previewRows = buildPreviewRows(parseResult);
@@ -216,7 +216,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (parseResult.updateDate() == null || parseResult.retrievalDate() == null) {
-        errors.add("The upload submission date could not be determined.");
+        errors.add("The update date is required in the uploaded template.");
       }
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
@@ -266,7 +266,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
           RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-              file.getInputStream(), currentSubmissionMonth());
+              file.getInputStream(), currentSubmissionDate());
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
@@ -323,7 +323,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (parsedUpdateDate == null || parsedRetrievalDate == null) {
-        errors.add("The upload submission date could not be determined.");
+        errors.add("The update date is required in the uploaded template.");
       }
 
       if (!errors.isEmpty()) {
@@ -555,8 +555,8 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     return buildMutationResult(RETURN_SUCCESS, "Upload row saved.", List.of(), List.of(uploadedRow));
   }
 
-  private LocalDate currentSubmissionMonth() {
-    return LocalDate.now(clock).withDayOfMonth(1);
+  private LocalDate currentSubmissionDate() {
+    return LocalDate.now(clock);
   }
 
   private String formatDate(LocalDate date) {
