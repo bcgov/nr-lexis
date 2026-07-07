@@ -33,6 +33,7 @@ export type UploadQueuePreviewProps = {
   pendingMessage?: string
   canRemoveItem?: (item: UploadQueueItem) => boolean
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
+  showWorkflowProgress?: boolean
 }
 
 const formatFileType = (file: File): string => {
@@ -69,6 +70,7 @@ function UploadQueuePreview({
   pendingMessage = 'Not submitted yet.',
   canRemoveItem = () => true,
   renderCompleteAction,
+  showWorkflowProgress = true,
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const readyCount = items.filter((item) => item.status === 'queued').length
@@ -127,12 +129,14 @@ function UploadQueuePreview({
 
   return (
     <section className="admin-upload-panel" aria-labelledby={previewTitleId}>
-      <UploadWorkflowProgress
-        steps={UPLOAD_REVIEW_STEPS}
-        currentStepId={currentWorkflowStep}
-        completedStepIds={completedWorkflowSteps}
-        ariaLabel="Upload queue workflow progress"
-      />
+      {showWorkflowProgress && (
+        <UploadWorkflowProgress
+          steps={UPLOAD_REVIEW_STEPS}
+          currentStepId={currentWorkflowStep}
+          completedStepIds={completedWorkflowSteps}
+          ariaLabel="Upload queue workflow progress"
+        />
+      )}
 
       <div className="admin-upload-panel__header">
         <div>

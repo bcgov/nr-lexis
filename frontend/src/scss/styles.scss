@@ -1692,6 +1692,15 @@ body {
   gap: 0.25rem;
 }
 
+.admin-upload-step-panel {
+  padding-block: 0;
+}
+
+.admin-upload-validation-cell {
+  display: grid;
+  gap: 0.25rem;
+}
+
 .admin-upload-file-chip {
   display: flex;
   align-items: center;

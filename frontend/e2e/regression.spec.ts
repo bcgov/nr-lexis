@@ -1027,6 +1027,21 @@ test.describe('TEST IDIR admin regression', () => {
       'href',
       '/provincial/application/upload',
     )
+    await expectAccessiblePage(
+      page,
+      '/provincial/application/upload',
+      /upload application submission/i,
+    )
+    const applicationSubmissionProgress = page.getByRole('list', {
+      name: 'Application submission upload workflow progress',
+    })
+    await expect(applicationSubmissionProgress.getByText('1. Validate')).toBeVisible()
+    await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Validation status' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+
+    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
     await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
     await expect(adminSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
 
