@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Button, Tag, TextInput } from '@carbon/react'
-import { Upload } from '@carbon/icons-react'
+import { ArrowRight, Upload } from '@carbon/icons-react'
 import UploadQueueReviewAccordion from './UploadQueueReviewAccordion'
 import UploadWorkflowProgress from './UploadWorkflowProgress'
 import {
@@ -34,6 +34,13 @@ export type UploadQueuePreviewProps = {
   canRemoveItem?: (item: UploadQueueItem) => boolean
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
   showWorkflowProgress?: boolean
+  currentStepId?: 'upload' | 'review'
+  validationTitle?: string
+  reviewLabel?: string
+  actionsPlacement?: 'header' | 'footer'
+  onReview?: () => void
+  onBack?: () => void
+  backLabel?: string
 }
 
 const formatFileType = (file: File): string => {
@@ -71,6 +78,13 @@ function UploadQueuePreview({
   canRemoveItem = () => true,
   renderCompleteAction,
   showWorkflowProgress = true,
+  currentStepId,
+  validationTitle = 'Validation status',
+  reviewLabel = 'Review upload',
+  actionsPlacement = 'header',
+  onReview,
+  onBack,
+  backLabel = 'Back',
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
@@ -81,7 +95,9 @@ function UploadQueuePreview({
   const failedCount = items.filter((item) => item.status === 'failed').length
   const queueIdentity = useMemo(() => items.map((item) => item.id).join('|'), [items])
   const isReviewStep =
-    !showWorkflowProgress || (items.length > 0 && reviewQueueIdentity === queueIdentity)
+    currentStepId !== undefined
+      ? currentStepId === 'review'
+      : !showWorkflowProgress || (items.length > 0 && reviewQueueIdentity === queueIdentity)
   const effectiveQueueFilter = isReviewStep ? queueFilter : ''
 
   const filteredItems = useMemo(() => {
@@ -125,10 +141,12 @@ function UploadQueuePreview({
 
   const enterReviewStep = (): void => {
     setQueueFilter('')
+    onReview?.()
     setReviewQueueIdentity(queueIdentity)
   }
 
   const previewTitleId = `${idPrefix}PreviewTitle`
+  const displayedPreviewTitle = isReviewStep ? previewTitle : validationTitle
   const queueFilterId = `${idPrefix}QueueFilter`
   const itemNounPlural = `${itemNoun}s`
   const isSubmissionQueue = itemNoun === 'submission'
@@ -147,6 +165,49 @@ function UploadQueuePreview({
       : `${selectedItemLabel} validated. Continue to review before ${
           isSubmissionQueue ? 'finalizing' : 'saving'
         }.`
+  const queueSummary =
+    items.length > 0 ? (
+      <div className="admin-upload-queue-summary" aria-label="Upload preview summary">
+        <Tag type="gray">Ready {readyCount}</Tag>
+        <Tag type="red">Invalid {invalidCount}</Tag>
+        <Tag type="green">Validated {validatedCount}</Tag>
+        <Tag type="green">Complete {completeCount}</Tag>
+        <Tag type="red">Failed {failedCount}</Tag>
+      </div>
+    ) : null
+  const actionControls = (
+    <>
+      {items.length > 0 && (
+        <Button kind="ghost" size="sm" onClick={clearQueue} disabled={isSubmitting}>
+          Clear
+        </Button>
+      )}
+      {isReviewStep ? (
+        <Button
+          kind="primary"
+          size="sm"
+          onClick={onSubmit}
+          disabled={isSubmitting || !canSubmit}
+          renderIcon={ArrowRight}
+        >
+          {isSubmitting ? submittingLabel : submitLabel}
+        </Button>
+      ) : (
+        <Button
+          kind="primary"
+          size="sm"
+          onClick={enterReviewStep}
+          disabled={isSubmitting || !canReviewUpload}
+          renderIcon={ArrowRight}
+        >
+          {reviewLabel}
+        </Button>
+      )}
+      <Button kind="ghost" size="sm" onClick={resetUpload} disabled={isSubmitting}>
+        Reset
+      </Button>
+    </>
+  )
 
   return (
     <section className="admin-upload-panel" aria-labelledby={previewTitleId}>
@@ -161,7 +222,7 @@ function UploadQueuePreview({
 
       <div className="admin-upload-panel__header">
         <div>
-          <h2 id={previewTitleId}>{previewTitle}</h2>
+          <h2 id={previewTitleId}>{displayedPreviewTitle}</h2>
           <p>
             {items.length === 0
               ? emptyDescription
@@ -173,42 +234,8 @@ function UploadQueuePreview({
           </p>
         </div>
         <div className="admin-upload-preview-actions">
-          {items.length > 0 && (
-            <div className="admin-upload-queue-summary" aria-label="Upload preview summary">
-              <Tag type="gray">Ready {readyCount}</Tag>
-              <Tag type="red">Invalid {invalidCount}</Tag>
-              <Tag type="green">Validated {validatedCount}</Tag>
-              <Tag type="green">Complete {completeCount}</Tag>
-              <Tag type="red">Failed {failedCount}</Tag>
-            </div>
-          )}
-          {items.length > 0 && (
-            <Button kind="ghost" size="sm" onClick={clearQueue} disabled={isSubmitting}>
-              Clear
-            </Button>
-          )}
-          {isReviewStep ? (
-            <Button
-              kind="primary"
-              size="sm"
-              onClick={onSubmit}
-              disabled={isSubmitting || !canSubmit}
-            >
-              {isSubmitting ? submittingLabel : submitLabel}
-            </Button>
-          ) : (
-            <Button
-              kind="primary"
-              size="sm"
-              onClick={enterReviewStep}
-              disabled={isSubmitting || !canReviewUpload}
-            >
-              Review upload
-            </Button>
-          )}
-          <Button kind="ghost" size="sm" onClick={resetUpload} disabled={isSubmitting}>
-            Reset
-          </Button>
+          {queueSummary}
+          {actionsPlacement === 'header' && actionControls}
         </div>
       </div>
 
@@ -310,6 +337,18 @@ function UploadQueuePreview({
             </>
           )}
         </>
+      )}
+      {actionsPlacement === 'footer' && (
+        <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
+          <div>
+            {isReviewStep && onBack && (
+              <Button kind="secondary" size="sm" onClick={onBack} disabled={isSubmitting}>
+                {backLabel}
+              </Button>
+            )}
+          </div>
+          <div className="admin-upload-preview-footer-actions__right">{actionControls}</div>
+        </div>
       )}
     </section>
   )

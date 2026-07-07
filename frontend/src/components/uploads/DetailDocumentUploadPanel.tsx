@@ -455,23 +455,25 @@ const DetailDocumentUploadPanel = ({
             rows={3}
             disabled={disabled}
           />
-        </section>
 
-        <MultiFileDropZone
-          title="Upload documents"
-          description="Supported files: any document with a file extension"
-          inputId={`${inputId}File`}
-          inputKey={fileInputKey}
-          inputLabel="Document File"
-          invalidText={
-            invalidUploadCount > 0
-              ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
-              : undefined
-          }
-          disabled={disabled}
-          disabledDescription={disabledReason}
-          onFilesSelected={addFilesToQueue}
-        />
+          <MultiFileDropZone
+            title="Upload documents"
+            description="Supported files: any document with a file extension"
+            inputId={`${inputId}File`}
+            inputKey={fileInputKey}
+            inputLabel="Document File"
+            invalidText={
+              invalidUploadCount > 0
+                ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
+                : undefined
+            }
+            disabled={disabled}
+            disabledDescription={disabledReason}
+            renderAsPanel={false}
+            variant="fspts"
+            onFilesSelected={addFilesToQueue}
+          />
+        </section>
       </div>
 
       <UploadQueuePreview
@@ -480,6 +482,7 @@ const DetailDocumentUploadPanel = ({
         canSubmit={canSubmit}
         isSubmitting={isSubmitting}
         idPrefix={`${inputId}Queue`}
+        actionsPlacement="footer"
         onSubmit={() => void onSubmitUpload()}
         onReset={resetUpload}
         onClear={clearQueuedFiles}

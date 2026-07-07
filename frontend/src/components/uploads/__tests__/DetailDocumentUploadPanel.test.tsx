@@ -30,7 +30,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       screen.getByRole('button', { name: 'Choose files for Upload documents' }),
     ).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByText('Browse files')).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Drag and drop files here or click to upload')).toBeInTheDocument()
     expect(screen.getByText('Upload access is read only.')).toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
     expect(

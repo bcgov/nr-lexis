@@ -112,7 +112,7 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
     expect(screen.getByRole('combobox', { name: 'Permit number' })).toHaveValue('5001')
-    expect(screen.getByRole('button', { name: 'Choose files for Upload Documents' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Choose files for Upload documents' })).toBeVisible()
 
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
@@ -351,7 +351,7 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
-    expect(screen.getByRole('heading', { name: 'Data preview' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Validation status' })).toBeInTheDocument()
     expect(screen.getByText('No data uploaded yet')).toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
     expect(within(workflowProgress).getByText('1. Upload')).toBeVisible()
@@ -535,10 +535,10 @@ describe('Admin upload workflow smoke', () => {
     const workflowProgress = screen.getByRole('list', {
       name: 'Application submission upload workflow progress',
     })
-    expect(within(workflowProgress).getByText('1. Validate')).toBeInTheDocument()
+    expect(within(workflowProgress).getByText('1. Upload')).toBeInTheDocument()
     expect(within(workflowProgress).getByText('2. Review')).toBeInTheDocument()
     expect(
-      within(workflowProgress).getByText('1. Validate').closest('[role="listitem"]'),
+      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
     expect(screen.getByRole('heading', { name: 'Validation status' })).toBeInTheDocument()
     expect(screen.getByText('No application submissions selected')).toBeInTheDocument()
@@ -614,8 +614,8 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText('525.0').length).toBeGreaterThan(0)
     expect(screen.getByText('HE, FI')).toBeInTheDocument()
     expect(screen.getAllByText('CLIENT-REF-1').length).toBeGreaterThan(0)
-    expect(screen.queryByLabelText('User reference')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Application submission file')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('User reference')).toBeDisabled()
+    expect(screen.getByLabelText('Application submission file')).toBeEnabled()
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
 

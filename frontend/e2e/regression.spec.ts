@@ -1035,7 +1035,7 @@ test.describe('TEST IDIR admin regression', () => {
     const applicationSubmissionProgress = page.getByRole('list', {
       name: 'Application submission upload workflow progress',
     })
-    await expect(applicationSubmissionProgress.getByText('1. Validate')).toBeVisible()
+    await expect(applicationSubmissionProgress.getByText('1. Upload')).toBeVisible()
     await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Validation status' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
@@ -1313,16 +1313,16 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(createDocumentsHeading).toBeVisible()
     await expect(createDocumentsHeading).not.toContainText('API')
     await expect(page.getByText('Upload documents')).toBeVisible()
-    await expect(page.getByText('Multiple files can be queued and saved together.')).toBeVisible()
+    await expect(page.getByText(/Multiple files can be queued and saved together/)).toBeVisible()
     await expect(page.getByText('Queued files')).toBeVisible()
     await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
     await expect(page.getByLabel('Document File')).toBeDisabled()
+    await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
-    await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
+    await expect(
+      page.getByRole('button', { name: 'Choose files for Upload documents' }),
+    ).toHaveAttribute('aria-disabled', 'true')
   })
 
   test('uses save and cancel workflow on provincial create/edit pages', async () => {
@@ -1931,17 +1931,16 @@ test.describe('TEST IDIR admin regression', () => {
       ).not.toContainText('API')
       await expect(page.getByText('Upload documents').first()).toBeVisible()
       await expect(
-        page.getByText('Multiple files can be queued and saved together.').first(),
+        page.getByText(/Multiple files can be queued and saved together/).first(),
       ).toBeVisible()
       await expect(page.getByText('Queued files').first()).toBeVisible()
-      await expect(page.getByText('Drag and drop files here, or browse for files.')).toBeVisible()
+      await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
       await expect(page.getByLabel('Document File')).toBeEnabled()
       await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
       await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
-      await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
-        'aria-disabled',
-        'false',
-      )
+      await expect(
+        page.getByRole('button', { name: 'Choose files for Upload documents' }),
+      ).toHaveAttribute('aria-disabled', 'false')
 
       const approved = await readJsonResponse<ReviewStatusResponse>(
         await postWithCsrf(page, `/api/lexis/application-reviews/${applicationNumber}/approve`),

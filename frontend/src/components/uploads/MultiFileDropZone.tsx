@@ -11,6 +11,8 @@ export type MultiFileDropZoneProps = {
   invalidText?: string
   disabled?: boolean
   disabledDescription?: string
+  renderAsPanel?: boolean
+  variant?: 'default' | 'fspts'
   onFilesSelected: (files: FileList | null) => void
 }
 
@@ -24,6 +26,8 @@ function MultiFileDropZone({
   invalidText,
   disabled = false,
   disabledDescription = 'File upload is not available.',
+  renderAsPanel = true,
+  variant = 'default',
   onFilesSelected,
 }: MultiFileDropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -57,20 +61,36 @@ function MultiFileDropZone({
 
   const dropZoneClassName = [
     'admin-upload-drop-zone',
+    variant === 'fspts' ? 'admin-upload-drop-zone--fspts' : '',
     isDraggingOver ? 'is-dragging' : '',
     disabled ? 'is-disabled' : '',
   ]
     .filter(Boolean)
     .join(' ')
 
-  return (
-    <section className="admin-upload-panel" aria-labelledby={`${inputId}-panel-title`}>
-      <div className="admin-upload-panel__header">
-        <div>
-          <h2 id={`${inputId}-panel-title`}>{title}</h2>
-          <p>{description}. Multiple files can be queued and saved together.</p>
+  const fieldContent = (
+    <>
+      {renderAsPanel ? (
+        <div className="admin-upload-panel__header">
+          <div>
+            <h2 id={`${inputId}-panel-title`}>{title}</h2>
+            <p>{description}. Multiple files can be queued and saved together.</p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="admin-upload-field-header">
+          <div>
+            <span className="admin-upload-field-label" id={`${inputId}-panel-title`}>
+              {title}
+            </span>
+            <p className="admin-upload-field-helper">
+              {disabled && variant === 'fspts'
+                ? disabledDescription
+                : `${description}. Multiple files can be queued and saved together.`}
+            </p>
+          </div>
+        </div>
+      )}
 
       <input
         ref={inputRef}
@@ -118,19 +138,29 @@ function MultiFileDropZone({
         onDragLeave={() => setIsDraggingOver(false)}
         onDrop={onDropUploadFiles}
       >
-        <div className="admin-upload-drop-zone__icon" aria-hidden="true">
-          <Upload size={32} />
+        {variant !== 'fspts' && (
+          <div className="admin-upload-drop-zone__icon" aria-hidden="true">
+            <Upload size={32} />
+          </div>
+        )}
+        <div>
+          <div className="admin-upload-drop-zone__copy">
+            <p>
+              {variant === 'fspts'
+                ? 'Drag and drop files here or click to upload'
+                : 'Drag and drop files here, or browse for files.'}
+            </p>
+            {variant !== 'fspts' && <p>{disabled ? disabledDescription : description}</p>}
+          </div>
         </div>
-        <div className="admin-upload-drop-zone__copy">
-          <p>Drag and drop files here, or browse for files.</p>
-          <p>{disabled ? disabledDescription : description}</p>
-        </div>
-        <span
-          className={`cds--btn cds--btn--primary admin-upload-browse-button${disabled ? ' cds--btn--disabled' : ''}`}
-          aria-disabled={disabled}
-        >
-          Browse files
-        </span>
+        {variant !== 'fspts' && (
+          <span
+            className={`cds--btn cds--btn--primary admin-upload-browse-button${disabled ? ' cds--btn--disabled' : ''}`}
+            aria-disabled={disabled}
+          >
+            Browse files
+          </span>
+        )}
       </div>
 
       {invalidText && (
@@ -142,6 +172,16 @@ function MultiFileDropZone({
           {invalidText}
         </p>
       )}
+    </>
+  )
+
+  if (!renderAsPanel) {
+    return <div className="admin-upload-drop-zone-field">{fieldContent}</div>
+  }
+
+  return (
+    <section className="admin-upload-panel" aria-labelledby={`${inputId}-panel-title`}>
+      {fieldContent}
     </section>
   )
 }
