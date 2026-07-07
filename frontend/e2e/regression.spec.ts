@@ -18,6 +18,51 @@ import { E2E_BASE_URL } from './utils'
 const sideNavSection = (name: string) =>
   `.csp-side-nav__section:has(.csp-side-nav__category-text:text-is("${name}"))`
 
+const expectFsptsUploadLayout = async (page: Page): Promise<void> => {
+  const metrics = await page.evaluate(() => {
+    const rect = (selector: string) => {
+      const element = document.querySelector(selector)
+      if (!element) {
+        return null
+      }
+      const bounds = element.getBoundingClientRect()
+      return {
+        left: bounds.left,
+        right: bounds.right,
+        height: bounds.height,
+      }
+    }
+
+    return {
+      root: rect('.admin-upload-fspts-page'),
+      header: rect('.admin-upload-fspts-header'),
+      progress: rect('.admin-upload-fspts-header .admin-upload-progress'),
+      content: rect('.admin-upload-fspts-content'),
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }
+  })
+
+  expect(metrics.root).not.toBeNull()
+  expect(metrics.header).not.toBeNull()
+  expect(metrics.progress).not.toBeNull()
+  expect(metrics.content).not.toBeNull()
+
+  const root = metrics.root!
+  const header = metrics.header!
+  const progress = metrics.progress!
+  const content = metrics.content!
+
+  expect(Math.abs(header.left - root.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(header.right - root.right)).toBeLessThanOrEqual(1)
+  expect(Math.abs(progress.left - root.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(progress.right - root.right)).toBeLessThanOrEqual(1)
+  expect(Math.abs(content.left - root.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(content.right - root.right)).toBeLessThanOrEqual(1)
+  expect(header.height).toBeLessThanOrEqual(220)
+  expect(metrics.scrollWidth).toBe(metrics.clientWidth)
+}
+
 const asStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((item) => String(item)) : []
 
@@ -1032,6 +1077,7 @@ test.describe('TEST IDIR admin regression', () => {
       '/provincial/application/upload',
       /upload application submission/i,
     )
+    await expectFsptsUploadLayout(page)
     const applicationSubmissionProgress = page.getByRole('list', {
       name: 'Application submission upload workflow progress',
     })
@@ -1174,6 +1220,7 @@ test.describe('TEST IDIR admin regression', () => {
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
+    await expectFsptsUploadLayout(page)
     await expect(
       page.getByText(
         'Generate an upload preview from XLSX files and apply validated average monthly value changes.',

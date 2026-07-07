@@ -1327,12 +1327,24 @@ body {
 }
 
 .admin-upload-fspts-page {
-  margin-inline: -2rem;
-  inline-size: calc(100% + 4rem);
+  margin-inline: 0;
+  inline-size: 100%;
   max-inline-size: none;
   padding: 0;
   background: var(--cds-background);
   min-block-size: calc(100vh - 3rem);
+  align-content: start;
+}
+
+.cds--content.app-main:has(.admin-upload-fspts-page) {
+  padding-block-start: 0;
+  padding-inline: 0;
+}
+
+.admin-upload-fspts-header,
+.admin-upload-fspts-content {
+  margin-inline: 0;
+  inline-size: auto;
 }
 
 .admin-upload-fspts-header {
@@ -2241,8 +2253,8 @@ body {
   }
 
   .admin-upload-fspts-page {
-    margin-inline: -1rem;
-    inline-size: calc(100% + 2rem);
+    margin-inline: 0;
+    inline-size: 100%;
     max-inline-size: none;
   }
 
