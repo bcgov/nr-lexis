@@ -13,6 +13,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
@@ -518,6 +519,39 @@ class OracleLegacyCsvReportServiceTest {
     verify(preparedStatement).setString(6, "F");
     verify(preparedStatement).setString(7, "APP");
     verify(preparedStatement).setString(8, "T");
+  }
+
+  @Test
+  void shouldGenerateBiweeklyCsvHeadersWhenAdvertisingListQueryFails() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareStatement(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(preparedStatement);
+    when(preparedStatement.executeQuery()).thenThrow(new SQLException("invalid identifier"));
+
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(
+            Map.of(
+                "fromDate", "2026-05-01",
+                "toDate", "2026-05-31"),
+            "CSV");
+
+    var report =
+        service.generateLegacyCsvReport(
+            LexisJasperReportDefinition.BIWEEKLY_LISTING,
+            request,
+            LexisReportFormat.CSV);
+
+    assertThat(report).isPresent();
+    assertThat(report.orElseThrow().filename()).isEqualTo("biweeklyListing" + today() + ".csv");
+
+    String csv = new String(report.orElseThrow().content());
+    assertThat(csv)
+        .contains(
+            "\"CLIENT_CONTACT_PHONE\",\"CLIENT_CONTACT_EMAIL\",\"JURISDICTION_CODE\"");
+    assertThat(csv)
+        .contains(
+            "\"AGENT_PHONE\",\"AGENT_CONTACT_NAME\",\"AGENT_CONTACT_EMAIL\",\"PACKAGE_NUMBER\"");
   }
 
   @Test
