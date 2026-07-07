@@ -2653,23 +2653,6 @@ body {
   margin-top: 1rem;
 }
 
-.application-detail-status-strip .detail-tile-title {
-  margin-bottom: 0.5rem;
-}
-
-.application-detail-flag-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.application-detail-lock-message {
-  color: var(--cds-text-secondary);
-  margin: 0.75rem 0 0;
-  max-inline-size: 72rem;
-}
-
 .application-detail-summary .legacy-search-grid {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }

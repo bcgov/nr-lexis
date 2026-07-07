@@ -773,14 +773,16 @@ const ProvincialApplicationDetailsPage = () => {
   const canAddApplicationDocuments =
     canUploadApplicationDocuments && !documentUploadUnavailableMessage
   const hasApplicationDocuments = documentRows.length > 0
+  const canViewRemarks = canPerform('/applicationRemarks')
   const canManageItems =
     canPerform('createApplication') &&
     !detail?.readOnly &&
     !detail?.locked &&
     !detail?.exemptionApprover
-  const canManageRemarks = canPerform('/applicationRemarks') && !detail?.readOnly && !detail?.locked
+  const canManageRemarks = canViewRemarks && !detail?.readOnly && !detail?.locked
   const canEditSummary = canManageItems
   const canReviewApplication = canPerform('/applicationsReview')
+  const canViewReview = canViewRemarks && canReviewApplication
   const normalizedReviewStatusCode = useMemo(
     () => normalizeReviewStatus(reviewStatusCode),
     [reviewStatusCode],
@@ -2356,6 +2358,16 @@ const ProvincialApplicationDetailsPage = () => {
               />
             </Column>
           )}
+          {!!detail.locked && !!detail.lockMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="warning"
+                title="Application locked"
+                subtitle={detail.lockMessage}
+                lowContrast
+              />
+            </Column>
+          )}
 
           <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
             <Tabs
@@ -2373,9 +2385,9 @@ const ProvincialApplicationDetailsPage = () => {
                 <Tab>Application</Tab>
                 <Tab>Items</Tab>
                 <Tab>Documents</Tab>
-                <Tab>Remarks</Tab>
+                {canViewRemarks && <Tab>Remarks</Tab>}
                 <Tab>Offers</Tab>
-                <Tab>Review</Tab>
+                {canViewReview && <Tab>Review</Tab>}
               </TabList>
               <TabPanels>
                 <TabPanel className="application-detail-tab-panel">
@@ -2932,32 +2944,6 @@ const ProvincialApplicationDetailsPage = () => {
                     </Column>
 
                     <Column sm={4} md={8} lg={16}>
-                      <Tile className="application-detail-section application-detail-status-strip">
-                        <h2 className="detail-tile-title">Access & workflow flags</h2>
-                        <div className="application-detail-flag-row">
-                          <Tag type={detail.canCreateOffers ? 'green' : 'gray'}>
-                            Create offers: {detail.canCreateOffers ? 'Yes' : 'No'}
-                          </Tag>
-                          <Tag type={detail.industryUser ? 'green' : 'gray'}>
-                            Industry User: {detail.industryUser ? 'Yes' : 'No'}
-                          </Tag>
-                          <Tag type={detail.readOnly ? 'red' : 'gray'}>
-                            Read Only: {detail.readOnly ? 'Yes' : 'No'}
-                          </Tag>
-                          <Tag type={detail.exemptionApprover ? 'green' : 'gray'}>
-                            Exemption Approver: {detail.exemptionApprover ? 'Yes' : 'No'}
-                          </Tag>
-                          <Tag type={detail.locked ? 'red' : 'green'}>
-                            Locked: {detail.locked ? 'Yes' : 'No'}
-                          </Tag>
-                        </div>
-                        {detail.locked && detail.lockMessage && (
-                          <p className="application-detail-lock-message">{detail.lockMessage}</p>
-                        )}
-                      </Tile>
-                    </Column>
-
-                    <Column sm={4} md={8} lg={16}>
                       {applicationPermitsContent}
                     </Column>
                   </Grid>
@@ -3148,118 +3134,120 @@ const ProvincialApplicationDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile
-                        id="application-remarks"
-                        className="application-detail-section application-detail-remarks"
-                      >
-                        <h2 className="detail-tile-title">Remarks</h2>
-                        {canManageRemarks && (
-                          <div className="legacy-search-actions">
-                            <TextArea
-                              id="applicationRemarkBody"
-                              labelText={
-                                editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark'
-                              }
-                              value={remarkBody}
-                              invalid={!!remarkValidationMessage}
-                              invalidText={remarkValidationMessage}
-                              onChange={(event) => {
-                                setRemarkBody(event.target.value)
-                                if (remarkValidationMessage) {
-                                  setRemarkValidationMessage('')
+                {canViewRemarks && (
+                  <TabPanel className="application-detail-tab-panel">
+                    <Grid fullWidth className="application-detail-tab-grid">
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile
+                          id="application-remarks"
+                          className="application-detail-section application-detail-remarks"
+                        >
+                          <h2 className="detail-tile-title">Remarks</h2>
+                          {canManageRemarks && (
+                            <div className="legacy-search-actions">
+                              <TextArea
+                                id="applicationRemarkBody"
+                                labelText={
+                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark'
                                 }
-                              }}
-                            />
-                            <Button
-                              kind="primary"
-                              size="sm"
-                              disabled={isSavingRemark}
-                              onClick={() => void onSaveRemark()}
-                            >
-                              {isSavingRemark
-                                ? 'Saving...'
-                                : editingRemarkId
-                                  ? 'Update Remark'
-                                  : 'Save Remark'}
-                            </Button>
-                            {editingRemarkId && (
+                                value={remarkBody}
+                                invalid={!!remarkValidationMessage}
+                                invalidText={remarkValidationMessage}
+                                onChange={(event) => {
+                                  setRemarkBody(event.target.value)
+                                  if (remarkValidationMessage) {
+                                    setRemarkValidationMessage('')
+                                  }
+                                }}
+                              />
                               <Button
-                                kind="ghost"
+                                kind="primary"
                                 size="sm"
                                 disabled={isSavingRemark}
-                                onClick={() => {
-                                  setEditingRemarkId(null)
-                                  setRemarkBody('')
-                                  setRemarkValidationMessage('')
-                                }}
+                                onClick={() => void onSaveRemark()}
                               >
-                                Cancel Edit
+                                {isSavingRemark
+                                  ? 'Saving...'
+                                  : editingRemarkId
+                                    ? 'Update Remark'
+                                    : 'Save Remark'}
                               </Button>
-                            )}
-                          </div>
-                        )}
-                        <TextInput
-                          id="applicationDetailRemarkFilter"
-                          labelText="Filter remarks"
-                          value={remarkFilter}
-                          onChange={(event) =>
-                            updateFilterParam('remarkFilter', event.target.value)
-                          }
-                          placeholder="Filter by title or remark text"
-                        />
-                        <Table useZebraStyles>
-                          <TableHead>
-                            <TableRow>
-                              <TableHeader>Date</TableHeader>
-                              <TableHeader>User</TableHeader>
-                              <TableHeader>Title</TableHeader>
-                              <TableHeader>Remark</TableHeader>
-                              {canManageRemarks && <TableHeader>Actions</TableHeader>}
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {filteredRemarks.map((item) => (
-                              <TableRow key={`${item.remarkId ?? item.title}-${item.remark}`}>
-                                <TableCell>{displayValue(item.date)}</TableCell>
-                                <TableCell>{displayValue(item.user)}</TableCell>
-                                <TableCell>{item.title}</TableCell>
-                                <TableCell>{item.remark}</TableCell>
-                                {canManageRemarks && (
-                                  <TableCell>
-                                    <Button
-                                      kind="ghost"
-                                      size="sm"
-                                      disabled={!item.remarkId}
-                                      onClick={() => {
-                                        setEditingRemarkId(
-                                          item.remarkId ? String(item.remarkId) : null,
-                                        )
-                                        setRemarkBody(item.remark)
-                                        setRemarkValidationMessage('')
-                                      }}
-                                    >
-                                      Edit
-                                    </Button>
-                                  </TableCell>
-                                )}
-                              </TableRow>
-                            ))}
-                            {filteredRemarks.length === 0 && (
+                              {editingRemarkId && (
+                                <Button
+                                  kind="ghost"
+                                  size="sm"
+                                  disabled={isSavingRemark}
+                                  onClick={() => {
+                                    setEditingRemarkId(null)
+                                    setRemarkBody('')
+                                    setRemarkValidationMessage('')
+                                  }}
+                                >
+                                  Cancel Edit
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                          <TextInput
+                            id="applicationDetailRemarkFilter"
+                            labelText="Filter remarks"
+                            value={remarkFilter}
+                            onChange={(event) =>
+                              updateFilterParam('remarkFilter', event.target.value)
+                            }
+                            placeholder="Filter by title or remark text"
+                          />
+                          <Table useZebraStyles>
+                            <TableHead>
                               <TableRow>
-                                <TableCell colSpan={canManageRemarks ? 5 : 4}>
-                                  No remarks matched the current filter.
-                                </TableCell>
+                                <TableHeader>Date</TableHeader>
+                                <TableHeader>User</TableHeader>
+                                <TableHeader>Title</TableHeader>
+                                <TableHeader>Remark</TableHeader>
+                                {canManageRemarks && <TableHeader>Actions</TableHeader>}
                               </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </Tile>
-                    </Column>
-                  </Grid>
-                </TabPanel>
+                            </TableHead>
+                            <TableBody>
+                              {filteredRemarks.map((item) => (
+                                <TableRow key={`${item.remarkId ?? item.title}-${item.remark}`}>
+                                  <TableCell>{displayValue(item.date)}</TableCell>
+                                  <TableCell>{displayValue(item.user)}</TableCell>
+                                  <TableCell>{item.title}</TableCell>
+                                  <TableCell>{item.remark}</TableCell>
+                                  {canManageRemarks && (
+                                    <TableCell>
+                                      <Button
+                                        kind="ghost"
+                                        size="sm"
+                                        disabled={!item.remarkId}
+                                        onClick={() => {
+                                          setEditingRemarkId(
+                                            item.remarkId ? String(item.remarkId) : null,
+                                          )
+                                          setRemarkBody(item.remark)
+                                          setRemarkValidationMessage('')
+                                        }}
+                                      >
+                                        Edit
+                                      </Button>
+                                    </TableCell>
+                                  )}
+                                </TableRow>
+                              ))}
+                              {filteredRemarks.length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={canManageRemarks ? 5 : 4}>
+                                    No remarks matched the current filter.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </Tile>
+                      </Column>
+                    </Grid>
+                  </TabPanel>
+                )}
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
@@ -3267,13 +3255,15 @@ const ProvincialApplicationDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      {applicationReviewContent}
-                    </Column>
-                  </Grid>
-                </TabPanel>
+                {canViewReview && (
+                  <TabPanel className="application-detail-tab-panel">
+                    <Grid fullWidth className="application-detail-tab-grid">
+                      <Column sm={4} md={8} lg={16}>
+                        {applicationReviewContent}
+                      </Column>
+                    </Grid>
+                  </TabPanel>
+                )}
               </TabPanels>
             </Tabs>
           </Column>

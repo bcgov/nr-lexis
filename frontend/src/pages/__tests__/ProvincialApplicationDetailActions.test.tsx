@@ -595,6 +595,33 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('hides remarks and review tabs without legacy remarks/review access', async () => {
+    mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const tabs = await screen.findAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Documents',
+      'Offers',
+    ])
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
   it('shows offer company and received date from application detail', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -867,7 +894,7 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     await selectApplicationDetailTab('Application')
-    expect(await screen.findByText('Locked: Yes')).toBeInTheDocument()
+    expect(await screen.findByText('Application locked')).toBeInTheDocument()
     expect(
       screen.getAllByText(
         'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
@@ -1942,7 +1969,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
   })
 
-  it('hides application remark editing without application remarks action', async () => {
+  it('hides application remarks tab without application remarks action', async () => {
     mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
 
     render(
@@ -1956,14 +1983,11 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Remarks')
-    const remarksTile = screen.getByRole('heading', { name: 'Remarks' }).closest('.cds--tile')
-    expect(remarksTile).toBeTruthy()
-
-    const remarksControls = within(remarksTile as HTMLElement)
-    expect(remarksControls.queryByLabelText('New Remark')).not.toBeInTheDocument()
-    expect(remarksControls.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
-    expect(remarksControls.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
   it('updates existing application remarks and refreshes detail', async () => {
