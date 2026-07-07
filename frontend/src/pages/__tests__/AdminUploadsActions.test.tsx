@@ -564,10 +564,12 @@ describe('Admin upload workflow smoke', () => {
 
     await userEvent.click(reviewButton)
 
-    expect(screen.getByRole('heading', { name: 'Submission summary' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Filter queued submissions' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Submission type' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Submission file' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: 'Filter queued submissions' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Submission type' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Submission file' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Submission review' })).toBeInTheDocument()
     expect(screen.getByText('File name')).toBeInTheDocument()
     expect(screen.getByText('File size')).toBeInTheDocument()
@@ -606,7 +608,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('M')).toBeInTheDocument()
     expect(screen.getAllByText('525.0').length).toBeGreaterThan(0)
     expect(screen.getByText('HE, FI')).toBeInTheDocument()
-    expect(screen.getByLabelText('Application submission file')).toBeEnabled()
+    expect(screen.queryByLabelText('Application submission file')).not.toBeInTheDocument()
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
 
@@ -673,6 +675,45 @@ describe('Admin upload workflow smoke', () => {
         file: replacementFile,
       }),
     )
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('reviews only application submissions that passed validation', async () => {
+    mockUploadAccess('uploadApplicationSubmission')
+    mockedValidateApplicationSubmissionUpload
+      .mockResolvedValueOnce({
+        message: 'LEXIS application submission validated for package VALID-PKG with 1 scale row.',
+        packageNumber: 'VALID-PKG',
+        scaleRows: 1,
+      })
+      .mockResolvedValueOnce({
+        status: 'rejected',
+        message: 'LEXIS application submission rejected.',
+        errors: ['Invalid application submission XML.'],
+      })
+
+    renderPage('/provincial/application/upload')
+
+    const validFile = new File(['<xml />'], 'valid.xml', { type: 'application/xml' })
+    const invalidFile = new File(['broken'], 'invalid.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('Application submission file'), [
+      validFile,
+      invalidFile,
+    ])
+
+    await waitFor(() => {
+      expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(2)
+    })
+    expect(
+      screen.getByText('1 submission failed validation. Review the queue for details.'),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review submissions' }))
+
+    expect(screen.getByRole('heading', { name: 'Submission review' })).toBeInTheDocument()
+    expect(screen.getAllByText('valid.xml').length).toBeGreaterThan(0)
+    expect(screen.queryByText('invalid.xml')).not.toBeInTheDocument()
+    expect(screen.queryByText('Invalid application submission XML.')).not.toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
@@ -881,7 +922,8 @@ describe('Admin upload workflow smoke', () => {
       ),
     ).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Review submissions' }))
-    expect(screen.getByRole('heading', { name: 'Submission summary' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Submission review' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit submissions' }))
 

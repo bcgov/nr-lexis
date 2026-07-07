@@ -41,6 +41,8 @@ export type UploadQueuePreviewProps = {
   onBack?: () => void
   backLabel?: string
   showQueueManagementActions?: boolean
+  showReviewQueueTable?: boolean
+  showReviewAccordionHeader?: boolean
 }
 
 const formatFileType = (file: File): string => {
@@ -86,6 +88,8 @@ function UploadQueuePreview({
   onBack,
   backLabel = 'Back',
   showQueueManagementActions = false,
+  showReviewQueueTable = true,
+  showReviewAccordionHeader = true,
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
@@ -240,7 +244,7 @@ function UploadQueuePreview({
         </div>
       ) : (
         <>
-          {isReviewStep && (
+          {isReviewStep && showReviewQueueTable && (
             <div className="admin-upload-preview-filter">
               <TextInput
                 id={queueFilterId}
@@ -251,79 +255,84 @@ function UploadQueuePreview({
               />
             </div>
           )}
-          <div className="admin-upload-fspts-table-wrap">
-            <table className="admin-upload-queue__table admin-upload-queue__table--generic">
-              <thead>
-                <tr>
-                  <th>{workflowColumnLabel}</th>
-                  <th>{fileColumnLabel}</th>
-                  <th>Target</th>
-                  <th>Status</th>
-                  <th>Message</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayedItems.length === 0 ? (
+          {showReviewQueueTable && (
+            <div className="admin-upload-fspts-table-wrap">
+              <table className="admin-upload-queue__table admin-upload-queue__table--generic">
+                <thead>
                   <tr>
-                    <td colSpan={6}>No queued {itemNounPlural} match the current filter.</td>
+                    <th>{workflowColumnLabel}</th>
+                    <th>{fileColumnLabel}</th>
+                    <th>Target</th>
+                    <th>Status</th>
+                    <th>Message</th>
+                    <th>Action</th>
                   </tr>
-                ) : (
-                  displayedItems.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.workflowLabel}</td>
-                      <td>
-                        <div className="admin-upload-file-cell">
-                          <span>{item.file.name}</span>
-                          <span>
-                            {formatFileType(item.file)} | {formatUploadFileSize(item.file.size)} |
-                            Added {formatUploadQueuedAt(item.queuedAt)}
-                          </span>
-                        </div>
-                      </td>
-                      <td>{item.targetSummary ?? targetSummary}</td>
-                      <td>
-                        <span
-                          className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
-                        >
-                          {uploadQueueStatusLabel(item.status)}
-                        </span>
-                      </td>
-                      <td>{item.message || pendingMessage}</td>
-                      <td>
-                        <div className="admin-upload-row-actions">
-                          {renderCompleteAction?.(item)}
-                          {canRemoveItem(item) && (
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => onRemove(item.id)}
-                              disabled={isSubmitting && item.status === 'uploading'}
-                            >
-                              {removeLabel}
-                            </Button>
-                          )}
-                        </div>
-                      </td>
+                </thead>
+                <tbody>
+                  {displayedItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={6}>No queued {itemNounPlural} match the current filter.</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    displayedItems.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.workflowLabel}</td>
+                        <td>
+                          <div className="admin-upload-file-cell">
+                            <span>{item.file.name}</span>
+                            <span>
+                              {formatFileType(item.file)} | {formatUploadFileSize(item.file.size)} |
+                              Added {formatUploadQueuedAt(item.queuedAt)}
+                            </span>
+                          </div>
+                        </td>
+                        <td>{item.targetSummary ?? targetSummary}</td>
+                        <td>
+                          <span
+                            className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                          >
+                            {uploadQueueStatusLabel(item.status)}
+                          </span>
+                        </td>
+                        <td>{item.message || pendingMessage}</td>
+                        <td>
+                          <div className="admin-upload-row-actions">
+                            {renderCompleteAction?.(item)}
+                            {canRemoveItem(item) && (
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => onRemove(item.id)}
+                                disabled={isSubmitting && item.status === 'uploading'}
+                              >
+                                {removeLabel}
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
           {isReviewStep && (
             <>
-              <div className="admin-upload-preview-footer">
-                <span>
-                  Showing {filteredItems.length} of {items.length}{' '}
-                  {items.length === 1 ? itemNoun : itemNounPlural}
-                </span>
-              </div>
+              {showReviewQueueTable && (
+                <div className="admin-upload-preview-footer">
+                  <span>
+                    Showing {filteredItems.length} of {items.length}{' '}
+                    {items.length === 1 ? itemNoun : itemNounPlural}
+                  </span>
+                </div>
+              )}
               <UploadQueueReviewAccordion
                 items={filteredItems}
                 targetSummary={targetSummary}
                 idPrefix={`${idPrefix}Review`}
                 itemNoun={itemNoun}
+                showHeader={showReviewAccordionHeader}
               />
             </>
           )}

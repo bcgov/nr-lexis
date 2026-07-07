@@ -793,6 +793,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       resultApplicationNumber?: number,
       targetSummary?: string,
       details?: UploadQueueReviewDetails,
+      submitted?: boolean,
     ): void => {
       setUploadQueue((current) =>
         current.map((item) =>
@@ -804,6 +805,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 details: details ?? item.details,
                 resultApplicationNumber,
                 targetSummary: targetSummary ?? item.targetSummary,
+                submitted: submitted ?? item.submitted,
               }
             : item,
         ),
@@ -1034,7 +1036,15 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         continue
       }
 
-      setQueueItemStatus(item.id, 'uploading', '', undefined, currentUploadTargetSummary)
+      setQueueItemStatus(
+        item.id,
+        'uploading',
+        '',
+        undefined,
+        currentUploadTargetSummary,
+        undefined,
+        true,
+      )
 
       try {
         const result = await submitQueuedFile(item)
@@ -1225,6 +1235,17 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       ? APPLICATION_SUBMISSION_UPLOAD_STEPS
       : DOCUMENT_UPLOAD_STEPS
   const activeCompletedSteps = activeUploadStep === 'review' ? ['upload'] : []
+  const applicationSubmissionReviewItems = useMemo(
+    () =>
+      uploadQueue.filter(
+        (item) =>
+          item.status === 'validated' ||
+          item.status === 'uploading' ||
+          item.status === 'complete' ||
+          item.submitted,
+      ),
+    [uploadQueue],
+  )
   const workflowProgressLabel =
     selectedWorkflowType === 'applicationSubmission'
       ? 'Application submission upload workflow progress'
@@ -1530,22 +1551,25 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 </p>
               </div>
 
-              {uploadSettingsPanel}
+              {selectedWorkflowType !== 'applicationSubmission' && uploadSettingsPanel}
 
               <UploadQueuePreview
-                items={uploadQueue}
+                items={
+                  selectedWorkflowType === 'applicationSubmission'
+                    ? applicationSubmissionReviewItems
+                    : uploadQueue
+                }
                 targetSummary={currentUploadTargetSummary}
                 canSubmit={
                   hasUploadAccess &&
-                  (selectedWorkflowType !== 'applicationSubmission' ||
-                    !hasValidatingLexisSubmissions)
+                  (selectedWorkflowType !== 'applicationSubmission' || hasValidatedLexisSubmissions)
                 }
                 isSubmitting={isSubmitting}
                 currentStepId="review"
                 actionsPlacement="footer"
                 previewTitle={
                   selectedWorkflowType === 'applicationSubmission'
-                    ? 'Submission summary'
+                    ? 'Submission review'
                     : 'Data preview'
                 }
                 emptyDescription={
@@ -1598,6 +1622,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                   ) : null
                 }
                 showWorkflowProgress={false}
+                showReviewQueueTable={selectedWorkflowType !== 'applicationSubmission'}
+                showReviewAccordionHeader={selectedWorkflowType !== 'applicationSubmission'}
               />
             </>
           )}
