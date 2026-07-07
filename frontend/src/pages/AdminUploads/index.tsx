@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Column, ComboBox, Grid, Tag, TextArea, TextInput } from '@carbon/react'
+import { Button, Column, ComboBox, Grid, TextArea, TextInput } from '@carbon/react'
 import { ArrowRight } from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
@@ -22,7 +22,6 @@ import {
   getFileExtension,
   uploadQueueFileKey,
   uploadQueueStatusLabel,
-  uploadQueueStatusTagType,
 } from '@/components/uploads/uploadQueueHelpers'
 import type {
   UploadQueueItem,
@@ -397,11 +396,7 @@ function ApplicationSubmissionValidationPanel({
   onReview,
   onRemove,
 }: ApplicationSubmissionValidationPanelProps) {
-  const readyCount = items.filter((item) => item.status === 'queued').length
-  const invalidCount = items.filter((item) => item.status === 'invalid').length
   const validatingCount = items.filter((item) => item.status === 'validating').length
-  const validatedCount = items.filter((item) => item.status === 'validated').length
-  const failedCount = items.filter((item) => item.status === 'failed').length
   const reviewLabel = items.length === 1 ? 'Review submission' : 'Review submissions'
 
   return (
@@ -411,17 +406,6 @@ function ApplicationSubmissionValidationPanel({
           <h2 id="applicationSubmissionValidateTitle">Validation status</h2>
           <p>Application submissions validate automatically after selection.</p>
         </div>
-        <div className="admin-upload-preview-actions">
-          {items.length > 0 && (
-            <div className="admin-upload-queue-summary" aria-label="Submission validation summary">
-              <Tag type="gray">Ready {readyCount}</Tag>
-              <Tag type="blue">Validating {validatingCount}</Tag>
-              <Tag type="red">Invalid {invalidCount}</Tag>
-              <Tag type="green">Validated {validatedCount}</Tag>
-              <Tag type="red">Failed {failedCount}</Tag>
-            </div>
-          )}
-        </div>
       </div>
 
       {items.length === 0 ? (
@@ -430,58 +414,62 @@ function ApplicationSubmissionValidationPanel({
           <p>Choose application submission files to validate.</p>
         </div>
       ) : (
-        <table className="cds--data-table admin-upload-queue__table">
-          <thead>
-            <tr>
-              <th>Submission file</th>
-              <th>Status</th>
-              <th>Validation message</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <div className="admin-upload-file-cell">
-                    <span>{item.file.name}</span>
-                    <span>
-                      {getFileExtension(item.file.name).slice(1).toUpperCase() || item.file.type} |{' '}
-                      {formatUploadFileSize(item.file.size)} | Added{' '}
-                      {formatUploadQueuedAt(item.queuedAt)}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <Tag type={uploadQueueStatusTagType(item.status)}>
-                    {uploadQueueStatusLabel(item.status)}
-                  </Tag>
-                </td>
-                <td>
-                  <div className="admin-upload-validation-cell">
-                    <span>{item.message || 'Waiting for validation.'}</span>
-                    {item.details?.errors?.map((error) => (
-                      <span key={error}>{error}</span>
-                    ))}
-                    {item.details?.warnings?.map((warning) => (
-                      <span key={warning}>{warning}</span>
-                    ))}
-                  </div>
-                </td>
-                <td>
-                  <Button
-                    kind="ghost"
-                    size="sm"
-                    onClick={() => onRemove(item.id)}
-                    disabled={isSubmitting}
-                  >
-                    Cancel submission
-                  </Button>
-                </td>
+        <div className="admin-upload-fspts-table-wrap">
+          <table className="admin-upload-queue__table admin-upload-queue__table--submission">
+            <thead>
+              <tr>
+                <th>Submission file</th>
+                <th>Status</th>
+                <th>Validation message</th>
+                <th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <div className="admin-upload-file-cell">
+                      <span>{item.file.name}</span>
+                      <span>
+                        {getFileExtension(item.file.name).slice(1).toUpperCase() || item.file.type}{' '}
+                        | {formatUploadFileSize(item.file.size)} | Added{' '}
+                        {formatUploadQueuedAt(item.queuedAt)}
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <span
+                      className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                    >
+                      {uploadQueueStatusLabel(item.status)}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="admin-upload-validation-cell">
+                      <span>{item.message || 'Waiting for validation.'}</span>
+                      {item.details?.errors?.map((error) => (
+                        <span key={error}>{error}</span>
+                      ))}
+                      {item.details?.warnings?.map((warning) => (
+                        <span key={warning}>{warning}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => onRemove(item.id)}
+                      disabled={isSubmitting}
+                    >
+                      Cancel submission
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
         <div />

@@ -18,8 +18,7 @@ export const GENERIC_UPLOAD_FAILURE_MESSAGE =
 export const GENERIC_SUBMISSION_FAILURE_MESSAGE =
   'Submission failed. Please try again. If the problem persists, contact your administrator.'
 
-export const DOCUMENT_UPLOAD_READY_MESSAGE =
-  'File is ready for review. Security scanning runs when the upload is submitted.'
+export const DOCUMENT_UPLOAD_READY_MESSAGE = 'File is queued for validation.'
 
 const FILE_TOO_LARGE_UPLOAD_FAILURE_MESSAGE =
   'The selected file is too large. Choose a smaller file and try again.'
@@ -80,21 +79,6 @@ export const getFileExtension = (fileName: string): string => {
 }
 
 export const uploadQueueFileKey = (file: File): string => file.name.trim().toLocaleLowerCase()
-
-export const uploadQueueStatusTagType = (
-  status: UploadQueueStatus,
-): 'gray' | 'blue' | 'green' | 'red' => {
-  if (status === 'invalid' || status === 'failed') {
-    return 'red'
-  }
-  if (status === 'uploading' || status === 'validating') {
-    return 'blue'
-  }
-  if (status === 'complete' || status === 'validated') {
-    return 'green'
-  }
-  return 'gray'
-}
 
 export const uploadQueueStatusLabel = (status: UploadQueueStatus): string => {
   if (status === 'invalid') {

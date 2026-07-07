@@ -2,17 +2,23 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
+  validateAdminUpload: vi.fn(),
 }))
 
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
 describe('DetailDocumentUploadPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedValidateAdminUpload.mockResolvedValue({
+      status: 'validated',
+      message: 'File passed validation and virus scanning.',
+    })
   })
 
   it('disables file selection when upload access is not available', () => {
@@ -59,9 +65,19 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
+    expect(mockedValidateAdminUpload).toHaveBeenCalledWith(
+      'application',
+      expect.objectContaining({
+        applicationNumber: '321',
+        file,
+      }),
+    )
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
         'application',
@@ -102,6 +118,9 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
@@ -114,7 +133,10 @@ describe('DetailDocumentUploadPanel', () => {
       within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
     expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
-    expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
+    expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
@@ -145,6 +167,10 @@ describe('DetailDocumentUploadPanel', () => {
         },
       },
     })
+    mockedValidateAdminUpload.mockResolvedValue({
+      status: 'validated',
+      message: 'File passed validation and virus scanning.',
+    })
 
     render(
       <DetailDocumentUploadPanel
@@ -155,6 +181,9 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
@@ -165,5 +194,46 @@ describe('DetailDocumentUploadPanel', () => {
         'The selected file is too large. Choose a smaller file and try again.',
       )[0],
     ).toBeInTheDocument()
+  })
+
+  it('runs document validation automatically before review', async () => {
+    const file = new File(['infected document upload'], 'eicar-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    mockedValidateAdminUpload.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          message: 'The uploaded file failed virus scanning.',
+        },
+      },
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+
+    await waitFor(() => {
+      expect(mockedValidateAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file,
+        }),
+      )
+    })
+    expect(await screen.findByText('Upload error')).toBeInTheDocument()
+    expect(
+      screen.getByText('1 file failed validation. Review the queue for details.'),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 })

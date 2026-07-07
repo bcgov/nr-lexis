@@ -84,6 +84,21 @@ public class LexisUploadController {
   }
 
   @PostMapping(
+      value = {"/uploads/application/validation", "/admin/uploads/applications/validation"},
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<LexisUploadResultDto> validateApplicationUpload(
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      @RequestParam(name = "applicationNumber", required = false) Long applicationNumber) {
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null || uploadFile.isEmpty() || applicationNumber == null || applicationNumber < 1) {
+      return uploadBadRequest(
+          "application", "Choose a file and enter a valid application number before validating documents.");
+    }
+    return validateDocumentUpload("application", uploadFile);
+  }
+
+  @PostMapping(
       value = {"/filePermitUpload", "/uploads/permit", "/admin/uploads/permits"},
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<LexisUploadResultDto> filePermitUpload(
@@ -116,6 +131,21 @@ public class LexisUploadController {
                 uploadPersistenceFailure(
                     "permit",
                     "We were unable to save this permit document. Confirm the permit exists and try again."));
+  }
+
+  @PostMapping(
+      value = {"/uploads/permit/validation", "/admin/uploads/permits/validation"},
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<LexisUploadResultDto> validatePermitUpload(
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null || uploadFile.isEmpty() || permitNumber == null || permitNumber < 1) {
+      return uploadBadRequest(
+          "permit", "Choose a file and enter a valid permit number before validating documents.");
+    }
+    return validateDocumentUpload("permit", uploadFile);
   }
 
   @PostMapping(
@@ -154,6 +184,24 @@ public class LexisUploadController {
                 uploadPersistenceFailure(
                     "exemption",
                     "We were unable to save this exemption document. Confirm the exemption exists and try again."));
+  }
+
+  @PostMapping(
+      value = {"/uploads/exemption/validation", "/admin/uploads/exemptions/validation"},
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<LexisUploadResultDto> validateExemptionUpload(
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null
+        || uploadFile.isEmpty()
+        || exemptionNumber == null
+        || exemptionNumber.isBlank()) {
+      return uploadBadRequest(
+          "exemption", "Choose a file and enter a valid exemption number before validating documents.");
+    }
+    return validateDocumentUpload("exemption", uploadFile);
   }
 
   @PostMapping(
@@ -207,6 +255,27 @@ public class LexisUploadController {
                 uploadPersistenceFailure(
                     "invoice",
                     "We were unable to save this invoice document. Confirm the permit exists and try again."));
+  }
+
+  @PostMapping(
+      value = {"/uploads/invoice/validation", "/admin/uploads/invoices/validation"},
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<LexisUploadResultDto> validateInvoiceUpload(
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber) {
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null
+        || uploadFile.isEmpty()
+        || permitNumber == null
+        || permitNumber < 1
+        || salesInvoiceNumber == null
+        || salesInvoiceNumber.isBlank()) {
+      return uploadBadRequest(
+          "invoice", "Choose a file and enter valid permit and invoice numbers before validating documents.");
+    }
+    return validateDocumentUpload("invoice", uploadFile);
   }
 
   @PostMapping(
@@ -297,8 +366,23 @@ public class LexisUploadController {
 
   private ResponseEntity<LexisUploadResultDto> uploadResponse(LexisUploadResultDto result) {
     HttpStatus status =
-        "accepted".equalsIgnoreCase(result.status()) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
+        "accepted".equalsIgnoreCase(result.status()) || "validated".equalsIgnoreCase(result.status())
+            ? HttpStatus.OK
+            : HttpStatus.UNPROCESSABLE_ENTITY;
     return ResponseEntity.status(status).body(result);
+  }
+
+  private ResponseEntity<LexisUploadResultDto> validateDocumentUpload(
+      String uploadType, MultipartFile uploadFile) {
+    LexisUploadService service = uploadServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Upload service unavailable - returning no content for {} validation", uploadType);
+      return ResponseEntity.noContent().build();
+    }
+    return service
+        .validateDocument(uploadFile, uploadType)
+        .map(this::uploadResponse)
+        .orElseGet(() -> uploadBadRequest(uploadType, "Choose a valid file before validating documents."));
   }
 
   private ResponseEntity<LexisUploadResultDto> uploadBadRequest(

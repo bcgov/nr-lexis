@@ -51,7 +51,7 @@ import {
   fetchApplicationReviewOptions,
   fetchProvincialApplicationOptions,
 } from '@/service/search-options-service'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -112,6 +112,7 @@ vi.mock('@/service/search-options-service', () => ({
 
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
+  validateAdminUpload: vi.fn(),
 }))
 
 // This file renders the full provincial application detail page; several tests exercise
@@ -174,6 +175,7 @@ const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
 const mockApplicationDetailAuth = (
   canPerform: (action: string) => boolean = () => true,
@@ -303,6 +305,10 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedSubmitAdminUpload.mockResolvedValue({
       status: 'success',
       message: 'Application document upload submitted.',
+    })
+    mockedValidateAdminUpload.mockResolvedValue({
+      status: 'validated',
+      message: 'File passed validation and virus scanning.',
     })
     mockedFetchApplicationReviewOptions.mockResolvedValue({
       productTypes: [],
@@ -595,6 +601,33 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('hides remarks and review tabs without legacy remarks/review access', async () => {
+    mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const tabs = await screen.findAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Documents',
+      'Offers',
+    ])
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
   it('shows offer company and received date from application detail', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -867,7 +900,7 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     await selectApplicationDetailTab('Application')
-    expect(await screen.findByText('Locked: Yes')).toBeInTheDocument()
+    expect(await screen.findByText('Application locked')).toBeInTheDocument()
     expect(
       screen.getAllByText(
         'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
@@ -928,10 +961,21 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await userEvent.type(screen.getByLabelText('Document description'), 'Uploaded')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
+      expect(mockedValidateAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file,
+          fileDescription: 'Uploaded',
+        }),
+      )
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
         'application',
         expect.objectContaining({
@@ -1942,7 +1986,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
   })
 
-  it('hides application remark editing without application remarks action', async () => {
+  it('hides application remarks tab without application remarks action', async () => {
     mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
 
     render(
@@ -1956,14 +2000,11 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Remarks')
-    const remarksTile = screen.getByRole('heading', { name: 'Remarks' }).closest('.cds--tile')
-    expect(remarksTile).toBeTruthy()
-
-    const remarksControls = within(remarksTile as HTMLElement)
-    expect(remarksControls.queryByLabelText('New Remark')).not.toBeInTheDocument()
-    expect(remarksControls.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
-    expect(remarksControls.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
   it('updates existing application remarks and refreshes detail', async () => {

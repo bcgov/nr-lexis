@@ -1464,6 +1464,57 @@ body {
   justify-content: space-between;
 }
 
+.admin-upload-fspts-button-row .cds--btn {
+  block-size: 2.5rem;
+  min-block-size: 2.5rem;
+  min-inline-size: 0;
+  padding: 0 1rem;
+  border-radius: 4px;
+  font-family:
+    'BCSans',
+    'IBM Plex Sans',
+    -apple-system,
+    sans-serif;
+  font-size: 0.875rem;
+  font-weight: 400;
+  gap: 0.5rem;
+  letter-spacing: 0.01rem;
+  line-height: 1.125rem;
+}
+
+.admin-upload-fspts-button-row .cds--btn svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex-shrink: 0;
+}
+
+.admin-upload-fspts-button-row .cds--btn--primary {
+  background: var(--fds-interactive);
+  border: 0;
+  color: var(--fds-layer-01);
+}
+
+.admin-upload-fspts-button-row .cds--btn--primary:hover:not(:disabled) {
+  background: #005db5;
+}
+
+.admin-upload-fspts-button-row .cds--btn--primary:disabled,
+.admin-upload-fspts-button-row .cds--btn--primary.cds--btn--disabled {
+  background: var(--fds-border-subtle);
+  color: var(--fds-text-secondary);
+  opacity: 0.5;
+}
+
+.admin-upload-fspts-button-row .cds--btn--ghost {
+  background: transparent;
+  border: 1px solid var(--fds-interactive);
+  color: var(--fds-interactive);
+}
+
+.admin-upload-fspts-button-row .cds--btn--ghost:hover:not(:disabled) {
+  background: var(--fds-interactive-light);
+}
+
 .admin-upload-fspts-page .admin-upload-drop-zone {
   display: flex;
   align-items: flex-start;
@@ -1743,12 +1794,6 @@ body {
   margin: 0.75rem 0 0;
 }
 
-.admin-upload-queue-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
 .admin-upload-step-panel {
   padding-block: 0;
 }
@@ -1997,8 +2042,116 @@ body {
   border-radius: 50%;
 }
 
+.admin-upload-fspts-table-wrap {
+  margin-block-start: 1rem;
+  overflow-x: auto;
+  background: var(--fds-layer-01, var(--cds-layer));
+  border: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  border-radius: 4px;
+}
+
 .admin-upload-queue__table {
+  min-inline-size: 56rem;
   inline-size: 100%;
+  border-collapse: collapse;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font-size: 0.875rem;
+  letter-spacing: 0.01rem;
+}
+
+.admin-upload-queue__table thead tr {
+  background: var(--fds-table-header, var(--cds-layer-accent));
+}
+
+.admin-upload-queue__table th {
+  block-size: 3rem;
+  padding: 0 1rem;
+  background: var(--fds-table-header, var(--cds-layer-accent));
+  border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.01rem;
+  line-height: 1.125rem;
+  text-align: start;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.admin-upload-queue__table td {
+  min-block-size: 3rem;
+  padding: 0.75rem 1rem;
+  border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.01rem;
+  line-height: 1.125rem;
+  vertical-align: top;
+}
+
+.admin-upload-queue__table tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+.admin-upload-queue__table tbody tr:nth-child(odd) td {
+  background: var(--fds-layer-01, #ffffff);
+}
+
+.admin-upload-queue__table tbody tr:nth-child(even) td {
+  background: var(--fds-table-zebra, #f3f3f5);
+}
+
+.admin-upload-queue__table tbody tr:hover td {
+  background: var(--fds-interactive-light, #dfeaf8);
+}
+
+.admin-upload-queue__table--generic th:nth-child(1),
+.admin-upload-queue__table--generic td:nth-child(1) {
+  inline-size: 12rem;
+}
+
+.admin-upload-queue__table--generic th:nth-child(2),
+.admin-upload-queue__table--generic td:nth-child(2) {
+  inline-size: 18rem;
+}
+
+.admin-upload-queue__table--generic th:nth-child(4),
+.admin-upload-queue__table--generic td:nth-child(4),
+.admin-upload-queue__table--submission th:nth-child(2),
+.admin-upload-queue__table--submission td:nth-child(2) {
+  inline-size: 10rem;
+}
+
+.admin-upload-queue__table th:last-child,
+.admin-upload-queue__table td:last-child {
+  inline-size: 12rem;
+}
+
+.admin-upload-queue__table .cds--btn--ghost {
+  min-block-size: auto;
+  block-size: auto;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  color: var(--fds-interactive, var(--cds-link-primary));
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.01rem;
+  line-height: 1.125rem;
+}
+
+.admin-upload-queue__table .cds--btn--ghost:hover:not(:disabled) {
+  color: var(--fds-interactive-hover, var(--cds-link-primary-hover));
+  background: transparent;
+  text-decoration: underline;
+}
+
+.admin-upload-queue__table .cds--btn--ghost:disabled {
+  color: var(--fds-text-secondary, var(--cds-text-disabled));
+  background: transparent;
+  opacity: 0.5;
 }
 
 .admin-upload-file-cell {
@@ -2011,7 +2164,7 @@ body {
 }
 
 .admin-upload-file-cell span:last-child {
-  color: var(--csp-text-primary);
+  color: var(--fds-text-secondary, var(--csp-text-primary));
   font-size: 0.875rem;
 }
 
@@ -2019,6 +2172,10 @@ body {
 .admin-upload-queue__table td:nth-child(5) {
   max-inline-size: 32rem;
   white-space: normal;
+}
+
+.admin-upload-queue__table--submission td:nth-child(3) {
+  max-inline-size: 52rem;
 }
 
 .admin-upload-preview-footer {
@@ -2036,6 +2193,27 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.admin-upload-status-text {
+  color: var(--fds-text-primary, var(--cds-text-primary));
+}
+
+.admin-upload-status-text--validated,
+.admin-upload-status-text--complete {
+  color: var(--cds-support-success);
+  font-weight: 600;
+}
+
+.admin-upload-status-text--failed,
+.admin-upload-status-text--invalid {
+  color: var(--cds-support-error);
+  font-weight: 600;
+}
+
+.admin-upload-status-text--validating,
+.admin-upload-status-text--uploading {
+  color: var(--fds-text-secondary, var(--cds-text-secondary));
 }
 
 .admin-upload-review {
@@ -2449,7 +2627,12 @@ body {
 }
 
 .application-detail-tab-panel {
+  background: transparent;
   padding: 1rem 0 0;
+}
+
+.application-detail-tab-panel.cds--tab-content {
+  background: transparent;
 }
 
 .application-create-actions {
@@ -2468,23 +2651,6 @@ body {
 
 .application-detail-documents .detail-empty-message + .detail-document-upload {
   margin-top: 1rem;
-}
-
-.application-detail-status-strip .detail-tile-title {
-  margin-bottom: 0.5rem;
-}
-
-.application-detail-flag-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.application-detail-lock-message {
-  color: var(--cds-text-secondary);
-  margin: 0.75rem 0 0;
-  max-inline-size: 72rem;
 }
 
 .application-detail-summary .legacy-search-grid {

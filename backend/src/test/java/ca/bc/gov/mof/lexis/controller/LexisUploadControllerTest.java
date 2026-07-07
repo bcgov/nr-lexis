@@ -108,6 +108,43 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void validateApplicationUploadShouldDelegateToService() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
+    LexisUploadController controller = controller();
+    MultipartFile formFile = sampleFile("application.pdf");
+    LexisUploadResultDto payload =
+        new LexisUploadResultDto(
+            "application",
+            "application.pdf",
+            formFile.getSize(),
+            "validated",
+            "File passed validation and virus scanning.");
+    when(uploadService.validateDocument(formFile, "application")).thenReturn(Optional.of(payload));
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.validateApplicationUpload(null, formFile, 7000123L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(payload);
+    verify(uploadService).validateDocument(formFile, "application");
+  }
+
+  @Test
+  void validateApplicationUploadShouldReturnBadRequestWhenTargetMissing() {
+    LexisUploadController controller = controller();
+    MultipartFile formFile = sampleFile("application.pdf");
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.validateApplicationUpload(null, formFile, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("Choose a file and enter a valid application number before validating documents.");
+    verifyNoInteractions(uploadService);
+  }
+
+  @Test
   void fileApplicationUploadShouldReturnUnprocessableEntityWhenPersistenceFails() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();

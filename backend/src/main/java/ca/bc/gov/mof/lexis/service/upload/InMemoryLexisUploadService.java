@@ -24,6 +24,21 @@ public class InMemoryLexisUploadService implements LexisUploadService {
   }
 
   @Override
+  public Optional<LexisUploadResultDto> validateDocument(MultipartFile file, String uploadType) {
+    Optional<LexisUploadResultDto> result = buildResult(uploadType, file);
+    return result.map(
+        payload ->
+            "accepted".equalsIgnoreCase(payload.status())
+                ? new LexisUploadResultDto(
+                    payload.uploadType(),
+                    payload.fileName(),
+                    payload.fileSize(),
+                    "validated",
+                    "File passed validation and virus scanning.")
+                : payload);
+  }
+
+  @Override
   public Optional<LexisUploadResultDto> uploadApplication(
       MultipartFile file, Long applicationNumber, String description, String entryUserId) {
     if (applicationNumber == null || applicationNumber < 1) {

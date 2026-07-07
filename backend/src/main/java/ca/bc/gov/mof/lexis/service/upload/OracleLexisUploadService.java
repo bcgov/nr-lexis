@@ -35,6 +35,43 @@ public class OracleLexisUploadService implements LexisUploadService {
   }
 
   @Override
+  public Optional<LexisUploadResultDto> validateDocument(MultipartFile file, String uploadType) {
+    String normalizedUploadType = normalizeUploadType(uploadType);
+    if (!validFile(file) || normalizedUploadType == null) {
+      return Optional.empty();
+    }
+
+    String fileTypeCode = fileExtension(file);
+    if (fileTypeCode == null) {
+      return Optional.of(
+          rejected(
+              normalizedUploadType,
+              file,
+              "Document uploads need a file extension so LEXIS can resolve the file type."));
+    }
+
+    Optional<LexisUploadResultDto> fileTypeRejection =
+        rejectUnsupportedFileType(normalizedUploadType, file, fileTypeCode);
+    if (fileTypeRejection.isPresent()) {
+      return fileTypeRejection;
+    }
+
+    Optional<LexisUploadResultDto> virusScanRejection =
+        rejectFailedVirusScan(normalizedUploadType, file);
+    if (virusScanRejection.isPresent()) {
+      return virusScanRejection;
+    }
+
+    return Optional.of(
+        new LexisUploadResultDto(
+            normalizedUploadType,
+            resolveFileName(file),
+            file.getSize(),
+            "validated",
+            "File passed validation and virus scanning."));
+  }
+
+  @Override
   public Optional<LexisUploadResultDto> uploadApplication(
       MultipartFile file, Long applicationNumber, String description, String entryUserId) {
     if (!validFile(file) || applicationNumber == null || applicationNumber < 1) {
@@ -271,6 +308,18 @@ public class OracleLexisUploadService implements LexisUploadService {
 
   private boolean validFile(MultipartFile file) {
     return file != null && !file.isEmpty();
+  }
+
+  private String normalizeUploadType(String uploadType) {
+    String normalized = trimToNull(uploadType);
+    if (normalized == null) {
+      return null;
+    }
+    normalized = normalized.toLowerCase(Locale.ROOT);
+    return switch (normalized) {
+      case "application", "permit", "exemption", "invoice" -> normalized;
+      default -> null;
+    };
   }
 
   private boolean positive(BigDecimal value) {

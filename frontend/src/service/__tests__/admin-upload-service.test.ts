@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   submitAdminUpload,
+  validateAdminUpload,
   validateApplicationSubmissionUpload,
 } from '@/service/admin-upload-service'
 
@@ -106,6 +107,25 @@ describe('admin-upload-service', () => {
     expect(formData.get('userReference')).toBe('CLIENT-REF-1')
     const uploadedFile = formData.get('formFile') as File
     expect(uploadedFile.name).toBe('submission.xml')
+  })
+
+  it('posts document upload validation to the document validation endpoint', async () => {
+    const file = new File(['application-data'], 'application.pdf', { type: 'application/pdf' })
+
+    await validateAdminUpload('application', {
+      applicationNumber: '1001',
+      file,
+      fileDescription: 'Application evidence',
+    })
+
+    const [path, payload] = postMock.mock.calls[0]
+
+    expect(path).toBe('/lexis/admin/uploads/applications/validation')
+    const formData = payload as FormData
+    expect(formData.get('applicationNumber')).toBe('1001')
+    expect(formData.get('fileDescription')).toBe('Application evidence')
+    const uploadedFile = formData.get('formFile') as File
+    expect(uploadedFile.name).toBe('application.pdf')
   })
 
   it('posts application submission validation to the validation endpoint', async () => {

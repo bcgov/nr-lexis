@@ -951,6 +951,135 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void adminApplicationUploadValidationShouldAllowAdminRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/applications/validation")
+                .file(file)
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void adminApplicationUploadValidationShouldRejectReadOnlyRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/applications/validation")
+                .file(file)
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void adminPermitUploadValidationShouldAllowAdminRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "permit.pdf", "application/pdf", "content".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/permits/validation")
+                .file(file)
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void adminExemptionUploadValidationShouldAllowAdminRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "exemption.pdf", "application/pdf", "content".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/exemptions/validation")
+                .file(file)
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void adminInvoiceUploadValidationShouldAllowAdminRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", "content".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/invoices/validation")
+                .file(file)
+                .param("permitNumber", "7000123")
+                .param("salesInvoiceNumber", "INV-100")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void adminDocumentUploadValidationShouldRejectReadOnlyRole() throws Exception {
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/permits/validation")
+                .file(new MockMultipartFile("formFile", "permit.pdf", "application/pdf", "content".getBytes()))
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/exemptions/validation")
+                .file(new MockMultipartFile("formFile", "exemption.pdf", "application/pdf", "content".getBytes()))
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/invoices/validation")
+                .file(new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", "content".getBytes()))
+                .param("permitNumber", "7000123")
+                .param("salesInvoiceNumber", "INV-100")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void adminDocumentUploadValidationShouldRejectScopedProvincialSubmitterRole()
+      throws Exception {
+    SimpleGrantedAuthority scopedSubmitter =
+        new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00012345");
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/applications/validation")
+                .file(new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes()))
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(scopedSubmitter)))
+        .andExpect(status().isForbidden());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/permits/validation")
+                .file(new MockMultipartFile("formFile", "permit.pdf", "application/pdf", "content".getBytes()))
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(scopedSubmitter)))
+        .andExpect(status().isForbidden());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/exemptions/validation")
+                .file(new MockMultipartFile("formFile", "exemption.pdf", "application/pdf", "content".getBytes()))
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(scopedSubmitter)))
+        .andExpect(status().isForbidden());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/invoices/validation")
+                .file(new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", "content".getBytes()))
+                .param("permitNumber", "7000123")
+                .param("salesInvoiceNumber", "INV-100")
+                .with(jwt().authorities(scopedSubmitter)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void adminPermitUploadShouldRejectReadOnlyRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "permit.pdf", "application/pdf", "content".getBytes());
