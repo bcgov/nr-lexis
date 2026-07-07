@@ -32,10 +32,9 @@ describe('DetailDocumentUploadPanel', () => {
     ).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText('Drag and drop files here or click to upload')).toBeInTheDocument()
     expect(screen.getByText('Upload access is read only.')).toBeInTheDocument()
-    const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
     expect(
-      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
-    ).toHaveAttribute('aria-current', 'step')
+      screen.queryByRole('list', { name: 'Upload queue workflow progress' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
   })

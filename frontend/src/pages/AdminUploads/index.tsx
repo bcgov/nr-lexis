@@ -488,7 +488,7 @@ function ApplicationSubmissionValidationPanel({
         <div className="admin-upload-preview-footer-actions__right">
           <Button
             kind="primary"
-            size="sm"
+            size="md"
             onClick={onReview}
             disabled={isSubmitting || !canReview || items.length === 0 || validatingCount > 0}
             renderIcon={ArrowRight}
@@ -498,6 +498,30 @@ function ApplicationSubmissionValidationPanel({
         </div>
       </div>
     </section>
+  )
+}
+
+function UploadStepReviewButton({
+  label,
+  disabled,
+  onReview,
+}: {
+  label: string
+  disabled: boolean
+  onReview: () => void
+}) {
+  return (
+    <div className="admin-upload-fspts-button-row">
+      <Button
+        kind="primary"
+        size="md"
+        onClick={onReview}
+        disabled={disabled}
+        renderIcon={ArrowRight}
+      >
+        {label}
+      </Button>
+    </div>
   )
 }
 
@@ -1508,14 +1532,22 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               {uploadSettingsPanel}
 
               {selectedWorkflowType === 'applicationSubmission' ? (
-                <ApplicationSubmissionValidationPanel
-                  items={uploadQueue}
-                  canReview={hasUploadAccess && canReviewLexisSubmissions}
-                  isSubmitting={isSubmitting}
-                  onReview={onReviewApplicationSubmissions}
-                  onRemove={removeQueuedFile}
-                />
-              ) : (
+                uploadQueue.length > 0 ? (
+                  <ApplicationSubmissionValidationPanel
+                    items={uploadQueue}
+                    canReview={hasUploadAccess && canReviewLexisSubmissions}
+                    isSubmitting={isSubmitting}
+                    onReview={onReviewApplicationSubmissions}
+                    onRemove={removeQueuedFile}
+                  />
+                ) : (
+                  <UploadStepReviewButton
+                    label="Review submissions"
+                    disabled
+                    onReview={onReviewApplicationSubmissions}
+                  />
+                )
+              ) : uploadQueue.length > 0 ? (
                 <UploadQueuePreview
                   items={uploadQueue}
                   targetSummary={currentUploadTargetSummary}
@@ -1530,6 +1562,12 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                   onClear={clearQueuedFiles}
                   onRemove={removeQueuedFile}
                   showWorkflowProgress={false}
+                />
+              ) : (
+                <UploadStepReviewButton
+                  label="Review upload"
+                  disabled
+                  onReview={() => setDocumentUploadStep('review')}
                 />
               )}
             </>

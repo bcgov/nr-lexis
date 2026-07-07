@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { TextArea, TextInput } from '@carbon/react'
+import { Button, TextArea, TextInput } from '@carbon/react'
+import { ArrowRight } from '@carbon/icons-react'
 import { AppNotification } from '../AppNotification'
 import {
   buildUploadResultMessage,
@@ -489,20 +490,28 @@ const DetailDocumentUploadPanel = ({
         </section>
       </div>
 
-      <UploadQueuePreview
-        items={uploadQueue}
-        targetSummary={currentTargetSummary}
-        canSubmit={canSubmit}
-        isSubmitting={isSubmitting}
-        idPrefix={`${inputId}Queue`}
-        actionsPlacement="footer"
-        onSubmit={() => void onSubmitUpload()}
-        submitLabel="Submit upload"
-        submittingLabel="Submitting upload..."
-        onReset={resetUpload}
-        onClear={clearQueuedFiles}
-        onRemove={removeQueuedFile}
-      />
+      {uploadQueue.length > 0 ? (
+        <UploadQueuePreview
+          items={uploadQueue}
+          targetSummary={currentTargetSummary}
+          canSubmit={canSubmit}
+          isSubmitting={isSubmitting}
+          idPrefix={`${inputId}Queue`}
+          actionsPlacement="footer"
+          onSubmit={() => void onSubmitUpload()}
+          submitLabel="Submit upload"
+          submittingLabel="Submitting upload..."
+          onReset={resetUpload}
+          onClear={clearQueuedFiles}
+          onRemove={removeQueuedFile}
+        />
+      ) : (
+        <div className="admin-upload-fspts-button-row">
+          <Button kind="primary" size="md" disabled renderIcon={ArrowRight}>
+            Review upload
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

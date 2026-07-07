@@ -346,19 +346,14 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
   })
 
-  it('shows a data preview empty state before files are selected', () => {
+  it('keeps the review area collapsed before files are selected', () => {
     mockUploadAccess('/filePermitUpload')
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
-    expect(screen.getByRole('heading', { name: 'Validation status' })).toBeInTheDocument()
-    expect(screen.getByText('No data uploaded yet')).toBeInTheDocument()
-    const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
-    expect(within(workflowProgress).getByText('1. Upload')).toBeVisible()
-    expect(within(workflowProgress).getByText('2. Review')).toBeVisible()
-    expect(
-      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
-    ).toHaveAttribute('aria-current', 'step')
+    expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()
+    expect(screen.queryByText('No data uploaded yet')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     expect(screen.queryByRole('columnheader', { name: 'File' })).not.toBeInTheDocument()
   })
 
@@ -540,8 +535,9 @@ describe('Admin upload workflow smoke', () => {
     expect(
       within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
-    expect(screen.getByRole('heading', { name: 'Validation status' })).toBeInTheDocument()
-    expect(screen.getByText('No application submissions selected')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()
+    expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
@@ -635,7 +631,8 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
-    expect(screen.getByText('No application submissions selected')).toBeInTheDocument()
+    expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Cancel submission' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Open Application 9001' })).not.toBeInTheDocument()
   })
@@ -706,7 +703,8 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel submission' }))
 
     expect(screen.queryByText('Submission validated')).not.toBeInTheDocument()
-    expect(screen.getByText('No application submissions selected')).toBeInTheDocument()
+    expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
     expect(screen.getByLabelText('Application submission file')).not.toBeDisabled()
     expect(
       screen.queryByText(
@@ -912,7 +910,8 @@ describe('Admin upload workflow smoke', () => {
         '2 application submissions created. Verify the created application and package details.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('No application submissions selected')).toBeInTheDocument()
+    expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
   })
 
   it('shows per-file review details for mixed XML upload results', async () => {
@@ -1172,7 +1171,7 @@ describe('Admin upload workflow smoke', () => {
     ).toBeInTheDocument()
     expect(screen.queryByLabelText('Upload type')).not.toBeInTheDocument()
     expect(screen.getByText('Upload application submissions')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Validation status' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()

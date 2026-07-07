@@ -1083,7 +1083,7 @@ test.describe('TEST IDIR admin regression', () => {
     })
     await expect(applicationSubmissionProgress.getByText('1. Upload')).toBeVisible()
     await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Validation status' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Validation status' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
 

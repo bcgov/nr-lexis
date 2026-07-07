@@ -178,14 +178,14 @@ function UploadQueuePreview({
   const actionControls = (
     <>
       {showQueueManagementActions && items.length > 0 && (
-        <Button kind="ghost" size="sm" onClick={clearQueue} disabled={isSubmitting}>
+        <Button kind="ghost" size="md" onClick={clearQueue} disabled={isSubmitting}>
           Clear
         </Button>
       )}
       {isReviewStep ? (
         <Button
           kind="primary"
-          size="sm"
+          size="md"
           onClick={onSubmit}
           disabled={isSubmitting || !canSubmit}
           renderIcon={ArrowRight}
@@ -195,7 +195,7 @@ function UploadQueuePreview({
       ) : (
         <Button
           kind="primary"
-          size="sm"
+          size="md"
           onClick={enterReviewStep}
           disabled={isSubmitting || !canReviewUpload}
           renderIcon={ArrowRight}
@@ -204,7 +204,7 @@ function UploadQueuePreview({
         </Button>
       )}
       {showQueueManagementActions && (
-        <Button kind="ghost" size="sm" onClick={resetUpload} disabled={isSubmitting}>
+        <Button kind="ghost" size="md" onClick={resetUpload} disabled={isSubmitting}>
           Reset
         </Button>
       )}
@@ -342,7 +342,7 @@ function UploadQueuePreview({
         <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
           <div>
             {isReviewStep && onBack && (
-              <Button kind="secondary" size="sm" onClick={onBack} disabled={isSubmitting}>
+              <Button kind="secondary" size="md" onClick={onBack} disabled={isSubmitting}>
                 {backLabel}
               </Button>
             )}

@@ -879,14 +879,14 @@ const RTMEmsLogAmvPage = () => {
 
             <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split">
               <div>
-                <Button kind="secondary" size="sm" onClick={() => setUploadStep('upload')}>
+                <Button kind="secondary" size="md" onClick={() => setUploadStep('upload')}>
                   Back
                 </Button>
               </div>
               <div>
                 <Button
                   kind="primary"
-                  size="sm"
+                  size="md"
                   onClick={() => {
                     void submitUpload()
                   }}
