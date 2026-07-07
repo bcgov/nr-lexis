@@ -244,64 +244,66 @@ function UploadQueuePreview({
               />
             </div>
           )}
-          <table className="cds--data-table admin-upload-queue__table">
-            <thead>
-              <tr>
-                <th>{workflowColumnLabel}</th>
-                <th>{fileColumnLabel}</th>
-                <th>Target</th>
-                <th>Status</th>
-                <th>Message</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayedItems.length === 0 ? (
+          <div className="admin-upload-fspts-table-wrap">
+            <table className="admin-upload-queue__table admin-upload-queue__table--generic">
+              <thead>
                 <tr>
-                  <td colSpan={6}>No queued {itemNounPlural} match the current filter.</td>
+                  <th>{workflowColumnLabel}</th>
+                  <th>{fileColumnLabel}</th>
+                  <th>Target</th>
+                  <th>Status</th>
+                  <th>Message</th>
+                  <th>Action</th>
                 </tr>
-              ) : (
-                displayedItems.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.workflowLabel}</td>
-                    <td>
-                      <div className="admin-upload-file-cell">
-                        <span>{item.file.name}</span>
-                        <span>
-                          {formatFileType(item.file)} | {formatUploadFileSize(item.file.size)} |
-                          Added {formatUploadQueuedAt(item.queuedAt)}
-                        </span>
-                      </div>
-                    </td>
-                    <td>{item.targetSummary ?? targetSummary}</td>
-                    <td>
-                      <span
-                        className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
-                      >
-                        {uploadQueueStatusLabel(item.status)}
-                      </span>
-                    </td>
-                    <td>{item.message || pendingMessage}</td>
-                    <td>
-                      <div className="admin-upload-row-actions">
-                        {renderCompleteAction?.(item)}
-                        {canRemoveItem(item) && (
-                          <Button
-                            kind="ghost"
-                            size="sm"
-                            onClick={() => onRemove(item.id)}
-                            disabled={isSubmitting && item.status === 'uploading'}
-                          >
-                            {removeLabel}
-                          </Button>
-                        )}
-                      </div>
-                    </td>
+              </thead>
+              <tbody>
+                {displayedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>No queued {itemNounPlural} match the current filter.</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  displayedItems.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.workflowLabel}</td>
+                      <td>
+                        <div className="admin-upload-file-cell">
+                          <span>{item.file.name}</span>
+                          <span>
+                            {formatFileType(item.file)} | {formatUploadFileSize(item.file.size)} |
+                            Added {formatUploadQueuedAt(item.queuedAt)}
+                          </span>
+                        </div>
+                      </td>
+                      <td>{item.targetSummary ?? targetSummary}</td>
+                      <td>
+                        <span
+                          className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                        >
+                          {uploadQueueStatusLabel(item.status)}
+                        </span>
+                      </td>
+                      <td>{item.message || pendingMessage}</td>
+                      <td>
+                        <div className="admin-upload-row-actions">
+                          {renderCompleteAction?.(item)}
+                          {canRemoveItem(item) && (
+                            <Button
+                              kind="ghost"
+                              size="sm"
+                              onClick={() => onRemove(item.id)}
+                              disabled={isSubmitting && item.status === 'uploading'}
+                            >
+                              {removeLabel}
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
           {isReviewStep && (
             <>
               <div className="admin-upload-preview-footer">
