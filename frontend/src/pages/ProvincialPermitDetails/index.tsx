@@ -64,7 +64,8 @@ import {
   fetchProvincialPermitDetailTabs,
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
-import { triggerBrowserDownload } from '@/utils/download'
+import { ReportRequestError, runReport } from '@/service/report-service'
+import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 
 const formatAmount = (value: number): string => {
   return value.toLocaleString(undefined, {
@@ -285,6 +286,7 @@ const ProvincialPermitDetailsPage = () => {
   const [isEditingShipping, setIsEditingShipping] = useState(false)
   const [isSavingPermit, setIsSavingPermit] = useState(false)
   const [isSavingShipping, setIsSavingShipping] = useState(false)
+  const [isOpeningPermitReport, setIsOpeningPermitReport] = useState(false)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsInvoicesErrorMessage, setDocumentsInvoicesErrorMessage] = useState('')
@@ -583,6 +585,8 @@ const ProvincialPermitDetailsPage = () => {
   const canDeletePermitDocuments = canPerform('/filePermitUpload')
   const canDeleteInvoiceDocuments = canPerform('/fileInvoiceUpload')
   const canSavePermit = canPerform('savePermit')
+  const canOpenPermitReport =
+    canPerform('/permitReport') && detail?.permitStatusCode?.trim().toUpperCase() === 'COM'
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
     if (!permitForm) {
       return {}
@@ -786,6 +790,38 @@ const ProvincialPermitDetailsPage = () => {
       setActionErrorMessage('Unable to open permit document.')
     }
   }, [])
+
+  const onOpenPermitReport = useCallback(async () => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!resolvedPermitNumber || !canOpenPermitReport) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsOpeningPermitReport(true)
+    try {
+      const result = await runReport({
+        reportId: 'permitReport',
+        actionMapping: 'generate',
+        values: { permitNumber: resolvedPermitNumber },
+      })
+      const opened = openBlobInNewTab(result.blob, 'Permit')
+      if (!opened) {
+        triggerBrowserDownload(result.blob, result.filename)
+        setActionInfoMessage(
+          'Popup blocked while opening permit report. Downloaded the report instead.',
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage(
+        error instanceof ReportRequestError ? error.message : 'Unable to generate permit report.',
+      )
+    } finally {
+      setIsOpeningPermitReport(false)
+    }
+  }, [canOpenPermitReport, detail?.permitNumber, permitNumber])
 
   const onRemoveDocument = useCallback(
     async (row: PermitDocumentRow) => {
@@ -998,6 +1034,16 @@ const ProvincialPermitDetailsPage = () => {
                 <dd>{documentRows.length.toLocaleString()}</dd>
               </div>
             </dl>
+          )}
+          {canOpenPermitReport && (
+            <Button
+              kind="primary"
+              size="sm"
+              disabled={isOpeningPermitReport}
+              onClick={() => void onOpenPermitReport()}
+            >
+              {isOpeningPermitReport ? 'Opening...' : 'Print permit'}
+            </Button>
           )}
         </div>
       </Column>

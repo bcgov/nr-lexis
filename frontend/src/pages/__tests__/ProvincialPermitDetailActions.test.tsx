@@ -24,6 +24,8 @@ import {
 } from '@/service/provincial-permit-documents-invoices-service'
 import { fetchApplicationClientData } from '@/service/application-client-lookup-service'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
+import { runReport } from '@/service/report-service'
+import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -67,6 +69,21 @@ vi.mock('@/service/admin-upload-service', () => ({
   validateAdminUpload: vi.fn(),
 }))
 
+vi.mock('@/service/report-service', () => ({
+  ReportRequestError: class ReportRequestError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = 'ReportRequestError'
+    }
+  },
+  runReport: vi.fn(),
+}))
+
+vi.mock('@/utils/download', () => ({
+  openBlobInNewTab: vi.fn(),
+  triggerBrowserDownload: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
@@ -83,6 +100,9 @@ const mockedUpdatePermitShipping = vi.mocked(updatePermitShipping)
 const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
+const mockedRunReport = vi.mocked(runReport)
+const mockedOpenBlobInNewTab = vi.mocked(openBlobInNewTab)
+const mockedTriggerBrowserDownload = vi.mocked(triggerBrowserDownload)
 
 const permitDetail: ProvincialPermitDetail = {
   permitNumber: 777,
@@ -226,6 +246,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
       status: 'validated',
       message: 'File passed validation and virus scanning.',
     })
+    mockedRunReport.mockResolvedValue({
+      source: 'api',
+      blob: new Blob(['permit report']),
+      filename: 'permit-report.pdf',
+      contentType: 'application/pdf',
+    })
+    mockedOpenBlobInNewTab.mockReturnValue(true)
   })
 
   it('adds invoice and refreshes invoice rows', async () => {
@@ -448,6 +475,83 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Shipping')
     expect(await screen.findByRole('heading', { name: 'Shipping' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
+  })
+
+  it('opens completed permit report with the legacy permit report request', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const printButton = await screen.findByRole('button', { name: 'Print permit' })
+    await userEvent.click(printButton)
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'permitReport',
+        actionMapping: 'generate',
+        values: { permitNumber: '777' },
+      })
+      expect(mockedOpenBlobInNewTab).toHaveBeenCalledWith(expect.any(Blob), 'Permit')
+      expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
+    })
+  })
+
+  it('downloads completed permit report when the popup is blocked', async () => {
+    mockedOpenBlobInNewTab.mockReturnValue(false)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Print permit' }))
+
+    await waitFor(() => {
+      expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(
+        expect.any(Blob),
+        'permit-report.pdf',
+      )
+    })
+    expect(
+      await screen.findByText(
+        'Popup blocked while opening permit report. Downloaded the report instead.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('hides permit report action when the user lacks report access', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/permitReport',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Print permit' })).not.toBeInTheDocument()
   })
 
   it('blocks add invoice when invoice number exceeds the legacy length limit', async () => {
