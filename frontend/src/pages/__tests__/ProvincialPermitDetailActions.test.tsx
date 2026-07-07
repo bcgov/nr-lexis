@@ -20,7 +20,7 @@ import {
   removePermitDocument,
   removePermitInvoiceDocument,
 } from '@/service/provincial-permit-documents-invoices-service'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -55,6 +55,7 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
 
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
+  validateAdminUpload: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
@@ -69,6 +70,7 @@ const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationD
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
 const mockedRemovePermitInvoiceDocument = vi.mocked(removePermitInvoiceDocument)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
 const permitDetail: ProvincialPermitDetail = {
   permitNumber: 777,
@@ -158,6 +160,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedSubmitAdminUpload.mockResolvedValue({
       status: 'success',
       message: 'Invoice upload submitted.',
+    })
+    mockedValidateAdminUpload.mockResolvedValue({
+      status: 'validated',
+      message: 'File passed validation and virus scanning.',
     })
   })
 
@@ -360,10 +366,25 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(invoiceControls.getByLabelText('Upload invoice number'), 'INV123')
     await userEvent.type(invoiceControls.getByLabelText('Upload invoice export value'), '1000')
     await userEvent.upload(invoiceControls.getByLabelText('Document File'), file)
+    await waitFor(() => {
+      expect(invoiceControls.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
     await userEvent.click(invoiceControls.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(invoiceControls.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
+      expect(mockedValidateAdminUpload).toHaveBeenCalledWith(
+        'invoice',
+        expect.objectContaining({
+          permitNumber: '777',
+          salesInvoiceNumber: 'INV123',
+          invoiceExportValue: '1000',
+          invoiceConversionRate: '1.00',
+          invoiceFeeInLieu: '1.00',
+          file,
+          fileDescription: '',
+        }),
+      )
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
         'invoice',
         expect.objectContaining({

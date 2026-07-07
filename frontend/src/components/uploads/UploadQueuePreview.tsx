@@ -89,7 +89,12 @@ function UploadQueuePreview({
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
-  const invalidCount = items.filter((item) => item.status === 'invalid').length
+  const blockedCount = items.filter(
+    (item) => item.status === 'invalid' || item.status === 'failed',
+  ).length
+  const pendingValidationCount = items.filter(
+    (item) => item.status === 'queued' || item.status === 'validating',
+  ).length
   const queueIdentity = useMemo(() => items.map((item) => item.id).join('|'), [items])
   const isReviewStep =
     currentStepId !== undefined
@@ -154,12 +159,14 @@ function UploadQueuePreview({
   const selectedItemLabel = `${items.length} selected ${
     items.length === 1 ? itemNoun : itemNounPlural
   }`
-  const canReviewUpload = canSubmit && items.length > 0 && invalidCount === 0
+  const canReviewUpload = canSubmit && items.length > 0 && blockedCount === 0
   const displayedItems = isReviewStep ? filteredItems : items
   const uploadStepDescription =
-    invalidCount > 0
+    blockedCount > 0
       ? `${selectedItemLabel} ${items.length === 1 ? 'needs' : 'need'} attention before review.`
-      : `${selectedItemLabel} ready. Continue to review before submitting.`
+      : pendingValidationCount > 0
+        ? `${selectedItemLabel} validating. Continue after validation completes.`
+        : `${selectedItemLabel} validated. Continue to review before submitting.`
   const actionControls = (
     <>
       {showQueueManagementActions && items.length > 0 && (

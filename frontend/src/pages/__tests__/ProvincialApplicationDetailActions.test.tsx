@@ -51,7 +51,7 @@ import {
   fetchApplicationReviewOptions,
   fetchProvincialApplicationOptions,
 } from '@/service/search-options-service'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -112,6 +112,7 @@ vi.mock('@/service/search-options-service', () => ({
 
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
+  validateAdminUpload: vi.fn(),
 }))
 
 // This file renders the full provincial application detail page; several tests exercise
@@ -174,6 +175,7 @@ const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
 const mockApplicationDetailAuth = (
   canPerform: (action: string) => boolean = () => true,
@@ -303,6 +305,10 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedSubmitAdminUpload.mockResolvedValue({
       status: 'success',
       message: 'Application document upload submitted.',
+    })
+    mockedValidateAdminUpload.mockResolvedValue({
+      status: 'validated',
+      message: 'File passed validation and virus scanning.',
     })
     mockedFetchApplicationReviewOptions.mockResolvedValue({
       productTypes: [],
@@ -955,10 +961,21 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await userEvent.type(screen.getByLabelText('Document description'), 'Uploaded')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
+      expect(mockedValidateAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file,
+          fileDescription: 'Uploaded',
+        }),
+      )
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
         'application',
         expect.objectContaining({

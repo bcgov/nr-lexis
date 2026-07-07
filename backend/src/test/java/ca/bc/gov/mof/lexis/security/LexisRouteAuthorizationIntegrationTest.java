@@ -946,7 +946,33 @@ class LexisRouteAuthorizationIntegrationTest {
                     jwt()
                         .authorities(
                             new SimpleGrantedAuthority(
-                                "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
+                "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void adminApplicationUploadValidationShouldAllowAdminRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/applications/validation")
+                .file(file)
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void adminApplicationUploadValidationShouldRejectReadOnlyRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/applications/validation")
+                .file(file)
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
   }
 

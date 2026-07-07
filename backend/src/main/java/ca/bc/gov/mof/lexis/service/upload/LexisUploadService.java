@@ -7,6 +7,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface LexisUploadService {
 
+  Optional<LexisUploadResultDto> validateDocument(MultipartFile file, String uploadType);
+
   Optional<LexisUploadResultDto> uploadApplication(
       MultipartFile file, Long applicationNumber, String description, String entryUserId);
 

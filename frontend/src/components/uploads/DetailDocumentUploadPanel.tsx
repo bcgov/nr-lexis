@@ -22,7 +22,7 @@ import {
   requiredMaxLengthFieldError,
   requiredPositiveNumericFieldError,
 } from '@/pages/shared/create-form-utils'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 
 type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
 
@@ -73,6 +73,8 @@ const UPLOAD_COPY: Record<DetailDocumentUploadType, UploadCopy> = {
 const uploadTargetSummary = (copy: UploadCopy, targetNumber: string): string =>
   targetNumber.trim() ? `${copy.targetLabel} ${targetNumber.trim()}` : `${copy.targetLabel} missing`
 
+const DOCUMENT_UPLOAD_VALIDATED_MESSAGE = 'File passed validation and virus scanning.'
+
 const DetailDocumentUploadPanel = ({
   workflowType,
   targetNumber,
@@ -102,15 +104,17 @@ const DetailDocumentUploadPanel = ({
     (invoiceConversionRateOverride ?? initialInvoiceConversionRate) || '1.00'
 
   const invalidUploadCount = useMemo(
-    () => uploadQueue.filter((item) => item.status === 'invalid').length,
+    () =>
+      uploadQueue.filter((item) => item.status === 'invalid' || item.status === 'failed').length,
     [uploadQueue],
   )
-  const uploadableCount = useMemo(
+  const pendingValidationCount = useMemo(
     () =>
-      uploadQueue.filter(
-        (item) =>
-          item.status === 'queued' || item.status === 'validated' || item.status === 'failed',
-      ).length,
+      uploadQueue.filter((item) => item.status === 'queued' || item.status === 'validating').length,
+    [uploadQueue],
+  )
+  const validatedUploadCount = useMemo(
+    () => uploadQueue.filter((item) => item.status === 'validated').length,
     [uploadQueue],
   )
   const invoiceValidationErrors = useMemo(() => {
@@ -151,7 +155,107 @@ const DetailDocumentUploadPanel = ({
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
   const canSubmit =
-    !disabled && !!targetNumber.trim() && uploadableCount > 0 && invalidUploadCount === 0
+    !disabled &&
+    !!targetNumber.trim() &&
+    validatedUploadCount > 0 &&
+    invalidUploadCount === 0 &&
+    pendingValidationCount === 0 &&
+    invoiceValidationErrors.length === 0
+
+  function setQueueItemStatus(
+    id: string,
+    status: UploadQueueStatus,
+    message = '',
+    targetSummary?: string,
+    details?: UploadQueueReviewDetails,
+  ): void {
+    setUploadQueue((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status,
+              message,
+              details: details ?? item.details,
+              targetSummary: targetSummary ?? item.targetSummary,
+            }
+          : item,
+      ),
+    )
+  }
+
+  const validateQueuedUploadFile = async (
+    file: File,
+  ): Promise<{
+    message: string
+    details: UploadQueueReviewDetails
+  }> => {
+    const baseRequest = {
+      file,
+      fileDescription: fileDescription.trim(),
+    }
+
+    if (workflowType === 'application') {
+      const result = await validateAdminUpload('application', {
+        ...baseRequest,
+        applicationNumber: targetNumber.trim(),
+      })
+      const message = buildUploadResultMessage(
+        'application',
+        DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
+        result,
+      )
+      return { message, details: buildUploadReviewDetails(message, result) }
+    }
+
+    if (workflowType === 'exemption') {
+      const result = await validateAdminUpload('exemption', {
+        ...baseRequest,
+        exemptionNumber: targetNumber.trim(),
+      })
+      const message = buildUploadResultMessage(
+        'exemption',
+        DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
+        result,
+      )
+      return { message, details: buildUploadReviewDetails(message, result) }
+    }
+
+    if (workflowType === 'invoice') {
+      const result = await validateAdminUpload('invoice', {
+        ...baseRequest,
+        permitNumber: targetNumber.trim(),
+        salesInvoiceNumber: salesInvoiceNumber.trim(),
+        invoiceExportValue: invoiceExportValue.trim(),
+        invoiceConversionRate: invoiceConversionRate.trim(),
+        invoiceFeeInLieu: invoiceFeeInLieu.trim(),
+      })
+      const message = buildUploadResultMessage('invoice', DOCUMENT_UPLOAD_VALIDATED_MESSAGE, result)
+      return { message, details: buildUploadReviewDetails(message, result) }
+    }
+
+    const result = await validateAdminUpload('permit', {
+      ...baseRequest,
+      permitNumber: targetNumber.trim(),
+    })
+    const message = buildUploadResultMessage('permit', DOCUMENT_UPLOAD_VALIDATED_MESSAGE, result)
+    return { message, details: buildUploadReviewDetails(message, result) }
+  }
+
+  const validateQueueItem = async (
+    id: string,
+    file: File,
+    targetSummary: string,
+  ): Promise<void> => {
+    try {
+      const result = await validateQueuedUploadFile(file)
+      setQueueItemStatus(id, 'validated', result.message, targetSummary, result.details)
+    } catch (error) {
+      const uploadError = extractUploadErrorDetails(error, GENERIC_UPLOAD_FAILURE_MESSAGE)
+      setQueueItemStatus(id, 'failed', uploadError.message, targetSummary, uploadError.details)
+      setErrorMessage('1 file failed validation. Review the queue for details.')
+    }
+  }
 
   const addFilesToQueue = (files: FileList | null): void => {
     if (!files || files.length === 0) {
@@ -159,17 +263,26 @@ const DetailDocumentUploadPanel = ({
     }
 
     const queuedAt = Date.now()
+    const lockedTargetSummary = currentTargetSummary
     const nextItemsByFileName = new Map<string, UploadQueueItem>()
     Array.from(files).forEach((file, index) => {
-      const validationMessage = validateDocumentUploadFile(file)
+      const validationMessages = [
+        validateDocumentUploadFile(file),
+        !targetNumber.trim()
+          ? `${copy.targetLabel} number is required before validating documents.`
+          : '',
+        ...(workflowType === 'invoice' ? invoiceValidationErrors : []),
+      ].filter(Boolean)
+      const validationMessage = validationMessages.join(' ')
 
       nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
         workflowLabel: copy.workflowLabel,
         queuedAt,
-        status: validationMessage ? ('invalid' as const) : ('queued' as const),
-        message: validationMessage || DOCUMENT_UPLOAD_READY_MESSAGE,
+        status: validationMessage ? ('invalid' as const) : ('validating' as const),
+        message: validationMessage || 'Validating file...',
+        targetSummary: lockedTargetSummary,
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
           : { summary: DOCUMENT_UPLOAD_READY_MESSAGE },
@@ -184,7 +297,13 @@ const DetailDocumentUploadPanel = ({
     ])
     setErrorMessage('')
     setSuccessMessage('')
+    if (workflowType === 'invoice' && invoiceValidationErrors.length > 0) {
+      setShowInvoiceValidationErrors(true)
+    }
     setFileInputKey((current) => current + 1)
+    nextItems
+      .filter((item) => item.status === 'validating')
+      .forEach((item) => void validateQueueItem(item.id, item.file, lockedTargetSummary))
   }
 
   const removeQueuedFile = (id: string): void => {
@@ -216,28 +335,6 @@ const DetailDocumentUploadPanel = ({
     setInvoiceConversionRateOverride(null)
     setInvoiceFeeInLieu('1.00')
     setShowInvoiceValidationErrors(false)
-  }
-
-  const setQueueItemStatus = (
-    id: string,
-    status: UploadQueueStatus,
-    message = '',
-    targetSummary?: string,
-    details?: UploadQueueReviewDetails,
-  ): void => {
-    setUploadQueue((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status,
-              message,
-              details: details ?? item.details,
-              targetSummary: targetSummary ?? item.targetSummary,
-            }
-          : item,
-      ),
-    )
   }
 
   const submitQueuedFile = async (
@@ -310,14 +407,19 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
+    if (pendingValidationCount > 0) {
+      setErrorMessage('Wait for file validation to finish before reviewing the upload.')
+      return
+    }
+
     if (invalidUploadCount > 0) {
       setErrorMessage(
-        `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`,
+        `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`,
       )
       return
     }
 
-    if (uploadQueue.length === 0) {
+    if (validatedUploadCount === 0) {
       setErrorMessage('Choose at least one file to upload.')
       return
     }
@@ -329,7 +431,7 @@ const DetailDocumentUploadPanel = ({
     let lastSuccessMessage = ''
 
     for (const item of uploadQueue) {
-      if (item.status === 'complete' || item.status === 'invalid') {
+      if (item.status !== 'validated') {
         continue
       }
 
@@ -478,7 +580,7 @@ const DetailDocumentUploadPanel = ({
             inputLabel="Document File"
             invalidText={
               invalidUploadCount > 0
-                ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
+                ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
                 : undefined
             }
             disabled={disabled}
