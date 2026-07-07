@@ -455,17 +455,6 @@ const ReviewUploadContent = ({
         </div>
       </dl>
 
-      {previewResult.warnings.length > 0 && (
-        <div className="admin-upload-review__issue-group">
-          <h3>Warnings</h3>
-          <ul>
-            {previewResult.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {matrixRows.length > 0 ? (
         <div className="admin-upload-review-table">
           <Table useZebraStyles aria-label="Average monthly value upload review">
@@ -853,6 +842,7 @@ const RTMEmsLogAmvPage = () => {
             <div className="admin-upload-fspts-button-row">
               <Button
                 kind="primary"
+                size="md"
                 renderIcon={ArrowRight}
                 onClick={openReviewStep}
                 disabled={isReviewDisabled}
@@ -890,6 +880,7 @@ const RTMEmsLogAmvPage = () => {
                 <Button
                   kind="primary"
                   size="md"
+                  renderIcon={ArrowRight}
                   onClick={() => {
                     void submitUpload()
                   }}
