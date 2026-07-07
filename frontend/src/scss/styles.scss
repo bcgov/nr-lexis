@@ -1488,6 +1488,12 @@ body {
   flex-shrink: 0;
 }
 
+.admin-upload-fspts-button-row .cds--btn .cds--btn__icon {
+  position: static;
+  margin-inline-start: 0;
+  transform: none;
+}
+
 .admin-upload-fspts-button-row .cds--btn--primary {
   background: var(--fds-interactive);
   border: 0;

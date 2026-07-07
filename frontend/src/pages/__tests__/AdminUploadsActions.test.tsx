@@ -511,7 +511,6 @@ describe('Admin upload workflow smoke', () => {
         speciesCodes: ['HE', 'FI'],
         endUseCode: 'PL',
       },
-      userReference: 'CLIENT-REF-1',
     })
     mockedSubmitAdminUpload.mockResolvedValue({
       message:
@@ -519,7 +518,6 @@ describe('Admin upload workflow smoke', () => {
       applicationNumber: 9001,
       packageNumber: 'TEST23-652-7D-2',
       scaleRows: 3,
-      userReference: 'CLIENT-REF-1',
     })
 
     renderPage('/provincial/application/upload')
@@ -541,8 +539,8 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('User reference')).not.toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('User reference'), 'CLIENT-REF-1')
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
     expect(screen.getAllByText('Creates a new application').length).toBeGreaterThan(0)
@@ -555,7 +553,6 @@ describe('Admin upload workflow smoke', () => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
         expect.objectContaining({
           file,
-          userReference: 'CLIENT-REF-1',
         }),
       )
     })
@@ -609,8 +606,6 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('M')).toBeInTheDocument()
     expect(screen.getAllByText('525.0').length).toBeGreaterThan(0)
     expect(screen.getByText('HE, FI')).toBeInTheDocument()
-    expect(screen.getAllByText('CLIENT-REF-1').length).toBeGreaterThan(0)
-    expect(screen.getByLabelText('User reference')).toBeDisabled()
     expect(screen.getByLabelText('Application submission file')).toBeEnabled()
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
@@ -622,7 +617,6 @@ describe('Admin upload workflow smoke', () => {
         'applicationSubmission',
         expect.objectContaining({
           file,
-          userReference: 'CLIENT-REF-1',
         }),
       )
     })
@@ -1175,6 +1169,6 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
-    expect(screen.getByLabelText('User reference')).toBeInTheDocument()
+    expect(screen.queryByLabelText('User reference')).not.toBeInTheDocument()
   })
 })
