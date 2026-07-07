@@ -10,7 +10,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   Tile,
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
@@ -430,7 +429,6 @@ const ProvincialSummaryPage = () => {
             <Column key={metric.key} sm={4} md={4} lg={5}>
               <Tile>
                 <h2 className="dashboard-title">{metric.label}</h2>
-                <Tag type="green">Available</Tag>
                 <p className="summary-metric-value">{metric.total.toLocaleString()}</p>
                 <p>{metric.description}</p>
                 <div className="legacy-search-actions">

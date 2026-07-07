@@ -1249,9 +1249,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                     <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
                     <p>{workflowDescription(selectedWorkflowType)}</p>
                   </div>
-                  <Tag type={hasUploadAccess ? 'green' : 'red'}>
-                    {hasUploadAccess ? 'Allowed' : 'Not Granted'}
-                  </Tag>
                 </div>
 
                 <div className="admin-upload-summary-strip" aria-label="Upload batch summary">

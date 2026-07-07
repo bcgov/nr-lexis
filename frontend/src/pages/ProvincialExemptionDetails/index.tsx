@@ -21,7 +21,6 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
@@ -476,10 +475,7 @@ const ProvincialExemptionDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          Documents{' '}
-                          <ApiSourceTag context="Exemption documents are returned from the exemption documents service." />
-                        </h2>
+                        <h2 className="detail-tile-title">Documents</h2>
                         {canManageDocuments && (
                           <DetailDocumentUploadPanel
                             workflowType="exemption"

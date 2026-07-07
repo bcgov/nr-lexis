@@ -11,7 +11,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   TextInput,
   Tile,
 } from '@carbon/react'
@@ -573,12 +572,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <div>
-            Access:{' '}
-            <Tag type={canAccessArea ? 'green' : 'red'}>
-              {canAccessArea ? 'Allowed' : 'Not Granted'}
-            </Tag>
-          </div>
           {isLoadingPolicies && <InlineLoading description={loadingDescription} />}
           {successMessage && (
             <AppNotification
