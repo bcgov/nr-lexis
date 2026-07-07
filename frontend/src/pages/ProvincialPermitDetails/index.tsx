@@ -38,6 +38,10 @@ import {
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 import {
+  fetchApplicationClientData,
+  type ApplicationClientData,
+} from '@/service/application-client-lookup-service'
+import {
   addPermitInvoice,
   fetchPermitDocuments,
   fetchPermitInvoiceConversionRate,
@@ -80,14 +84,67 @@ type PermitInvoiceField = 'invoiceDraftNumber' | 'invoiceDraftExportValue' | 'in
 
 const MAX_SALES_INVOICE_NUMBER_LENGTH = 9
 const PERMIT_DETAIL_TAB_INDEX = {
-  summary: 0,
-  items: 1,
-  fees: 2,
-  billing: 3,
-  orders: 4,
-  documents: 5,
-  invoices: 6,
+  permit: 0,
+  owner: 1,
+  agent: 2,
+  shipping: 3,
+  items: 4,
+  fees: 5,
+  gbms: 6,
+  orders: 7,
+  documents: 8,
+  invoices: 9,
 } as const
+
+const fetchPermitClientData = (
+  clientNumber: string | null,
+  clientLocationCode: string | null,
+): Promise<ApplicationClientData | null> => {
+  if (!clientNumber || !clientLocationCode) {
+    return Promise.resolve(null)
+  }
+
+  return fetchApplicationClientData(clientNumber, clientLocationCode)
+}
+
+type PermitClientTileProps = {
+  title: string
+  clientNumber: string | null
+  locationCode: string | null
+  clientData: ApplicationClientData | null
+  isLoading: boolean
+}
+
+const PermitClientTile = ({
+  title,
+  clientNumber,
+  locationCode,
+  clientData,
+  isLoading,
+}: PermitClientTileProps) => (
+  <DetailFieldTile
+    title={title}
+    fields={[
+      { label: 'Client number', value: displayValue(clientNumber) },
+      { label: 'Location', value: displayValue(locationCode) },
+      {
+        label: 'Company name',
+        value: isLoading ? 'Loading...' : displayValue(clientData?.companyName),
+      },
+      { label: 'Address', value: isLoading ? 'Loading...' : displayValue(clientData?.address) },
+      { label: 'City', value: isLoading ? 'Loading...' : displayValue(clientData?.city) },
+      { label: 'Province', value: isLoading ? 'Loading...' : displayValue(clientData?.province) },
+      {
+        label: 'Postal code',
+        value: isLoading ? 'Loading...' : displayValue(clientData?.postalCode),
+      },
+      { label: 'Country', value: isLoading ? 'Loading...' : displayValue(clientData?.country) },
+      { label: 'Phone', value: isLoading ? 'Loading...' : displayValue(clientData?.phone) },
+      { label: 'Fax', value: isLoading ? 'Loading...' : displayValue(clientData?.fax) },
+      { label: 'Email', value: isLoading ? 'Loading...' : displayValue(clientData?.email) },
+    ]}
+  />
+)
 
 const ProvincialPermitDetailsPage = () => {
   const { canPerform } = useAuth()
@@ -95,6 +152,9 @@ const ProvincialPermitDetailsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialPermitDetail | null>(null)
   const [tabsData, setTabsData] = useState<ProvincialPermitDetailTabsData | null>(null)
+  const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
+  const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
+  const [isClientDataLoading, setIsClientDataLoading] = useState(false)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -108,7 +168,7 @@ const ProvincialPermitDetailsPage = () => {
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
   const [isAddingInvoice, setIsAddingInvoice] = useState(false)
   const [selectedPermitTabIndex, setSelectedPermitTabIndex] = useState(
-    PERMIT_DETAIL_TAB_INDEX.summary,
+    PERMIT_DETAIL_TAB_INDEX.permit,
   )
   const [touchedInvoiceFields, setTouchedInvoiceFields] = useState<
     TouchedFields<PermitInvoiceField>
@@ -229,6 +289,60 @@ const ProvincialPermitDetailsPage = () => {
 
     void load()
   }, [permitNumber, beginDetailRequest])
+
+  useEffect(() => {
+    let isCancelled = false
+    setOwnerClientData(null)
+    setAgentClientData(null)
+
+    if (!detail) {
+      setIsClientDataLoading(false)
+      return () => {
+        isCancelled = true
+      }
+    }
+
+    const ownerClientNumber = detail.ownerClientNumber
+    const ownerClientLocationCode = detail.ownerClientLocationCode
+    const agentClientNumber = detail.applicantClientNumber
+    const agentClientLocationCode = detail.agentClientLocationCode
+    const hasClientLookup =
+      (!!ownerClientNumber && !!ownerClientLocationCode) ||
+      (!!agentClientNumber && !!agentClientLocationCode)
+
+    if (!hasClientLookup) {
+      setIsClientDataLoading(false)
+      return () => {
+        isCancelled = true
+      }
+    }
+
+    setIsClientDataLoading(true)
+    Promise.all([
+      fetchPermitClientData(ownerClientNumber, ownerClientLocationCode),
+      fetchPermitClientData(agentClientNumber, agentClientLocationCode),
+    ])
+      .then(([ownerResult, agentResult]) => {
+        if (!isCancelled) {
+          setOwnerClientData(ownerResult)
+          setAgentClientData(agentResult)
+        }
+      })
+      .catch((error) => {
+        if (!isCancelled) {
+          console.warn('Unable to load permit owner or agent client data.', error)
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsClientDataLoading(false)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [detail])
 
   const filteredItems = useMemo(() => {
     if (!tabsData) {
@@ -628,10 +742,13 @@ const ProvincialPermitDetailsPage = () => {
                 size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
-                <Tab>Summary</Tab>
+                <Tab>Permit</Tab>
+                <Tab>Owner</Tab>
+                <Tab>Agent</Tab>
+                <Tab>Shipping</Tab>
                 <Tab>Items</Tab>
                 <Tab>Fees</Tab>
-                <Tab>Billing</Tab>
+                <Tab>GBMS</Tab>
                 <Tab>Orders</Tab>
                 <Tab>Documents</Tab>
                 <Tab>Invoices</Tab>
@@ -667,7 +784,69 @@ const ProvincialPermitDetailsPage = () => {
                       />
                     </Column>
 
-                    <Column sm={4} md={8} lg={8}>
+                    <Column sm={4} md={8} lg={16}>
+                      <DetailFieldTile
+                        title="Financial and volume"
+                        fields={[
+                          { label: 'Permit volume (m³)', value: displayValue(detail.permitVolume) },
+                          { label: 'Number of pieces', value: displayValue(detail.numberOfPieces) },
+                          { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
+                          { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
+                          {
+                            label: 'Federal permit number',
+                            value: displayValue(detail.federalPermitNumber),
+                          },
+                          {
+                            label: 'Agent client number',
+                            value: displayValue(detail.applicantClientNumber),
+                          },
+                          {
+                            label: 'Agent location',
+                            value: displayValue(detail.agentClientLocationCode),
+                          },
+                          {
+                            label: 'Owner client number',
+                            value: displayValue(detail.ownerClientNumber),
+                          },
+                          {
+                            label: 'Owner location',
+                            value: displayValue(detail.ownerClientLocationCode),
+                          },
+                          { label: 'Remarks', value: displayValue(detail.remarks) },
+                        ]}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <PermitClientTile
+                        title="Owner"
+                        clientNumber={detail.ownerClientNumber}
+                        locationCode={detail.ownerClientLocationCode}
+                        clientData={ownerClientData}
+                        isLoading={isClientDataLoading}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <PermitClientTile
+                        title="Agent"
+                        clientNumber={detail.applicantClientNumber}
+                        locationCode={detail.agentClientLocationCode}
+                        clientData={agentClientData}
+                        isLoading={isClientDataLoading}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
                       <DetailFieldTile
                         title="Shipping"
                         fields={[
@@ -693,31 +872,6 @@ const ProvincialPermitDetailsPage = () => {
                             label: 'Estimated shipping date',
                             value: displayValue(detail.estimatedShippingDate),
                           },
-                        ]}
-                      />
-                    </Column>
-
-                    <Column sm={4} md={8} lg={8}>
-                      <DetailFieldTile
-                        title="Financial and volume"
-                        fields={[
-                          { label: 'Permit volume (m³)', value: displayValue(detail.permitVolume) },
-                          { label: 'Number of pieces', value: displayValue(detail.numberOfPieces) },
-                          { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
-                          { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
-                          {
-                            label: 'Federal permit number',
-                            value: displayValue(detail.federalPermitNumber),
-                          },
-                          {
-                            label: 'Applicant client number',
-                            value: displayValue(detail.applicantClientNumber),
-                          },
-                          {
-                            label: 'Owner client number',
-                            value: displayValue(detail.ownerClientNumber),
-                          },
-                          { label: 'Remarks', value: displayValue(detail.remarks) },
                         ]}
                       />
                     </Column>
@@ -766,50 +920,6 @@ const ProvincialPermitDetailsPage = () => {
                             )}
                           </TableBody>
                         </Table>
-                        <div className="legacy-search-grid">
-                          <TextInput
-                            id="permitInvoiceDraftNumber"
-                            labelText="Invoice number"
-                            value={invoiceDraftNumber}
-                            invalid={!!invoiceFieldError('invoiceDraftNumber')}
-                            invalidText={invoiceFieldError('invoiceDraftNumber')}
-                            onBlur={() => markInvoiceFieldTouched('invoiceDraftNumber')}
-                            onChange={(event) => setInvoiceDraftNumber(event.target.value)}
-                            placeholder="Enter sales invoice number"
-                          />
-                          <TextInput
-                            id="permitInvoiceDraftExportValue"
-                            labelText="Export value"
-                            value={invoiceDraftExportValue}
-                            invalid={!!invoiceFieldError('invoiceDraftExportValue')}
-                            invalidText={invoiceFieldError('invoiceDraftExportValue')}
-                            onBlur={() => markInvoiceFieldTouched('invoiceDraftExportValue')}
-                            onChange={(event) => setInvoiceDraftExportValue(event.target.value)}
-                            placeholder="Enter export value"
-                          />
-                          <TextInput
-                            id="permitInvoiceDraftFeeInLieu"
-                            labelText="Fee in lieu"
-                            value={invoiceDraftFeeInLieu}
-                            invalid={!!invoiceFieldError('invoiceDraftFeeInLieu')}
-                            invalidText={invoiceFieldError('invoiceDraftFeeInLieu')}
-                            onBlur={() => markInvoiceFieldTouched('invoiceDraftFeeInLieu')}
-                            onChange={(event) => setInvoiceDraftFeeInLieu(event.target.value)}
-                            placeholder="Enter fee in lieu (defaults to export value)"
-                          />
-                        </div>
-                        <div className="legacy-search-actions">
-                          <Button
-                            kind="secondary"
-                            size="sm"
-                            disabled={
-                              !canDeleteInvoiceDocuments || isAddingInvoice || !detail.permitNumber
-                            }
-                            onClick={() => void onAddInvoice()}
-                          >
-                            {isAddingInvoice ? 'Adding Invoice...' : 'Add Invoice'}
-                          </Button>
-                        </div>
                       </Tile>
                     </Column>
                   </Grid>
@@ -1084,6 +1194,50 @@ const ProvincialPermitDetailsPage = () => {
                             onUploadComplete={refreshPermitDocuments}
                           />
                         )}
+                        <div className="legacy-search-grid">
+                          <TextInput
+                            id="permitInvoiceDraftNumber"
+                            labelText="Invoice number"
+                            value={invoiceDraftNumber}
+                            invalid={!!invoiceFieldError('invoiceDraftNumber')}
+                            invalidText={invoiceFieldError('invoiceDraftNumber')}
+                            onBlur={() => markInvoiceFieldTouched('invoiceDraftNumber')}
+                            onChange={(event) => setInvoiceDraftNumber(event.target.value)}
+                            placeholder="Enter sales invoice number"
+                          />
+                          <TextInput
+                            id="permitInvoiceDraftExportValue"
+                            labelText="Export value"
+                            value={invoiceDraftExportValue}
+                            invalid={!!invoiceFieldError('invoiceDraftExportValue')}
+                            invalidText={invoiceFieldError('invoiceDraftExportValue')}
+                            onBlur={() => markInvoiceFieldTouched('invoiceDraftExportValue')}
+                            onChange={(event) => setInvoiceDraftExportValue(event.target.value)}
+                            placeholder="Enter export value"
+                          />
+                          <TextInput
+                            id="permitInvoiceDraftFeeInLieu"
+                            labelText="Fee in lieu"
+                            value={invoiceDraftFeeInLieu}
+                            invalid={!!invoiceFieldError('invoiceDraftFeeInLieu')}
+                            invalidText={invoiceFieldError('invoiceDraftFeeInLieu')}
+                            onBlur={() => markInvoiceFieldTouched('invoiceDraftFeeInLieu')}
+                            onChange={(event) => setInvoiceDraftFeeInLieu(event.target.value)}
+                            placeholder="Enter fee in lieu (defaults to export value)"
+                          />
+                        </div>
+                        <div className="legacy-search-actions">
+                          <Button
+                            kind="secondary"
+                            size="sm"
+                            disabled={
+                              !canDeleteInvoiceDocuments || isAddingInvoice || !detail.permitNumber
+                            }
+                            onClick={() => void onAddInvoice()}
+                          >
+                            {isAddingInvoice ? 'Adding Invoice...' : 'Add Invoice'}
+                          </Button>
+                        </div>
                         <TextInput
                           id="permitInvoicesFilter"
                           labelText="Filter invoice rows"

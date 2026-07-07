@@ -20,6 +20,7 @@ import {
   removePermitDocument,
   removePermitInvoiceDocument,
 } from '@/service/provincial-permit-documents-invoices-service'
+import { fetchApplicationClientData } from '@/service/application-client-lookup-service'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
@@ -53,6 +54,10 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
   removePermitInvoiceDocument: vi.fn(),
 }))
 
+vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientData: vi.fn(),
+}))
+
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
   validateAdminUpload: vi.fn(),
@@ -69,6 +74,7 @@ const mockedOpenPermitDocument = vi.mocked(openPermitDocument)
 const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationDocument)
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
 const mockedRemovePermitInvoiceDocument = vi.mocked(removePermitInvoiceDocument)
+const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
@@ -80,7 +86,9 @@ const permitDetail: ProvincialPermitDetail = {
   permitStatusCode: 'COM',
   permitStatusDescription: 'Completed',
   applicantClientNumber: '00012345',
+  agentClientLocationCode: '01',
   ownerClientNumber: '00067890',
+  ownerClientLocationCode: '03',
   destinationCompanyName: 'Acme',
   destinationCountryCode: 'CA',
   transportTypeCode: 'TRK',
@@ -140,6 +148,39 @@ describe('Provincial Permit Detail Action Smoke', () => {
       conversionRate: '1.00',
       source: 'api',
     })
+    mockedFetchApplicationClientData.mockImplementation(
+      async (clientNumber, clientLocationCode) => {
+        if (clientNumber === '00067890' && clientLocationCode === '03') {
+          return {
+            clientNumber,
+            companyName: 'Owner Co',
+            address: '1 Owner St',
+            city: 'Victoria',
+            province: 'BC',
+            postalCode: 'V8V 1A1',
+            country: 'Canada',
+            phone: '2505551111',
+            fax: '2505552222',
+            email: 'owner@example.test',
+            notfound: '',
+          }
+        }
+
+        return {
+          clientNumber,
+          companyName: 'Agent Co',
+          address: '2 Agent St',
+          city: 'Nanaimo',
+          province: 'BC',
+          postalCode: 'V9R 1A1',
+          country: 'Canada',
+          phone: '2505553333',
+          fax: '2505554444',
+          email: 'agent@example.test',
+          notfound: '',
+        }
+      },
+    )
     mockedOpenPermitDocument.mockResolvedValue({
       source: 'api',
       blob: new Blob(['test']),
@@ -203,10 +244,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     for (const tabName of [
-      'Summary',
+      'Permit',
+      'Owner',
+      'Agent',
+      'Shipping',
       'Items',
       'Fees',
-      'Billing',
+      'GBMS',
       'Orders',
       'Documents',
       'Invoices',
@@ -239,7 +283,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(permitFinancialTile as HTMLElement).getByText('Permit volume (m³)'),
     ).toBeInTheDocument()
     expect(within(permitFinancialTile as HTMLElement).getByText('120')).toBeInTheDocument()
-    await selectPermitDetailTab('Items')
+    await selectPermitDetailTab('Owner')
+    expect(await screen.findByText('Owner Co')).toBeInTheDocument()
+    expect(screen.getByText('owner@example.test')).toBeInTheDocument()
+    await selectPermitDetailTab('Agent')
+    expect(await screen.findByText('Agent Co')).toBeInTheDocument()
+    expect(screen.getByText('agent@example.test')).toBeInTheDocument()
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03')
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '01')
+    await selectPermitDetailTab('Invoices')
     const invoiceNumberInput = await screen.findByLabelText('Invoice number')
     const exportValueInput = await screen.findByLabelText('Export value')
     const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
@@ -272,7 +324,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    await selectPermitDetailTab('Items')
+    await selectPermitDetailTab('Invoices')
     const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
     await userEvent.click(addInvoiceButton)
 
@@ -293,7 +345,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    await selectPermitDetailTab('Items')
+    await selectPermitDetailTab('Invoices')
     await userEvent.type(await screen.findByLabelText('Invoice number'), '1234567890')
     await userEvent.type(screen.getByLabelText('Export value'), '100')
     await userEvent.click(await screen.findByRole('button', { name: 'Add Invoice' }))

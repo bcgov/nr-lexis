@@ -101,7 +101,9 @@ export type ProvincialPermitDetail = {
   permitStatusCode: string | null
   permitStatusDescription: string | null
   applicantClientNumber: string | null
+  agentClientLocationCode: string | null
   ownerClientNumber: string | null
+  ownerClientLocationCode: string | null
   destinationCompanyName: string | null
   destinationCountryCode: string | null
   transportTypeCode: string | null
