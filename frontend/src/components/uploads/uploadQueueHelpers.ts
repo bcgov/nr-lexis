@@ -81,21 +81,6 @@ export const getFileExtension = (fileName: string): string => {
 
 export const uploadQueueFileKey = (file: File): string => file.name.trim().toLocaleLowerCase()
 
-export const uploadQueueStatusTagType = (
-  status: UploadQueueStatus,
-): 'gray' | 'blue' | 'green' | 'red' => {
-  if (status === 'invalid' || status === 'failed') {
-    return 'red'
-  }
-  if (status === 'uploading' || status === 'validating') {
-    return 'blue'
-  }
-  if (status === 'complete' || status === 'validated') {
-    return 'green'
-  }
-  return 'gray'
-}
-
 export const uploadQueueStatusLabel = (status: UploadQueueStatus): string => {
   if (status === 'invalid') {
     return 'Invalid'

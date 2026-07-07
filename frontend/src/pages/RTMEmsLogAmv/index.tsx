@@ -24,7 +24,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
@@ -59,20 +58,20 @@ type RtmReviewMatrixRow = {
 type RtmReviewCellValues = Record<string, number | null>
 type UploadValidationIssueSeverity = 'Error' | 'Warning'
 
-const parseStatusTag = (status: string | undefined) => {
+const uploadResultStatusClass = (status: string | undefined) => {
   if (!status) {
-    return 'gray'
+    return 'queued'
   }
 
   if (status === 'accepted') {
-    return 'green'
+    return 'complete'
   }
 
   if (status === 'validation_failed') {
-    return 'blue'
+    return 'invalid'
   }
 
-  return 'red'
+  return 'failed'
 }
 
 const formatMoney = (value: number | null) => {
@@ -498,7 +497,11 @@ const ReviewUploadContent = ({
 
       {uploadResult && (
         <div className="admin-upload-result" role="status">
-          <Tag type={parseStatusTag(uploadResult.status)}>{uploadResult.status}</Tag>
+          <span
+            className={`admin-upload-status-text admin-upload-status-text--${uploadResultStatusClass(uploadResult.status)}`}
+          >
+            {uploadResult.status}
+          </span>
           <p>
             {createResultMessage(uploadResult.status, uploadResult.message, uploadResult.errors)}
           </p>
@@ -879,7 +882,7 @@ const RTMEmsLogAmvPage = () => {
 
             <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split">
               <div>
-                <Button kind="secondary" size="md" onClick={() => setUploadStep('upload')}>
+                <Button kind="ghost" size="md" onClick={() => setUploadStep('upload')}>
                   Back
                 </Button>
               </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Column, ComboBox, Grid, Tag, TextArea, TextInput } from '@carbon/react'
+import { Button, Column, ComboBox, Grid, TextArea, TextInput } from '@carbon/react'
 import { ArrowRight } from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
@@ -22,7 +22,6 @@ import {
   getFileExtension,
   uploadQueueFileKey,
   uploadQueueStatusLabel,
-  uploadQueueStatusTagType,
 } from '@/components/uploads/uploadQueueHelpers'
 import type {
   UploadQueueItem,
@@ -397,11 +396,7 @@ function ApplicationSubmissionValidationPanel({
   onReview,
   onRemove,
 }: ApplicationSubmissionValidationPanelProps) {
-  const readyCount = items.filter((item) => item.status === 'queued').length
-  const invalidCount = items.filter((item) => item.status === 'invalid').length
   const validatingCount = items.filter((item) => item.status === 'validating').length
-  const validatedCount = items.filter((item) => item.status === 'validated').length
-  const failedCount = items.filter((item) => item.status === 'failed').length
   const reviewLabel = items.length === 1 ? 'Review submission' : 'Review submissions'
 
   return (
@@ -410,17 +405,6 @@ function ApplicationSubmissionValidationPanel({
         <div>
           <h2 id="applicationSubmissionValidateTitle">Validation status</h2>
           <p>Application submissions validate automatically after selection.</p>
-        </div>
-        <div className="admin-upload-preview-actions">
-          {items.length > 0 && (
-            <div className="admin-upload-queue-summary" aria-label="Submission validation summary">
-              <Tag type="gray">Ready {readyCount}</Tag>
-              <Tag type="blue">Validating {validatingCount}</Tag>
-              <Tag type="red">Invalid {invalidCount}</Tag>
-              <Tag type="green">Validated {validatedCount}</Tag>
-              <Tag type="red">Failed {failedCount}</Tag>
-            </div>
-          )}
         </div>
       </div>
 
@@ -453,9 +437,11 @@ function ApplicationSubmissionValidationPanel({
                   </div>
                 </td>
                 <td>
-                  <Tag type={uploadQueueStatusTagType(item.status)}>
+                  <span
+                    className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                  >
                     {uploadQueueStatusLabel(item.status)}
-                  </Tag>
+                  </span>
                 </td>
                 <td>
                   <div className="admin-upload-validation-cell">

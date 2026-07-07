@@ -1,11 +1,9 @@
-import { Tag } from '@carbon/react'
 import { displayValue } from '@/utils/text'
 import {
   formatScaleRows,
   formatUploadFileSize,
   formatUploadQueuedAt,
   uploadQueueStatusLabel,
-  uploadQueueStatusTagType,
 } from './uploadQueueHelpers'
 import type { UploadQueueItem } from './uploadQueueTypes'
 
@@ -170,9 +168,11 @@ function UploadQueueReviewAccordion({
             >
               <summary className="admin-upload-review__summary">
                 <span className="admin-upload-review__file-name">{item.file.name}</span>
-                <Tag type={uploadQueueStatusTagType(item.status)}>
+                <span
+                  className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                >
                   {uploadQueueStatusLabel(item.status)}
-                </Tag>
+                </span>
                 <span className="admin-upload-review__summary-text">{summary}</span>
               </summary>
 

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Button, Tag, TextInput } from '@carbon/react'
+import { Button, TextInput } from '@carbon/react'
 import { ArrowRight, Upload } from '@carbon/icons-react'
 import UploadQueueReviewAccordion from './UploadQueueReviewAccordion'
 import UploadWorkflowProgress from './UploadWorkflowProgress'
@@ -8,7 +8,6 @@ import {
   formatUploadQueuedAt,
   getFileExtension,
   uploadQueueStatusLabel,
-  uploadQueueStatusTagType,
 } from './uploadQueueHelpers'
 import type { UploadQueueItem } from './uploadQueueTypes'
 
@@ -90,11 +89,7 @@ function UploadQueuePreview({
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
-  const readyCount = items.filter((item) => item.status === 'queued').length
   const invalidCount = items.filter((item) => item.status === 'invalid').length
-  const validatedCount = items.filter((item) => item.status === 'validated').length
-  const completeCount = items.filter((item) => item.status === 'complete').length
-  const failedCount = items.filter((item) => item.status === 'failed').length
   const queueIdentity = useMemo(() => items.map((item) => item.id).join('|'), [items])
   const isReviewStep =
     currentStepId !== undefined
@@ -165,16 +160,6 @@ function UploadQueuePreview({
     invalidCount > 0
       ? `${selectedItemLabel} ${items.length === 1 ? 'needs' : 'need'} attention before review.`
       : `${selectedItemLabel} ready. Continue to review before submitting.`
-  const queueSummary =
-    items.length > 0 ? (
-      <div className="admin-upload-queue-summary" aria-label="Upload preview summary">
-        <Tag type="gray">Ready {readyCount}</Tag>
-        <Tag type="red">Invalid {invalidCount}</Tag>
-        <Tag type="green">Validated {validatedCount}</Tag>
-        <Tag type="green">Complete {completeCount}</Tag>
-        <Tag type="red">Failed {failedCount}</Tag>
-      </div>
-    ) : null
   const actionControls = (
     <>
       {showQueueManagementActions && items.length > 0 && (
@@ -234,7 +219,6 @@ function UploadQueuePreview({
           </p>
         </div>
         <div className="admin-upload-preview-actions">
-          {queueSummary}
           {actionsPlacement === 'header' && actionControls}
         </div>
       </div>
@@ -291,9 +275,11 @@ function UploadQueuePreview({
                     </td>
                     <td>{item.targetSummary ?? targetSummary}</td>
                     <td>
-                      <Tag type={uploadQueueStatusTagType(item.status)}>
+                      <span
+                        className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                      >
                         {uploadQueueStatusLabel(item.status)}
-                      </Tag>
+                      </span>
                     </td>
                     <td>{item.message || pendingMessage}</td>
                     <td>
@@ -323,10 +309,6 @@ function UploadQueuePreview({
                   Showing {filteredItems.length} of {items.length}{' '}
                   {items.length === 1 ? itemNoun : itemNounPlural}
                 </span>
-                <span>
-                  Ready {readyCount} | Invalid {invalidCount} | Validated {validatedCount} |
-                  Complete {completeCount} | Failed {failedCount}
-                </span>
               </div>
               <UploadQueueReviewAccordion
                 items={filteredItems}
@@ -342,7 +324,7 @@ function UploadQueuePreview({
         <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
           <div>
             {isReviewStep && onBack && (
-              <Button kind="secondary" size="md" onClick={onBack} disabled={isSubmitting}>
+              <Button kind="ghost" size="md" onClick={onBack} disabled={isSubmitting}>
                 {backLabel}
               </Button>
             )}
