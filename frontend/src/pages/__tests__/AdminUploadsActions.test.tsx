@@ -112,7 +112,6 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
     expect(screen.getByRole('combobox', { name: 'Permit number' })).toHaveValue('5001')
-    expect(screen.getByText('Allowed')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Choose files for Upload Documents' })).toBeVisible()
 
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
@@ -121,6 +120,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText('Permit 5001').length).toBeGreaterThan(0)
     expect(screen.getByText(/PDF \| 13 B \| Added/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
@@ -221,6 +221,7 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['application upload'], 'application.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
@@ -268,6 +269,7 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['exemption upload'], 'exemption.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
@@ -317,6 +319,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.type(screen.getByLabelText('Invoice number'), 'INV123')
     await userEvent.type(screen.getByLabelText('Export value (CAD)'), '1000')
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
@@ -336,11 +339,11 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/admin/uploads?type=invoice')
 
-    expect(screen.getByText('Not Granted')).toBeInTheDocument()
     expect(
       screen.getByText('Attach an invoice file and invoice values to an existing permit.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save upload' })).not.toBeInTheDocument()
   })
 
   it('shows a data preview empty state before files are selected', () => {
@@ -383,12 +386,18 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getAllByText('permit.pdf').length).toBeGreaterThan(0)
     expect(screen.getAllByText('scale.csv').length).toBeGreaterThan(0)
-    expect(screen.getByText('Showing 2 of 2 files')).toBeInTheDocument()
+    expect(screen.queryByText('Showing 2 of 2 files')).not.toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
+    expect(
+      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
+    expect(screen.queryByLabelText('Filter queued files')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('Showing 2 of 2 files')).toBeInTheDocument()
     expect(
       within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
-
     await userEvent.type(screen.getByLabelText('Filter queued files'), 'scale')
 
     expect(screen.queryByText('permit.pdf')).not.toBeInTheDocument()
@@ -415,12 +424,21 @@ describe('Admin upload workflow smoke', () => {
     })
 
     await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+
     await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
 
-    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+    expect(screen.queryByText('Showing 1 of 1 file')).not.toBeInTheDocument()
+    const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
+    expect(
+      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
+    ).toHaveAttribute('aria-current', 'step')
     expect(screen.getByText(/PDF \| 25 B \| Added/)).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
@@ -436,15 +454,17 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
   })
 
-  it('shows field validation for missing permit upload inputs', async () => {
+  it('shows target field validation before saving permit upload review', async () => {
     mockUploadAccess('/filePermitUpload')
 
     renderPage('/admin/uploads?type=permit')
 
+    const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
-    expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
-    expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
+    expect(screen.getAllByText('Permit number is required.').length).toBeGreaterThan(0)
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
@@ -462,6 +482,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.clear(screen.getByLabelText('Fee in lieu'))
     await userEvent.type(screen.getByLabelText('Fee in lieu'), '0')
 
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     expect(screen.getByText('Invoice number must be 9 characters or fewer.')).toBeInTheDocument()
@@ -508,7 +529,6 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/provincial/application/upload')
 
-    expect(screen.getByText('Allowed')).toBeInTheDocument()
     expect(screen.getByText('Application submission upload')).toBeInTheDocument()
     expect(screen.getByText('Upload application submissions')).toBeInTheDocument()
     expect(screen.getByText('Queued submissions')).toBeInTheDocument()
@@ -1107,11 +1127,9 @@ describe('Admin upload workflow smoke', () => {
       ).length,
     ).toBeGreaterThan(0)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
-
-    expect(
-      screen.getAllByText('1 queued file needs attention before upload.').length,
-    ).toBeGreaterThan(0)
+    expect(screen.getByText('1 selected file needs attention before review.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save upload' })).not.toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 

@@ -36,7 +36,8 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
-    expect(screen.getByRole('button', { name: 'Save upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save upload' })).not.toBeInTheDocument()
   })
 
   it('shows a visible refresh error after a successful upload when refresh fails', async () => {
@@ -59,6 +60,7 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
@@ -101,15 +103,22 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save upload' })).toBeEnabled()
+
     await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
 
-    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+    expect(screen.queryByText('Showing 1 of 1 file')).not.toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
     expect(
-      within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
+      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
+    expect(screen.queryByRole('button', { name: 'Save upload' })).not.toBeInTheDocument()
     expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
 
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     await waitFor(() => {
@@ -147,6 +156,7 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
 
     expect(await screen.findByText('Upload error')).toBeInTheDocument()

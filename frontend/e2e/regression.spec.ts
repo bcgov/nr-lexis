@@ -1309,12 +1309,16 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('link', { name: 'Back to Search' })).toHaveCount(0)
 
     await page.getByRole('tab', { name: 'Documents' }).click()
-    await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
+    const createDocumentsHeading = page.getByRole('heading', { name: 'Documents', exact: true })
+    await expect(createDocumentsHeading).toBeVisible()
+    await expect(createDocumentsHeading).not.toContainText('API')
     await expect(page.getByText('Upload documents')).toBeVisible()
     await expect(page.getByText('Multiple files can be queued and saved together.')).toBeVisible()
     await expect(page.getByText('Queued files')).toBeVisible()
     await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
     await expect(page.getByLabel('Document File')).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
     await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
       'aria-disabled',
       'true',
@@ -1916,9 +1920,15 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(
         page
           .locator('.detail-tile-title')
-          .filter({ hasText: /^Documents\b/ })
+          .filter({ hasText: /^Documents$/ })
           .first(),
       ).toBeVisible()
+      await expect(
+        page
+          .locator('.detail-tile-title')
+          .filter({ hasText: /^Documents$/ })
+          .first(),
+      ).not.toContainText('API')
       await expect(page.getByText('Upload documents').first()).toBeVisible()
       await expect(
         page.getByText('Multiple files can be queued and saved together.').first(),
@@ -1926,6 +1936,8 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(page.getByText('Queued files').first()).toBeVisible()
       await expect(page.getByText('Drag and drop files here, or browse for files.')).toBeVisible()
       await expect(page.getByLabel('Document File')).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
       await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
         'aria-disabled',
         'false',

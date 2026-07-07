@@ -73,14 +73,19 @@ function UploadQueuePreview({
   showWorkflowProgress = true,
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
+  const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
   const readyCount = items.filter((item) => item.status === 'queued').length
   const invalidCount = items.filter((item) => item.status === 'invalid').length
   const validatedCount = items.filter((item) => item.status === 'validated').length
   const completeCount = items.filter((item) => item.status === 'complete').length
   const failedCount = items.filter((item) => item.status === 'failed').length
+  const queueIdentity = useMemo(() => items.map((item) => item.id).join('|'), [items])
+  const isReviewStep =
+    !showWorkflowProgress || (items.length > 0 && reviewQueueIdentity === queueIdentity)
+  const effectiveQueueFilter = isReviewStep ? queueFilter : ''
 
   const filteredItems = useMemo(() => {
-    const query = queueFilter.trim().toLowerCase()
+    const query = effectiveQueueFilter.trim().toLowerCase()
     if (!query) {
       return items
     }
@@ -104,28 +109,44 @@ function UploadQueuePreview({
         .toLowerCase()
         .includes(query),
     )
-  }, [items, queueFilter, targetSummary])
+  }, [effectiveQueueFilter, items, targetSummary])
 
   const clearQueue = (): void => {
     setQueueFilter('')
+    setReviewQueueIdentity(null)
     onClear()
   }
 
   const resetUpload = (): void => {
     setQueueFilter('')
+    setReviewQueueIdentity(null)
     onReset()
   }
+
+  const enterReviewStep = (): void => {
+    setQueueFilter('')
+    setReviewQueueIdentity(queueIdentity)
+  }
+
   const previewTitleId = `${idPrefix}PreviewTitle`
   const queueFilterId = `${idPrefix}QueueFilter`
   const itemNounPlural = `${itemNoun}s`
   const isSubmissionQueue = itemNoun === 'submission'
   const workflowColumnLabel = isSubmissionQueue ? 'Submission type' : 'Upload type'
   const fileColumnLabel = isSubmissionQueue ? 'Submission file' : 'File'
-  const currentWorkflowStep = items.length > 0 ? 'review' : 'upload'
-  const completedWorkflowSteps = items.length > 0 ? ['upload'] : []
+  const currentWorkflowStep = items.length > 0 && isReviewStep ? 'review' : 'upload'
+  const completedWorkflowSteps = items.length > 0 && isReviewStep ? ['upload'] : []
   const selectedItemLabel = `${items.length} selected ${
     items.length === 1 ? itemNoun : itemNounPlural
   }`
+  const canReviewUpload = canSubmit && items.length > 0 && invalidCount === 0
+  const displayedItems = isReviewStep ? filteredItems : items
+  const uploadStepDescription =
+    invalidCount > 0
+      ? `${selectedItemLabel} ${items.length === 1 ? 'needs' : 'need'} attention before review.`
+      : `${selectedItemLabel} validated. Continue to review before ${
+          isSubmissionQueue ? 'finalizing' : 'saving'
+        }.`
 
   return (
     <section className="admin-upload-panel" aria-labelledby={previewTitleId}>
@@ -144,9 +165,11 @@ function UploadQueuePreview({
           <p>
             {items.length === 0
               ? emptyDescription
-              : `Review ${selectedItemLabel} before ${
-                  isSubmissionQueue ? 'finalizing' : 'saving'
-                }.`}
+              : isReviewStep
+                ? `Review ${selectedItemLabel} before ${
+                    isSubmissionQueue ? 'finalizing' : 'saving'
+                  }.`
+                : uploadStepDescription}
           </p>
         </div>
         <div className="admin-upload-preview-actions">
@@ -164,9 +187,25 @@ function UploadQueuePreview({
               Clear
             </Button>
           )}
-          <Button kind="primary" size="sm" onClick={onSubmit} disabled={isSubmitting || !canSubmit}>
-            {isSubmitting ? submittingLabel : submitLabel}
-          </Button>
+          {isReviewStep ? (
+            <Button
+              kind="primary"
+              size="sm"
+              onClick={onSubmit}
+              disabled={isSubmitting || !canSubmit}
+            >
+              {isSubmitting ? submittingLabel : submitLabel}
+            </Button>
+          ) : (
+            <Button
+              kind="primary"
+              size="sm"
+              onClick={enterReviewStep}
+              disabled={isSubmitting || !canReviewUpload}
+            >
+              Review upload
+            </Button>
+          )}
           <Button kind="ghost" size="sm" onClick={resetUpload} disabled={isSubmitting}>
             Reset
           </Button>
@@ -183,15 +222,17 @@ function UploadQueuePreview({
         </div>
       ) : (
         <>
-          <div className="admin-upload-preview-filter">
-            <TextInput
-              id={queueFilterId}
-              labelText={`Filter queued ${itemNounPlural}`}
-              placeholder={`Filter by ${workflowColumnLabel.toLowerCase()}, file name, target, status, or message`}
-              value={queueFilter}
-              onChange={(event) => setQueueFilter(event.target.value)}
-            />
-          </div>
+          {isReviewStep && (
+            <div className="admin-upload-preview-filter">
+              <TextInput
+                id={queueFilterId}
+                labelText={`Filter queued ${itemNounPlural}`}
+                placeholder={`Filter by ${workflowColumnLabel.toLowerCase()}, file name, target, status, or message`}
+                value={queueFilter}
+                onChange={(event) => setQueueFilter(event.target.value)}
+              />
+            </div>
+          )}
           <table className="cds--data-table admin-upload-queue__table">
             <thead>
               <tr>
@@ -204,12 +245,12 @@ function UploadQueuePreview({
               </tr>
             </thead>
             <tbody>
-              {filteredItems.length === 0 ? (
+              {displayedItems.length === 0 ? (
                 <tr>
                   <td colSpan={6}>No queued {itemNounPlural} match the current filter.</td>
                 </tr>
               ) : (
-                filteredItems.map((item) => (
+                displayedItems.map((item) => (
                   <tr key={item.id}>
                     <td>{item.workflowLabel}</td>
                     <td>
@@ -248,22 +289,26 @@ function UploadQueuePreview({
               )}
             </tbody>
           </table>
-          <div className="admin-upload-preview-footer">
-            <span>
-              Showing {filteredItems.length} of {items.length}{' '}
-              {items.length === 1 ? itemNoun : itemNounPlural}
-            </span>
-            <span>
-              Ready {readyCount} | Invalid {invalidCount} | Validated {validatedCount} | Complete{' '}
-              {completeCount} | Failed {failedCount}
-            </span>
-          </div>
-          <UploadQueueReviewAccordion
-            items={filteredItems}
-            targetSummary={targetSummary}
-            idPrefix={`${idPrefix}Review`}
-            itemNoun={itemNoun}
-          />
+          {isReviewStep && (
+            <>
+              <div className="admin-upload-preview-footer">
+                <span>
+                  Showing {filteredItems.length} of {items.length}{' '}
+                  {items.length === 1 ? itemNoun : itemNounPlural}
+                </span>
+                <span>
+                  Ready {readyCount} | Invalid {invalidCount} | Validated {validatedCount} |
+                  Complete {completeCount} | Failed {failedCount}
+                </span>
+              </div>
+              <UploadQueueReviewAccordion
+                items={filteredItems}
+                targetSummary={targetSummary}
+                idPrefix={`${idPrefix}Review`}
+                itemNoun={itemNoun}
+              />
+            </>
+          )}
         </>
       )}
     </section>
