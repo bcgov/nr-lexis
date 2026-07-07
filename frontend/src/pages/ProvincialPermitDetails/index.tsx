@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
   Tabs,
+  TextArea,
   TextInput,
   Tile,
 } from '@carbon/react'
@@ -29,6 +30,8 @@ import { searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import {
   firstValidationError,
   getVisibleFieldError,
+  integerFieldError,
+  isoDateFieldError,
   numericFieldError,
   requiredFieldError,
   requiredMaxLengthFieldError,
@@ -50,7 +53,10 @@ import {
   removePermitApplicationDocument,
   removePermitDocument,
   removePermitInvoiceDocument,
+  updatePermitDetail,
+  updatePermitShipping,
   type PermitDocumentRow,
+  type PermitDetailMutationRequest,
   type PermitInvoiceRow,
 } from '@/service/provincial-permit-documents-invoices-service'
 import {
@@ -146,6 +152,123 @@ const PermitClientTile = ({
   />
 )
 
+type PermitDetailFormField =
+  | 'permitNumber'
+  | 'permitStatus'
+  | 'permitIssueDate'
+  | 'permitExpiryDate'
+  | 'permitRequestDate'
+  | 'exemptionNumber'
+  | 'permitReceiptNo'
+  | 'permitRemarks'
+  | 'permitTotalVolume'
+  | 'permitNumberOfPieces'
+  | 'region'
+  | 'ownerClientNumber'
+  | 'ownerClientLocation'
+  | 'agentClientNumber'
+  | 'agentClientLocation'
+  | 'destinationCompanyName'
+  | 'destinationCountry'
+  | 'transportType'
+  | 'transportName'
+  | 'estimatedShippingDate'
+  | 'portOfExport'
+  | 'otherPortOfExport'
+
+type PermitDetailForm = Record<PermitDetailFormField, string>
+
+const detailValue = (value: string | number | null | undefined): string =>
+  value === null || value === undefined ? '' : String(value)
+
+const numericDetailValue = (value: number | null | undefined): string =>
+  value === null || value === undefined ? '' : String(value)
+
+const optionalNumberValue = (value: string): number | null => {
+  const normalizedValue = value.trim()
+  if (!normalizedValue) {
+    return null
+  }
+
+  const parsedValue = Number(normalizedValue)
+  return Number.isFinite(parsedValue) ? parsedValue : null
+}
+
+const optionalIntegerValue = (value: string): number | null => {
+  const normalizedValue = value.trim()
+  if (!normalizedValue) {
+    return null
+  }
+
+  const parsedValue = Number(normalizedValue)
+  return Number.isInteger(parsedValue) ? parsedValue : null
+}
+
+const buildPermitDetailForm = (permitDetail: ProvincialPermitDetail): PermitDetailForm => ({
+  permitNumber: detailValue(permitDetail.permitNumber),
+  permitStatus: detailValue(permitDetail.permitStatusCode),
+  permitIssueDate: detailValue(permitDetail.issueDate),
+  permitExpiryDate: detailValue(permitDetail.expiryDate),
+  permitRequestDate: detailValue(permitDetail.receivedDate),
+  exemptionNumber: detailValue(permitDetail.exemptionNumber),
+  permitReceiptNo: detailValue(permitDetail.receiptNumber),
+  permitRemarks: detailValue(permitDetail.remarks),
+  permitTotalVolume: numericDetailValue(permitDetail.permitVolume),
+  permitNumberOfPieces: numericDetailValue(permitDetail.numberOfPieces),
+  region: detailValue(permitDetail.region),
+  ownerClientNumber: detailValue(permitDetail.ownerClientNumber),
+  ownerClientLocation: detailValue(permitDetail.ownerClientLocationCode),
+  agentClientNumber: detailValue(permitDetail.applicantClientNumber),
+  agentClientLocation: detailValue(permitDetail.agentClientLocationCode),
+  destinationCompanyName: detailValue(permitDetail.destinationCompanyName),
+  destinationCountry: detailValue(permitDetail.destinationCountryCode),
+  transportType: detailValue(permitDetail.transportTypeCode),
+  transportName: detailValue(permitDetail.transportName),
+  estimatedShippingDate: detailValue(permitDetail.estimatedShippingDate),
+  portOfExport: detailValue(permitDetail.portOfExportCode),
+  otherPortOfExport: detailValue(permitDetail.otherPortOfExport),
+})
+
+const withUpdatedPermitDetail = (
+  currentDetail: ProvincialPermitDetail,
+  form: PermitDetailForm,
+): ProvincialPermitDetail => ({
+  ...currentDetail,
+  permitNumber: optionalIntegerValue(form.permitNumber),
+  permitStatusCode: form.permitStatus.trim() || null,
+  permitStatusDescription:
+    form.permitStatus.trim() === detailValue(currentDetail.permitStatusCode)
+      ? currentDetail.permitStatusDescription
+      : form.permitStatus.trim() || null,
+  exemptionNumber: form.exemptionNumber.trim() || null,
+  issueDate: form.permitIssueDate.trim() || null,
+  expiryDate: form.permitExpiryDate.trim() || null,
+  receivedDate: form.permitRequestDate.trim() || null,
+  permitVolume: optionalNumberValue(form.permitTotalVolume),
+  numberOfPieces: optionalIntegerValue(form.permitNumberOfPieces),
+  receiptNumber: form.permitReceiptNo.trim() || null,
+  remarks: form.permitRemarks.trim() || null,
+  region: form.region.trim() || null,
+  ownerClientNumber: form.ownerClientNumber.trim() || null,
+  ownerClientLocationCode: form.ownerClientLocation.trim() || null,
+  applicantClientNumber: form.agentClientNumber.trim() || null,
+  agentClientLocationCode: form.agentClientLocation.trim() || null,
+})
+
+const withUpdatedPermitShipping = (
+  currentDetail: ProvincialPermitDetail,
+  form: PermitDetailForm,
+): ProvincialPermitDetail => ({
+  ...currentDetail,
+  destinationCompanyName: form.destinationCompanyName.trim() || null,
+  destinationCountryCode: form.destinationCountry.trim() || null,
+  transportTypeCode: form.transportType.trim() || null,
+  transportName: form.transportName.trim() || null,
+  portOfExportCode: form.portOfExport.trim() || null,
+  otherPortOfExport: form.otherPortOfExport.trim() || null,
+  estimatedShippingDate: form.estimatedShippingDate.trim() || null,
+})
+
 const ProvincialPermitDetailsPage = () => {
   const { canPerform } = useAuth()
   const { permitNumber } = useParams()
@@ -157,6 +280,11 @@ const ProvincialPermitDetailsPage = () => {
   const [isClientDataLoading, setIsClientDataLoading] = useState(false)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
+  const [permitForm, setPermitForm] = useState<PermitDetailForm | null>(null)
+  const [isEditingPermit, setIsEditingPermit] = useState(false)
+  const [isEditingShipping, setIsEditingShipping] = useState(false)
+  const [isSavingPermit, setIsSavingPermit] = useState(false)
+  const [isSavingShipping, setIsSavingShipping] = useState(false)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsInvoicesErrorMessage, setDocumentsInvoicesErrorMessage] = useState('')
@@ -173,10 +301,15 @@ const ProvincialPermitDetailsPage = () => {
   const [touchedInvoiceFields, setTouchedInvoiceFields] = useState<
     TouchedFields<PermitInvoiceField>
   >({})
+  const [touchedPermitFields, setTouchedPermitFields] = useState<
+    TouchedFields<PermitDetailFormField>
+  >({})
   const [showInvoiceValidationErrors, setShowInvoiceValidationErrors] = useState(false)
+  const [showPermitValidationErrors, setShowPermitValidationErrors] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
   const beginAddInvoiceRequest = useLatestRequestGuard()
+  const beginPermitMutationRequest = useLatestRequestGuard()
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
   const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
@@ -211,6 +344,9 @@ const ProvincialPermitDetailsPage = () => {
       if (!permitNumber) {
         setErrorMessage('Permit number is missing from the route.')
         setDetail(null)
+        setPermitForm(null)
+        setIsEditingPermit(false)
+        setIsEditingShipping(false)
         setTabsData(null)
         setDocumentRows([])
         setInvoiceRows([])
@@ -229,9 +365,13 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
         setDetail(response)
+        setPermitForm(response ? buildPermitDetailForm(response) : null)
+        setIsEditingPermit(false)
+        setIsEditingShipping(false)
 
         if (!response) {
           setErrorMessage(`No provincial permit found for ${permitNumber}.`)
+          setPermitForm(null)
           setTabsData(null)
           setDocumentRows([])
           setInvoiceRows([])
@@ -275,6 +415,9 @@ const ProvincialPermitDetailsPage = () => {
           console.error(error)
           setErrorMessage('Unable to retrieve provincial permit detail.')
           setDetail(null)
+          setPermitForm(null)
+          setIsEditingPermit(false)
+          setIsEditingShipping(false)
           setTabsData(null)
           setDocumentRows([])
           setInvoiceRows([])
@@ -439,6 +582,27 @@ const ProvincialPermitDetailsPage = () => {
 
   const canDeletePermitDocuments = canPerform('/filePermitUpload')
   const canDeleteInvoiceDocuments = canPerform('/fileInvoiceUpload')
+  const canSavePermit = canPerform('savePermit')
+  const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
+    if (!permitForm) {
+      return {}
+    }
+
+    return {
+      permitNumber: requiredFieldError(permitForm.permitNumber, 'Permit number') ?? undefined,
+      permitStatus: requiredFieldError(permitForm.permitStatus, 'Permit status') ?? undefined,
+      permitIssueDate: isoDateFieldError(permitForm.permitIssueDate) ?? undefined,
+      permitExpiryDate: isoDateFieldError(permitForm.permitExpiryDate) ?? undefined,
+      permitRequestDate: isoDateFieldError(permitForm.permitRequestDate) ?? undefined,
+      estimatedShippingDate: isoDateFieldError(permitForm.estimatedShippingDate) ?? undefined,
+      permitTotalVolume:
+        numericFieldError(permitForm.permitTotalVolume, 'Permit volume') ?? undefined,
+      permitNumberOfPieces: permitForm.permitNumberOfPieces.trim()
+        ? (integerFieldError(permitForm.permitNumberOfPieces, 'Number of pieces') ?? undefined)
+        : undefined,
+    }
+  }, [permitForm])
+  const hasPermitValidationError = Object.values(permitFieldErrors).some((error) => !!error)
   const invoiceFieldErrors = useMemo<FieldErrors<PermitInvoiceField>>(
     () => ({
       invoiceDraftNumber:
@@ -468,6 +632,135 @@ const ProvincialPermitDetailsPage = () => {
       touchedInvoiceFields,
       showInvoiceValidationErrors,
     )
+
+  const markPermitFieldTouched = (field: PermitDetailFormField): void => {
+    setTouchedPermitFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const permitFieldError = (field: PermitDetailFormField): string | undefined =>
+    getVisibleFieldError(field, permitFieldErrors, touchedPermitFields, showPermitValidationErrors)
+
+  const setPermitFormField = (field: PermitDetailFormField, value: string): void => {
+    setPermitForm((current) => (current ? { ...current, [field]: value } : current))
+  }
+
+  const resetPermitForm = (): void => {
+    if (detail) {
+      setPermitForm(buildPermitDetailForm(detail))
+    }
+    setTouchedPermitFields({})
+    setShowPermitValidationErrors(false)
+  }
+
+  const onSavePermit = useCallback(async () => {
+    const request: PermitDetailMutationRequest | null = permitForm
+    if (!detail || !request || !canSavePermit) {
+      return
+    }
+
+    if (hasPermitValidationError) {
+      setShowPermitValidationErrors(true)
+      setActionErrorMessage(
+        Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+          'Please fix validation errors before saving the permit.',
+      )
+      return
+    }
+
+    const isLatestRequest = beginPermitMutationRequest()
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsSavingPermit(true)
+    try {
+      const result = await updatePermitDetail(request)
+      if (!isLatestRequest()) {
+        return
+      }
+      if (!result.success) {
+        setActionErrorMessage(result.errors[0] || result.message || 'Unable to save permit.')
+        return
+      }
+
+      const updatedDetail = withUpdatedPermitDetail(detail, request)
+      setDetail(updatedDetail)
+      setPermitForm(buildPermitDetailForm(updatedDetail))
+      setIsEditingPermit(false)
+      setTouchedPermitFields({})
+      setShowPermitValidationErrors(false)
+      setActionInfoMessage(result.message || 'Permit saved successfully.')
+    } catch (error) {
+      if (isLatestRequest()) {
+        console.error(error)
+        setActionErrorMessage('Unable to save permit.')
+      }
+    } finally {
+      if (isLatestRequest()) {
+        setIsSavingPermit(false)
+      }
+    }
+  }, [
+    beginPermitMutationRequest,
+    canSavePermit,
+    detail,
+    hasPermitValidationError,
+    permitFieldErrors,
+    permitForm,
+  ])
+
+  const onSaveShipping = useCallback(async () => {
+    const request: PermitDetailMutationRequest | null = permitForm
+    if (!detail || !request || !canSavePermit) {
+      return
+    }
+
+    if (hasPermitValidationError) {
+      setShowPermitValidationErrors(true)
+      setActionErrorMessage(
+        Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+          'Please fix validation errors before saving shipping.',
+      )
+      return
+    }
+
+    const isLatestRequest = beginPermitMutationRequest()
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsSavingShipping(true)
+    try {
+      const result = await updatePermitShipping(request)
+      if (!isLatestRequest()) {
+        return
+      }
+      if (!result.success) {
+        setActionErrorMessage(result.errors[0] || result.message || 'Unable to save shipping.')
+        return
+      }
+
+      const updatedDetail = withUpdatedPermitShipping(detail, request)
+      setDetail(updatedDetail)
+      setPermitForm(buildPermitDetailForm(updatedDetail))
+      setIsEditingShipping(false)
+      setTouchedPermitFields({})
+      setShowPermitValidationErrors(false)
+      setActionInfoMessage(result.message || 'Shipping saved successfully.')
+    } catch (error) {
+      if (isLatestRequest()) {
+        console.error(error)
+        setActionErrorMessage('Unable to save shipping.')
+      }
+    } finally {
+      if (isLatestRequest()) {
+        setIsSavingShipping(false)
+      }
+    }
+  }, [
+    beginPermitMutationRequest,
+    canSavePermit,
+    detail,
+    hasPermitValidationError,
+    permitFieldErrors,
+    permitForm,
+  ])
 
   const refreshPermitDocuments = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
@@ -641,6 +934,41 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
   ])
 
+  const renderPermitTextInput = (
+    field: PermitDetailFormField,
+    labelText: string,
+    isDisabled: boolean,
+  ) => (
+    <TextInput
+      id={`permit-${field}`}
+      labelText={labelText}
+      value={permitForm?.[field] ?? ''}
+      invalid={!!permitFieldError(field)}
+      invalidText={permitFieldError(field)}
+      onBlur={() => markPermitFieldTouched(field)}
+      onChange={(event) => setPermitFormField(field, event.target.value)}
+      disabled={isDisabled}
+    />
+  )
+
+  const renderPermitTextArea = (
+    field: PermitDetailFormField,
+    labelText: string,
+    isDisabled: boolean,
+  ) => (
+    <TextArea
+      id={`permit-${field}`}
+      labelText={labelText}
+      value={permitForm?.[field] ?? ''}
+      invalid={!!permitFieldError(field)}
+      invalidText={permitFieldError(field)}
+      onBlur={() => markPermitFieldTouched(field)}
+      onChange={(event) => setPermitFormField(field, event.target.value)}
+      disabled={isDisabled}
+      rows={3}
+    />
+  )
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
@@ -756,65 +1084,184 @@ const ProvincialPermitDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <DetailFieldTile
-                        title="Permit summary"
-                        fields={[
-                          { label: 'Permit number', value: displayValue(detail.permitNumber) },
-                          {
-                            label: 'Application number',
-                            value: displayValue(detail.applicationNumber),
-                          },
-                          { label: 'Package number', value: displayValue(detail.packageNumber) },
-                          {
-                            label: 'Exemption number',
-                            value: displayValue(detail.exemptionNumber),
-                          },
-                          {
-                            label: 'Status',
-                            value: displayValue(
-                              detail.permitStatusDescription ?? detail.permitStatusCode,
-                            ),
-                          },
-                          { label: 'Issue date', value: displayValue(detail.issueDate) },
-                          { label: 'Expiry date', value: displayValue(detail.expiryDate) },
-                          { label: 'Received date', value: displayValue(detail.receivedDate) },
-                          { label: 'Region', value: displayValue(detail.region) },
-                        ]}
-                      />
+                      {isEditingPermit && permitForm ? (
+                        <Tile>
+                          <h2 className="detail-tile-title">Permit summary</h2>
+                          <div className="legacy-search-grid">
+                            {renderPermitTextInput('permitNumber', 'Permit number', true)}
+                            <TextInput
+                              id="permit-applicationNumber"
+                              labelText="Application number"
+                              value={displayValue(detail.applicationNumber)}
+                              disabled
+                            />
+                            <TextInput
+                              id="permit-packageNumber"
+                              labelText="Package number"
+                              value={displayValue(detail.packageNumber)}
+                              disabled
+                            />
+                            {renderPermitTextInput('exemptionNumber', 'Exemption number', false)}
+                            {renderPermitTextInput('permitStatus', 'Permit status', false)}
+                            {renderPermitTextInput('permitIssueDate', 'Issue date', false)}
+                            {renderPermitTextInput('permitExpiryDate', 'Expiry date', false)}
+                            {renderPermitTextInput('permitRequestDate', 'Received date', false)}
+                            {renderPermitTextInput('region', 'Region', false)}
+                          </div>
+                        </Tile>
+                      ) : (
+                        <DetailFieldTile
+                          title="Permit summary"
+                          fields={[
+                            { label: 'Permit number', value: displayValue(detail.permitNumber) },
+                            {
+                              label: 'Application number',
+                              value: displayValue(detail.applicationNumber),
+                            },
+                            { label: 'Package number', value: displayValue(detail.packageNumber) },
+                            {
+                              label: 'Exemption number',
+                              value: displayValue(detail.exemptionNumber),
+                            },
+                            {
+                              label: 'Status',
+                              value: displayValue(
+                                detail.permitStatusDescription ?? detail.permitStatusCode,
+                              ),
+                            },
+                            { label: 'Issue date', value: displayValue(detail.issueDate) },
+                            { label: 'Expiry date', value: displayValue(detail.expiryDate) },
+                            { label: 'Received date', value: displayValue(detail.receivedDate) },
+                            { label: 'Region', value: displayValue(detail.region) },
+                          ]}
+                        />
+                      )}
                     </Column>
 
                     <Column sm={4} md={8} lg={16}>
-                      <DetailFieldTile
-                        title="Financial and volume"
-                        fields={[
-                          { label: 'Permit volume (m³)', value: displayValue(detail.permitVolume) },
-                          { label: 'Number of pieces', value: displayValue(detail.numberOfPieces) },
-                          { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
-                          { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
-                          {
-                            label: 'Federal permit number',
-                            value: displayValue(detail.federalPermitNumber),
-                          },
-                          {
-                            label: 'Agent client number',
-                            value: displayValue(detail.applicantClientNumber),
-                          },
-                          {
-                            label: 'Agent location',
-                            value: displayValue(detail.agentClientLocationCode),
-                          },
-                          {
-                            label: 'Owner client number',
-                            value: displayValue(detail.ownerClientNumber),
-                          },
-                          {
-                            label: 'Owner location',
-                            value: displayValue(detail.ownerClientLocationCode),
-                          },
-                          { label: 'Remarks', value: displayValue(detail.remarks) },
-                        ]}
-                      />
+                      {isEditingPermit && permitForm ? (
+                        <Tile>
+                          <h2 className="detail-tile-title">Financial and volume</h2>
+                          <div className="legacy-search-grid">
+                            {renderPermitTextInput(
+                              'permitTotalVolume',
+                              'Permit volume (m³)',
+                              false,
+                            )}
+                            {renderPermitTextInput(
+                              'permitNumberOfPieces',
+                              'Number of pieces',
+                              false,
+                            )}
+                            {renderPermitTextInput('permitReceiptNo', 'Receipt number', false)}
+                            <TextInput
+                              id="permit-invoiceNumber"
+                              labelText="Invoice number"
+                              value={displayValue(detail.invoiceNumber)}
+                              disabled
+                            />
+                            <TextInput
+                              id="permit-federalPermitNumber"
+                              labelText="Federal permit number"
+                              value={displayValue(detail.federalPermitNumber)}
+                              disabled
+                            />
+                            {renderPermitTextInput(
+                              'agentClientNumber',
+                              'Agent client number',
+                              false,
+                            )}
+                            {renderPermitTextInput('agentClientLocation', 'Agent location', false)}
+                            {renderPermitTextInput(
+                              'ownerClientNumber',
+                              'Owner client number',
+                              false,
+                            )}
+                            {renderPermitTextInput('ownerClientLocation', 'Owner location', false)}
+                          </div>
+                          <div className="legacy-search-grid">
+                            {renderPermitTextArea('permitRemarks', 'Remarks', false)}
+                          </div>
+                        </Tile>
+                      ) : (
+                        <DetailFieldTile
+                          title="Financial and volume"
+                          fields={[
+                            {
+                              label: 'Permit volume (m³)',
+                              value: displayValue(detail.permitVolume),
+                            },
+                            {
+                              label: 'Number of pieces',
+                              value: displayValue(detail.numberOfPieces),
+                            },
+                            { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
+                            { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
+                            {
+                              label: 'Federal permit number',
+                              value: displayValue(detail.federalPermitNumber),
+                            },
+                            {
+                              label: 'Agent client number',
+                              value: displayValue(detail.applicantClientNumber),
+                            },
+                            {
+                              label: 'Agent location',
+                              value: displayValue(detail.agentClientLocationCode),
+                            },
+                            {
+                              label: 'Owner client number',
+                              value: displayValue(detail.ownerClientNumber),
+                            },
+                            {
+                              label: 'Owner location',
+                              value: displayValue(detail.ownerClientLocationCode),
+                            },
+                            { label: 'Remarks', value: displayValue(detail.remarks) },
+                          ]}
+                        />
+                      )}
                     </Column>
+                    {canSavePermit && (
+                      <Column sm={4} md={8} lg={16}>
+                        <div className="legacy-search-actions">
+                          {isEditingPermit ? (
+                            <>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={isSavingPermit}
+                                onClick={() => void onSavePermit()}
+                              >
+                                {isSavingPermit ? 'Saving...' : 'Save permit'}
+                              </Button>
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={isSavingPermit}
+                                onClick={() => {
+                                  resetPermitForm()
+                                  setIsEditingPermit(false)
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              kind="secondary"
+                              size="sm"
+                              onClick={() => {
+                                resetPermitForm()
+                                setIsEditingPermit(true)
+                              }}
+                            >
+                              Edit permit
+                            </Button>
+                          )}
+                        </div>
+                      </Column>
+                    )}
                   </Grid>
                 </TabPanel>
                 <TabPanel className="application-detail-tab-panel">
@@ -846,34 +1293,108 @@ const ProvincialPermitDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <DetailFieldTile
-                        title="Shipping"
-                        fields={[
-                          {
-                            label: 'Destination company',
-                            value: displayValue(detail.destinationCompanyName),
-                          },
-                          {
-                            label: 'Destination country',
-                            value: displayValue(detail.destinationCountryCode),
-                          },
-                          {
-                            label: 'Transport type',
-                            value: displayValue(detail.transportTypeCode),
-                          },
-                          { label: 'Transport name', value: displayValue(detail.transportName) },
-                          { label: 'Port of export', value: displayValue(detail.portOfExportCode) },
-                          {
-                            label: 'Other port of export',
-                            value: displayValue(detail.otherPortOfExport),
-                          },
-                          {
-                            label: 'Estimated shipping date',
-                            value: displayValue(detail.estimatedShippingDate),
-                          },
-                        ]}
-                      />
+                      {isEditingShipping && permitForm ? (
+                        <Tile>
+                          <h2 className="detail-tile-title">Shipping</h2>
+                          <div className="legacy-search-grid">
+                            {renderPermitTextInput(
+                              'destinationCompanyName',
+                              'Destination company',
+                              false,
+                            )}
+                            {renderPermitTextInput(
+                              'destinationCountry',
+                              'Destination country',
+                              false,
+                            )}
+                            {renderPermitTextInput('transportType', 'Transport type', false)}
+                            {renderPermitTextInput('transportName', 'Transport name', false)}
+                            {renderPermitTextInput('portOfExport', 'Port of export', false)}
+                            {renderPermitTextInput(
+                              'otherPortOfExport',
+                              'Other port of export',
+                              false,
+                            )}
+                            {renderPermitTextInput(
+                              'estimatedShippingDate',
+                              'Estimated shipping date',
+                              false,
+                            )}
+                          </div>
+                        </Tile>
+                      ) : (
+                        <DetailFieldTile
+                          title="Shipping"
+                          fields={[
+                            {
+                              label: 'Destination company',
+                              value: displayValue(detail.destinationCompanyName),
+                            },
+                            {
+                              label: 'Destination country',
+                              value: displayValue(detail.destinationCountryCode),
+                            },
+                            {
+                              label: 'Transport type',
+                              value: displayValue(detail.transportTypeCode),
+                            },
+                            { label: 'Transport name', value: displayValue(detail.transportName) },
+                            {
+                              label: 'Port of export',
+                              value: displayValue(detail.portOfExportCode),
+                            },
+                            {
+                              label: 'Other port of export',
+                              value: displayValue(detail.otherPortOfExport),
+                            },
+                            {
+                              label: 'Estimated shipping date',
+                              value: displayValue(detail.estimatedShippingDate),
+                            },
+                          ]}
+                        />
+                      )}
                     </Column>
+                    {canSavePermit && (
+                      <Column sm={4} md={8} lg={16}>
+                        <div className="legacy-search-actions">
+                          {isEditingShipping ? (
+                            <>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={isSavingShipping}
+                                onClick={() => void onSaveShipping()}
+                              >
+                                {isSavingShipping ? 'Saving...' : 'Save shipping'}
+                              </Button>
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={isSavingShipping}
+                                onClick={() => {
+                                  resetPermitForm()
+                                  setIsEditingShipping(false)
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              kind="secondary"
+                              size="sm"
+                              onClick={() => {
+                                resetPermitForm()
+                                setIsEditingShipping(true)
+                              }}
+                            >
+                              Edit shipping
+                            </Button>
+                          )}
+                        </div>
+                      </Column>
+                    )}
                   </Grid>
                 </TabPanel>
                 <TabPanel className="application-detail-tab-panel">

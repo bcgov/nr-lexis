@@ -59,6 +59,31 @@ export type AddPermitInvoiceRequest = {
   invoiceFeeInLieu: string
 }
 
+export type PermitDetailMutationRequest = {
+  permitNumber: string
+  permitStatus: string
+  permitIssueDate: string
+  permitExpiryDate: string
+  permitRequestDate: string
+  exemptionNumber: string
+  permitReceiptNo: string
+  permitRemarks: string
+  permitTotalVolume: string
+  permitNumberOfPieces: string
+  region: string
+  ownerClientNumber: string
+  ownerClientLocation: string
+  agentClientNumber: string
+  agentClientLocation: string
+  destinationCompanyName: string
+  destinationCountry: string
+  transportType: string
+  transportName: string
+  estimatedShippingDate: string
+  portOfExport: string
+  otherPortOfExport: string
+}
+
 export type AddPermitInvoiceResult = {
   success: boolean
   message: string
@@ -66,6 +91,8 @@ export type AddPermitInvoiceResult = {
   warnings: string[]
   source: PermitDocumentAndInvoiceSource
 }
+
+export type PermitDetailMutationResult = AddPermitInvoiceResult
 
 export type RemovePermitDocumentResult = {
   success: boolean
@@ -275,6 +302,25 @@ const parseAddPermitInvoiceResponse = (
   }
 }
 
+const parsePermitDetailMutationResponse = (
+  payload: unknown,
+  source: PermitDocumentAndInvoiceSource,
+): PermitDetailMutationResult => {
+  const objectPayload = recordOrEmpty(payload)
+  const success = asBoolean(objectPayload.success ?? objectPayload.valid)
+  const message = asString(objectPayload.message)
+  const errors = asStringArray(objectPayload.errors)
+  const warnings = asStringArray(objectPayload.warnings)
+
+  return {
+    success,
+    message: message || (success ? 'Permit saved successfully.' : 'Unable to save permit.'),
+    errors,
+    warnings,
+    source,
+  }
+}
+
 export const addPermitInvoice = async (
   request: AddPermitInvoiceRequest,
 ): Promise<AddPermitInvoiceResult> => {
@@ -288,6 +334,53 @@ export const addPermitInvoice = async (
 
   const payload = await postFormData('/lexis/rpc/permit-details/add-invoice', normalizedPayload)
   return parseAddPermitInvoiceResponse(payload, 'api')
+}
+
+const normalizePermitDetailMutationPayload = (
+  request: PermitDetailMutationRequest,
+): Record<string, string> => ({
+  permitNumber: request.permitNumber.trim(),
+  permitStatus: request.permitStatus.trim(),
+  permitIssueDate: request.permitIssueDate.trim(),
+  permitExpiryDate: request.permitExpiryDate.trim(),
+  permitRequestDate: request.permitRequestDate.trim(),
+  exemptionNumber: request.exemptionNumber.trim(),
+  permitReceiptNo: request.permitReceiptNo.trim(),
+  permitRemarks: request.permitRemarks.trim(),
+  permitTotalVolume: request.permitTotalVolume.trim(),
+  permitNumberOfPieces: request.permitNumberOfPieces.trim(),
+  region: request.region.trim(),
+  ownerClientNumber: request.ownerClientNumber.trim(),
+  ownerClientLocation: request.ownerClientLocation.trim(),
+  agentClientNumber: request.agentClientNumber.trim(),
+  agentClientLocation: request.agentClientLocation.trim(),
+  destinationCompanyName: request.destinationCompanyName.trim(),
+  destinationCountry: request.destinationCountry.trim(),
+  transportType: request.transportType.trim(),
+  transportName: request.transportName.trim(),
+  estimatedShippingDate: request.estimatedShippingDate.trim(),
+  portOfExport: request.portOfExport.trim(),
+  otherPortOfExport: request.otherPortOfExport.trim(),
+})
+
+export const updatePermitDetail = async (
+  request: PermitDetailMutationRequest,
+): Promise<PermitDetailMutationResult> => {
+  const payload = await postFormData(
+    '/lexis/rpc/permit-details/update-permit',
+    normalizePermitDetailMutationPayload(request),
+  )
+  return parsePermitDetailMutationResponse(payload, 'api')
+}
+
+export const updatePermitShipping = async (
+  request: PermitDetailMutationRequest,
+): Promise<PermitDetailMutationResult> => {
+  const payload = await postFormData(
+    '/lexis/rpc/permit-details/update-shipping',
+    normalizePermitDetailMutationPayload(request),
+  )
+  return parsePermitDetailMutationResponse(payload, 'api')
 }
 
 const removeDocument = async (

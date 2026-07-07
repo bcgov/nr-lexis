@@ -19,6 +19,8 @@ import {
   removePermitApplicationDocument,
   removePermitDocument,
   removePermitInvoiceDocument,
+  updatePermitDetail,
+  updatePermitShipping,
 } from '@/service/provincial-permit-documents-invoices-service'
 import { fetchApplicationClientData } from '@/service/application-client-lookup-service'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
@@ -52,6 +54,8 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
   removePermitApplicationDocument: vi.fn(),
   removePermitDocument: vi.fn(),
   removePermitInvoiceDocument: vi.fn(),
+  updatePermitDetail: vi.fn(),
+  updatePermitShipping: vi.fn(),
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
@@ -74,6 +78,8 @@ const mockedOpenPermitDocument = vi.mocked(openPermitDocument)
 const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationDocument)
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
 const mockedRemovePermitInvoiceDocument = vi.mocked(removePermitInvoiceDocument)
+const mockedUpdatePermitDetail = vi.mocked(updatePermitDetail)
+const mockedUpdatePermitShipping = vi.mocked(updatePermitShipping)
 const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
@@ -196,6 +202,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedRemovePermitInvoiceDocument.mockResolvedValue({
       success: true,
+      source: 'api',
+    })
+    mockedUpdatePermitDetail.mockResolvedValue({
+      success: true,
+      message: 'The permit was updated successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+    })
+    mockedUpdatePermitShipping.mockResolvedValue({
+      success: true,
+      message: 'The permit was saved successfully.',
+      errors: [],
+      warnings: [],
       source: 'api',
     })
     mockedSubmitAdminUpload.mockResolvedValue({
@@ -331,6 +351,103 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getAllByText('Invoice number is required.').length).toBeGreaterThan(0)
     expect(screen.getByText('Invoice export value is required.')).toBeInTheDocument()
     expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
+  })
+
+  it('saves permit summary changes through the permit update endpoint', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Permit status'))
+    await userEvent.type(screen.getByLabelText('Permit status'), 'ACT')
+    await userEvent.clear(screen.getByLabelText('Receipt number'))
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2')
+    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'updated remarks')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitNumber: '777',
+          permitStatus: 'ACT',
+          permitReceiptNo: 'R-2',
+          permitRemarks: 'updated remarks',
+          ownerClientNumber: '00067890',
+          ownerClientLocation: '03',
+          agentClientNumber: '00012345',
+          agentClientLocation: '01',
+        }),
+      )
+    })
+    expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
+    expect(screen.getAllByText('ACT').length).toBeGreaterThan(0)
+  })
+
+  it('saves shipping changes through the shipping update endpoint', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+    await userEvent.clear(screen.getByLabelText('Destination company'))
+    await userEvent.type(screen.getByLabelText('Destination company'), 'Updated Destination')
+    await userEvent.clear(screen.getByLabelText('Estimated shipping date'))
+    await userEvent.type(screen.getByLabelText('Estimated shipping date'), '2026-05-25')
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitNumber: '777',
+          destinationCompanyName: 'Updated Destination',
+          estimatedShippingDate: '2026-05-25',
+        }),
+      )
+    })
+    expect(await screen.findByText('The permit was saved successfully.')).toBeInTheDocument()
+    expect(screen.getByText('Updated Destination')).toBeInTheDocument()
+  })
+
+  it('hides permit edit controls without savePermit access', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== 'savePermit',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    await selectPermitDetailTab('Shipping')
+    expect(await screen.findByRole('heading', { name: 'Shipping' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
   })
 
   it('blocks add invoice when invoice number exceeds the legacy length limit', async () => {
