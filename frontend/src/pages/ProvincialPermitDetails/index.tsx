@@ -292,52 +292,51 @@ const ProvincialPermitDetailsPage = () => {
 
   useEffect(() => {
     let isCancelled = false
-    setOwnerClientData(null)
-    setAgentClientData(null)
 
-    if (!detail) {
-      setIsClientDataLoading(false)
-      return () => {
-        isCancelled = true
+    const loadClientData = async () => {
+      setOwnerClientData(null)
+      setAgentClientData(null)
+
+      if (!detail) {
+        setIsClientDataLoading(false)
+        return
       }
-    }
 
-    const ownerClientNumber = detail.ownerClientNumber
-    const ownerClientLocationCode = detail.ownerClientLocationCode
-    const agentClientNumber = detail.applicantClientNumber
-    const agentClientLocationCode = detail.agentClientLocationCode
-    const hasClientLookup =
-      (!!ownerClientNumber && !!ownerClientLocationCode) ||
-      (!!agentClientNumber && !!agentClientLocationCode)
+      const ownerClientNumber = detail.ownerClientNumber
+      const ownerClientLocationCode = detail.ownerClientLocationCode
+      const agentClientNumber = detail.applicantClientNumber
+      const agentClientLocationCode = detail.agentClientLocationCode
+      const hasClientLookup =
+        (!!ownerClientNumber && !!ownerClientLocationCode) ||
+        (!!agentClientNumber && !!agentClientLocationCode)
 
-    if (!hasClientLookup) {
-      setIsClientDataLoading(false)
-      return () => {
-        isCancelled = true
+      if (!hasClientLookup) {
+        setIsClientDataLoading(false)
+        return
       }
-    }
 
-    setIsClientDataLoading(true)
-    Promise.all([
-      fetchPermitClientData(ownerClientNumber, ownerClientLocationCode),
-      fetchPermitClientData(agentClientNumber, agentClientLocationCode),
-    ])
-      .then(([ownerResult, agentResult]) => {
+      setIsClientDataLoading(true)
+      try {
+        const [ownerResult, agentResult] = await Promise.all([
+          fetchPermitClientData(ownerClientNumber, ownerClientLocationCode),
+          fetchPermitClientData(agentClientNumber, agentClientLocationCode),
+        ])
         if (!isCancelled) {
           setOwnerClientData(ownerResult)
           setAgentClientData(agentResult)
         }
-      })
-      .catch((error) => {
+      } catch (error) {
         if (!isCancelled) {
           console.warn('Unable to load permit owner or agent client data.', error)
         }
-      })
-      .finally(() => {
+      } finally {
         if (!isCancelled) {
           setIsClientDataLoading(false)
         }
-      })
+      }
+    }
+
+    void loadClientData()
 
     return () => {
       isCancelled = true
