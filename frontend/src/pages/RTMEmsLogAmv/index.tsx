@@ -843,6 +843,7 @@ const RTMEmsLogAmvPage = () => {
               <Button
                 kind="primary"
                 size="md"
+                className="admin-upload-fspts-action-button"
                 renderIcon={ArrowRight}
                 onClick={openReviewStep}
                 disabled={isReviewDisabled}
@@ -880,6 +881,7 @@ const RTMEmsLogAmvPage = () => {
                 <Button
                   kind="primary"
                   size="md"
+                  className="admin-upload-fspts-action-button"
                   renderIcon={ArrowRight}
                   onClick={() => {
                     void submitUpload()

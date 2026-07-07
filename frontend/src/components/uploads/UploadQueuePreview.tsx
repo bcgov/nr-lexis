@@ -206,6 +206,7 @@ function UploadQueuePreview({
         <Button
           kind="primary"
           size="md"
+          className="admin-upload-fspts-action-button"
           onClick={onSubmit}
           disabled={isSubmitting || !canSubmit}
           renderIcon={ArrowRight}
@@ -216,6 +217,7 @@ function UploadQueuePreview({
         <Button
           kind="primary"
           size="md"
+          className="admin-upload-fspts-action-button"
           onClick={enterReviewStep}
           disabled={isSubmitting || !canReviewUpload}
           renderIcon={ArrowRight}
@@ -279,7 +281,7 @@ function UploadQueuePreview({
               />
             </div>
           )}
-          {showReviewQueueTable && (
+          {(!isReviewStep || showReviewQueueTable) && (
             <div className="admin-upload-fspts-table-wrap">
               <table className="admin-upload-queue__table admin-upload-queue__table--generic">
                 <thead>

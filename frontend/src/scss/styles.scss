@@ -1494,19 +1494,31 @@ body {
   transform: none;
 }
 
-.admin-upload-fspts-button-row .cds--btn--primary {
+.admin-upload-fspts-button-row .cds--btn--primary,
+.admin-upload-fspts-button-row .admin-upload-fspts-action-button.cds--btn--primary {
   background: var(--fds-interactive, #0071bc);
-  border: 0;
+  background-color: var(--fds-interactive, #0071bc);
+  border: 1px solid var(--fds-interactive, #0071bc);
   color: var(--fds-layer-01, #fff);
+  box-shadow: none;
 }
 
-.admin-upload-fspts-button-row .cds--btn--primary:hover:not(:disabled) {
+.admin-upload-fspts-button-row .cds--btn--primary:hover:not(:disabled),
+.admin-upload-fspts-button-row
+  .admin-upload-fspts-action-button.cds--btn--primary:hover:not(:disabled) {
   background: #005db5;
+  background-color: #005db5;
+  border-color: #005db5;
 }
 
 .admin-upload-fspts-button-row .cds--btn--primary:disabled,
-.admin-upload-fspts-button-row .cds--btn--primary.cds--btn--disabled {
+.admin-upload-fspts-button-row .cds--btn--primary.cds--btn--disabled,
+.admin-upload-fspts-button-row .admin-upload-fspts-action-button.cds--btn--primary:disabled,
+.admin-upload-fspts-button-row
+  .admin-upload-fspts-action-button.cds--btn--primary.cds--btn--disabled {
   background: var(--fds-border-subtle, #c6c6c6);
+  background-color: var(--fds-border-subtle, #c6c6c6);
+  border-color: var(--fds-border-subtle, #c6c6c6);
   color: var(--fds-text-secondary, #6f6f6f);
   opacity: 0.5;
 }

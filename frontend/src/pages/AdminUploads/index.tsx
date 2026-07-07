@@ -473,6 +473,7 @@ function ApplicationSubmissionValidationPanel({
           <Button
             kind="primary"
             size="md"
+            className="admin-upload-fspts-action-button"
             onClick={onReview}
             disabled={isSubmitting || !canReview || items.length === 0 || validatingCount > 0}
             renderIcon={ArrowRight}
@@ -499,6 +500,7 @@ function UploadStepReviewButton({
       <Button
         kind="primary"
         size="md"
+        className="admin-upload-fspts-action-button"
         onClick={onReview}
         disabled={disabled}
         renderIcon={ArrowRight}
