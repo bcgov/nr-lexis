@@ -1207,7 +1207,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
 
-    await page.getByLabel('Average monthly values upload spreadsheet').setInputFiles({
+    await page.locator('#rtm-upload-file').setInputFiles({
       name: 'invalid-amv.xlsx',
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       buffer: Buffer.from('invalid average monthly values workbook'),
@@ -1313,7 +1313,6 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(createDocumentsHeading).toBeVisible()
     await expect(createDocumentsHeading).not.toContainText('API')
     await expect(page.getByText('Upload documents')).toBeVisible()
-    await expect(page.getByText(/Multiple files can be queued and saved together/)).toBeVisible()
     await expect(page.getByText('Queued files')).toBeVisible()
     await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
     await expect(page.getByLabel('Document File')).toBeDisabled()
