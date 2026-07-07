@@ -117,6 +117,17 @@ const DetailDocumentUploadPanel = ({
     () => uploadQueue.filter((item) => item.status === 'validated').length,
     [uploadQueue],
   )
+  const reviewUploadItems = useMemo(
+    () =>
+      uploadQueue.filter(
+        (item) =>
+          item.status === 'validated' ||
+          item.status === 'uploading' ||
+          item.status === 'complete' ||
+          item.submitted,
+      ),
+    [uploadQueue],
+  )
   const invoiceValidationErrors = useMemo(() => {
     if (workflowType !== 'invoice') {
       return []
@@ -154,13 +165,13 @@ const DetailDocumentUploadPanel = ({
     'Invoice fee in lieu',
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
-  const canSubmit =
+  const canReviewUpload =
     !disabled &&
     !!targetNumber.trim() &&
     validatedUploadCount > 0 &&
-    invalidUploadCount === 0 &&
     pendingValidationCount === 0 &&
     invoiceValidationErrors.length === 0
+  const canSubmit = canReviewUpload
 
   function setQueueItemStatus(
     id: string,
@@ -168,6 +179,7 @@ const DetailDocumentUploadPanel = ({
     message = '',
     targetSummary?: string,
     details?: UploadQueueReviewDetails,
+    submitted?: boolean,
   ): void {
     setUploadQueue((current) =>
       current.map((item) =>
@@ -178,6 +190,7 @@ const DetailDocumentUploadPanel = ({
               message,
               details: details ?? item.details,
               targetSummary: targetSummary ?? item.targetSummary,
+              submitted: submitted ?? item.submitted,
             }
           : item,
       ),
@@ -412,15 +425,12 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
-    if (invalidUploadCount > 0) {
-      setErrorMessage(
-        `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`,
-      )
-      return
-    }
-
     if (validatedUploadCount === 0) {
-      setErrorMessage('Choose at least one file to upload.')
+      setErrorMessage(
+        invalidUploadCount > 0
+          ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
+          : 'Choose at least one file to upload.',
+      )
       return
     }
 
@@ -435,7 +445,7 @@ const DetailDocumentUploadPanel = ({
         continue
       }
 
-      setQueueItemStatus(item.id, 'uploading', '', lockedTargetSummary)
+      setQueueItemStatus(item.id, 'uploading', '', lockedTargetSummary, undefined, true)
 
       try {
         const result = await submitQueuedFile(item.file)
@@ -466,7 +476,7 @@ const DetailDocumentUploadPanel = ({
           ? lastSuccessMessage
           : `${successCount} files uploaded. Verify updates in the document list.`,
       )
-      if (failureCount === 0) {
+      if (failureCount === 0 && invalidUploadCount === 0) {
         resetUploadAfterSuccess()
       }
     }
@@ -580,7 +590,7 @@ const DetailDocumentUploadPanel = ({
             inputLabel="Document File"
             invalidText={
               invalidUploadCount > 0
-                ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
+                ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from review.`
                 : undefined
             }
             disabled={disabled}
@@ -597,9 +607,11 @@ const DetailDocumentUploadPanel = ({
           items={uploadQueue}
           targetSummary={currentTargetSummary}
           canSubmit={canSubmit}
+          canReview={canReviewUpload}
           isSubmitting={isSubmitting}
           idPrefix={`${inputId}Queue`}
           actionsPlacement="footer"
+          reviewItems={reviewUploadItems}
           onSubmit={() => void onSubmitUpload()}
           submitLabel="Submit upload"
           submittingLabel="Submitting upload..."

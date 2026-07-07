@@ -1495,9 +1495,9 @@ body {
 }
 
 .admin-upload-fspts-button-row .cds--btn--primary {
-  background: var(--fds-interactive);
+  background: var(--fds-interactive, #0071bc);
   border: 0;
-  color: var(--fds-layer-01);
+  color: var(--fds-layer-01, #fff);
 }
 
 .admin-upload-fspts-button-row .cds--btn--primary:hover:not(:disabled) {
@@ -1506,8 +1506,8 @@ body {
 
 .admin-upload-fspts-button-row .cds--btn--primary:disabled,
 .admin-upload-fspts-button-row .cds--btn--primary.cds--btn--disabled {
-  background: var(--fds-border-subtle);
-  color: var(--fds-text-secondary);
+  background: var(--fds-border-subtle, #c6c6c6);
+  color: var(--fds-text-secondary, #6f6f6f);
   opacity: 0.5;
 }
 

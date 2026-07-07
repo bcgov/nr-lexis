@@ -43,6 +43,8 @@ export type UploadQueuePreviewProps = {
   showQueueManagementActions?: boolean
   showReviewQueueTable?: boolean
   showReviewAccordionHeader?: boolean
+  canReview?: boolean
+  reviewItems?: UploadQueueItem[]
 }
 
 const formatFileType = (file: File): string => {
@@ -90,6 +92,8 @@ function UploadQueuePreview({
   showQueueManagementActions = false,
   showReviewQueueTable = true,
   showReviewAccordionHeader = true,
+  canReview,
+  reviewItems,
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
@@ -106,13 +110,15 @@ function UploadQueuePreview({
       : !showWorkflowProgress || (items.length > 0 && reviewQueueIdentity === queueIdentity)
   const effectiveQueueFilter = isReviewStep ? queueFilter : ''
 
+  const effectiveItems = isReviewStep && reviewItems ? reviewItems : items
+
   const filteredItems = useMemo(() => {
     const query = effectiveQueueFilter.trim().toLowerCase()
     if (!query) {
-      return items
+      return effectiveItems
     }
 
-    return items.filter((item) =>
+    return effectiveItems.filter((item) =>
       [
         item.workflowLabel,
         item.file.name,
@@ -131,7 +137,7 @@ function UploadQueuePreview({
         .toLowerCase()
         .includes(query),
     )
-  }, [effectiveQueueFilter, items, targetSummary])
+  }, [effectiveItems, effectiveQueueFilter, targetSummary])
 
   const clearQueue = (): void => {
     setQueueFilter('')
@@ -163,14 +169,32 @@ function UploadQueuePreview({
   const selectedItemLabel = `${items.length} selected ${
     items.length === 1 ? itemNoun : itemNounPlural
   }`
-  const canReviewUpload = canSubmit && items.length > 0 && blockedCount === 0
+  const reviewSelectedItemLabel = `${effectiveItems.length} selected ${
+    effectiveItems.length === 1 ? itemNoun : itemNounPlural
+  }`
+  const canReviewUpload = canReview ?? (canSubmit && items.length > 0 && blockedCount === 0)
+  const reviewableItemCount =
+    reviewItems?.length ??
+    items.filter(
+      (item) =>
+        item.status === 'validated' ||
+        item.status === 'uploading' ||
+        item.status === 'complete' ||
+        item.submitted,
+    ).length
   const displayedItems = isReviewStep ? filteredItems : items
   const uploadStepDescription =
-    blockedCount > 0
-      ? `${selectedItemLabel} ${items.length === 1 ? 'needs' : 'need'} attention before review.`
-      : pendingValidationCount > 0
-        ? `${selectedItemLabel} validating. Continue after validation completes.`
-        : `${selectedItemLabel} validated. Continue to review before submitting.`
+    blockedCount > 0 && canReviewUpload
+      ? `${blockedCount} selected ${blockedCount === 1 ? itemNoun : itemNounPlural} ${
+          blockedCount === 1 ? 'needs' : 'need'
+        } attention. Review ${reviewableItemCount} validated ${
+          reviewableItemCount === 1 ? itemNoun : itemNounPlural
+        } before submitting.`
+      : blockedCount > 0
+        ? `${selectedItemLabel} ${items.length === 1 ? 'needs' : 'need'} attention before review.`
+        : pendingValidationCount > 0
+          ? `${selectedItemLabel} validating. Continue after validation completes.`
+          : `${selectedItemLabel} validated. Continue to review before submitting.`
   const actionControls = (
     <>
       {showQueueManagementActions && items.length > 0 && (
@@ -225,7 +249,7 @@ function UploadQueuePreview({
             {items.length === 0
               ? emptyDescription
               : isReviewStep
-                ? `Review ${selectedItemLabel} before submitting.`
+                ? `Review ${reviewSelectedItemLabel} before submitting.`
                 : uploadStepDescription}
           </p>
         </div>
@@ -322,8 +346,8 @@ function UploadQueuePreview({
               {showReviewQueueTable && (
                 <div className="admin-upload-preview-footer">
                   <span>
-                    Showing {filteredItems.length} of {items.length}{' '}
-                    {items.length === 1 ? itemNoun : itemNounPlural}
+                    Showing {filteredItems.length} of {effectiveItems.length}{' '}
+                    {effectiveItems.length === 1 ? itemNoun : itemNounPlural}
                   </span>
                 </div>
               )}
