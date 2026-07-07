@@ -41,6 +41,7 @@ export type UploadQueuePreviewProps = {
   onReview?: () => void
   onBack?: () => void
   backLabel?: string
+  showQueueManagementActions?: boolean
 }
 
 const formatFileType = (file: File): string => {
@@ -71,8 +72,8 @@ function UploadQueuePreview({
   emptyStateTitle = 'No data uploaded yet',
   emptyStateDescription = 'Upload files to see them here.',
   itemNoun = 'file',
-  submitLabel = 'Save upload',
-  submittingLabel = 'Saving upload...',
+  submitLabel = 'Submit upload',
+  submittingLabel = 'Submitting upload...',
   removeLabel = 'Remove',
   pendingMessage = 'Not submitted yet.',
   canRemoveItem = () => true,
@@ -85,6 +86,7 @@ function UploadQueuePreview({
   onReview,
   onBack,
   backLabel = 'Back',
+  showQueueManagementActions = false,
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
@@ -162,9 +164,7 @@ function UploadQueuePreview({
   const uploadStepDescription =
     invalidCount > 0
       ? `${selectedItemLabel} ${items.length === 1 ? 'needs' : 'need'} attention before review.`
-      : `${selectedItemLabel} validated. Continue to review before ${
-          isSubmissionQueue ? 'finalizing' : 'saving'
-        }.`
+      : `${selectedItemLabel} ready. Continue to review before submitting.`
   const queueSummary =
     items.length > 0 ? (
       <div className="admin-upload-queue-summary" aria-label="Upload preview summary">
@@ -177,15 +177,15 @@ function UploadQueuePreview({
     ) : null
   const actionControls = (
     <>
-      {items.length > 0 && (
-        <Button kind="ghost" size="sm" onClick={clearQueue} disabled={isSubmitting}>
+      {showQueueManagementActions && items.length > 0 && (
+        <Button kind="ghost" size="md" onClick={clearQueue} disabled={isSubmitting}>
           Clear
         </Button>
       )}
       {isReviewStep ? (
         <Button
           kind="primary"
-          size="sm"
+          size="md"
           onClick={onSubmit}
           disabled={isSubmitting || !canSubmit}
           renderIcon={ArrowRight}
@@ -195,7 +195,7 @@ function UploadQueuePreview({
       ) : (
         <Button
           kind="primary"
-          size="sm"
+          size="md"
           onClick={enterReviewStep}
           disabled={isSubmitting || !canReviewUpload}
           renderIcon={ArrowRight}
@@ -203,9 +203,11 @@ function UploadQueuePreview({
           {reviewLabel}
         </Button>
       )}
-      <Button kind="ghost" size="sm" onClick={resetUpload} disabled={isSubmitting}>
-        Reset
-      </Button>
+      {showQueueManagementActions && (
+        <Button kind="ghost" size="md" onClick={resetUpload} disabled={isSubmitting}>
+          Reset
+        </Button>
+      )}
     </>
   )
 
@@ -227,9 +229,7 @@ function UploadQueuePreview({
             {items.length === 0
               ? emptyDescription
               : isReviewStep
-                ? `Review ${selectedItemLabel} before ${
-                    isSubmissionQueue ? 'finalizing' : 'saving'
-                  }.`
+                ? `Review ${selectedItemLabel} before submitting.`
                 : uploadStepDescription}
           </p>
         </div>
@@ -342,7 +342,7 @@ function UploadQueuePreview({
         <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
           <div>
             {isReviewStep && onBack && (
-              <Button kind="secondary" size="sm" onClick={onBack} disabled={isSubmitting}>
+              <Button kind="secondary" size="md" onClick={onBack} disabled={isSubmitting}>
                 {backLabel}
               </Button>
             )}

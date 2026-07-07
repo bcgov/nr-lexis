@@ -18,6 +18,51 @@ import { E2E_BASE_URL } from './utils'
 const sideNavSection = (name: string) =>
   `.csp-side-nav__section:has(.csp-side-nav__category-text:text-is("${name}"))`
 
+const expectFsptsUploadLayout = async (page: Page): Promise<void> => {
+  const metrics = await page.evaluate(() => {
+    const rect = (selector: string) => {
+      const element = document.querySelector(selector)
+      if (!element) {
+        return null
+      }
+      const bounds = element.getBoundingClientRect()
+      return {
+        left: bounds.left,
+        right: bounds.right,
+        height: bounds.height,
+      }
+    }
+
+    return {
+      root: rect('.admin-upload-fspts-page'),
+      header: rect('.admin-upload-fspts-header'),
+      progress: rect('.admin-upload-fspts-header .admin-upload-progress'),
+      content: rect('.admin-upload-fspts-content'),
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }
+  })
+
+  expect(metrics.root).not.toBeNull()
+  expect(metrics.header).not.toBeNull()
+  expect(metrics.progress).not.toBeNull()
+  expect(metrics.content).not.toBeNull()
+
+  const root = metrics.root!
+  const header = metrics.header!
+  const progress = metrics.progress!
+  const content = metrics.content!
+
+  expect(Math.abs(header.left - root.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(header.right - root.right)).toBeLessThanOrEqual(1)
+  expect(Math.abs(progress.left - root.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(progress.right - root.right)).toBeLessThanOrEqual(1)
+  expect(Math.abs(content.left - root.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(content.right - root.right)).toBeLessThanOrEqual(1)
+  expect(header.height).toBeLessThanOrEqual(220)
+  expect(metrics.scrollWidth).toBe(metrics.clientWidth)
+}
+
 const asStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((item) => String(item)) : []
 
@@ -1032,12 +1077,13 @@ test.describe('TEST IDIR admin regression', () => {
       '/provincial/application/upload',
       /upload application submission/i,
     )
+    await expectFsptsUploadLayout(page)
     const applicationSubmissionProgress = page.getByRole('list', {
       name: 'Application submission upload workflow progress',
     })
     await expect(applicationSubmissionProgress.getByText('1. Upload')).toBeVisible()
     await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Validation status' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Validation status' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
 
@@ -1174,6 +1220,7 @@ test.describe('TEST IDIR admin regression', () => {
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
+    await expectFsptsUploadLayout(page)
     await expect(
       page.getByText(
         'Generate an upload preview from XLSX files and apply validated average monthly value changes.',
@@ -1205,9 +1252,9 @@ test.describe('TEST IDIR admin regression', () => {
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Submit changes' })).toHaveCount(0)
 
-    await page.getByLabel('Average monthly values upload spreadsheet').setInputFiles({
+    await page.locator('#rtm-upload-file').setInputFiles({
       name: 'invalid-amv.xlsx',
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       buffer: Buffer.from('invalid average monthly values workbook'),
@@ -1313,13 +1360,12 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(createDocumentsHeading).toBeVisible()
     await expect(createDocumentsHeading).not.toContainText('API')
     await expect(page.getByText('Upload documents')).toBeVisible()
-    await expect(page.getByText(/Multiple files can be queued and saved together/)).toBeVisible()
     await expect(page.getByText('Queued files')).toBeVisible()
     await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
     await expect(page.getByLabel('Document File')).toBeDisabled()
     await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Submit upload' })).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: 'Choose files for Upload documents' }),
     ).toHaveAttribute('aria-disabled', 'true')
@@ -1937,7 +1983,7 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
       await expect(page.getByLabel('Document File')).toBeEnabled()
       await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-      await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Submit upload' })).toHaveCount(0)
       await expect(
         page.getByRole('button', { name: 'Choose files for Upload documents' }),
       ).toHaveAttribute('aria-disabled', 'false')

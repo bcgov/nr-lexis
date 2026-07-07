@@ -72,7 +72,7 @@ const reviewEmptyResultMessage = (
   summary: string,
 ): string => {
   if (itemNoun === 'submission' && item.status === 'complete') {
-    return 'Application submission finalized successfully.'
+    return 'Application submission submitted successfully.'
   }
 
   return hasMetadata ? 'No validation issues returned.' : summary

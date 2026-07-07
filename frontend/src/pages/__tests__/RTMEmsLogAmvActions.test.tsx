@@ -172,10 +172,10 @@ describe('RTM EMS Log AMV actions', () => {
       screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit changes' })).not.toBeInTheDocument()
   })
 
-  it('validates the selected file automatically before review and save', async () => {
+  it('validates the selected file automatically before review and submit', async () => {
     const user = userEvent.setup()
     const file = new File(['excel bytes'], 'rtm-ems-log-amv-template.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -213,10 +213,11 @@ describe('RTM EMS Log AMV actions', () => {
     expect(within(reviewTable).getAllByText('10.25')).toHaveLength(1)
     expect(within(reviewTable).getAllByText('30.75')).toHaveLength(1)
 
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await user.click(screen.getByRole('button', { name: 'Submit changes' }))
 
     await waitFor(() => expect(mockedUpload).toHaveBeenCalledWith({ file }))
-    await waitFor(() => expect(screen.getAllByText('Upload applied.')).toHaveLength(2))
+    await waitFor(() => expect(screen.getByText('Upload applied.')).toBeVisible())
+    expect(screen.getByRole('heading', { name: 'Upload' })).toBeVisible()
   })
 
   it('keeps users on upload when validation fails', async () => {
