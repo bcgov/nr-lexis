@@ -361,7 +361,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(invoiceControls.getByLabelText('Upload invoice export value'), '1000')
     await userEvent.upload(invoiceControls.getByLabelText('Document File'), file)
     await userEvent.click(invoiceControls.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(invoiceControls.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(invoiceControls.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(

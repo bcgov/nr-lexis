@@ -647,7 +647,7 @@ const RTMEmsLogAmvPage = () => {
     }
 
     if (!selectedUploadFile) {
-      setUploadError('Upload an XLSX file before saving changes.')
+      setUploadError('Upload an XLSX file before submitting changes.')
       return
     }
 
@@ -656,7 +656,7 @@ const RTMEmsLogAmvPage = () => {
       pendingUploadValidation.fileName !== selectedUploadFile.name ||
       pendingUploadValidation.fileSize !== selectedUploadFile.size
     ) {
-      setUploadError('Validate this file before saving changes.')
+      setUploadError('Validate this file before submitting changes.')
       return
     }
 
@@ -678,6 +678,9 @@ const RTMEmsLogAmvPage = () => {
             : 'error',
       )
       setNotification(createResultMessage(response.status, response.message, response.errors))
+      if (response.status === 'accepted') {
+        clearUploadState()
+      }
     } catch (error) {
       console.error(error)
       const message = 'Unable to apply average monthly value upload.'
@@ -889,7 +892,7 @@ const RTMEmsLogAmvPage = () => {
                   }}
                   disabled={isUploadDisabled}
                 >
-                  Save changes
+                  Submit changes
                 </Button>
               </div>
             </div>

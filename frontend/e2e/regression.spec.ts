@@ -1205,7 +1205,7 @@ test.describe('TEST IDIR admin regression', () => {
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Submit changes' })).toHaveCount(0)
 
     await page.locator('#rtm-upload-file').setInputFiles({
       name: 'invalid-amv.xlsx',
@@ -1318,7 +1318,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByLabel('Document File')).toBeDisabled()
     await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Submit upload' })).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: 'Choose files for Upload documents' }),
     ).toHaveAttribute('aria-disabled', 'true')
@@ -1936,7 +1936,7 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
       await expect(page.getByLabel('Document File')).toBeEnabled()
       await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-      await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Submit upload' })).toHaveCount(0)
       await expect(
         page.getByRole('button', { name: 'Choose files for Upload documents' }),
       ).toHaveAttribute('aria-disabled', 'false')

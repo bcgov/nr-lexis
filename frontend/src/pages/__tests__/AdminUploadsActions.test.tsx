@@ -121,7 +121,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText(/PDF \| 13 B \| Added/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -222,7 +222,7 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['application upload'], 'application.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -270,7 +270,7 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['exemption upload'], 'exemption.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -320,7 +320,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.type(screen.getByLabelText('Invoice number'), 'INV123')
     await userEvent.type(screen.getByLabelText('Export value (CAD)'), '1000')
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -343,7 +343,7 @@ describe('Admin upload workflow smoke', () => {
       screen.getByText('Attach an invoice file and invoice values to an existing permit.'),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Save upload' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
   })
 
   it('shows a data preview empty state before files are selected', () => {
@@ -439,7 +439,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -454,7 +454,7 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
   })
 
-  it('shows target field validation before saving permit upload review', async () => {
+  it('shows target field validation before submitting permit upload review', async () => {
     mockUploadAccess('/filePermitUpload')
 
     renderPage('/admin/uploads?type=permit')
@@ -462,7 +462,7 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     expect(screen.getAllByText('Permit number is required.').length).toBeGreaterThan(0)
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
@@ -483,7 +483,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.type(screen.getByLabelText('Fee in lieu'), '0')
 
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     expect(screen.getByText('Invoice number must be 9 characters or fewer.')).toBeInTheDocument()
     expect(screen.getAllByText('Use a positive numeric value.').length).toBeGreaterThanOrEqual(3)
@@ -552,7 +552,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText('Creates a new application').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Cancel submission' })).toBeInTheDocument()
     expect(
-      screen.queryByText('Review 1 selected submission before finalizing.'),
+      screen.queryByText('Review 1 selected submission before submitting.'),
     ).not.toBeInTheDocument()
 
     await waitFor(() => {
@@ -619,7 +619,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Finalize submission' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit submission' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -635,12 +635,9 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
-    expect(screen.getByText('Application submission finalized successfully.')).toBeInTheDocument()
+    expect(screen.getByText('No application submissions selected')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancel submission' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open Application 9001' })).toHaveAttribute(
-      'href',
-      '/provincial/application/9001',
-    )
+    expect(screen.queryByRole('link', { name: 'Open Application 9001' })).not.toBeInTheDocument()
   })
 
   it('replaces application submissions with the same file name while validation is pending', async () => {
@@ -713,7 +710,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByLabelText('Application submission file')).not.toBeDisabled()
     expect(
       screen.queryByText(
-        'Current application submissions are locked for review. Finalize, cancel, or reset before choosing more files.',
+        'Current application submissions are submitting or complete. Wait for the upload to finish before choosing more files.',
       ),
     ).not.toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
@@ -888,13 +885,13 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
     expect(
       screen.getByText(
-        '2 application submissions validated. Review the submission summary and finalize submissions.',
+        '2 application submissions validated. Review the submission summary and submit submissions.',
       ),
     ).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Review submissions' }))
     expect(screen.getByRole('heading', { name: 'Submission summary' })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Finalize submissions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit submissions' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
@@ -915,12 +912,7 @@ describe('Admin upload workflow smoke', () => {
         '2 application submissions created. Verify the created application and package details.',
       ),
     ).toBeInTheDocument()
-    expect(
-      screen.getAllByText('First XML application submission created application 9001.').length,
-    ).toBeGreaterThan(0)
-    expect(
-      screen.getAllByText('Second XML application submission created application 9002.').length,
-    ).toBeGreaterThan(0)
+    expect(screen.getByText('No application submissions selected')).toBeInTheDocument()
   })
 
   it('shows per-file review details for mixed XML upload results', async () => {
@@ -965,7 +957,7 @@ describe('Admin upload workflow smoke', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Review submissions' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Finalize submissions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit submissions' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
@@ -988,7 +980,7 @@ describe('Admin upload workflow smoke', () => {
     ).toBeGreaterThan(0)
   })
 
-  it('shows duplicate package conflict when finalized after another validated submission wins', async () => {
+  it('shows duplicate package conflict when submitted after another validated submission wins', async () => {
     mockUploadAccess('uploadApplicationSubmission')
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
       message:
@@ -1021,7 +1013,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Submission validated')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Review submission' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Finalize submission' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit submission' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -1129,7 +1121,7 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByText('1 selected file needs attention before review.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Save upload' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 

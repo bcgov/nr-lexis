@@ -37,7 +37,7 @@ describe('DetailDocumentUploadPanel', () => {
       within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Save upload' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
   })
 
   it('shows a visible refresh error after a successful upload when refresh fails', async () => {
@@ -61,7 +61,7 @@ describe('DetailDocumentUploadPanel', () => {
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -82,7 +82,7 @@ describe('DetailDocumentUploadPanel', () => {
     ).toBeInTheDocument()
   })
 
-  it('replaces selected documents with the same file name before saving', async () => {
+  it('replaces selected documents with the same file name before submitting', async () => {
     const firstFile = new File(['first document upload'], 'application-document.pdf', {
       type: 'application/pdf',
     })
@@ -105,7 +105,7 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save upload' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
 
     await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
 
@@ -114,12 +114,12 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
-    expect(screen.queryByRole('button', { name: 'Save upload' })).not.toBeInTheDocument()
-    expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -157,7 +157,7 @@ describe('DetailDocumentUploadPanel', () => {
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     expect(await screen.findByText('Upload error')).toBeInTheDocument()
     expect(screen.getByText('1 file failed. Review the queue for details.')).toBeInTheDocument()

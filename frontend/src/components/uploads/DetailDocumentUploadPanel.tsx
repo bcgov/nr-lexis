@@ -4,7 +4,7 @@ import { AppNotification } from '../AppNotification'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
-  DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
+  DOCUMENT_UPLOAD_READY_MESSAGE,
   extractUploadErrorDetails,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   uploadQueueFileKey,
@@ -167,11 +167,11 @@ const DetailDocumentUploadPanel = ({
         file,
         workflowLabel: copy.workflowLabel,
         queuedAt,
-        status: validationMessage ? ('invalid' as const) : ('validated' as const),
-        message: validationMessage || DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
+        status: validationMessage ? ('invalid' as const) : ('queued' as const),
+        message: validationMessage || DOCUMENT_UPLOAD_READY_MESSAGE,
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
-          : { summary: DOCUMENT_UPLOAD_VALIDATED_MESSAGE },
+          : { summary: DOCUMENT_UPLOAD_READY_MESSAGE },
       })
     })
     const nextItems = Array.from(nextItemsByFileName.values())
@@ -204,6 +204,16 @@ const DetailDocumentUploadPanel = ({
     setInvoiceFeeInLieu('1.00')
     setErrorMessage('')
     setSuccessMessage('')
+    setShowInvoiceValidationErrors(false)
+  }
+
+  const resetUploadAfterSuccess = (): void => {
+    clearQueuedFiles()
+    setFileDescription('')
+    setSalesInvoiceNumber('')
+    setInvoiceExportValue('')
+    setInvoiceConversionRateOverride(null)
+    setInvoiceFeeInLieu('1.00')
     setShowInvoiceValidationErrors(false)
   }
 
@@ -353,6 +363,9 @@ const DetailDocumentUploadPanel = ({
           ? lastSuccessMessage
           : `${successCount} files uploaded. Verify updates in the document list.`,
       )
+      if (failureCount === 0) {
+        resetUploadAfterSuccess()
+      }
     }
 
     if (failureCount > 0) {
@@ -484,6 +497,8 @@ const DetailDocumentUploadPanel = ({
         idPrefix={`${inputId}Queue`}
         actionsPlacement="footer"
         onSubmit={() => void onSubmitUpload()}
+        submitLabel="Submit upload"
+        submittingLabel="Submitting upload..."
         onReset={resetUpload}
         onClear={clearQueuedFiles}
         onRemove={removeQueuedFile}

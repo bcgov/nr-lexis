@@ -1327,8 +1327,9 @@ body {
 }
 
 .admin-upload-fspts-page {
-  margin-left: -2rem;
-  max-width: calc(100% + 2rem);
+  margin-inline: -2rem;
+  inline-size: calc(100% + 4rem);
+  max-inline-size: none;
   padding: 0;
   background: var(--cds-background);
   min-block-size: calc(100vh - 3rem);
@@ -2240,8 +2241,9 @@ body {
   }
 
   .admin-upload-fspts-page {
-    margin-left: 0;
-    max-width: 100%;
+    margin-inline: -1rem;
+    inline-size: calc(100% + 2rem);
+    max-inline-size: none;
   }
 
   .admin-upload-fspts-header,

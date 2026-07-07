@@ -13,7 +13,7 @@ import { buildLexisXmlPreviewMessage } from '@/components/uploads/lexisXmlPrevie
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
-  DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
+  DOCUMENT_UPLOAD_READY_MESSAGE,
   extractUploadErrorDetails,
   formatUploadFileSize,
   formatUploadQueuedAt,
@@ -387,8 +387,6 @@ type ApplicationSubmissionValidationPanelProps = {
   canReview: boolean
   isSubmitting: boolean
   onReview: () => void
-  onClear: () => void
-  onReset: () => void
   onRemove: (id: string) => void
 }
 
@@ -397,8 +395,6 @@ function ApplicationSubmissionValidationPanel({
   canReview,
   isSubmitting,
   onReview,
-  onClear,
-  onReset,
   onRemove,
 }: ApplicationSubmissionValidationPanelProps) {
   const readyCount = items.filter((item) => item.status === 'queued').length
@@ -490,11 +486,6 @@ function ApplicationSubmissionValidationPanel({
       <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
         <div />
         <div className="admin-upload-preview-footer-actions__right">
-          {items.length > 0 && (
-            <Button kind="ghost" size="sm" onClick={onClear} disabled={isSubmitting}>
-              Clear
-            </Button>
-          )}
           <Button
             kind="primary"
             size="sm"
@@ -503,9 +494,6 @@ function ApplicationSubmissionValidationPanel({
             renderIcon={ArrowRight}
           >
             {reviewLabel}
-          </Button>
-          <Button kind="ghost" size="sm" onClick={onReset} disabled={isSubmitting}>
-            Reset
           </Button>
         </div>
       </div>
@@ -601,14 +589,14 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         ? `Validating ${applicationSubmissionActionNoun}...`
         : hasQueuedLexisSubmissions || !hasValidatedLexisSubmissions
           ? `Validate ${applicationSubmissionActionNoun}`
-          : `Finalize ${applicationSubmissionActionNoun}`
-      : 'Save upload'
+          : `Submit ${applicationSubmissionActionNoun}`
+      : 'Submit upload'
   const submittingButtonLabel =
     selectedWorkflowType === 'applicationSubmission' && hasQueuedLexisSubmissions
       ? `Validating ${applicationSubmissionActionNoun}...`
       : selectedWorkflowType === 'applicationSubmission'
-        ? `Finalizing ${applicationSubmissionActionNoun}...`
-        : 'Saving upload...'
+        ? `Submitting ${applicationSubmissionActionNoun}...`
+        : 'Submitting upload...'
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
@@ -707,7 +695,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     Array.from(files).forEach((file, index) => {
       const validationMessage = validateQueuedFile(file, selectedWorkflowType)
       const isApplicationSubmission = selectedWorkflowType === 'applicationSubmission'
-      const validDocumentMessage = isApplicationSubmission ? '' : DOCUMENT_UPLOAD_VALIDATED_MESSAGE
+      const validDocumentMessage = isApplicationSubmission ? '' : DOCUMENT_UPLOAD_READY_MESSAGE
 
       nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
@@ -718,7 +706,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           ? ('invalid' as const)
           : isApplicationSubmission
             ? ('queued' as const)
-            : ('validated' as const),
+            : ('queued' as const),
         message: validationMessage || validDocumentMessage,
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
@@ -789,6 +777,14 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     setApplicationSubmissionStep('upload')
     setDocumentUploadStep('upload')
     clearUploadFeedback()
+  }
+
+  const resetUploadQueueAfterSuccess = (): void => {
+    setUploadQueue([])
+    setFileInputKey((current) => current + 1)
+    setShowValidationErrors(false)
+    setApplicationSubmissionStep('upload')
+    setDocumentUploadStep('upload')
   }
 
   const setQueueItemStatus = useCallback(
@@ -924,7 +920,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
       const message = buildUploadResultMessage(
         'applicationSubmission',
-        'LEXIS application submission validated. Review the summary before finalizing application submissions.',
+        'LEXIS application submission validated. Review the summary before submitting application submissions.',
         result,
       )
       return {
@@ -1007,7 +1003,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       setSuccessMessage(
         successCount === 1
           ? lastSuccessMessage
-          : `${successCount} application submissions validated. Review the submission summary and finalize submissions.`,
+          : `${successCount} application submissions validated. Review the submission summary and submit submissions.`,
       )
     }
 
@@ -1084,6 +1080,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           ? lastSuccessMessage
           : `${successCount} application submissions created. Verify the created application and package details.`,
       )
+      if (failureCount === 0) {
+        resetUploadQueueAfterSuccess()
+      }
     }
 
     if (failureCount > 0) {
@@ -1144,7 +1143,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
     if (selectedWorkflowType === 'applicationSubmission') {
       if (uploadQueue.some((item) => item.status === 'validating')) {
-        setErrorMessage('Wait for validation to finish before finalizing submissions.')
+        setErrorMessage('Wait for validation to finish before submitting.')
       } else if (uploadQueue.some((item) => item.status === 'queued')) {
         await validateLexisQueue()
       } else if (applicationSubmissionStep !== 'review') {
@@ -1201,6 +1200,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           ? lastSuccessMessage
           : `${successCount} files uploaded. Verify updates in the target details view.`,
       )
+      if (failureCount === 0) {
+        resetUploadQueueAfterSuccess()
+      }
     }
 
     if (failureCount > 0) {
@@ -1238,12 +1240,12 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       : 'Upload queue workflow progress'
   const pageSubtitle =
     selectedWorkflowType === 'applicationSubmission'
-      ? 'Upload LEXIS XML or GeoJSON application submissions and review validated data before finalizing.'
-      : 'Upload documents and review validated files before saving.'
+      ? 'Upload LEXIS XML or GeoJSON application submissions and review validated data before submitting.'
+      : 'Upload documents and review selected files before submitting.'
   const uploadStepDescription =
     selectedWorkflowType === 'applicationSubmission'
       ? 'Select one or more application submission files to validate before review.'
-      : 'Select documents to validate before reviewing and saving the upload.'
+      : 'Select documents to prepare before reviewing and submitting the upload.'
   const uploadSettingsPanel = (
     <section className="admin-upload-panel" aria-labelledby="admin-upload-settings-title">
       <div className="admin-upload-panel__header">
@@ -1452,7 +1454,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         disabledDescription={
           !hasUploadAccess
             ? 'Your session does not include the required upload permission.'
-            : 'Current application submissions are finalizing or complete. Reset before choosing more files.'
+            : 'Current application submissions are submitting or complete. Wait for the upload to finish before choosing more files.'
         }
         renderAsPanel={false}
         variant="fspts"
@@ -1511,8 +1513,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                   canReview={hasUploadAccess && canReviewLexisSubmissions}
                   isSubmitting={isSubmitting}
                   onReview={onReviewApplicationSubmissions}
-                  onClear={clearQueuedFiles}
-                  onReset={onReset}
                   onRemove={removeQueuedFile}
                 />
               ) : (
@@ -1539,8 +1539,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 <h2 id="admin-upload-review-title">Review</h2>
                 <p>
                   {selectedWorkflowType === 'applicationSubmission'
-                    ? 'Review validated submission data before finalizing.'
-                    : 'Review selected files and target details before saving.'}
+                    ? 'Review validated submission data before submitting.'
+                    : 'Review selected files and target details before submitting.'}
                 </p>
               </div>
 

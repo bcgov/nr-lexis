@@ -929,7 +929,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.type(screen.getByLabelText('Document description'), 'Uploaded')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
