@@ -1027,6 +1027,21 @@ test.describe('TEST IDIR admin regression', () => {
       'href',
       '/provincial/application/upload',
     )
+    await expectAccessiblePage(
+      page,
+      '/provincial/application/upload',
+      /upload application submission/i,
+    )
+    const applicationSubmissionProgress = page.getByRole('list', {
+      name: 'Application submission upload workflow progress',
+    })
+    await expect(applicationSubmissionProgress.getByText('1. Upload')).toBeVisible()
+    await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Validation status' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+
+    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
     await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
     await expect(adminSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
 
@@ -1139,6 +1154,25 @@ test.describe('TEST IDIR admin regression', () => {
   test('shows average monthly values upload-only workflow controls', async () => {
     const page = await authenticatedIdirPage()
 
+    await page.route('**/api/lexis/rtm/emslogamv/preview', async (route) => {
+      await route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'validation_failed',
+          fileName: 'invalid-amv.xlsx',
+          fileSize: 12,
+          message: 'Template is missing an update date.',
+          rowCount: 0,
+          retrievalDate: null,
+          updateDate: null,
+          errors: ['The update date is required in the uploaded template.'],
+          warnings: [],
+          rows: [],
+        }),
+      })
+    })
+
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expect(
       page.getByText(
@@ -1172,6 +1206,28 @@ test.describe('TEST IDIR admin regression', () => {
     ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
+
+    await page.getByLabel('Average monthly values upload spreadsheet').setInputFiles({
+      name: 'invalid-amv.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: Buffer.from('invalid average monthly values workbook'),
+    })
+
+    await expect(page.getByText('1 validation issue found')).toBeVisible()
+    await expect(
+      page.getByText('Correct the issues in your spreadsheet, then replace the file to continue.'),
+    ).toBeVisible()
+
+    const validationTable = page.getByRole('table', { name: 'Upload validation issues' })
+    await expect(validationTable).toBeVisible()
+    await expect(validationTable.getByRole('columnheader', { name: 'Issue' })).toBeVisible()
+    await expect(validationTable.getByRole('columnheader', { name: 'File location' })).toBeVisible()
+    await expect(validationTable.getByRole('columnheader', { name: 'Detail' })).toBeVisible()
+    await expect(validationTable.getByText('Error')).toBeVisible()
+    await expect(
+      validationTable.getByText('The update date is required in the uploaded template.'),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
   })
 
   test('shows selected natural resource region names across search filters', async () => {
@@ -1253,16 +1309,20 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('link', { name: 'Back to Search' })).toHaveCount(0)
 
     await page.getByRole('tab', { name: 'Documents' }).click()
-    await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
+    const createDocumentsHeading = page.getByRole('heading', { name: 'Documents', exact: true })
+    await expect(createDocumentsHeading).toBeVisible()
+    await expect(createDocumentsHeading).not.toContainText('API')
     await expect(page.getByText('Upload documents')).toBeVisible()
-    await expect(page.getByText('Multiple files can be queued and saved together.')).toBeVisible()
+    await expect(page.getByText(/Multiple files can be queued and saved together/)).toBeVisible()
     await expect(page.getByText('Queued files')).toBeVisible()
     await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
     await expect(page.getByLabel('Document File')).toBeDisabled()
-    await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
+    await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
+    await expect(
+      page.getByRole('button', { name: 'Choose files for Upload documents' }),
+    ).toHaveAttribute('aria-disabled', 'true')
   })
 
   test('uses save and cancel workflow on provincial create/edit pages', async () => {
@@ -1860,20 +1920,27 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(
         page
           .locator('.detail-tile-title')
-          .filter({ hasText: /^Documents\b/ })
+          .filter({ hasText: /^Documents$/ })
           .first(),
       ).toBeVisible()
+      await expect(
+        page
+          .locator('.detail-tile-title')
+          .filter({ hasText: /^Documents$/ })
+          .first(),
+      ).not.toContainText('API')
       await expect(page.getByText('Upload documents').first()).toBeVisible()
       await expect(
-        page.getByText('Multiple files can be queued and saved together.').first(),
+        page.getByText(/Multiple files can be queued and saved together/).first(),
       ).toBeVisible()
       await expect(page.getByText('Queued files').first()).toBeVisible()
-      await expect(page.getByText('Drag and drop files here, or browse for files.')).toBeVisible()
+      await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
       await expect(page.getByLabel('Document File')).toBeEnabled()
-      await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
-        'aria-disabled',
-        'false',
-      )
+      await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Save upload' })).toHaveCount(0)
+      await expect(
+        page.getByRole('button', { name: 'Choose files for Upload documents' }),
+      ).toHaveAttribute('aria-disabled', 'false')
 
       const approved = await readJsonResponse<ReviewStatusResponse>(
         await postWithCsrf(page, `/api/lexis/application-reviews/${applicationNumber}/approve`),

@@ -20,7 +20,6 @@ import {
 } from '@carbon/react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
@@ -728,10 +727,7 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          Permit items{' '}
-                          <ApiSourceTag context="Permit item rows are returned from the permit items service." />
-                        </h2>
+                        <h2 className="detail-tile-title">Permit items</h2>
                         <TextInput
                           id="permitItemsFilter"
                           labelText="Filter item rows"
@@ -822,10 +818,7 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          Fee ledger{' '}
-                          <ApiSourceTag context="Permit fee records are returned from the permit ledger service." />
-                        </h2>
+                        <h2 className="detail-tile-title">Fee ledger</h2>
                         <TextInput
                           id="permitFeesFilter"
                           labelText="Filter fee rows"
@@ -873,8 +866,7 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <h2 className="detail-tile-title">
-                          General Billing Management System events{' '}
-                          <ApiSourceTag context="Permit billing events are returned from the General Billing Management System integration service." />
+                          General Billing Management System events
                         </h2>
                         <TextInput
                           id="permitGbmsFilter"
@@ -920,10 +912,7 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={8}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          Order in Council items{' '}
-                          <ApiSourceTag context="Order in Council item rows are returned from the permit Order in Council dataset." />
-                        </h2>
+                        <h2 className="detail-tile-title">Order in Council items</h2>
                         <TextInput
                           id="permitOicFilter"
                           labelText="Filter Order in Council rows"
@@ -963,10 +952,7 @@ const ProvincialPermitDetailsPage = () => {
 
                     <Column sm={4} md={8} lg={8}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          Blanket Order in Council items{' '}
-                          <ApiSourceTag context="Blanket Order in Council item rows are returned from the permit Blanket Order in Council dataset." />
-                        </h2>
+                        <h2 className="detail-tile-title">Blanket Order in Council items</h2>
                         <TextInput
                           id="permitBoicFilter"
                           labelText="Filter Blanket Order in Council rows"
@@ -1009,10 +995,7 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          Permit documents{' '}
-                          <ApiSourceTag context="Permit documents are returned from the permit documents service." />
-                        </h2>
+                        <h2 className="detail-tile-title">Permit documents</h2>
                         {canDeletePermitDocuments && (
                           <DetailDocumentUploadPanel
                             workflowType="permit"
@@ -1091,10 +1074,7 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          Invoices{' '}
-                          <ApiSourceTag context="Permit invoices are returned from the permit invoice service." />
-                        </h2>
+                        <h2 className="detail-tile-title">Invoices</h2>
                         {canDeleteInvoiceDocuments && (
                           <DetailDocumentUploadPanel
                             workflowType="invoice"
@@ -1148,56 +1128,6 @@ const ProvincialPermitDetailsPage = () => {
                 </TabPanel>
               </TabPanels>
             </Tabs>
-          </Column>
-
-          <Column sm={4} md={8} lg={8}>
-            <DetailFieldTile
-              title="Tab data sources"
-              fields={[
-                {
-                  label: 'Items',
-                  value: (
-                    <ApiSourceTag context="Permit item rows come from the permit items service." />
-                  ),
-                },
-                {
-                  label: 'Fees',
-                  value: (
-                    <ApiSourceTag context="Permit fee records come from the permit ledger service." />
-                  ),
-                },
-                {
-                  label: 'General Billing Management System events',
-                  value: (
-                    <ApiSourceTag context="Billing event rows come from the General Billing Management System integration service." />
-                  ),
-                },
-                {
-                  label: 'Order in Council items',
-                  value: (
-                    <ApiSourceTag context="Order in Council item rows come from the permit Order in Council service." />
-                  ),
-                },
-                {
-                  label: 'Blanket Order in Council items',
-                  value: (
-                    <ApiSourceTag context="Blanket Order in Council item rows come from the permit Blanket Order in Council service." />
-                  ),
-                },
-                {
-                  label: 'Documents',
-                  value: (
-                    <ApiSourceTag context="Permit documents come from the permit documents service." />
-                  ),
-                },
-                {
-                  label: 'Invoices',
-                  value: (
-                    <ApiSourceTag context="Permit invoices come from the permit invoice service." />
-                  ),
-                },
-              ]}
-            />
           </Column>
         </>
       )}

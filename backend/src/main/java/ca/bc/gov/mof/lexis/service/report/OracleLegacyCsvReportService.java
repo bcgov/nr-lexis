@@ -97,6 +97,36 @@ public class OracleLegacyCsvReportService {
       INNER JOIN ORG_UNIT OU
         ON OU.ORG_UNIT_NO = EEA.ORG_UNIT_NO
       """;
+  private static final List<String> BIWEEKLY_CSV_HEADERS =
+      List.of(
+          "ADVERTISING_DATE",
+          "REGION_NAME",
+          "CLIENT_NAME",
+          "CLIENT_ADDRESS_1",
+          "CLIENT_ADDRESS_2",
+          "CLIENT_ADDRESS_3",
+          "CLIENT_CITY",
+          "CLIENT_PROVINCE",
+          "CLIENT_POSTAL_CODE",
+          "CLIENT_CONTACT_NAME",
+          "CLIENT_CONTACT_PHONE",
+          "CLIENT_CONTACT_EMAIL",
+          "JURISDICTION_CODE",
+          "APPLICATION_NUMBER",
+          "SPECIES_ENDUSE",
+          "PRODUCT_TYPE",
+          "PRODUCT_LOCATION",
+          "EXEMPTION_APPLICATION_VOLUME",
+          "AVERAGE_LOG_VOLUME",
+          "AGENT_NAME",
+          "AGENT_PHONE",
+          "AGENT_CONTACT_NAME",
+          "AGENT_CONTACT_EMAIL",
+          "PACKAGE_NUMBER",
+          "PACKAGE_VOLUME",
+          "AGE_CLASS",
+          "AVERAGE_LENGTH",
+          "AVERAGE_DIAMETER");
   private static final String TRANSPORT_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.TRANSPORT_REPORT_CSV(?,?,?,?) }";
   private static final String EXEMPTIONS_CSV_PROCEDURE =
@@ -361,13 +391,12 @@ public class OracleLegacyCsvReportService {
     DynamicWhere where = buildBiweeklyWhere(parameters);
     Optional<LegacyTabularReportData> dataOptional =
         executeQuery(BIWEEKLY_CSV_QUERY, where);
-    if (dataOptional.isEmpty()) {
-      return Optional.empty();
-    }
+    LegacyTabularReportData data =
+        dataOptional.orElseGet(() -> new LegacyTabularReportData(BIWEEKLY_CSV_HEADERS, List.of()));
 
     byte[] content;
     try {
-      content = renderCsv(dataOptional.orElseThrow());
+      content = renderCsv(data);
     } catch (IOException ex) {
       LOGGER.warn("Unable to render biweekly CSV: {}", ex.getMessage());
       return Optional.empty();

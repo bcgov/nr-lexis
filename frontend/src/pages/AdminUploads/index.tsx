@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Column, ComboBox, Grid, Tag, TextArea, TextInput } from '@carbon/react'
+import { Button, Column, ComboBox, Grid, Tag, TextArea, TextInput } from '@carbon/react'
+import { ArrowRight } from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
@@ -7,16 +8,21 @@ import { shouldFilterSearchableDropdownItem } from '../../components/dropdown-fi
 import SearchableSelect from '../../components/SearchableSelect'
 import MultiFileDropZone from '../../components/uploads/MultiFileDropZone'
 import UploadQueuePreview from '../../components/uploads/UploadQueuePreview'
+import UploadWorkflowProgress from '../../components/uploads/UploadWorkflowProgress'
 import { buildLexisXmlPreviewMessage } from '@/components/uploads/lexisXmlPreview'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
   DOCUMENT_UPLOAD_VALIDATED_MESSAGE,
   extractUploadErrorDetails,
+  formatUploadFileSize,
+  formatUploadQueuedAt,
   GENERIC_SUBMISSION_FAILURE_MESSAGE,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   getFileExtension,
   uploadQueueFileKey,
+  uploadQueueStatusLabel,
+  uploadQueueStatusTagType,
 } from '@/components/uploads/uploadQueueHelpers'
 import type {
   UploadQueueItem,
@@ -98,6 +104,16 @@ const DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS = UPLOAD_WORKFLOW_DEFINITIONS.filter(
   (workflow) => workflow.type !== 'applicationSubmission',
 )
 
+const APPLICATION_SUBMISSION_UPLOAD_STEPS = [
+  { id: 'upload', label: 'Upload' },
+  { id: 'review', label: 'Review' },
+]
+
+const DOCUMENT_UPLOAD_STEPS = [
+  { id: 'upload', label: 'Upload' },
+  { id: 'review', label: 'Review' },
+]
+
 type UploadFormState = {
   applicationNumber: string
   exemptionNumber: string
@@ -111,6 +127,7 @@ type UploadFormState = {
 }
 
 type UploadField = keyof UploadFormState | 'uploadFile'
+type UploadWizardStep = 'upload' | 'review'
 
 type QueuedUploadResult = {
   message: string
@@ -365,6 +382,137 @@ const uploadTargetSummary = (
 const defaultSuccessTitle = (workflowType: UploadWorkflowType): string =>
   workflowType === 'applicationSubmission' ? 'Application submission complete' : 'Upload submitted'
 
+type ApplicationSubmissionValidationPanelProps = {
+  items: UploadQueueItem[]
+  canReview: boolean
+  isSubmitting: boolean
+  onReview: () => void
+  onClear: () => void
+  onReset: () => void
+  onRemove: (id: string) => void
+}
+
+function ApplicationSubmissionValidationPanel({
+  items,
+  canReview,
+  isSubmitting,
+  onReview,
+  onClear,
+  onReset,
+  onRemove,
+}: ApplicationSubmissionValidationPanelProps) {
+  const readyCount = items.filter((item) => item.status === 'queued').length
+  const invalidCount = items.filter((item) => item.status === 'invalid').length
+  const validatingCount = items.filter((item) => item.status === 'validating').length
+  const validatedCount = items.filter((item) => item.status === 'validated').length
+  const failedCount = items.filter((item) => item.status === 'failed').length
+  const reviewLabel = items.length === 1 ? 'Review submission' : 'Review submissions'
+
+  return (
+    <section className="admin-upload-panel" aria-labelledby="applicationSubmissionValidateTitle">
+      <div className="admin-upload-panel__header">
+        <div>
+          <h2 id="applicationSubmissionValidateTitle">Validation status</h2>
+          <p>Application submissions validate automatically after selection.</p>
+        </div>
+        <div className="admin-upload-preview-actions">
+          {items.length > 0 && (
+            <div className="admin-upload-queue-summary" aria-label="Submission validation summary">
+              <Tag type="gray">Ready {readyCount}</Tag>
+              <Tag type="blue">Validating {validatingCount}</Tag>
+              <Tag type="red">Invalid {invalidCount}</Tag>
+              <Tag type="green">Validated {validatedCount}</Tag>
+              <Tag type="red">Failed {failedCount}</Tag>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="admin-upload-empty-state">
+          <p>No application submissions selected</p>
+          <p>Choose application submission files to validate.</p>
+        </div>
+      ) : (
+        <table className="cds--data-table admin-upload-queue__table">
+          <thead>
+            <tr>
+              <th>Submission file</th>
+              <th>Status</th>
+              <th>Validation message</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id}>
+                <td>
+                  <div className="admin-upload-file-cell">
+                    <span>{item.file.name}</span>
+                    <span>
+                      {getFileExtension(item.file.name).slice(1).toUpperCase() || item.file.type} |{' '}
+                      {formatUploadFileSize(item.file.size)} | Added{' '}
+                      {formatUploadQueuedAt(item.queuedAt)}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <Tag type={uploadQueueStatusTagType(item.status)}>
+                    {uploadQueueStatusLabel(item.status)}
+                  </Tag>
+                </td>
+                <td>
+                  <div className="admin-upload-validation-cell">
+                    <span>{item.message || 'Waiting for validation.'}</span>
+                    {item.details?.errors?.map((error) => (
+                      <span key={error}>{error}</span>
+                    ))}
+                    {item.details?.warnings?.map((warning) => (
+                      <span key={warning}>{warning}</span>
+                    ))}
+                  </div>
+                </td>
+                <td>
+                  <Button
+                    kind="ghost"
+                    size="sm"
+                    onClick={() => onRemove(item.id)}
+                    disabled={isSubmitting}
+                  >
+                    Cancel submission
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
+        <div />
+        <div className="admin-upload-preview-footer-actions__right">
+          {items.length > 0 && (
+            <Button kind="ghost" size="sm" onClick={onClear} disabled={isSubmitting}>
+              Clear
+            </Button>
+          )}
+          <Button
+            kind="primary"
+            size="sm"
+            onClick={onReview}
+            disabled={isSubmitting || !canReview || items.length === 0 || validatingCount > 0}
+            renderIcon={ArrowRight}
+          >
+            {reviewLabel}
+          </Button>
+          <Button kind="ghost" size="sm" onClick={onReset} disabled={isSubmitting}>
+            Reset
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPageProps) {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -383,6 +531,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
+  const [applicationSubmissionStep, setApplicationSubmissionStep] =
+    useState<UploadWizardStep>('upload')
+  const [documentUploadStep, setDocumentUploadStep] = useState<UploadWizardStep>('upload')
 
   const selectedWorkflow = useMemo(() => {
     return (
@@ -430,13 +581,20 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       (item) =>
         item.status === 'validated' || item.status === 'uploading' || item.status === 'complete',
     )
+  const hasSubmittedLexisSubmissions =
+    selectedWorkflowType === 'applicationSubmission' &&
+    uploadQueue.some((item) => item.status === 'uploading' || item.status === 'complete')
+  const canReviewLexisSubmissions =
+    selectedWorkflowType === 'applicationSubmission' &&
+    hasValidatedLexisSubmissions &&
+    !hasValidatingLexisSubmissions
   const applicationSubmissionActionNoun =
     selectedWorkflowType === 'applicationSubmission' && uploadQueue.length === 1
       ? 'submission'
       : 'submissions'
   const isUploadInputLocked =
     !hasUploadAccess ||
-    (selectedWorkflowType === 'applicationSubmission' && hasLockedLexisSubmissions)
+    (selectedWorkflowType === 'applicationSubmission' && hasSubmittedLexisSubmissions)
   const submitButtonLabel =
     selectedWorkflowType === 'applicationSubmission'
       ? hasValidatingLexisSubmissions
@@ -529,12 +687,19 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     setSuccessMessage('')
     setSuccessTitle(defaultSuccessTitle(workflowType))
     setShowValidationErrors(false)
+    setApplicationSubmissionStep('upload')
+    setDocumentUploadStep('upload')
     setSearchParams({ type: workflowType }, { replace: true })
   }
 
   const addFilesToQueue = (files: FileList | null): void => {
     if (!files || files.length === 0) {
       return
+    }
+    if (selectedWorkflowType === 'applicationSubmission') {
+      setApplicationSubmissionStep('upload')
+    } else {
+      setDocumentUploadStep('upload')
     }
 
     const queuedAt = Date.now()
@@ -607,13 +772,22 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   }
 
   const removeQueuedFile = (id: string): void => {
+    const nextLength = uploadQueue.filter((item) => item.id !== id).length
     setUploadQueue((current) => current.filter((item) => item.id !== id))
+    if (selectedWorkflowType === 'applicationSubmission' && nextLength === 0) {
+      setApplicationSubmissionStep('upload')
+    }
+    if (selectedWorkflowType !== 'applicationSubmission' && nextLength === 0) {
+      setDocumentUploadStep('upload')
+    }
     clearUploadFeedback()
   }
 
   const clearQueuedFiles = (): void => {
     setUploadQueue([])
     setFileInputKey((current) => current + 1)
+    setApplicationSubmissionStep('upload')
+    setDocumentUploadStep('upload')
     clearUploadFeedback()
   }
 
@@ -919,6 +1093,28 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     }
   }
 
+  const onReviewApplicationSubmissions = (): void => {
+    setErrorMessage('')
+
+    if (validationErrors.length > 0) {
+      setShowValidationErrors(true)
+      setErrorMessage(validationErrors.join(' '))
+      return
+    }
+
+    if (hasValidatingLexisSubmissions) {
+      setErrorMessage('Wait for validation to finish before reviewing submissions.')
+      return
+    }
+
+    if (!hasValidatedLexisSubmissions) {
+      setErrorMessage('No validated application submissions are ready for review.')
+      return
+    }
+
+    setApplicationSubmissionStep('review')
+  }
+
   const onSubmitUpload = async (): Promise<void> => {
     setErrorMessage('')
     setSuccessMessage('')
@@ -951,6 +1147,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         setErrorMessage('Wait for validation to finish before finalizing submissions.')
       } else if (uploadQueue.some((item) => item.status === 'queued')) {
         await validateLexisQueue()
+      } else if (applicationSubmissionStep !== 'review') {
+        onReviewApplicationSubmissions()
       } else if (uploadQueue.some((item) => item.status === 'validated')) {
         await submitValidatedLexisQueue()
       } else {
@@ -1021,15 +1219,262 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     setSuccessMessage('')
     setSuccessTitle(defaultSuccessTitle(selectedWorkflowType))
     setShowValidationErrors(false)
+    setApplicationSubmissionStep('upload')
+    setDocumentUploadStep('upload')
   }
 
+  const activeUploadStep =
+    selectedWorkflowType === 'applicationSubmission'
+      ? applicationSubmissionStep
+      : documentUploadStep
+  const activeUploadSteps =
+    selectedWorkflowType === 'applicationSubmission'
+      ? APPLICATION_SUBMISSION_UPLOAD_STEPS
+      : DOCUMENT_UPLOAD_STEPS
+  const activeCompletedSteps = activeUploadStep === 'review' ? ['upload'] : []
+  const workflowProgressLabel =
+    selectedWorkflowType === 'applicationSubmission'
+      ? 'Application submission upload workflow progress'
+      : 'Upload queue workflow progress'
+  const pageSubtitle =
+    selectedWorkflowType === 'applicationSubmission'
+      ? 'Upload LEXIS XML or GeoJSON application submissions and review validated data before finalizing.'
+      : 'Upload documents and review validated files before saving.'
+  const uploadStepDescription =
+    selectedWorkflowType === 'applicationSubmission'
+      ? 'Select one or more application submission files to validate before review.'
+      : 'Select documents to validate before reviewing and saving the upload.'
+  const uploadSettingsPanel = (
+    <section className="admin-upload-panel" aria-labelledby="admin-upload-settings-title">
+      <div className="admin-upload-panel__header">
+        <div>
+          <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
+          <p>{workflowDescription(selectedWorkflowType)}</p>
+        </div>
+      </div>
+
+      <div className="admin-upload-summary-strip" aria-label="Upload batch summary">
+        <div>
+          <span>Target</span>
+          <strong>{currentUploadTargetSummary}</strong>
+        </div>
+        <div>
+          <span>
+            {selectedWorkflowType === 'applicationSubmission'
+              ? 'Queued submissions'
+              : 'Queued files'}
+          </span>
+          <strong>{uploadQueue.length}</strong>
+        </div>
+        <div>
+          <span>Format</span>
+          <strong>{selectedWorkflowType === 'applicationSubmission' ? 'LEXIS' : 'Document'}</strong>
+        </div>
+      </div>
+
+      <div className="legacy-search-grid admin-upload-settings-grid">
+        {!lockedWorkflowType && (
+          <SearchableSelect
+            id="uploadWorkflowType"
+            labelText="Upload type"
+            value={selectedWorkflowType}
+            options={DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
+              value: workflow.type,
+              label: workflow.label,
+            }))}
+            onChange={(value) => setWorkflowType(getWorkflowFromQuery(value, 'application', false))}
+          />
+        )}
+
+        {selectedWorkflowType === 'application' && (
+          <ApplicationNumberSelect
+            id="applicationNumber"
+            labelText={selectedWorkflow.numberFieldLabel}
+            value={formState.applicationNumber}
+            invalid={!!fieldError('applicationNumber')}
+            invalidText={fieldError('applicationNumber')}
+            onBlur={() => markFieldTouched('applicationNumber')}
+            onChange={(value) =>
+              setFormState((current) => ({
+                ...current,
+                applicationNumber: value,
+              }))
+            }
+          />
+        )}
+
+        {selectedWorkflowType === 'exemption' && (
+          <UploadTargetNumberSelect
+            id="exemptionNumber"
+            labelText={selectedWorkflow.numberFieldLabel}
+            value={formState.exemptionNumber}
+            invalid={!!fieldError('exemptionNumber')}
+            invalidText={fieldError('exemptionNumber')}
+            searchOptions={searchProvincialExemptionNumberOptions}
+            onBlur={() => markFieldTouched('exemptionNumber')}
+            onChange={(value) =>
+              setFormState((current) => ({
+                ...current,
+                exemptionNumber: value,
+              }))
+            }
+          />
+        )}
+
+        {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
+          <UploadTargetNumberSelect
+            id="permitNumber"
+            labelText={selectedWorkflow.numberFieldLabel}
+            value={formState.permitNumber}
+            invalid={!!fieldError('permitNumber')}
+            invalidText={fieldError('permitNumber')}
+            searchOptions={searchProvincialPermitNumberOptions}
+            normalizeInput={leadingDigits}
+            onBlur={() => markFieldTouched('permitNumber')}
+            onChange={(value) =>
+              setFormState((current) => ({
+                ...current,
+                permitNumber: value,
+              }))
+            }
+          />
+        )}
+
+        {selectedWorkflowType === 'invoice' && (
+          <>
+            <TextInput
+              id="salesInvoiceNumber"
+              labelText="Invoice number"
+              value={formState.salesInvoiceNumber}
+              invalid={!!fieldError('salesInvoiceNumber')}
+              invalidText={fieldError('salesInvoiceNumber')}
+              onBlur={() => markFieldTouched('salesInvoiceNumber')}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  salesInvoiceNumber: event.target.value,
+                }))
+              }
+            />
+            <TextInput
+              id="invoiceExportValue"
+              labelText="Export value (CAD)"
+              value={formState.invoiceExportValue}
+              invalid={!!fieldError('invoiceExportValue')}
+              invalidText={fieldError('invoiceExportValue')}
+              onBlur={() => markFieldTouched('invoiceExportValue')}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  invoiceExportValue: event.target.value,
+                }))
+              }
+            />
+            <TextInput
+              id="invoiceConversionRate"
+              labelText="Conversion rate"
+              value={formState.invoiceConversionRate}
+              invalid={!!fieldError('invoiceConversionRate')}
+              invalidText={fieldError('invoiceConversionRate')}
+              onBlur={() => markFieldTouched('invoiceConversionRate')}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  invoiceConversionRate: event.target.value,
+                }))
+              }
+            />
+            <TextInput
+              id="invoiceFeeInLieu"
+              labelText="Fee in lieu"
+              value={formState.invoiceFeeInLieu}
+              invalid={!!fieldError('invoiceFeeInLieu')}
+              invalidText={fieldError('invoiceFeeInLieu')}
+              onBlur={() => markFieldTouched('invoiceFeeInLieu')}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  invoiceFeeInLieu: event.target.value,
+                }))
+              }
+            />
+          </>
+        )}
+
+        {selectedWorkflowType === 'applicationSubmission' && (
+          <TextInput
+            id="userReference"
+            labelText="User reference"
+            value={formState.userReference}
+            maxLength={50}
+            disabled={hasLockedLexisSubmissions}
+            invalid={!!fieldError('userReference')}
+            invalidText={fieldError('userReference')}
+            onBlur={() => markFieldTouched('userReference')}
+            onChange={(event) =>
+              setFormState((current) => ({
+                ...current,
+                userReference: event.target.value,
+              }))
+            }
+          />
+        )}
+
+        {selectedWorkflowType !== 'applicationSubmission' && (
+          <TextArea
+            id="fileDescription"
+            labelText="Document description"
+            value={formState.fileDescription}
+            onChange={(event) =>
+              setFormState((current) => ({
+                ...current,
+                fileDescription: event.target.value,
+              }))
+            }
+            rows={4}
+          />
+        )}
+      </div>
+
+      <MultiFileDropZone
+        title={
+          selectedWorkflowType === 'applicationSubmission'
+            ? 'Upload application submissions'
+            : 'Upload documents'
+        }
+        description={uploadFormatText}
+        inputId="uploadFile"
+        inputKey={fileInputKey}
+        inputLabel={uploadInputLabel}
+        accept={uploadAccept}
+        invalidText={fieldError('uploadFile')}
+        disabled={isUploadInputLocked}
+        disabledDescription={
+          !hasUploadAccess
+            ? 'Your session does not include the required upload permission.'
+            : 'Current application submissions are finalizing or complete. Reset before choosing more files.'
+        }
+        renderAsPanel={false}
+        variant="fspts"
+        onFilesSelected={addFilesToQueue}
+      />
+    </section>
+  )
+
   return (
-    <Grid fullWidth className="default-grid admin-upload-page">
-      <Column sm={4} md={8} lg={16}>
+    <Grid fullWidth className="default-grid admin-upload-fspts-page">
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header">
         <h1>{resolvedPageTitle}</h1>
+        <p>{pageSubtitle}</p>
+        <UploadWorkflowProgress
+          steps={activeUploadSteps}
+          currentStepId={activeUploadStep}
+          completedStepIds={activeCompletedSteps}
+          ariaLabel={workflowProgressLabel}
+        />
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
         <div className="admin-upload-workflow">
           {successMessage && (
             <AppNotification
@@ -1051,278 +1496,125 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             />
           )}
 
-          <div className="admin-upload-workspace">
-            <section className="admin-upload-panel" aria-labelledby="admin-upload-settings-title">
-              <div className="admin-upload-panel__header">
-                <div>
-                  <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
-                  <p>{workflowDescription(selectedWorkflowType)}</p>
-                </div>
-                <Tag type={hasUploadAccess ? 'green' : 'red'}>
-                  {hasUploadAccess ? 'Allowed' : 'Not Granted'}
-                </Tag>
+          {activeUploadStep === 'upload' ? (
+            <>
+              <div className="admin-upload-section-heading">
+                <h2 id="admin-upload-step-title">Upload</h2>
+                <p>{uploadStepDescription}</p>
               </div>
 
-              <div className="admin-upload-summary-strip" aria-label="Upload batch summary">
-                <div>
-                  <span>Target</span>
-                  <strong>{currentUploadTargetSummary}</strong>
-                </div>
-                <div>
-                  <span>
-                    {selectedWorkflowType === 'applicationSubmission'
-                      ? 'Queued submissions'
-                      : 'Queued files'}
-                  </span>
-                  <strong>{uploadQueue.length}</strong>
-                </div>
-                <div>
-                  <span>Format</span>
-                  <strong>
-                    {selectedWorkflowType === 'applicationSubmission' ? 'LEXIS' : 'Document'}
-                  </strong>
-                </div>
+              {uploadSettingsPanel}
+
+              {selectedWorkflowType === 'applicationSubmission' ? (
+                <ApplicationSubmissionValidationPanel
+                  items={uploadQueue}
+                  canReview={hasUploadAccess && canReviewLexisSubmissions}
+                  isSubmitting={isSubmitting}
+                  onReview={onReviewApplicationSubmissions}
+                  onClear={clearQueuedFiles}
+                  onReset={onReset}
+                  onRemove={removeQueuedFile}
+                />
+              ) : (
+                <UploadQueuePreview
+                  items={uploadQueue}
+                  targetSummary={currentUploadTargetSummary}
+                  canSubmit={hasUploadAccess}
+                  isSubmitting={isSubmitting}
+                  currentStepId={documentUploadStep}
+                  actionsPlacement="footer"
+                  emptyDescription="Upload files to validate before review."
+                  onReview={() => setDocumentUploadStep('review')}
+                  onSubmit={() => void onSubmitUpload()}
+                  onReset={onReset}
+                  onClear={clearQueuedFiles}
+                  onRemove={removeQueuedFile}
+                  showWorkflowProgress={false}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <div className="admin-upload-section-heading">
+                <h2 id="admin-upload-review-title">Review</h2>
+                <p>
+                  {selectedWorkflowType === 'applicationSubmission'
+                    ? 'Review validated submission data before finalizing.'
+                    : 'Review selected files and target details before saving.'}
+                </p>
               </div>
 
-              <div className="legacy-search-grid admin-upload-settings-grid">
-                {!lockedWorkflowType && (
-                  <SearchableSelect
-                    id="uploadWorkflowType"
-                    labelText="Upload type"
-                    value={selectedWorkflowType}
-                    options={DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
-                      value: workflow.type,
-                      label: workflow.label,
-                    }))}
-                    onChange={(value) =>
-                      setWorkflowType(getWorkflowFromQuery(value, 'application', false))
-                    }
-                  />
-                )}
+              {uploadSettingsPanel}
 
-                {selectedWorkflowType === 'application' && (
-                  <ApplicationNumberSelect
-                    id="applicationNumber"
-                    labelText={selectedWorkflow.numberFieldLabel}
-                    value={formState.applicationNumber}
-                    invalid={!!fieldError('applicationNumber')}
-                    invalidText={fieldError('applicationNumber')}
-                    onBlur={() => markFieldTouched('applicationNumber')}
-                    onChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        applicationNumber: value,
-                      }))
-                    }
-                  />
-                )}
-
-                {selectedWorkflowType === 'exemption' && (
-                  <UploadTargetNumberSelect
-                    id="exemptionNumber"
-                    labelText={selectedWorkflow.numberFieldLabel}
-                    value={formState.exemptionNumber}
-                    invalid={!!fieldError('exemptionNumber')}
-                    invalidText={fieldError('exemptionNumber')}
-                    searchOptions={searchProvincialExemptionNumberOptions}
-                    onBlur={() => markFieldTouched('exemptionNumber')}
-                    onChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        exemptionNumber: value,
-                      }))
-                    }
-                  />
-                )}
-
-                {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
-                  <UploadTargetNumberSelect
-                    id="permitNumber"
-                    labelText={selectedWorkflow.numberFieldLabel}
-                    value={formState.permitNumber}
-                    invalid={!!fieldError('permitNumber')}
-                    invalidText={fieldError('permitNumber')}
-                    searchOptions={searchProvincialPermitNumberOptions}
-                    normalizeInput={leadingDigits}
-                    onBlur={() => markFieldTouched('permitNumber')}
-                    onChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        permitNumber: value,
-                      }))
-                    }
-                  />
-                )}
-
-                {selectedWorkflowType === 'invoice' && (
-                  <>
-                    <TextInput
-                      id="salesInvoiceNumber"
-                      labelText="Invoice number"
-                      value={formState.salesInvoiceNumber}
-                      invalid={!!fieldError('salesInvoiceNumber')}
-                      invalidText={fieldError('salesInvoiceNumber')}
-                      onBlur={() => markFieldTouched('salesInvoiceNumber')}
-                      onChange={(event) =>
-                        setFormState((current) => ({
-                          ...current,
-                          salesInvoiceNumber: event.target.value,
-                        }))
-                      }
-                    />
-                    <TextInput
-                      id="invoiceExportValue"
-                      labelText="Export value (CAD)"
-                      value={formState.invoiceExportValue}
-                      invalid={!!fieldError('invoiceExportValue')}
-                      invalidText={fieldError('invoiceExportValue')}
-                      onBlur={() => markFieldTouched('invoiceExportValue')}
-                      onChange={(event) =>
-                        setFormState((current) => ({
-                          ...current,
-                          invoiceExportValue: event.target.value,
-                        }))
-                      }
-                    />
-                    <TextInput
-                      id="invoiceConversionRate"
-                      labelText="Conversion rate"
-                      value={formState.invoiceConversionRate}
-                      invalid={!!fieldError('invoiceConversionRate')}
-                      invalidText={fieldError('invoiceConversionRate')}
-                      onBlur={() => markFieldTouched('invoiceConversionRate')}
-                      onChange={(event) =>
-                        setFormState((current) => ({
-                          ...current,
-                          invoiceConversionRate: event.target.value,
-                        }))
-                      }
-                    />
-                    <TextInput
-                      id="invoiceFeeInLieu"
-                      labelText="Fee in lieu"
-                      value={formState.invoiceFeeInLieu}
-                      invalid={!!fieldError('invoiceFeeInLieu')}
-                      invalidText={fieldError('invoiceFeeInLieu')}
-                      onBlur={() => markFieldTouched('invoiceFeeInLieu')}
-                      onChange={(event) =>
-                        setFormState((current) => ({
-                          ...current,
-                          invoiceFeeInLieu: event.target.value,
-                        }))
-                      }
-                    />
-                  </>
-                )}
-
-                {selectedWorkflowType === 'applicationSubmission' && (
-                  <TextInput
-                    id="userReference"
-                    labelText="User reference"
-                    value={formState.userReference}
-                    maxLength={50}
-                    disabled={hasLockedLexisSubmissions}
-                    invalid={!!fieldError('userReference')}
-                    invalidText={fieldError('userReference')}
-                    onBlur={() => markFieldTouched('userReference')}
-                    onChange={(event) =>
-                      setFormState((current) => ({
-                        ...current,
-                        userReference: event.target.value,
-                      }))
-                    }
-                  />
-                )}
-
-                {selectedWorkflowType !== 'applicationSubmission' && (
-                  <TextArea
-                    id="fileDescription"
-                    labelText="Document description"
-                    value={formState.fileDescription}
-                    onChange={(event) =>
-                      setFormState((current) => ({
-                        ...current,
-                        fileDescription: event.target.value,
-                      }))
-                    }
-                    rows={4}
-                  />
-                )}
-              </div>
-            </section>
-
-            <MultiFileDropZone
-              title={
-                selectedWorkflowType === 'applicationSubmission'
-                  ? 'Upload application submissions'
-                  : 'Upload Documents'
-              }
-              description={uploadFormatText}
-              inputId="uploadFile"
-              inputKey={fileInputKey}
-              inputLabel={uploadInputLabel}
-              accept={uploadAccept}
-              invalidText={fieldError('uploadFile')}
-              disabled={isUploadInputLocked}
-              disabledDescription={
-                !hasUploadAccess
-                  ? 'Your session does not include the required upload permission.'
-                  : 'Current application submissions are locked for review. Finalize, cancel, or reset before choosing more files.'
-              }
-              onFilesSelected={addFilesToQueue}
-            />
-          </div>
-
-          <UploadQueuePreview
-            items={uploadQueue}
-            targetSummary={currentUploadTargetSummary}
-            canSubmit={
-              hasUploadAccess &&
-              (selectedWorkflowType !== 'applicationSubmission' || !hasValidatingLexisSubmissions)
-            }
-            isSubmitting={isSubmitting}
-            previewTitle={
-              selectedWorkflowType === 'applicationSubmission' ? 'Submission summary' : undefined
-            }
-            emptyDescription={
-              selectedWorkflowType === 'applicationSubmission'
-                ? 'Choose application submission files to validate.'
-                : undefined
-            }
-            emptyStateTitle={
-              selectedWorkflowType === 'applicationSubmission'
-                ? 'No application submissions selected'
-                : undefined
-            }
-            emptyStateDescription={
-              selectedWorkflowType === 'applicationSubmission'
-                ? 'Application submission files will appear here after selection.'
-                : undefined
-            }
-            itemNoun={selectedWorkflowType === 'applicationSubmission' ? 'submission' : undefined}
-            submitLabel={submitButtonLabel}
-            submittingLabel={submittingButtonLabel}
-            removeLabel={
-              selectedWorkflowType === 'applicationSubmission' ? 'Cancel submission' : undefined
-            }
-            pendingMessage={
-              selectedWorkflowType === 'applicationSubmission' ? 'Not validated yet.' : undefined
-            }
-            canRemoveItem={(item) =>
-              selectedWorkflowType !== 'applicationSubmission' || item.status !== 'complete'
-            }
-            onSubmit={() => void onSubmitUpload()}
-            onReset={onReset}
-            onClear={clearQueuedFiles}
-            onRemove={removeQueuedFile}
-            renderCompleteAction={(item) =>
-              item.status === 'complete' && item.resultApplicationNumber ? (
-                <Link to={`/provincial/application/${item.resultApplicationNumber}`}>
-                  Open Application {item.resultApplicationNumber}
-                </Link>
-              ) : null
-            }
-          />
+              <UploadQueuePreview
+                items={uploadQueue}
+                targetSummary={currentUploadTargetSummary}
+                canSubmit={
+                  hasUploadAccess &&
+                  (selectedWorkflowType !== 'applicationSubmission' ||
+                    !hasValidatingLexisSubmissions)
+                }
+                isSubmitting={isSubmitting}
+                currentStepId="review"
+                actionsPlacement="footer"
+                previewTitle={
+                  selectedWorkflowType === 'applicationSubmission'
+                    ? 'Submission summary'
+                    : 'Data preview'
+                }
+                emptyDescription={
+                  selectedWorkflowType === 'applicationSubmission'
+                    ? 'Choose application submission files to validate.'
+                    : undefined
+                }
+                emptyStateTitle={
+                  selectedWorkflowType === 'applicationSubmission'
+                    ? 'No application submissions selected'
+                    : undefined
+                }
+                emptyStateDescription={
+                  selectedWorkflowType === 'applicationSubmission'
+                    ? 'Application submission files will appear here after selection.'
+                    : undefined
+                }
+                itemNoun={
+                  selectedWorkflowType === 'applicationSubmission' ? 'submission' : undefined
+                }
+                submitLabel={submitButtonLabel}
+                submittingLabel={submittingButtonLabel}
+                removeLabel={
+                  selectedWorkflowType === 'applicationSubmission' ? 'Cancel submission' : undefined
+                }
+                pendingMessage={
+                  selectedWorkflowType === 'applicationSubmission'
+                    ? 'Not validated yet.'
+                    : undefined
+                }
+                canRemoveItem={(item) =>
+                  selectedWorkflowType !== 'applicationSubmission' || item.status !== 'complete'
+                }
+                onBack={() => {
+                  if (selectedWorkflowType === 'applicationSubmission') {
+                    setApplicationSubmissionStep('upload')
+                  } else {
+                    setDocumentUploadStep('upload')
+                  }
+                }}
+                onSubmit={() => void onSubmitUpload()}
+                onReset={onReset}
+                onClear={clearQueuedFiles}
+                onRemove={removeQueuedFile}
+                renderCompleteAction={(item) =>
+                  item.status === 'complete' && item.resultApplicationNumber ? (
+                    <Link to={`/provincial/application/${item.resultApplicationNumber}`}>
+                      Open Application {item.resultApplicationNumber}
+                    </Link>
+                  ) : null
+                }
+                showWorkflowProgress={false}
+              />
+            </>
+          )}
         </div>
       </Column>
     </Grid>

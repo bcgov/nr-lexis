@@ -105,7 +105,6 @@ import {
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
-import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
 import { AppNotification } from '../../components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
@@ -3038,10 +3037,7 @@ const ProvincialApplicationDetailsPage = () => {
                         id="application-documents"
                         className="application-detail-section application-detail-documents"
                       >
-                        <h2 className="detail-tile-title">
-                          Documents{' '}
-                          <ApiSourceTag context="Application documents are returned from the document service." />
-                        </h2>
+                        <h2 className="detail-tile-title">Documents</h2>
                         {!!showDocumentUploadUnavailableMessage &&
                           canUploadApplicationDocuments && (
                             <AppNotification

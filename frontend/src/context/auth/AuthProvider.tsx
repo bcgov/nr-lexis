@@ -334,11 +334,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const data = await fetchSessionCapabilities()
         if (sessionGenerationRef.current === refreshGeneration) {
           sessionExpiryInFlightRef.current = false
-          setCapabilities(sanitizeCapabilities(data, orgUnitNo))
+          const nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+          authenticatedSessionRef.current = nextCapabilities.authenticated
+          setCapabilities(nextCapabilities)
         }
       } catch (error) {
         if (sessionGenerationRef.current === refreshGeneration) {
           console.warn('Unable to load session capabilities.', error)
+          authenticatedSessionRef.current = false
           setCapabilities(DEFAULT_CAPABILITIES)
         }
       } finally {

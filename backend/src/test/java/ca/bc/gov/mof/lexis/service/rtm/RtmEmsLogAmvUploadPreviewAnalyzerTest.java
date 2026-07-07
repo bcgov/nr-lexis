@@ -73,8 +73,9 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
 
     assertThat(sheetXml)
-        .contains("<t>Update Date</t>")
-        .contains("<t>GRADE</t>")
+        .contains("Update Date (YYYY-MM-DD)")
+        .contains("Enter update date here")
+        .contains("GRADE")
         .doesNotContain("<t>Retrieval Date</t>")
         .doesNotContain("<f>TODAY()</f>")
         .doesNotContain("<v>10.25</v>")

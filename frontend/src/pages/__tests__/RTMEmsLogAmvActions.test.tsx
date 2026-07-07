@@ -240,7 +240,17 @@ describe('RTM EMS Log AMV actions', () => {
     )
 
     expect(await screen.findByText('1 validation issue found')).toBeVisible()
-    expect(screen.getByText('The update date is required in the uploaded template.')).toBeVisible()
+    const validationTable = screen.getByRole('table', { name: 'Upload validation issues' })
+    expect(validationTable).toBeVisible()
+    expect(within(validationTable).getByRole('columnheader', { name: 'Issue' })).toBeVisible()
+    expect(
+      within(validationTable).getByRole('columnheader', { name: 'File location' }),
+    ).toBeVisible()
+    expect(within(validationTable).getByRole('columnheader', { name: 'Detail' })).toBeVisible()
+    expect(within(validationTable).getByText('Error')).toBeVisible()
+    expect(
+      within(validationTable).getByText('The update date is required in the uploaded template.'),
+    ).toBeVisible()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     expect(screen.queryByRole('heading', { name: 'Review upload' })).not.toBeInTheDocument()
   })
