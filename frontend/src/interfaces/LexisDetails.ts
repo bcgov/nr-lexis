@@ -93,6 +93,10 @@ export type ProvincialOfferDetail = {
   speciesGradeCode: string | null
   offerVolume: number | null
   region: string | null
+  canEditScheduleDates: boolean
+  canEditOfferRemarks: boolean
+  canEditOfferDetails: boolean
+  canEditWithdrawFields: boolean
 }
 
 export type ProvincialPermitDetail = {
@@ -119,6 +123,8 @@ export type ProvincialPermitDetail = {
   permitVolume: number | null
   approvedExemptionVolume: number | null
   exemptionVolumeRemaining: number | null
+  exemptionTypeDescription: string | null
+  blanketOic: boolean
   numberOfPieces: number | null
   receiptNumber: string | null
   federalPermitNumber: string | null

@@ -51,6 +51,10 @@ const offerDetail: ProvincialOfferDetail = {
   speciesGradeCode: 'FI/HE/LUM',
   offerVolume: 99.99,
   region: '12',
+  canEditScheduleDates: true,
+  canEditOfferRemarks: true,
+  canEditOfferDetails: true,
+  canEditWithdrawFields: true,
 }
 
 const LocationDisplay = () => {
@@ -89,8 +93,7 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     const companyInput = screen.getByLabelText('Company')
-    await userEvent.clear(companyInput)
-    await userEvent.type(companyInput, 'Updated Buyer')
+    expect(companyInput).toHaveAttribute('readonly')
 
     const amountInput = screen.getByLabelText('Offer amount ($/m³)')
     await userEvent.clear(amountInput)
@@ -104,7 +107,7 @@ describe('Provincial Offer Detail Actions', () => {
           offerNumber: '81001',
           applicationNumber: '1000456',
           packageNumber: 'PKG-903',
-          companyName: 'Updated Buyer',
+          companyName: 'Original Buyer',
           purchaseOfferAmount: '13000',
           pickupLocation: 'Port Moody',
         }),
@@ -114,10 +117,14 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 
-  it('does not expose edit controls without createOffer access', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({ canPerform: (action: string) => action !== 'createOffer' }),
-    )
+  it('does not expose edit controls when the offer detail has no edit permissions', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      canEditScheduleDates: false,
+      canEditOfferRemarks: false,
+      canEditOfferDetails: false,
+      canEditWithdrawFields: false,
+    })
 
     renderPage()
 
@@ -175,5 +182,27 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.getByLabelText('Offer conditions / remarks')).toHaveAttribute('maxlength', '250')
     expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('maxlength', '250')
     expect(screen.getByLabelText('Offer remarks')).toHaveAttribute('maxlength', '250')
+  })
+
+  it('only enables legacy offer detail fields for offering-client edits', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      canEditScheduleDates: false,
+      canEditOfferRemarks: false,
+      canEditOfferDetails: true,
+      canEditWithdrawFields: false,
+    })
+
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Provincial offer details' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+
+    expect(screen.getByLabelText('Offer amount ($/m³)')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Pickup location')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Company')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer remarks')).toHaveAttribute('readonly')
+    expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeDisabled()
   })
 })

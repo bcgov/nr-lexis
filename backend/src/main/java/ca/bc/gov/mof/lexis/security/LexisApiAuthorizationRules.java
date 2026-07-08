@@ -102,7 +102,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("getClientData", ACTION_OFFER_DETAILS),
           Map.entry("getClientLocations", ACTION_OFFER_DETAILS),
           Map.entry("addOffer", ACTION_CREATE_OFFER),
-          Map.entry("updateOffer", ACTION_CREATE_OFFER));
+          Map.entry("updateOffer", ACTION_OFFER_DETAILS));
 
   private static final Map<String, String> PERMIT_DETAILS_RPC_ACTIONS =
       actionMap(
@@ -456,7 +456,11 @@ final class LexisApiAuthorizationRules {
           action(
               HttpMethod.POST,
               ACTION_CREATE_OFFER,
-              "/api/lexis/rpc/offer-details/**"),
+              "/api/lexis/rpc/offer-details/offer"),
+          action(
+              HttpMethod.POST,
+              ACTION_OFFER_DETAILS,
+              "/api/lexis/rpc/offer-details/offer/update"),
           legacyAction(
               HttpMethod.POST,
               ACTION_OFFER_DETAILS,

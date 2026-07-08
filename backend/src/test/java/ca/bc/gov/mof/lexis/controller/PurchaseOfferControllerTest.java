@@ -16,6 +16,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
@@ -39,6 +40,7 @@ class PurchaseOfferControllerTest {
   @Mock private ObjectProvider<PurchaseOfferService> serviceProvider;
   @Mock private PurchaseOfferService service;
   @Mock private LexisSessionService sessionService;
+  @Mock private LexisAuthorizationService authorizationService;
   @Mock private LexisApplicationService applicationService;
   @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
@@ -50,7 +52,11 @@ class PurchaseOfferControllerTest {
   void setup() {
     controller =
         new PurchaseOfferController(
-            serviceProvider, sessionService, applicationService, applicationDetailsServiceProvider);
+            serviceProvider,
+            sessionService,
+            authorizationService,
+            applicationService,
+            applicationDetailsServiceProvider);
   }
 
   @Test
@@ -262,9 +268,35 @@ class PurchaseOfferControllerTest {
         controller.getByOfferNumber(81009L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(offer.withApplicationContext(45.5, "FI/HE/LUM"));
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, true, false));
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void detailShouldReturnFullEditPermissionsWhenUserCanCreateOffer() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "createOffer"))
+        .thenReturn(true);
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(true, true, true, true));
   }
 
   @Test

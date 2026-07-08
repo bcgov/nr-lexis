@@ -4,7 +4,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
-import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import {
   firstValidationError,
@@ -118,7 +117,6 @@ const mergeOfferFormIntoDetail = (
 })
 
 const ProvincialOfferDetailsPage = () => {
-  const { canPerform } = useAuth()
   const { offerNumber } = useParams()
   const navigate = useNavigate()
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
@@ -131,7 +129,16 @@ const ProvincialOfferDetailsPage = () => {
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialOfferDetailField>>({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
-  const canEditOffer = canPerform('createOffer')
+  const canEditAnyOfferField =
+    !!detail &&
+    (detail.canEditOfferDetails ||
+      detail.canEditWithdrawFields ||
+      detail.canEditScheduleDates ||
+      detail.canEditOfferRemarks)
+  const canEditOfferDetailFields = isEditing && !!detail?.canEditOfferDetails
+  const canEditWithdrawFields = isEditing && !!detail?.canEditWithdrawFields
+  const canEditScheduleFields = isEditing && !!detail?.canEditScheduleDates
+  const canEditOfferRemarkFields = isEditing && !!detail?.canEditOfferRemarks
 
   const loadOfferDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
@@ -398,13 +405,7 @@ const ProvincialOfferDetailsPage = () => {
                   value={form.packageNumber}
                   readOnly
                 />
-                <TextInput
-                  id="offerRegion"
-                  labelText="Region"
-                  value={form.region}
-                  readOnly={!isEditing}
-                  onChange={(event) => updateFormField('region', event.target.value)}
-                />
+                <TextInput id="offerRegion" labelText="Region" value={form.region} readOnly />
                 <TextInput
                   id="offerAdvertisingDate"
                   labelText="Listing date"
@@ -437,31 +438,19 @@ const ProvincialOfferDetailsPage = () => {
                   id="offerOfferingClientNumber"
                   labelText="Offering client number"
                   value={form.offeringClientNumber}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('offeringClientNumber')}
-                  invalidText={fieldError('offeringClientNumber')}
-                  onBlur={() => markFieldTouched('offeringClientNumber')}
-                  onChange={(event) => updateFormField('offeringClientNumber', event.target.value)}
+                  readOnly
                 />
                 <TextInput
                   id="offerCompanyName"
                   labelText="Company"
                   value={form.companyName}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('companyName')}
-                  invalidText={fieldError('companyName')}
-                  onBlur={() => markFieldTouched('companyName')}
-                  onChange={(event) => updateFormField('companyName', event.target.value)}
+                  readOnly
                 />
                 <TextInput
                   id="offerContactName"
                   labelText="Contact name"
                   value={form.contactName}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('contactName')}
-                  invalidText={fieldError('contactName')}
-                  onBlur={() => markFieldTouched('contactName')}
-                  onChange={(event) => updateFormField('contactName', event.target.value)}
+                  readOnly
                 />
               </div>
             </fieldset>
@@ -485,8 +474,8 @@ const ProvincialOfferDetailsPage = () => {
                   id="offerVolume"
                   labelText="Offer volume (m³)"
                   value={form.offerVolume}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('offerVolume')}
+                  readOnly={!canEditOfferDetailFields}
+                  invalid={canEditOfferDetailFields && !!fieldError('offerVolume')}
                   invalidText={fieldError('offerVolume')}
                   onBlur={() => markFieldTouched('offerVolume')}
                   onChange={(event) => updateFormField('offerVolume', event.target.value)}
@@ -495,8 +484,8 @@ const ProvincialOfferDetailsPage = () => {
                   id="offerPurchaseOfferAmount"
                   labelText="Offer amount ($/m³)"
                   value={form.purchaseOfferAmount}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('purchaseOfferAmount')}
+                  readOnly={!canEditOfferDetailFields}
+                  invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferAmount')}
                   invalidText={fieldError('purchaseOfferAmount')}
                   onBlur={() => markFieldTouched('purchaseOfferAmount')}
                   onChange={(event) => updateFormField('purchaseOfferAmount', event.target.value)}
@@ -505,18 +494,18 @@ const ProvincialOfferDetailsPage = () => {
                   id="offerPurchaseOfferDate"
                   labelText="Offer received date"
                   value={form.purchaseOfferDate}
-                  invalid={isEditing && !!fieldError('purchaseOfferDate')}
+                  invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferDate')}
                   invalidText={fieldError('purchaseOfferDate')}
                   onBlur={() => markFieldTouched('purchaseOfferDate')}
                   onChange={(value) => updateFormField('purchaseOfferDate', value)}
-                  disabled={!isEditing}
+                  disabled
                 />
                 <TextArea
                   id="offerPickupLocation"
                   labelText="Pickup location"
                   value={form.pickupLocation}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('pickupLocation')}
+                  readOnly={!canEditOfferDetailFields}
+                  invalid={canEditOfferDetailFields && !!fieldError('pickupLocation')}
                   invalidText={fieldError('pickupLocation')}
                   onBlur={() => markFieldTouched('pickupLocation')}
                   onChange={(event) => updateFormField('pickupLocation', event.target.value)}
@@ -526,8 +515,8 @@ const ProvincialOfferDetailsPage = () => {
                   id="offerCondition"
                   labelText="Offer conditions / remarks"
                   value={form.offerCondition}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('offerCondition')}
+                  readOnly={!canEditOfferDetailFields}
+                  invalid={canEditOfferDetailFields && !!fieldError('offerCondition')}
                   invalidText={fieldError('offerCondition')}
                   onBlur={() => markFieldTouched('offerCondition')}
                   onChange={(event) => updateFormField('offerCondition', event.target.value)}
@@ -543,18 +532,18 @@ const ProvincialOfferDetailsPage = () => {
                   id="offerWithdrawalDate"
                   labelText="Offer withdrawal date"
                   value={form.offerWithdrawalDate}
-                  invalid={isEditing && !!fieldError('offerWithdrawalDate')}
+                  invalid={canEditWithdrawFields && !!fieldError('offerWithdrawalDate')}
                   invalidText={fieldError('offerWithdrawalDate')}
                   onBlur={() => markFieldTouched('offerWithdrawalDate')}
                   onChange={(value) => updateFormField('offerWithdrawalDate', value)}
-                  disabled={!isEditing}
+                  disabled={!canEditWithdrawFields}
                 />
                 <TextArea
                   id="offerWithdrawReason"
                   labelText="Offer withdrawal reason"
                   value={form.withdrawReason}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('withdrawReason')}
+                  readOnly={!canEditWithdrawFields}
+                  invalid={canEditWithdrawFields && !!fieldError('withdrawReason')}
                   invalidText={fieldError('withdrawReason')}
                   onBlur={() => markFieldTouched('withdrawReason')}
                   onChange={(event) => updateFormField('withdrawReason', event.target.value)}
@@ -570,11 +559,11 @@ const ProvincialOfferDetailsPage = () => {
                   id="offerTeacReviewDate"
                   labelText="TEAC review date"
                   value={form.teacReviewDate}
-                  invalid={isEditing && !!fieldError('teacReviewDate')}
+                  invalid={canEditScheduleFields && !!fieldError('teacReviewDate')}
                   invalidText={fieldError('teacReviewDate')}
                   onBlur={() => markFieldTouched('teacReviewDate')}
                   onChange={(value) => updateFormField('teacReviewDate', value)}
-                  disabled={!isEditing}
+                  disabled={!canEditScheduleFields}
                 />
                 <SearchableSelect
                   id="offerFairOfferIndicator"
@@ -582,7 +571,7 @@ const ProvincialOfferDetailsPage = () => {
                   value={form.fairOfferIndicator}
                   placeholder="Select value"
                   options={YES_NO_OPTIONS}
-                  disabled={!isEditing}
+                  disabled={!canEditScheduleFields}
                   onChange={(value) => updateFormField('fairOfferIndicator', value)}
                 />
                 <SearchableSelect
@@ -591,7 +580,7 @@ const ProvincialOfferDetailsPage = () => {
                   value={form.validOfferIndicator}
                   placeholder="Select value"
                   options={YES_NO_OPTIONS}
-                  disabled={!isEditing}
+                  disabled={!canEditScheduleFields}
                   onChange={(value) => updateFormField('validOfferIndicator', value)}
                 />
                 <SearchableSelect
@@ -600,15 +589,15 @@ const ProvincialOfferDetailsPage = () => {
                   value={form.approvalIndicator}
                   placeholder="Select value"
                   options={YES_NO_OPTIONS}
-                  disabled={!isEditing}
+                  disabled={!canEditScheduleFields}
                   onChange={(value) => updateFormField('approvalIndicator', value)}
                 />
                 <TextArea
                   id="offerRemark"
                   labelText="Offer remarks"
                   value={form.offerRemark}
-                  readOnly={!isEditing}
-                  invalid={isEditing && !!fieldError('offerRemark')}
+                  readOnly={!canEditOfferRemarkFields}
+                  invalid={canEditOfferRemarkFields && !!fieldError('offerRemark')}
                   invalidText={fieldError('offerRemark')}
                   onBlur={() => markFieldTouched('offerRemark')}
                   onChange={(event) => updateFormField('offerRemark', event.target.value)}
@@ -647,7 +636,7 @@ const ProvincialOfferDetailsPage = () => {
                     </Button>
                   </>
                 ) : (
-                  canEditOffer && (
+                  canEditAnyOfferField && (
                     <Button kind="primary" onClick={() => setIsEditing(true)}>
                       Edit
                     </Button>

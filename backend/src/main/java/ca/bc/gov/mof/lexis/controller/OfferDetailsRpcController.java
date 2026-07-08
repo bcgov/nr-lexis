@@ -5,10 +5,13 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
@@ -315,19 +318,27 @@ public class OfferDetailsRpcController {
   public ResponseEntity<OfferPersistenceResponseDto> updateOffer(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
-      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-    }
-
     PurchaseOfferService service = purchaseOfferServiceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Purchase offer service unavailable - returning no content for update offer");
       return ResponseEntity.noContent().build();
     }
 
+    PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
+    boolean canCreateOffer = canPerform(authentication, LEGACY_ACTION_CREATE_OFFER);
+    if (!canCreateOffer) {
+      Optional<PurchaseOfferDetailDto> currentOffer =
+          service.findByOfferNumber(request.exportPurchaseOfferNumber());
+      if (currentOffer.isEmpty()
+          || !canScopedOfferingClientUpdate(authentication, currentOffer.get())) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+      }
+      request = restrictOfferingClientUpdate(request, currentOffer.get());
+    }
+
     String userId = authentication == null ? null : authentication.getName();
     PurchaseOfferService.CreateOfferResult result =
-        service.updateOffer(toCreateOfferRequest(parameters), userId);
+        service.updateOffer(request, userId);
     return ResponseEntity.ok(toPersistenceResponse(result));
   }
 
@@ -354,6 +365,45 @@ public class OfferDetailsRpcController {
   private boolean canPerform(Authentication authentication, String action) {
     return authorizationService.canPerformAction(
         sessionService.parseRolesFromPrincipal(authentication), action);
+  }
+
+  private boolean canScopedOfferingClientUpdate(
+      Authentication authentication, PurchaseOfferDetailDto currentOffer) {
+    if (!canPerform(authentication, "/offerDetails")) {
+      return false;
+    }
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    return scopedClientNumber != null
+        && matchesScopedClient(scopedClientNumber, currentOffer.offeringClientNumber());
+  }
+
+  private PurchaseOfferService.CreateOfferRequest restrictOfferingClientUpdate(
+      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+    boolean canWithdraw =
+        currentOffer.offerWithdrawalDate() == null
+            && currentOffer.offerEndDate() != null
+            && !currentOffer.offerEndDate().isBefore(LocalDate.now());
+    return new PurchaseOfferService.CreateOfferRequest(
+        currentOffer.applicationNumber(),
+        currentOffer.offerNumber(),
+        currentOffer.packageNumber(),
+        currentOffer.companyName(),
+        currentOffer.contactName(),
+        requested.purchaseOfferAmount(),
+        currentOffer.purchaseOfferDate(),
+        canWithdraw ? requested.offerWithdrawalDate() : currentOffer.offerWithdrawalDate(),
+        currentOffer.teacReviewDate(),
+        currentOffer.fairOfferIndicator(),
+        currentOffer.validOfferIndicator(),
+        currentOffer.offerRemark(),
+        currentOffer.approvalIndicator(),
+        canWithdraw ? requested.withdrawReason() : currentOffer.withdrawReason(),
+        currentOffer.exportJurisdictionCode(),
+        currentOffer.manufacturingFacilityInfo(),
+        currentOffer.offeringClientNumber(),
+        requested.pickupLocation(),
+        requested.offerCondition(),
+        requested.offerVolume());
   }
 
   private Long parseApplicationNumber(String applicationNumber) {

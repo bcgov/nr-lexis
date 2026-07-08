@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
@@ -338,6 +339,92 @@ class OfferDetailsRpcControllerTest {
     assertThat(request.withdrawReason()).isEqualTo("Withdrawn by buyer");
   }
 
+  @Test
+  void updateOfferLegacyShouldAllowOfferingClientAndPreserveApproverFields() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(authentication.getName()).thenReturn("bceid\\buyer");
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(false);
+    when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offerDetails"))
+        .thenReturn(true);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    when(purchaseOfferService.updateOffer(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("bceid\\buyer")))
+        .thenReturn(
+            new PurchaseOfferService.CreateOfferResult(
+                true,
+                "The purchase offer was updated successfully.",
+                1000456L,
+                81001L,
+                false,
+                null,
+                true,
+                true,
+                List.of(),
+                List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+    params.add("purchaseOfferDate", "2026-04-01");
+    params.add("teacReviewDate", "2026-04-02");
+    params.add("approvalIndicator", "Y");
+    params.add("offerRemark", "Approver-only change");
+    params.add("offerWithdrawalDate", "2026-07-30");
+    params.add("withdrawReason", "Withdrawn by buyer");
+    params.add("pickupLocation", "Updated pickup");
+    params.add("offerCondition", "Updated condition");
+    params.add("offerVolume", "55.5");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<PurchaseOfferService.CreateOfferRequest> requestCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferService.CreateOfferRequest.class);
+    verify(purchaseOfferService)
+        .updateOffer(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\buyer"));
+    PurchaseOfferService.CreateOfferRequest request = requestCaptor.getValue();
+    assertThat(request.applicationNumber()).isEqualTo(1000456L);
+    assertThat(request.exportPurchaseOfferNumber()).isEqualTo(81001L);
+    assertThat(request.purchaseOfferAmount()).isEqualTo(13000.00d);
+    assertThat(request.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 2));
+    assertThat(request.teacReviewDate()).isEqualTo(LocalDate.of(2026, 3, 5));
+    assertThat(request.approvalIndicator()).isEqualTo("N");
+    assertThat(request.offerRemark()).isEqualTo("Initial offer");
+    assertThat(request.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 7, 30));
+    assertThat(request.withdrawReason()).isEqualTo("Withdrawn by buyer");
+    assertThat(request.pickupLocation()).isEqualTo("Updated pickup");
+    assertThat(request.offerCondition()).isEqualTo("Updated condition");
+    assertThat(request.offerVolume()).isEqualTo(55.5d);
+  }
+
+  @Test
+  void updateOfferLegacyShouldRejectNonOfferingClientWithoutCreateOfferAccess() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(false);
+    when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offerDetails"))
+        .thenReturn(true);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00099999");
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(purchaseOfferService).findByOfferNumber(81001L);
+  }
+
   private LexisApplicationDetailDto application(
       long applicationNumber,
       String statusCode,
@@ -371,5 +458,34 @@ class OfferDetailsRpcControllerTest {
         packages,
         List.of(),
         List.of());
+  }
+
+  private PurchaseOfferDetailDto offerDetailForRestrictedUpdate() {
+    return new PurchaseOfferDetailDto(
+        81001L,
+        1000456L,
+        "PKG-903",
+        45.5,
+        "FI/HE/LUM",
+        "Original Buyer",
+        "Buyer Contact",
+        12500.25,
+        LocalDate.of(2026, 3, 2),
+        null,
+        LocalDate.of(2026, 3, 5),
+        "N",
+        "Y",
+        "N",
+        "Initial offer",
+        null,
+        "P",
+        "Mill details",
+        "00077881",
+        "Port Moody",
+        "Condition notes",
+        LocalDate.of(2026, 2, 25),
+        LocalDate.of(2026, 12, 31),
+        90.0,
+        "12");
   }
 }
