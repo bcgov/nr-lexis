@@ -611,16 +611,19 @@ const ProvincialPermitDetailsPage = () => {
   const canDeletePermitDocuments = canPerform('/filePermitUpload')
   const canDeleteInvoiceDocuments = canPerform('/fileInvoiceUpload')
   const canSavePermit = canPerform('savePermit')
+  const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
+  const scaleAttachmentLockedStatuses = new Set(['COM', 'EXP', 'CAN'])
   const canOpenPermitReport =
-    canPerform('/permitReport') && detail?.permitStatusCode?.trim().toUpperCase() === 'COM'
+    canPerform('/permitReport') && permitStatusCode === 'COM'
   const canEditPermitApplications =
     canSavePermit &&
     !!detail?.permitNumber &&
     !detail?.blanketOic &&
-    detail.permitStatusCode?.trim().toUpperCase() !== 'COM'
-  const canEditNormalPermitScaleRows = canSavePermit && !detail?.blanketOic
+    permitStatusCode !== 'COM'
+  const canEditNormalPermitScaleRows =
+    canSavePermit && !detail?.blanketOic && !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
   const canEditBlanketOicScaleRows =
-    canSavePermit && !!detail?.blanketOic && detail.permitStatusCode?.trim().toUpperCase() !== 'COM'
+    canSavePermit && !!detail?.blanketOic && permitStatusCode !== 'COM'
   const itemTableColumnCount =
     (canEditNormalPermitScaleRows ? 1 : 0) + 6 + (canEditBlanketOicScaleRows ? 1 : 0)
   const reloadPermitTabs = useCallback(async () => {

@@ -88,6 +88,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
   private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
+  private static final String EXPORT_PERMIT_STATUS_EXPIRED = "EXP";
+  private static final String EXPORT_PERMIT_STATUS_CANCELLED = "CAN";
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final String SPECIES_FIR = "FI";
   private static final int MAX_SALES_INVOICE_NUMBER_LENGTH = 9;
@@ -939,6 +941,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     if (normalizedScaleDetailId == null) {
       return failurePersistenceResponse(List.of("A valid scale detail id is required."), permitNumber);
+    }
+
+    Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
+    if (permit.isEmpty()) {
+      return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
+    }
+    if (isScaleAttachmentLockedStatus(permit.get().permitStatusCode())) {
+      return failurePersistenceResponse(
+          List.of("Scale rows cannot be changed for a completed, expired, or cancelled permit."),
+          permitNumber);
     }
 
     Optional<ScaleMutationRow> existing = repository.findScaleMutationById(normalizedScaleDetailId);
@@ -1852,6 +1864,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private PermitPersistenceRpcResponseDto failurePersistenceResponse(
       List<String> errors, Long permitNumber) {
     return new PermitPersistenceRpcResponseDto(false, "", errors, List.of(), permitNumber);
+  }
+
+  private boolean isScaleAttachmentLockedStatus(String permitStatusCode) {
+    String normalized = trimToNull(permitStatusCode);
+    return EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(normalized)
+        || EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(normalized)
+        || EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(normalized);
   }
 
   private List<String> validateApplicationAssociationRequest(

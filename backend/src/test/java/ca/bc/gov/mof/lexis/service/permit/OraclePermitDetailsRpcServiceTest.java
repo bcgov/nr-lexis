@@ -958,6 +958,8 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void updateScaleAttachmentShouldRejectScaleAssignedToAnotherPermit() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
     when(repository.findScaleMutationById("101"))
         .thenReturn(
             Optional.of(
@@ -979,6 +981,24 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors()).containsExactly("Scale detail is already assigned to another permit.");
+    verify(repository, never())
+        .updateScaleDetail(
+            org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
+            org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void updateScaleAttachmentShouldRejectExpiredPermit() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("EXP")));
+
+    PermitPersistenceRpcResponseDto response =
+        service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Scale rows cannot be changed for a completed, expired, or cancelled permit.");
+    verify(repository, never()).findScaleMutationById("101");
     verify(repository, never())
         .updateScaleDetail(
             org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
@@ -1195,6 +1215,10 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   private PermitMutationRow permitMutationRow() {
+    return permitMutationRow("ACT");
+  }
+
+  private PermitMutationRow permitMutationRow(String permitStatusCode) {
     return new PermitMutationRow(
         7000123L,
         "Destination Co",
@@ -1222,7 +1246,7 @@ class OraclePermitDetailsRpcServiceTest {
         "EX-700",
         1835L,
         "VAN",
-        "ACT",
+        permitStatusCode,
         "S",
         "US",
         null,

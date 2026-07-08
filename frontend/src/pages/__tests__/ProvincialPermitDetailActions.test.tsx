@@ -480,6 +480,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('updates normal permit scale membership from the items tab', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
     mockedFetchProvincialPermitDetailTabs
       .mockResolvedValueOnce({
         ...tabsResult,
@@ -563,6 +568,49 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('Scale detail was added to the permit.')).toBeInTheDocument()
+  })
+
+  it('does not allow normal permit scale membership changes for expired permits', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'EXP',
+      permitStatusDescription: 'Expired',
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      items: [
+        {
+          id: 'SCALE-1',
+          timberMark: 'TM-1',
+          species: 'Fir',
+          grade: 'A',
+          pieces: 12,
+          volume: 34.5,
+          packageNumber: 'PKG-9',
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+
+    expect(await screen.findByText('SCALE-1')).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Include in permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }),
+    ).not.toBeInTheDocument()
   })
 
   it('adds and removes applications associated with an editable permit', async () => {
