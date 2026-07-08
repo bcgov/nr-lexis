@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.security;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -10,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -27,8 +31,15 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   @Autowired private MockMvc mockMvc;
 
   @Test
-  void prodRtmOnlyModeShouldExposeOnlyRtmAndRequiredSupportApisToAdmins() throws Exception {
+  void prodRtmOnlyModeShouldExposeOnlyRtmUploadAndRequiredSupportApisToAdmins()
+      throws Exception {
     SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
+    MockMultipartFile workbook =
+        new MockMultipartFile(
+            "formFile",
+            "template.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "not a real workbook".getBytes());
 
     mockMvc
         .perform(get("/api/lexis/session/capabilities").with(jwt().authorities(admin)))
@@ -39,10 +50,34 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
     mockMvc
         .perform(get("/api/lexis/rtm/emslogamv").with(jwt().authorities(admin)))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
 
     mockMvc
-        .perform(get("/api/lexis/rpc/application-details/species-codes").with(jwt().authorities(admin)))
+        .perform(
+            post("/api/lexis/rtm/emslogamv")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            multipart("/api/lexis/rtm/emslogamv/preview")
+                .file(workbook)
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isUnprocessableEntity());
+
+    mockMvc
+        .perform(
+            multipart("/api/lexis/rtm/emslogamv/upload")
+                .file(workbook)
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isUnprocessableEntity());
+
+    mockMvc
+        .perform(
+            get("/api/lexis/rpc/application-details/species-codes")
+                .with(jwt().authorities(admin)))
         .andExpect(status().is2xxSuccessful());
 
     mockMvc
@@ -56,9 +91,30 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
   @Test
   void prodRtmOnlyModeShouldRejectRtmForNonAdminRoles() throws Exception {
+    MockMultipartFile workbook =
+        new MockMultipartFile(
+            "formFile",
+            "template.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "not a real workbook".getBytes());
+
     mockMvc
         .perform(
             get("/api/lexis/rtm/emslogamv")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            multipart("/api/lexis/rtm/emslogamv/preview")
+                .file(workbook)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            multipart("/api/lexis/rtm/emslogamv/upload")
+                .file(workbook)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
   }
