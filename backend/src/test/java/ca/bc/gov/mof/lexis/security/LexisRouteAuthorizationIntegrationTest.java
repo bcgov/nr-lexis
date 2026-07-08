@@ -267,6 +267,14 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void federalApplicationSearchShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/federal/applications/search")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void exemptionDetailsRpcShouldRejectAnonymousRequests() throws Exception {
     mockMvc.perform(get("/api/lexis/rpc/exemption-details/applications")).andExpect(status().isUnauthorized());
   }
@@ -1273,6 +1281,16 @@ class LexisRouteAuthorizationIntegrationTest {
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldRejectFederalAccessForReadOnly() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/federalApplicationSearch")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(false));
   }
 
   @Test

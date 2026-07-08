@@ -213,12 +213,13 @@ class LexisAuthorizationMatrixParityTest {
   void readOnlyRoleShouldViewSearchesAndDetailsWithoutMutatingActionsOrReports() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("/federalApplicationSearch", "/federalApplicationDetails", "viewFederalApplication")
         .doesNotContain(
             "/summary",
             "/applicationRemarks",
             "/applicationsReview",
             "/createExemption",
+            "/federalApplicationSearch",
+            "/federalApplicationDetails",
             "/fileApplicationUpload",
             "/fileExemptionUpload",
             "/fileInvoiceUpload",
@@ -231,7 +232,8 @@ class LexisAuthorizationMatrixParityTest {
             "createOffer",
             "saveExemption",
             "savePermit",
-            "uploadApplicationSubmission")
+            "uploadApplicationSubmission",
+            "viewFederalApplication")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
   }
 }
