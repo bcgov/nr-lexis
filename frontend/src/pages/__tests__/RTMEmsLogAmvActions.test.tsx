@@ -220,7 +220,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByRole('heading', { name: 'Upload' })).toBeVisible()
   })
 
-  it('keeps validation warnings on the upload step and omits them from review', async () => {
+  it('hides validation warnings when the spreadsheet passes validation', async () => {
     const user = userEvent.setup()
     const warning = "Row 6 grade 'B' had no parseable AMV values and was skipped."
     mockedPreviewUpload.mockResolvedValue({
@@ -237,11 +237,11 @@ describe('RTM EMS Log AMV actions', () => {
       }),
     )
 
-    const validationTable = await screen.findByRole('table', {
-      name: 'Upload validation issues',
-    })
-    expect(within(validationTable).getByText('Warning')).toBeVisible()
-    expect(within(validationTable).getByText(warning)).toBeVisible()
+    expect(await screen.findByText('Spreadsheet validated')).toBeVisible()
+    expect(
+      screen.queryByRole('table', { name: 'Upload validation issues' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(warning)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Review upload' }))
 

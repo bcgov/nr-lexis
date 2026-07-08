@@ -396,8 +396,9 @@ const UploadValidationStatus = ({
     return null
   }
 
-  const issueCount = previewResult.errors.length + previewResult.warnings.length
   const isAccepted = previewResult.status === 'accepted'
+  const visibleWarnings = isAccepted ? [] : previewResult.warnings
+  const issueCount = previewResult.errors.length + visibleWarnings.length
 
   return (
     <>
@@ -419,7 +420,7 @@ const UploadValidationStatus = ({
         )}
         {isAccepted && <p>{previewResult.message}</p>}
       </UploadValidationMessage>
-      <ValidationIssuesTable errors={previewResult.errors} warnings={previewResult.warnings} />
+      <ValidationIssuesTable errors={previewResult.errors} warnings={visibleWarnings} />
     </>
   )
 }
