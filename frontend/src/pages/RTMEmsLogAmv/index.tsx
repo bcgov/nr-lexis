@@ -93,8 +93,10 @@ const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spread
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 
-const RTM_UPLOAD_ONLY_DESCRIPTION =
-  'Generate an upload preview from XLSX files and apply validated average monthly value changes.'
+const RTM_UPLOAD_ONLY_DESCRIPTION = 'Update average monthly values by uploading an XLSX file.'
+const RTM_UPLOAD_STEP_DESCRIPTION =
+  'Add your completed template to check for errors before the new values take effect.'
+const RTM_UPLOAD_FIELD_HELPER = 'Accepted formats: .xlsx.'
 
 const RTM_UPLOAD_REVIEW_STEPS = [
   { id: 'upload', label: 'Upload' },
@@ -694,14 +696,16 @@ const RTMEmsLogAmvPage = () => {
     }
   }
 
-  const isReviewDisabled =
-    isPreviewing ||
-    !selectedUploadFile ||
-    selectedUploadFile.size <= 0 ||
-    !pendingUploadValidation ||
-    pendingUploadValidation.fileName !== selectedUploadFile.name ||
-    pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-    previewResult?.status !== 'accepted'
+  const hasCurrentUploadValidation =
+    !!selectedUploadFile &&
+    selectedUploadFile.size > 0 &&
+    !!pendingUploadValidation &&
+    pendingUploadValidation.fileName === selectedUploadFile.name &&
+    pendingUploadValidation.fileSize === selectedUploadFile.size
+
+  const isReviewReady = hasCurrentUploadValidation && previewResult?.status === 'accepted'
+
+  const isReviewDisabled = isPreviewing || !canManage
 
   const isUploadDisabled =
     isUploading ||
@@ -714,7 +718,17 @@ const RTMEmsLogAmvPage = () => {
     previewResult?.status !== 'accepted'
 
   const openReviewStep = () => {
-    if (isReviewDisabled) {
+    if (!canManage) {
+      setUploadError('You do not have permission to upload average monthly value rows.')
+      return
+    }
+
+    if (!selectedUploadFile || selectedUploadFile.size <= 0) {
+      setUploadError('Please upload a file before continuing.')
+      return
+    }
+
+    if (!isReviewReady) {
       setUploadError('Upload a spreadsheet that passes validation before reviewing it.')
       return
     }
@@ -750,17 +764,14 @@ const RTMEmsLogAmvPage = () => {
           <>
             <div className="admin-upload-section-heading">
               <h2 id="rtm-upload-title">Upload</h2>
-              <p>Select a spreadsheet to validate before reviewing average monthly values.</p>
+              <p>{RTM_UPLOAD_STEP_DESCRIPTION}</p>
             </div>
 
             <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
               <div className="admin-upload-field-header">
                 <div>
                   <span className="admin-upload-field-label">Upload Excel Spreadsheet</span>
-                  <p className="admin-upload-field-helper">
-                    Supported format: .xlsx. Enter the update date and AMV values in the template;
-                    values apply to old and second growth.
-                  </p>
+                  <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
                 </div>
                 <a
                   className="cds--btn cds--btn--ghost"

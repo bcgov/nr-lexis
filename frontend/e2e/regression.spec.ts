@@ -1251,9 +1251,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expectFsptsUploadLayout(page)
     await expect(
-      page.getByText(
-        'Generate an upload preview from XLSX files and apply validated average monthly value changes.',
-      ),
+      page.getByText('Update average monthly values by uploading an XLSX file.'),
     ).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Query rows' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Manual entry' })).toHaveCount(0)
@@ -1267,20 +1265,24 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(workflowProgress.getByText('1. Upload')).toBeVisible()
     await expect(workflowProgress.getByText('2. Review')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Upload' })).toBeVisible()
+    await expect(
+      page.getByText(
+        'Add your completed template to check for errors before the new values take effect.',
+      ),
+    ).toBeVisible()
     await expect(page.getByText('Upload Excel Spreadsheet')).toBeVisible()
 
     const templateLink = page.getByRole('link', { name: 'Download template' })
     await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
     await expect(templateLink).toHaveAttribute('download', 'rtm-ems-log-amv-template.xlsx')
-    await expect(
-      page.getByText(
-        'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
-      ),
-    ).toBeVisible()
+    await expect(page.getByText('Accepted formats: .xlsx.')).toBeVisible()
     await expect(
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    const reviewUploadButton = page.getByRole('button', { name: 'Review upload' })
+    await expect(reviewUploadButton).toBeEnabled()
+    await reviewUploadButton.click()
+    await expect(page.getByText('Please upload a file before continuing.')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Submit changes' })).toHaveCount(0)
 
     await page.locator('#rtm-upload-file').setInputFiles({
@@ -1303,7 +1305,11 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(
       validationTable.getByText('The update date is required in the uploaded template.'),
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    await expect(reviewUploadButton).toBeEnabled()
+    await reviewUploadButton.click()
+    await expect(
+      page.getByText('Upload a spreadsheet that passes validation before reviewing it.'),
+    ).toBeVisible()
   })
 
   test('rejects non-persisting average monthly value validation fixtures', async () => {

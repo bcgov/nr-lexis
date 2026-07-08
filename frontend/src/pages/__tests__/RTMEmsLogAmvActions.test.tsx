@@ -140,6 +140,8 @@ describe('RTM EMS Log AMV actions', () => {
   })
 
   it('renders upload-only average monthly value controls', async () => {
+    const user = userEvent.setup()
+
     render(<RTMEmsLogAmvPage />)
 
     await screen.findByRole('heading', { name: 'Average Monthly Values' })
@@ -149,6 +151,14 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save row' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Upload' })).toBeVisible()
+    expect(
+      screen.getByText('Update average monthly values by uploading an XLSX file.'),
+    ).toBeVisible()
+    expect(
+      screen.getByText(
+        'Add your completed template to check for errors before the new values take effect.',
+      ),
+    ).toBeVisible()
     expect(screen.getByText('Upload Excel Spreadsheet')).toBeVisible()
     expect(screen.queryByRole('heading', { name: 'Data Preview' })).not.toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', {
@@ -163,15 +173,14 @@ describe('RTM EMS Log AMV actions', () => {
       'download',
       'rtm-ems-log-amv-template.xlsx',
     )
-    expect(
-      screen.getByText(
-        'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
-      ),
-    ).toBeVisible()
+    expect(screen.getByText('Accepted formats: .xlsx.')).toBeVisible()
     expect(
       screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    const reviewUploadButton = screen.getByRole('button', { name: 'Review upload' })
+    expect(reviewUploadButton).toBeEnabled()
+    await user.click(reviewUploadButton)
+    expect(screen.getByText('Please upload a file before continuing.')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Submit changes' })).not.toBeInTheDocument()
   })
 
@@ -282,7 +291,12 @@ describe('RTM EMS Log AMV actions', () => {
     expect(
       within(validationTable).getByText('The update date is required in the uploaded template.'),
     ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.queryByRole('heading', { name: 'Review upload' })).not.toBeInTheDocument()
+    const reviewButton = screen.getByRole('button', { name: 'Review upload' })
+    expect(reviewButton).toBeEnabled()
+    await user.click(reviewButton)
+    expect(
+      screen.getByText('Upload a spreadsheet that passes validation before reviewing it.'),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Review' })).not.toBeInTheDocument()
   })
 })

@@ -1518,7 +1518,7 @@ body {
 .admin-upload-fspts-button-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.5rem;
   padding: 0;
   margin-block-start: 2.5rem;
@@ -1529,6 +1529,9 @@ body {
 }
 
 .admin-upload-fspts-button-row .cds--btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   block-size: 2.5rem;
   min-block-size: 2.5rem;
   min-inline-size: 0;
@@ -1554,6 +1557,7 @@ body {
 
 .admin-upload-fspts-button-row .cds--btn .cds--btn__icon {
   position: static;
+  align-self: center;
   margin-inline-start: 0;
   transform: none;
 }
