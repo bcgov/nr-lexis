@@ -15,6 +15,7 @@ public class LexisAuthorizationService {
 
   private static final String ALL_ACTIONS_TOKEN = "*";
   private static final String INDUSTRY_ROLE_KEY = "INDUSTRY";
+  private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
@@ -26,6 +27,7 @@ public class LexisAuthorizationService {
   private final Set<String> configuredIndustryRoles;
   private final Map<String, List<String>> configuredRoleActions;
   private final LexisFeatureProperties featureProperties;
+  private final Map<String, List<String>> configuredScopeActions;
   private final LexisSessionService sessionService;
 
   public LexisAuthorizationService(
@@ -36,10 +38,12 @@ public class LexisAuthorizationService {
     this.featureProperties = featureProperties;
     this.configuredIndustryRoles = Set.copyOf(sessionService.getConfiguredIndustryRoles());
     this.configuredRoleActions = normalizeRoleActions(authorizationProperties.getRoleActions());
+    this.configuredScopeActions = normalizeScopeActions(authorizationProperties.getScopeActions());
   }
 
-  public List<String> resolveGrantedActions(List<String> rawRoles) {
-    List<String> roles = normalizeRoles(rawRoles);
+  public List<String> resolveGrantedActions(List<String> rawAuthorities) {
+    List<String> roles = normalizeRoles(rawAuthorities);
+    List<String> scopes = normalizeScopes(rawAuthorities);
     Set<String> granted = new LinkedHashSet<>();
 
     if (roles.contains(ROLE_ADMIN)) {
@@ -51,6 +55,10 @@ public class LexisAuthorizationService {
       if (configuredIndustryRoles.contains(role)) {
         appendRoleActions(granted, INDUSTRY_ROLE_KEY);
       }
+    }
+
+    for (String scope : scopes) {
+      appendScopeActions(granted, scope);
     }
 
     if (featureProperties.isProdRtmOnly()) {
@@ -116,7 +124,8 @@ public class LexisAuthorizationService {
       if (actions == null || actions.isEmpty()) {
         continue;
       }
-      if (actions.contains(ALL_ACTIONS_TOKEN) || actions.contains(action)) {
+      if ((actions.contains(ALL_ACTIONS_TOKEN) && LexisLegacyActionCatalog.ACTIONS.contains(action))
+          || actions.contains(action)) {
         roles.add(role);
       }
     }
@@ -142,6 +151,21 @@ public class LexisAuthorizationService {
     }
   }
 
+  private void appendScopeActions(Set<String> granted, String scope) {
+    List<String> actions = configuredScopeActions.get(scope);
+    if (actions == null || actions.isEmpty()) {
+      return;
+    }
+
+    for (String action : actions) {
+      if (ALL_ACTIONS_TOKEN.equals(action)) {
+        granted.addAll(LexisLegacyActionCatalog.ACTIONS);
+      } else {
+        granted.add(action);
+      }
+    }
+  }
+
   private Map<String, List<String>> normalizeRoleActions(Map<String, List<String>> roleActions) {
     Map<String, List<String>> normalized = new LinkedHashMap<>();
     if (roleActions == null || roleActions.isEmpty()) {
@@ -154,6 +178,22 @@ public class LexisAuthorizationService {
         return;
       }
       normalized.put(normalizedRole, normalizeActions(actionList));
+    });
+    return normalized;
+  }
+
+  private Map<String, List<String>> normalizeScopeActions(Map<String, List<String>> scopeActions) {
+    Map<String, List<String>> normalized = new LinkedHashMap<>();
+    if (scopeActions == null || scopeActions.isEmpty()) {
+      return normalized;
+    }
+
+    scopeActions.forEach((scopeName, actionList) -> {
+      String normalizedScope = normalizeScope(scopeName);
+      if (normalizedScope == null || actionList == null) {
+        return;
+      }
+      normalized.put(normalizedScope, normalizeActions(actionList));
     });
     return normalized;
   }
@@ -183,9 +223,29 @@ public class LexisAuthorizationService {
     }
     LinkedHashSet<String> normalized = new LinkedHashSet<>();
     for (String role : rawRoles) {
+      if (isScopeAuthority(role)) {
+        continue;
+      }
       String normalizedRole = normalizeRuntimeRole(role);
       if (normalizedRole != null) {
         normalized.add(normalizedRole);
+      }
+    }
+    return List.copyOf(normalized);
+  }
+
+  private List<String> normalizeScopes(List<String> rawAuthorities) {
+    if (rawAuthorities == null || rawAuthorities.isEmpty()) {
+      return List.of();
+    }
+    LinkedHashSet<String> normalized = new LinkedHashSet<>();
+    for (String authority : rawAuthorities) {
+      if (!isScopeAuthority(authority)) {
+        continue;
+      }
+      String normalizedScope = normalizeScope(authority.substring(SCOPE_AUTHORITY_PREFIX.length()));
+      if (normalizedScope != null) {
+        normalized.add(normalizedScope);
       }
     }
     return List.copyOf(normalized);
@@ -207,6 +267,18 @@ public class LexisAuthorizationService {
 
   private String normalizeRuntimeRole(String role) {
     return sessionService.normalizeRole(role);
+  }
+
+  private boolean isScopeAuthority(String authority) {
+    return authority != null && authority.startsWith(SCOPE_AUTHORITY_PREFIX);
+  }
+
+  private String normalizeScope(String scope) {
+    if (scope == null) {
+      return null;
+    }
+    String normalized = scope.trim();
+    return normalized.isEmpty() ? null : normalized;
   }
 
   private Set<String> withLegacyAliases(Set<String> canonicalRoles) {

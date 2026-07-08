@@ -131,6 +131,16 @@ class LexisSessionServiceTest {
   }
 
   @Test
+  void shouldRecognizeFederalServiceSubmitterWithoutRoutingToUiLanding() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("service\\federal", List.of("lexis_federal_service_submitter"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
+    assertThat(response.roles()).containsExactly("LEXIS_FEDERAL_SERVICE_SUBMITTER");
+  }
+
+  @Test
   void shouldParseRoleHeaderIntoCanonicalDistinctRoles() {
     List<String> roles = service.parseRoleHeader(" lexis_admin, lexis_read_only,LEXIS_ADMIN ,, ");
 
@@ -150,11 +160,29 @@ class LexisSessionServiceTest {
         service.parseAuthorities(
             List.of(
                 new SimpleGrantedAuthority("lexis_read_only"),
+                new SimpleGrantedAuthority("lexis_federal_service_submitter"),
                 new SimpleGrantedAuthority("lexis_delegated_admin"),
                 new SimpleGrantedAuthority("LEXIS_ADMIN"),
                 new SimpleGrantedAuthority("lexis_admin")));
 
-    assertThat(roles).containsExactly("LEXIS_READ_ONLY", "LEXIS_DELEGATED_ADMIN", "LEXIS_ADMIN");
+    assertThat(roles)
+        .containsExactly(
+            "LEXIS_READ_ONLY",
+            "LEXIS_FEDERAL_SERVICE_SUBMITTER",
+            "LEXIS_DELEGATED_ADMIN",
+            "LEXIS_ADMIN");
+  }
+
+  @Test
+  void shouldIgnoreOauthScopeAuthoritiesWhenParsingSessionRoles() {
+    List<String> roles =
+        service.parseAuthorities(
+            List.of(
+                new SimpleGrantedAuthority("SCOPE_openid"),
+                new SimpleGrantedAuthority("SCOPE_lexis:federal-submission:submit"),
+                new SimpleGrantedAuthority("lexis_read_only")));
+
+    assertThat(roles).containsExactly("LEXIS_READ_ONLY");
   }
 
   @Test

@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class LexisAuthorizationProperties {
 
   private Map<String, List<String>> roleActions = new LinkedHashMap<>();
+  private Map<String, List<String>> scopeActions = new LinkedHashMap<>();
 
   public Map<String, List<String>> getRoleActions() {
     return roleActions;
@@ -16,5 +17,13 @@ public class LexisAuthorizationProperties {
 
   public void setRoleActions(Map<String, List<String>> roleActions) {
     this.roleActions = roleActions;
+  }
+
+  public Map<String, List<String>> getScopeActions() {
+    return scopeActions;
+  }
+
+  public void setScopeActions(Map<String, List<String>> scopeActions) {
+    this.scopeActions = scopeActions;
   }
 }

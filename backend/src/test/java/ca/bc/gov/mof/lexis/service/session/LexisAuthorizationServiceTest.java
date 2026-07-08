@@ -203,16 +203,51 @@ class LexisAuthorizationServiceTest {
     assertThat(service.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "viewFederalApplication")).isFalse();
   }
 
+  @Test
+  void canPerformActionShouldSupportConfiguredOauthScopeWithoutGrantingKnownRole() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
+            Map.of("LEXIS_READ_ONLY", List.of("/federalApplicationDetails")),
+            Map.of("lexis:federal-submission:submit", List.of("uploadFederalSubmission")));
+
+    List<String> authorities = List.of("SCOPE_lexis:federal-submission:submit");
+
+    assertThat(service.resolveGrantedActions(authorities)).containsExactly("uploadFederalSubmission");
+    assertThat(service.canPerformAction(authorities, "uploadFederalSubmission")).isTrue();
+    assertThat(service.canPerformAction(authorities, "uploadApplicationSubmission")).isFalse();
+    assertThat(service.canPerformAction(authorities, "/federalApplicationDetails")).isFalse();
+    assertThat(service.hasKnownRole(authorities)).isFalse();
+    assertThat(service.canPerformAction(List.of("SCOPE_lexis.federalSubmission.submit"), "uploadFederalSubmission"))
+        .isFalse();
+  }
+
   private LexisAuthorizationService createService(
       String industryRolesCsv, Map<String, List<String>> roleActions) {
-    return createService(industryRolesCsv, roleActions, false);
+    return createService(industryRolesCsv, roleActions, Map.of(), false);
   }
 
   private LexisAuthorizationService createService(
       String industryRolesCsv, Map<String, List<String>> roleActions, boolean prodRtmOnly) {
+    return createService(industryRolesCsv, roleActions, Map.of(), prodRtmOnly);
+  }
+
+  private LexisAuthorizationService createService(
+      String industryRolesCsv,
+      Map<String, List<String>> roleActions,
+      Map<String, List<String>> scopeActions) {
+    return createService(industryRolesCsv, roleActions, scopeActions, false);
+  }
+
+  private LexisAuthorizationService createService(
+      String industryRolesCsv,
+      Map<String, List<String>> roleActions,
+      Map<String, List<String>> scopeActions,
+      boolean prodRtmOnly) {
     LexisAuthorizationProperties properties = new LexisAuthorizationProperties();
     Map<String, List<String>> orderedMappings = new LinkedHashMap<>(roleActions);
     properties.setRoleActions(orderedMappings);
+    properties.setScopeActions(new LinkedHashMap<>(scopeActions));
     LexisFeatureProperties featureProperties = new LexisFeatureProperties();
     featureProperties.setProdRtmOnly(prodRtmOnly);
     LexisSessionService sessionService = new LexisSessionService(industryRolesCsv);

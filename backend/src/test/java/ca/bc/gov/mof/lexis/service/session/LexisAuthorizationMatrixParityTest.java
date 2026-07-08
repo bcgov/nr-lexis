@@ -97,7 +97,8 @@ class LexisAuthorizationMatrixParityTest {
             "approveExemption",
             "createOffer",
             "saveExemption",
-            "savePermit")
+            "savePermit",
+            "uploadFederalSubmission")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
   }
 
@@ -116,7 +117,8 @@ class LexisAuthorizationMatrixParityTest {
             "/filePermitUpload",
             "createOffer",
             "saveExemption",
-            "savePermit");
+            "savePermit",
+            "uploadFederalSubmission");
   }
 
   @Test
@@ -156,6 +158,44 @@ class LexisAuthorizationMatrixParityTest {
             "createOffer",
             "saveExemption",
             "savePermit");
+  }
+
+  @Test
+  void dedicatedFederalUploadActionShouldBeScopeOnlyForNonAdminCallers() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_FEDERAL_SERVICE_SUBMITTER")))
+        .isEmpty();
+
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_ADMIN")))
+        .doesNotContain("uploadFederalSubmission");
+
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_FEDERAL_SUBMITTER")))
+        .doesNotContain("uploadFederalSubmission");
+
+    assertThat(authorizationService.resolveRolesForAction("uploadFederalSubmission"))
+        .isEmpty();
+
+    assertThat(authorizationService.resolveRolesForAction("uploadApplicationSubmission"))
+        .doesNotContain("LEXIS_FEDERAL_SERVICE_SUBMITTER");
+
+  }
+
+  @Test
+  void federalUploadScopeShouldOnlyUseDedicatedFederalUploadAction() {
+    List<String> authorities = List.of("SCOPE_lexis:federal-submission:submit");
+
+    assertThat(authorizationService.resolveGrantedActions(authorities))
+        .containsExactly("uploadFederalSubmission");
+    assertThat(authorizationService.hasKnownRole(authorities)).isFalse();
+    assertThat(authorizationService.canPerformAction(authorities, "uploadFederalSubmission"))
+        .isTrue();
+    assertThat(authorizationService.canPerformAction(authorities, "uploadApplicationSubmission"))
+        .isFalse();
+    assertThat(authorizationService.canPerformAction(authorities, "/federalApplicationDetails"))
+        .isFalse();
+    assertThat(
+            authorizationService.canPerformAction(
+                List.of("SCOPE_lexis/federalSubmission/submit"), "uploadFederalSubmission"))
+        .isFalse();
   }
 
   @Test

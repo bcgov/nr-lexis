@@ -23,7 +23,9 @@ public class LexisSessionService {
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final String ROLE_FEDERAL_SUBMITTER = "LEXIS_FEDERAL_SUBMITTER";
+  private static final String ROLE_FEDERAL_SERVICE_SUBMITTER = "LEXIS_FEDERAL_SERVICE_SUBMITTER";
   private static final String ROLE_DELEGATED_ADMIN = "LEXIS_DELEGATED_ADMIN";
+  private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
 
   private static final Set<String> CANONICAL_ROLES =
       Set.of(
@@ -33,6 +35,7 @@ public class LexisSessionService {
           ROLE_EXEMPTION_APPROVER,
           ROLE_PROVINCIAL_SUBMITTER,
           ROLE_FEDERAL_SUBMITTER,
+          ROLE_FEDERAL_SERVICE_SUBMITTER,
           ROLE_DELEGATED_ADMIN);
 
   private final Set<String> configuredIndustryRoles;
@@ -52,6 +55,8 @@ public class LexisSessionService {
     boolean industryUser = roleSet.stream().anyMatch(this::isIndustryRole);
     boolean exemptionApprover = roleSet.contains(ROLE_EXEMPTION_APPROVER);
     boolean delegatedAdminOnly = roleSet.size() == 1 && roleSet.contains(ROLE_DELEGATED_ADMIN);
+    boolean federalServiceSubmitterOnly =
+        roleSet.size() == 1 && roleSet.contains(ROLE_FEDERAL_SERVICE_SUBMITTER);
 
     WelcomeTarget target;
     if (adminUser) {
@@ -66,7 +71,7 @@ public class LexisSessionService {
       target = WelcomeTarget.INDUSTRY_USER;
     } else if (exemptionApprover) {
       target = WelcomeTarget.EXEMPTION_APPROVER;
-    } else if (delegatedAdminOnly) {
+    } else if (delegatedAdminOnly || federalServiceSubmitterOnly) {
       target = WelcomeTarget.NO_ACCESS;
     } else {
       target = WelcomeTarget.MOFR_USER;
@@ -202,6 +207,9 @@ public class LexisSessionService {
     }
     String normalizedRole = rawRole.trim().toUpperCase(Locale.ROOT);
     if (normalizedRole.isEmpty()) {
+      return null;
+    }
+    if (normalizedRole.startsWith(SCOPE_AUTHORITY_PREFIX)) {
       return null;
     }
 
