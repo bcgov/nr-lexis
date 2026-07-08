@@ -196,8 +196,8 @@ const mockApplicationDetailAuth = (
 const applicationDetail: ProvincialApplicationDetail = {
   applicationNumber: 321,
   exemptionNumber: 'EX-555',
-  applicationStatusCode: 'ACTIVE',
-  statusDescription: 'Active',
+  applicationStatusCode: 'APP',
+  statusDescription: 'Approved',
   ownerClientNumber: '00011122',
   agentClientNumber: '00033344',
   orgUnitNumber: 12,
@@ -546,7 +546,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ownerClientNumber: '00011122',
       ownerClientLocationCode: '00',
       exemptionNumber: 'EX-555',
-      applicationStatusCode: 'ACTIVE',
+      applicationStatusCode: 'APP',
       applicantTypeCode: 'A',
       orgUnitNumber: '12',
       productTypeCode: 'LOG',
@@ -867,6 +867,52 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['EXE', 'Exempted - New'],
+    ['PMT', 'Permitted'],
+    ['EXP', 'Expired'],
+    ['PND', 'Pending'],
+    ['REJ', 'Rejected'],
+    ['WDN', 'Withdrawn'],
+  ])(
+    'blocks application summary and package edits for %s applications',
+    async (applicationStatusCode, statusDescription) => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        applicationStatusCode,
+        statusDescription,
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectApplicationDetailTab('Application')
+      expect(await screen.findByText('Application summary')).toBeInTheDocument()
+      expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
+      const summaryTile = getApplicationSummaryTile()
+      expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
+
+      await selectApplicationDetailTab('Items')
+      expect(await screen.findByText('Package Details')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+      expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+      expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+      expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+      expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+    },
+  )
 
   it('blocks application edits when another user holds the edit lock', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -2193,7 +2239,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ownerClientNumber: '00011122',
       ownerClientLocationCode: '00',
       exemptionNumber: 'EX-555',
-      applicationStatusCode: 'ACTIVE',
+      applicationStatusCode: 'APP',
       applicantTypeCode: 'O',
       orgUnitNumber: '12',
       productTypeCode: 'LOG',
@@ -2290,7 +2336,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ownerClientNumber: '00011122',
       ownerClientLocationCode: '00',
       exemptionNumber: 'EX-555',
-      applicationStatusCode: 'ACTIVE',
+      applicationStatusCode: 'APP',
       applicantTypeCode: 'A',
       orgUnitNumber: '1903',
       productTypeCode: 'LOG',

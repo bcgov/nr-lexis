@@ -333,8 +333,14 @@ const normalizeSummaryAgentFields = (
         agentContactName: '',
       }
 
+const APPLICATION_STATUS_APPROVED = 'APP'
 const APPLICATION_STATUS_EXPIRED = 'EXP'
+const APPLICATION_STATUS_NEW = 'NEW'
 const APPLICATION_STATUS_PERMITTED = 'PMT'
+const APPLICATION_DETAIL_EDITABLE_STATUS_CODES = new Set([
+  APPLICATION_STATUS_APPROVED,
+  APPLICATION_STATUS_NEW,
+])
 const COMPLETE_PERMIT_STATUS_TEXT = 'COMPLETE'
 const APPLICATION_DOCUMENT_DELETE_ROLES = new Set([
   'ADMIN',
@@ -389,6 +395,13 @@ const isExpiredApplication = (detail: ProvincialApplicationDetail | null): boole
   const statusCode = detail?.applicationStatusCode?.trim().toUpperCase() ?? ''
   const statusDescription = detail?.statusDescription?.trim().toUpperCase() ?? ''
   return statusCode === APPLICATION_STATUS_EXPIRED || statusDescription === 'EXPIRED'
+}
+
+const isEditableApplicationDetailStatus = (
+  detail: ProvincialApplicationDetail | null,
+): boolean => {
+  const statusCode = detail?.applicationStatusCode?.trim().toUpperCase() ?? ''
+  return APPLICATION_DETAIL_EDITABLE_STATUS_CODES.has(statusCode)
 }
 
 const hasCompletePermit = (permitRows: ApplicationPermitRow[]): boolean =>
@@ -628,6 +641,7 @@ const ProvincialApplicationDetailsPage = () => {
 
       if (
         canPerform('createApplication') &&
+        isEditableApplicationDetailStatus(response) &&
         !response.readOnly &&
         !response.locked &&
         !response.exemptionApprover
@@ -776,6 +790,7 @@ const ProvincialApplicationDetailsPage = () => {
   const canViewRemarks = canPerform('/applicationRemarks')
   const canManageItems =
     canPerform('createApplication') &&
+    isEditableApplicationDetailStatus(detail) &&
     !detail?.readOnly &&
     !detail?.locked &&
     !detail?.exemptionApprover
@@ -1797,6 +1812,12 @@ const ProvincialApplicationDetailsPage = () => {
     if (!applicationNumber || !detail || !summaryForm) {
       return
     }
+    if (!canEditSummary) {
+      setActionErrorMessage(
+        'Application details can only be edited while the application is New or Approved.',
+      )
+      return
+    }
 
     setActionErrorMessage('')
     setActionInfoMessage('')
@@ -1871,6 +1892,7 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     applicationNumber,
     calculatedSummaryTermDays,
+    canEditSummary,
     detail,
     hasSummaryValidationError,
     loadApplicationDetail,
