@@ -219,7 +219,7 @@ class PurchaseOfferControllerTest {
   void detailShouldReturnPayloadWhenScopedUserOwnsParentApplication() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
-    PurchaseOfferDetailDto offer = offerDetail();
+    PurchaseOfferDetailDto offer = offerDetail("00099999");
     when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
     when(applicationService.findByApplicationNumber(1000456L))
         .thenReturn(Optional.of(applicationDetail("00077881", null)));
@@ -234,10 +234,26 @@ class PurchaseOfferControllerTest {
   }
 
   @Test
+  void detailShouldReturnPayloadWhenScopedUserIsOfferingClient() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(offer);
+    verify(service).findByOfferNumber(81009L);
+    verifyNoInteractions(applicationService);
+  }
+
+  @Test
   void detailShouldReturnNotFoundWhenScopedUserDoesNotOwnParentApplication() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
-    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offerDetail()));
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offerDetail("00077777")));
     when(applicationService.findByApplicationNumber(1000456L))
         .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
 
@@ -250,6 +266,10 @@ class PurchaseOfferControllerTest {
   }
 
   private static PurchaseOfferDetailDto offerDetail() {
+    return offerDetail("00077881");
+  }
+
+  private static PurchaseOfferDetailDto offerDetail(String offeringClientNumber) {
     return new PurchaseOfferDetailDto(
         81009L,
         1000456L,
@@ -267,7 +287,7 @@ class PurchaseOfferControllerTest {
         null,
         "P",
         "Mill details",
-        "00077881",
+        offeringClientNumber,
         "Port Moody",
         "Condition notes",
         LocalDate.of(2026, 2, 26),

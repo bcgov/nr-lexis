@@ -178,6 +178,9 @@ public class PurchaseOfferController {
     if (applicationNumber == null || applicationNumber < 1) {
       return false;
     }
+    if (matchesScopedClient(scopedClientNumber, detail.offeringClientNumber())) {
+      return true;
+    }
     return applicationService.findByApplicationNumber(applicationNumber)
         .map(application -> matchesScopedApplicationClient(scopedClientNumber, application))
         .orElse(false);
