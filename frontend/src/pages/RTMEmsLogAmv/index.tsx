@@ -279,6 +279,16 @@ const formatReviewCell = (values: RtmReviewCellValues | undefined) => {
   )
 }
 
+const countReviewValues = (matrixRows: RtmReviewMatrixRow[]): number =>
+  matrixRows.reduce(
+    (total, row) =>
+      total +
+      Object.values(row.values).filter((values) =>
+        Object.values(values).some((value) => !!formatMoney(value)),
+      ).length,
+    0,
+  )
+
 const UploadValidationMessage = ({
   kind,
   title,
@@ -433,6 +443,7 @@ const ReviewUploadContent = ({
 }) => {
   const speciesColumns = buildReviewSpeciesColumns(previewResult.rows)
   const matrixRows = buildReviewMatrixRows(previewResult.rows)
+  const reviewValueCount = countReviewValues(matrixRows)
 
   return (
     <div className="admin-upload-review admin-upload-review--rtm">
@@ -450,8 +461,8 @@ const ReviewUploadContent = ({
           <dd>{previewResult.retrievalDate ?? ''}</dd>
         </div>
         <div>
-          <dt>Rows to apply</dt>
-          <dd>{previewResult.rowCount}</dd>
+          <dt>Values to apply</dt>
+          <dd>{reviewValueCount}</dd>
         </div>
       </dl>
 

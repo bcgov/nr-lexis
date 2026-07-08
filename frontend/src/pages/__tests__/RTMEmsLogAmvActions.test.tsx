@@ -200,6 +200,11 @@ describe('RTM EMS Log AMV actions', () => {
     expect(
       within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
+    const reviewSummary = screen.getByLabelText('Average monthly values upload summary')
+    expect(within(reviewSummary).getByText('Values to apply')).toBeVisible()
+    expect(within(reviewSummary).getByText('3')).toBeVisible()
+    expect(within(reviewSummary).queryByText('Rows to apply')).not.toBeInTheDocument()
+    expect(within(reviewSummary).queryByText('8')).not.toBeInTheDocument()
     const reviewTable = screen.getByRole('table', { name: 'Average monthly value upload review' })
     expect(reviewTable).toBeVisible()
     expect(within(reviewTable).getByRole('columnheader', { name: 'Balsam' })).toBeVisible()

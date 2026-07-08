@@ -123,6 +123,7 @@ const DetailDocumentUploadPanel = ({
     () =>
       uploadQueue.filter(
         (item) =>
+          item.status === 'validating' ||
           item.status === 'validated' ||
           item.status === 'uploading' ||
           item.status === 'complete' ||
@@ -167,6 +168,10 @@ const DetailDocumentUploadPanel = ({
     'Invoice fee in lieu',
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
+  const uploadInvalidText =
+    invalidUploadCount > 0
+      ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from review.`
+      : undefined
   const canReviewUpload =
     !disabled &&
     !!targetNumber.trim() &&
@@ -312,7 +317,7 @@ const DetailDocumentUploadPanel = ({
     ])
     setErrorMessage('')
     setSuccessMessage('')
-    setUploadStep('upload')
+    setUploadStep((current) => (current === 'review' ? 'review' : 'upload'))
     if (workflowType === 'invoice' && invoiceValidationErrors.length > 0) {
       setShowInvoiceValidationErrors(true)
     }
@@ -584,7 +589,7 @@ const DetailDocumentUploadPanel = ({
               labelText="Document description"
               value={fileDescription}
               onChange={(event) => setFileDescription(event.target.value)}
-              rows={3}
+              rows={2}
               disabled={disabled}
             />
 
@@ -594,11 +599,7 @@ const DetailDocumentUploadPanel = ({
               inputId={`${inputId}File`}
               inputKey={fileInputKey}
               inputLabel="Document File"
-              invalidText={
-                invalidUploadCount > 0
-                  ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from review.`
-                  : undefined
-              }
+              invalidText={uploadInvalidText}
               disabled={disabled}
               disabledDescription={disabledReason}
               renderAsPanel={false}
@@ -631,6 +632,21 @@ const DetailDocumentUploadPanel = ({
           onReset={resetUpload}
           onClear={clearQueuedFiles}
           onRemove={removeQueuedFile}
+          reviewSupplementalContent={
+            <MultiFileDropZone
+              title="Add more documents"
+              description="Supported files: any document with a file extension"
+              inputId={`${inputId}ReviewFile`}
+              inputKey={fileInputKey}
+              inputLabel="Document File"
+              invalidText={uploadInvalidText}
+              disabled={disabled || isSubmitting}
+              disabledDescription={isSubmitting ? 'Upload is submitting.' : disabledReason}
+              renderAsPanel={false}
+              variant="fspts"
+              onFilesSelected={addFilesToQueue}
+            />
+          }
         />
       ) : (
         <div className="admin-upload-fspts-button-row">
