@@ -58,7 +58,7 @@ class LexisSessionControllerTest {
             "idir\\jsmith",
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
             "industryUser",
-            "/applicationSearch.do?actionMapping=view");
+            "/provincial/application");
 
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(dto);
@@ -83,7 +83,7 @@ class LexisSessionControllerTest {
             "idir\\jsmith",
             List.of(),
             "mofrUser",
-            "/applicationsReview.do?actionMapping=view");
+            "/provincial/review");
 
     when(principalService.resolvePrincipalName(principal)).thenReturn("idir\\jsmith");
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of())).thenReturn(dto);
@@ -113,7 +113,7 @@ class LexisSessionControllerTest {
             "idir\\jsmith",
             List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"),
             "readOnly",
-            "/applicationSearch.do?actionMapping=view");
+            "/provincial/application");
 
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN")))
         .thenReturn(welcome);
@@ -131,7 +131,7 @@ class LexisSessionControllerTest {
                 "idir\\jsmith",
                 List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"),
                 "readOnly",
-                "/applicationSearch.do?actionMapping=view",
+                "/provincial/application",
                 List.of("/applicationSearch", "/applicationDetails"),
                 "76"));
 

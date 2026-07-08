@@ -95,21 +95,6 @@ describe('Protected route access matrix', () => {
     expect(detailRoute.requiredActions).toEqual(route.requiredActions)
   })
 
-  it('redirects the retired federal upload URL to federal search', () => {
-    const route = findRoute('/federal/application/upload')
-
-    expect(route.id).toBe('Federal Application Upload Redirect')
-    expect(route.requiredActions).toEqual(['/federalApplicationSearch', 'viewFederalApplication'])
-    expect(route.requiredActionsMatch ?? 'any').toBe('any')
-    expect(route.roleScope).toBeUndefined()
-    expect(isValidElement(route.element)).toBe(true)
-    expect((route.element as ReactElement).type).toBe(Navigate)
-    expect((route.element as ReactElement).props).toMatchObject({
-      to: '/federal',
-      replace: true,
-    })
-  })
-
   it('does not expose retired Indian Reserve or legacy advertising routes', () => {
     const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
       route.path.toLowerCase(),

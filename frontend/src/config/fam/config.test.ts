@@ -52,12 +52,12 @@ describe('FAM auth config', () => {
     expect(oauth?.redirectSignOut).toEqual([signOutUrl])
   })
 
-  it('uses an empty sign-out URL when no runtime sign-out URL is configured', async () => {
+  it('uses the app root sign-out URL when no runtime sign-out URL is configured', async () => {
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
-    expect(oauth?.redirectSignOut).toEqual([''])
+    expect(oauth?.redirectSignOut).toEqual([`${window.location.origin}/`])
   })
 
   it('trims the configured BC Gov sign-out URL without rewriting the encoded return URL', async () => {

@@ -21,7 +21,7 @@ class Oauth2SecurityCustomizerTest {
             "https://dev.loginproxy.gov.bc.ca/auth/realms/standard",
             "",
             "",
-            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER"));
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
 
     Jwt jwt =
         jwt(
@@ -53,7 +53,7 @@ class Oauth2SecurityCustomizerTest {
             "https://dev.loginproxy.gov.bc.ca/auth/realms/forests",
             "https://dev.loginproxy.gov.bc.ca/auth/realms/apigw",
             "",
-            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER"));
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
 
     Jwt jwt =
         jwt(

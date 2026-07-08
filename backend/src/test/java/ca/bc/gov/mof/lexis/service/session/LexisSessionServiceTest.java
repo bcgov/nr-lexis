@@ -21,7 +21,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_read_only"));
 
     assertThat(response.welcomeTarget()).isEqualTo("readOnly");
-    assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
     assertThat(response.roles()).containsExactly("LEXIS_READ_ONLY");
   }
 
@@ -31,7 +31,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin", "lexis_read_only"));
 
     assertThat(response.welcomeTarget()).isEqualTo("adminUser");
-    assertThat(response.legacyPath()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/admin");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
@@ -41,7 +41,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
   }
 
   @Test
@@ -50,17 +50,18 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter_00001234"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
     assertThat(response.roles()).containsExactly("LEXIS_PROVINCIAL_SUBMITTER");
   }
 
   @Test
-  void shouldRouteFederalSubmittersToFederalSearch() {
+  void shouldNotRouteFederalSubmittersToFederalSearch() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_federal_submitter"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/federalApplicationSearch.do?actionMapping=view");
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
+    assertThat(response.roles()).isEmpty();
   }
 
   @Test
@@ -87,7 +88,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\jsmith", List.of("industry_submitter"));
 
     assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
-    assertThat(response.legacyPath()).isEqualTo("/applicationsReview.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/review");
   }
 
   @Test
@@ -96,7 +97,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin"));
 
     assertThat(response.welcomeTarget()).isEqualTo("adminUser");
-    assertThat(response.legacyPath()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/admin");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN");
   }
 
@@ -106,7 +107,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\approver", List.of("lexis_exemption_approver", "other_role"));
 
     assertThat(response.welcomeTarget()).isEqualTo("exemptionApprover");
-    assertThat(response.legacyPath()).isEqualTo("/exemptionSearch.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/exemption");
     assertThat(response.roles()).containsExactly("LEXIS_EXEMPTION_APPROVER", "OTHER_ROLE");
   }
 
@@ -116,7 +117,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\staff", List.of("lexis_application_approver"));
 
     assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
-    assertThat(response.legacyPath()).isEqualTo("/applicationsReview.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_APPLICATION_APPROVER");
   }
 

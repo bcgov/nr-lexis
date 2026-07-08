@@ -40,7 +40,7 @@ const redirectSignIn = resolveSameOriginRedirect(env.VITE_REDIRECT_SIGN_IN, '/')
 // Full BC Gov logoff URL registered in the Cognito app client. The returl
 // should point back to this app's root rather than chaining through
 // LoginProxy's OIDC logout endpoint, which can stop on a logout-confirm page.
-export const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() ?? ''
+export const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() || `${window.location.origin}/`
 const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
 
 export const idirProviderName = `${(env.VITE_ZONE ?? 'DEV').toUpperCase()}-IDIR`

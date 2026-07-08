@@ -206,8 +206,6 @@ final class LexisApiAuthorizationRules {
           action(
               HttpMethod.GET,
               "/federalApplicationSearch",
-              "/api/lexis/federalApplicationSearch",
-              "/api/lexis/federalApplicationSearch.do",
               "/api/lexis/federal/applications/search/options",
               "/api/lexis/federal/applications/search",
               "/api/lexis/federal/applications/search/count",
@@ -215,8 +213,6 @@ final class LexisApiAuthorizationRules {
           action(
               HttpMethod.GET,
               "/federalApplicationDetails",
-              "/api/lexis/federalApplicationDetails",
-              "/api/lexis/federalApplicationDetails.do",
               "/api/lexis/federal/applications/*",
               "/api/lexis/federal/applications/*/permit"),
           action(

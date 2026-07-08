@@ -18,6 +18,8 @@ vi.mock('@/config/fam/config', () => ({
   businessBceidProviderName: 'DEV-BCEIDBUSINESS',
   idirProviderName: 'DEV-IDIR',
   isCognitoConfigured: true,
+  redirectSignOut:
+    'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.gold.devops.gov.bc.ca%2F',
 }))
 
 vi.mock('@/service/session-service', () => ({
@@ -26,6 +28,13 @@ vi.mock('@/service/session-service', () => ({
 
 const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>
+const expectedCognitoSignOutInput = {
+  global: false,
+  oauth: {
+    redirectUrl:
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.gold.devops.gov.bc.ca%2F',
+  },
+}
 
 const LogoutProbe = () => {
   const { isLoading, isLoggedIn, logout } = useAuth()
@@ -92,7 +101,7 @@ describe('AuthProvider logout', () => {
     await waitFor(() => {
       expect(authMocks.signOut).toHaveBeenCalledTimes(1)
     })
-    expect(authMocks.signOut).toHaveBeenCalledWith()
+    expect(authMocks.signOut).toHaveBeenCalledWith(expectedCognitoSignOutInput)
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
   })
 
@@ -113,7 +122,7 @@ describe('AuthProvider logout', () => {
     await waitFor(() => {
       expect(authMocks.signOut).toHaveBeenCalledTimes(1)
     })
-    expect(authMocks.signOut).toHaveBeenCalledWith()
+    expect(authMocks.signOut).toHaveBeenCalledWith(expectedCognitoSignOutInput)
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       'Unable to complete Cognito sign-out. Clearing local auth state.',
       expect.any(Error),
