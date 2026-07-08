@@ -126,6 +126,8 @@ const permitDetail: ProvincialPermitDetail = {
   receivedDate: '2026-04-15',
   estimatedShippingDate: '2026-05-20',
   permitVolume: 120,
+  approvedExemptionVolume: 250,
+  exemptionVolumeRemaining: 130,
   numberOfPieces: 10,
   receiptNumber: 'R-1',
   federalPermitNumber: null,
@@ -330,6 +332,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(permitFinancialTile as HTMLElement).getByText('Permit volume (m³)'),
     ).toBeInTheDocument()
+    expect(
+      within(permitFinancialTile as HTMLElement).getByText('Total exemption volume (m³)'),
+    ).toBeInTheDocument()
+    expect(
+      within(permitFinancialTile as HTMLElement).getByText('Total volume remaining (m³)'),
+    ).toBeInTheDocument()
+    expect(within(permitFinancialTile as HTMLElement).getByText('250')).toBeInTheDocument()
+    expect(within(permitFinancialTile as HTMLElement).getByText('130')).toBeInTheDocument()
     expect(within(permitFinancialTile as HTMLElement).getByText('120')).toBeInTheDocument()
     await selectPermitDetailTab('Owner')
     expect(await screen.findByText('Owner Co')).toBeInTheDocument()

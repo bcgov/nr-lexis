@@ -11,6 +11,19 @@ import { toSearchServiceError } from '@/service/search-service-fallback'
 
 const DETAIL_CACHE_TTL_MS = 30_000
 
+const valueAsNumberOrNull = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(/[$,\s]/g, ''))
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
+}
+
 const isNotFound = (error: unknown): boolean => {
   return (
     axios.isAxiosError(error) && (error.response?.status === 404 || error.response?.status === 204)
@@ -81,6 +94,50 @@ export const fetchProvincialOfferDetail = async (
   }
 }
 
+const fetchPermitApprovedExemptionVolume = async (
+  exemptionNumber: string,
+): Promise<number | null> => {
+  try {
+    const response = await apiService.getCachedResponse<{ approvedExemptionVolume?: unknown }>(
+      '/lexis/rpc/permit-details/approved-exemption-volume',
+      {
+        params: {
+          exemptionNumber,
+        },
+      },
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
+
+    return response.status === 204
+      ? null
+      : valueAsNumberOrNull(response.data.approvedExemptionVolume)
+  } catch {
+    return null
+  }
+}
+
+const fetchPermitExemptionVolumeRemaining = async (
+  exemptionNumber: string,
+): Promise<number | null> => {
+  try {
+    const response = await apiService.getCachedResponse<{ exemptionVolumeRemaining?: unknown }>(
+      '/lexis/rpc/permit-details/exemption-volume-remaining',
+      {
+        params: {
+          exemptionNumber,
+        },
+      },
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
+
+    return response.status === 204
+      ? null
+      : valueAsNumberOrNull(response.data.exemptionVolumeRemaining)
+  } catch {
+    return null
+  }
+}
+
 export const fetchProvincialPermitDetail = async (
   permitNumber: string,
 ): Promise<ProvincialPermitDetail | null> => {
@@ -90,7 +147,25 @@ export const fetchProvincialPermitDetail = async (
       undefined,
       { ttlMs: DETAIL_CACHE_TTL_MS },
     )
-    return response.data
+    const permitDetail = response.data
+    if (!permitDetail.exemptionNumber) {
+      return {
+        ...permitDetail,
+        approvedExemptionVolume: permitDetail.approvedExemptionVolume ?? null,
+        exemptionVolumeRemaining: permitDetail.exemptionVolumeRemaining ?? null,
+      }
+    }
+
+    const [approvedVolume, remainingVolume] = await Promise.all([
+      fetchPermitApprovedExemptionVolume(permitDetail.exemptionNumber),
+      fetchPermitExemptionVolumeRemaining(permitDetail.exemptionNumber),
+    ])
+
+    return {
+      ...permitDetail,
+      approvedExemptionVolume: approvedVolume,
+      exemptionVolumeRemaining: remainingVolume,
+    }
   } catch (error) {
     if (isNotFound(error)) {
       return null

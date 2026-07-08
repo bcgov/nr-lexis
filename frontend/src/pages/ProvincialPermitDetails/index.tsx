@@ -1189,6 +1189,18 @@ const ProvincialPermitDetailsPage = () => {
                         <Tile>
                           <h2 className="detail-tile-title">Financial and volume</h2>
                           <div className="legacy-search-grid">
+                            <TextInput
+                              id="permit-approvedExemptionVolume"
+                              labelText="Total exemption volume (m³)"
+                              value={displayValue(detail.approvedExemptionVolume)}
+                              disabled
+                            />
+                            <TextInput
+                              id="permit-exemptionVolumeRemaining"
+                              labelText="Total volume remaining (m³)"
+                              value={displayValue(detail.exemptionVolumeRemaining)}
+                              disabled
+                            />
                             {renderPermitTextInput(
                               'permitTotalVolume',
                               'Permit volume (m³)',
@@ -1233,6 +1245,14 @@ const ProvincialPermitDetailsPage = () => {
                         <DetailFieldTile
                           title="Financial and volume"
                           fields={[
+                            {
+                              label: 'Total exemption volume (m³)',
+                              value: displayValue(detail.approvedExemptionVolume),
+                            },
+                            {
+                              label: 'Total volume remaining (m³)',
+                              value: displayValue(detail.exemptionVolumeRemaining),
+                            },
                             {
                               label: 'Permit volume (m³)',
                               value: displayValue(detail.permitVolume),

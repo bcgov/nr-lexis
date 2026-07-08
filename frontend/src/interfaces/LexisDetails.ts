@@ -117,6 +117,8 @@ export type ProvincialPermitDetail = {
   receivedDate: string | null
   estimatedShippingDate: string | null
   permitVolume: number | null
+  approvedExemptionVolume: number | null
+  exemptionVolumeRemaining: number | null
   numberOfPieces: number | null
   receiptNumber: string | null
   federalPermitNumber: string | null
