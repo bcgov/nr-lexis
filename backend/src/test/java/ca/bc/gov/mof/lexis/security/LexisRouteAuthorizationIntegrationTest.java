@@ -267,6 +267,14 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void federalApplicationSearchShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/federal/applications/search")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void exemptionDetailsRpcShouldRejectAnonymousRequests() throws Exception {
     mockMvc.perform(get("/api/lexis/rpc/exemption-details/applications")).andExpect(status().isUnauthorized());
   }
@@ -710,6 +718,62 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             post("/api/lexis/rpc/permit-details/update-permit")
                 .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void modernPermitScaleAttachmentShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/update-scale-attachment")
+                .param("permitNumber", "7000123")
+                .param("scaleId", "101")
+                .param("attachInd", "true")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void modernPermitApplicationAddShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/add-applications-to-permit")
+                .param("permitNumber", "7000123")
+                .param("selectedApplications", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void modernPermitApplicationRemoveShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/remove-application-from-permit")
+                .param("permitNumber", "7000123")
+                .param("applicationNumber", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void modernPermitBlanketOicScaleAddShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/add-boic-scale")
+                .param("permitNumber", "7000123")
+                .param("packageNumber", "PKG-903")
+                .param("timberMark", "TM1")
+                .param("scaleVolume", "12.5")
+                .param("scalePieces", "7")
+                .param("speciesCode", "HE")
+                .param("gradeCode", "A")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void modernPermitBlanketOicScaleDeleteShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/delete-boic-scale")
+                .param("permitNumber", "7000123")
+                .param("scaleId", "101")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
         .andExpect(status().isNoContent());
   }
@@ -1217,6 +1281,16 @@ class LexisRouteAuthorizationIntegrationTest {
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldRejectFederalAccessForReadOnly() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/federalApplicationSearch")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(false));
   }
 
   @Test

@@ -61,9 +61,9 @@ const INITIAL_FORM: ProvincialOfferCreateForm = {
   offerWithdrawalDate: '',
   withdrawReason: '',
   teacReviewDate: '',
-  fairOfferIndicator: '',
-  validOfferIndicator: '',
-  approvalIndicator: '',
+  fairOfferIndicator: 'N',
+  validOfferIndicator: 'Y',
+  approvalIndicator: 'N',
   offerRemark: '',
   pickupLocation: '',
   offerCondition: '',
@@ -104,9 +104,9 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreat
     offerWithdrawalDate: query.get('offerWithdrawalDate') ?? query.get('offerEndDate') ?? '',
     withdrawReason: query.get('withdrawReason') ?? '',
     teacReviewDate: query.get('teacReviewDate') ?? '',
-    fairOfferIndicator: query.get('fairOfferIndicator') ?? '',
-    validOfferIndicator: query.get('validOfferIndicator') ?? '',
-    approvalIndicator: query.get('approvalIndicator') ?? '',
+    fairOfferIndicator: query.get('fairOfferIndicator') ?? INITIAL_FORM.fairOfferIndicator,
+    validOfferIndicator: query.get('validOfferIndicator') ?? INITIAL_FORM.validOfferIndicator,
+    approvalIndicator: query.get('approvalIndicator') ?? INITIAL_FORM.approvalIndicator,
     offerRemark: query.get('offerRemark') ?? '',
     pickupLocation: query.get('pickupLocation') ?? '',
     offerCondition: query.get('offerCondition') ?? '',
@@ -214,6 +214,12 @@ const ProvincialOfferCreatePage = () => {
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialOfferCreateField>>({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const author = capabilities.principal ?? ''
+  const hasApplicationNumber = form.applicationNumber.trim().length > 0
+  const hasNoPackagesForApplication =
+    hasApplicationNumber &&
+    !isLoadingApplicationContext &&
+    applicationDetails !== null &&
+    packageOptions.length === 0
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -326,7 +332,10 @@ const ProvincialOfferCreatePage = () => {
       ),
       packageNumber: firstValidationError(
         () => (isLoadingApplicationContext ? 'Wait for package list to load.' : null),
-        () => requiredFieldError(form.packageNumber, 'Package number'),
+        () =>
+          packageOptions.length > 0
+            ? requiredFieldError(form.packageNumber, 'Package number')
+            : null,
         () =>
           packageOptions.length > 0 &&
           !packageOptions.some((option) => option.value === form.packageNumber.trim())
@@ -486,7 +495,8 @@ const ProvincialOfferCreatePage = () => {
                 <TextInput
                   id="packageNumber"
                   labelText="Package number"
-                  value={form.packageNumber}
+                  value={hasNoPackagesForApplication ? 'No Packages' : form.packageNumber}
+                  readOnly={hasNoPackagesForApplication}
                   invalid={!!fieldError('packageNumber')}
                   invalidText={fieldError('packageNumber')}
                   onBlur={() => markFieldTouched('packageNumber')}

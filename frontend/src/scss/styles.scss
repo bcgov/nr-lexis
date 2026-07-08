@@ -789,6 +789,70 @@ body {
   color: var(--csp-link-hover);
 }
 
+/* Carbon component polish aligned with NR FSPTS. Keep this scoped so legacy-parity
+   layouts stay intact while shared Carbon controls use the modern rounded styling. */
+.app-shell .cds--btn {
+  border-radius: 4px;
+}
+
+.app-shell .cds--btn:not(.cds--btn--icon-only) {
+  justify-content: center;
+  gap: 0.5rem;
+  padding-inline-end: 1rem;
+}
+
+.app-shell .cds--btn:not(.cds--btn--icon-only) .cds--btn__icon {
+  position: static;
+  inset-inline-end: auto;
+  margin-inline-start: 0;
+  transform: translateY(1px);
+}
+
+.app-shell .cds--text-input,
+.app-shell .cds--text-area,
+.app-shell .cds--number,
+.app-shell .cds--number__input-wrapper,
+.app-shell input[type='number'],
+.app-shell .cds--select-input,
+.app-shell .cds--list-box__field,
+.app-shell .cds--list-box,
+.app-shell .cds--date-picker__input,
+.app-shell .cds--search-input {
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+
+.app-shell .cds--number__control-btn,
+.app-shell .cds--list-box__menu,
+.app-shell .flatpickr-calendar,
+.app-shell .flatpickr-prev-month,
+.app-shell .flatpickr-next-month,
+.app-shell .cds--tile,
+.app-shell .cds--data-table-header,
+.app-shell .cds--table-expand__button,
+.app-shell .cds--pagination,
+.app-shell .cds--pagination__button,
+.app-shell .cds--inline-notification,
+.app-shell .cds--toast-notification {
+  border-radius: 4px;
+}
+
+.app-shell .cds--table-header-label,
+.app-shell .cds--data-table thead th,
+.app-shell .cds--data-table thead .cds--table-header {
+  font-weight: 700;
+}
+
+.app-shell .cds--inline-notification {
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+
+.app-shell .cds--inline-notification--low-contrast::before {
+  border-radius: 0 4px 4px 0;
+  filter: none;
+}
+
 .app-header-nav-link {
   text-decoration: none;
 }
@@ -1488,20 +1552,38 @@ body {
   flex-shrink: 0;
 }
 
-.admin-upload-fspts-button-row .cds--btn--primary {
-  background: var(--fds-interactive);
-  border: 0;
-  color: var(--fds-layer-01);
+.admin-upload-fspts-button-row .cds--btn .cds--btn__icon {
+  position: static;
+  margin-inline-start: 0;
+  transform: none;
 }
 
-.admin-upload-fspts-button-row .cds--btn--primary:hover:not(:disabled) {
+.admin-upload-fspts-button-row .cds--btn--primary,
+.admin-upload-fspts-button-row .admin-upload-fspts-action-button.cds--btn--primary {
+  background: var(--fds-interactive, #0071bc);
+  background-color: var(--fds-interactive, #0071bc);
+  border: 1px solid var(--fds-interactive, #0071bc);
+  color: var(--fds-layer-01, #fff);
+  box-shadow: none;
+}
+
+.admin-upload-fspts-button-row .cds--btn--primary:hover:not(:disabled),
+.admin-upload-fspts-button-row
+  .admin-upload-fspts-action-button.cds--btn--primary:hover:not(:disabled) {
   background: #005db5;
+  background-color: #005db5;
+  border-color: #005db5;
 }
 
 .admin-upload-fspts-button-row .cds--btn--primary:disabled,
-.admin-upload-fspts-button-row .cds--btn--primary.cds--btn--disabled {
-  background: var(--fds-border-subtle);
-  color: var(--fds-text-secondary);
+.admin-upload-fspts-button-row .cds--btn--primary.cds--btn--disabled,
+.admin-upload-fspts-button-row .admin-upload-fspts-action-button.cds--btn--primary:disabled,
+.admin-upload-fspts-button-row
+  .admin-upload-fspts-action-button.cds--btn--primary.cds--btn--disabled {
+  background: var(--fds-border-subtle, #c6c6c6);
+  background-color: var(--fds-border-subtle, #c6c6c6);
+  border-color: var(--fds-border-subtle, #c6c6c6);
+  color: var(--fds-text-secondary, #6f6f6f);
   opacity: 0.5;
 }
 

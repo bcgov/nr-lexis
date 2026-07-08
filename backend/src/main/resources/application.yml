@@ -72,9 +72,6 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
-        - "/federalApplicationSearch"
-        - "/federalApplicationDetails"
-        - "viewFederalApplication"
       LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/applicationSearch"

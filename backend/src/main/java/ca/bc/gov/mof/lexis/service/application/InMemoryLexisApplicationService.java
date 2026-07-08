@@ -378,6 +378,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         record.applicationDate(),
         record.receivedDate(),
         record.listingDate(),
+        null,
         record.termDays(),
         record.applicationVolume(),
         record.averageLogVolume(),

@@ -272,7 +272,9 @@ class PermitControllerTest {
         "ISS",
         "Issued",
         applicantClientNumber,
+        "01",
         ownerClientNumber,
+        "03",
         "Example Dest Co",
         "US",
         "SEA",
@@ -289,6 +291,7 @@ class PermitControllerTest {
         "FED-1122",
         "SI-99881",
         "Permit remarks",
+        null,
         "R2");
   }
 }

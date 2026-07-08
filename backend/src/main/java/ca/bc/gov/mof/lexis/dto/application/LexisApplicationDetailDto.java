@@ -17,6 +17,7 @@ public record LexisApplicationDetailDto(
     LocalDate applicationDate,
     LocalDate receivedDate,
     LocalDate listingDate,
+    LocalDate teacMeetingDate,
     Long termDays,
     double applicationVolume,
     double averageLogVolume,

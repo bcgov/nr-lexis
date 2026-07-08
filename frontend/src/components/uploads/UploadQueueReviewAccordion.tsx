@@ -12,6 +12,7 @@ export type UploadQueueReviewAccordionProps = {
   targetSummary: string
   idPrefix?: string
   itemNoun?: string
+  showHeader?: boolean
 }
 
 const asList = (value: string[] | undefined): string[] => value?.filter(Boolean) ?? []
@@ -81,6 +82,7 @@ function UploadQueueReviewAccordion({
   targetSummary,
   idPrefix = 'adminUploadReview',
   itemNoun = 'file',
+  showHeader = true,
 }: UploadQueueReviewAccordionProps) {
   if (items.length === 0) {
     return null
@@ -92,13 +94,20 @@ function UploadQueueReviewAccordion({
   const typeLabel = itemNoun === 'submission' ? 'Submission type' : 'Upload type'
 
   return (
-    <section className="admin-upload-review" aria-labelledby={titleId}>
-      <div className="admin-upload-review__header">
-        <h3 id={titleId}>{itemNounTitle} review</h3>
-        <span>
-          {items.length} {items.length === 1 ? itemNoun : itemNounPlural}
-        </span>
-      </div>
+    <section
+      className="admin-upload-review"
+      {...(showHeader
+        ? { 'aria-labelledby': titleId }
+        : { 'aria-label': `${itemNounTitle} review` })}
+    >
+      {showHeader && (
+        <div className="admin-upload-review__header">
+          <h3 id={titleId}>{itemNounTitle} review</h3>
+          <span>
+            {items.length} {items.length === 1 ? itemNoun : itemNounPlural}
+          </span>
+        </div>
+      )}
 
       <div className="admin-upload-review__list">
         {items.map((item) => {

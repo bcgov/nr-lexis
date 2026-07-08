@@ -6,24 +6,26 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -38,10 +40,24 @@ class PurchaseOfferControllerTest {
   @Mock private ObjectProvider<PurchaseOfferService> serviceProvider;
   @Mock private PurchaseOfferService service;
   @Mock private LexisSessionService sessionService;
+  @Mock private LexisAuthorizationService authorizationService;
   @Mock private LexisApplicationService applicationService;
+  @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
+  @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private Authentication authentication;
 
-  @InjectMocks private PurchaseOfferController controller;
+  private PurchaseOfferController controller;
+
+  @BeforeEach
+  void setup() {
+    controller =
+        new PurchaseOfferController(
+            serviceProvider,
+            sessionService,
+            authorizationService,
+            applicationService,
+            applicationDetailsServiceProvider);
+  }
 
   @Test
   void optionsShouldReturnNoContentWhenServiceMissing() {
@@ -207,37 +223,126 @@ class PurchaseOfferControllerTest {
     PurchaseOfferDetailDto dto =
         offerDetail();
     when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(dto));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00077881", null)));
+    mockApplicationSpeciesGradeCode();
 
     ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
+    assertThat(response.getBody()).isEqualTo(dto.withApplicationContext(45.5, "FI/HE/LUM"));
     verify(service).findByOfferNumber(81009L);
+    verify(applicationService).findByApplicationNumber(1000456L);
   }
 
   @Test
   void detailShouldReturnPayloadWhenScopedUserOwnsParentApplication() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
-    PurchaseOfferDetailDto offer = offerDetail();
+    PurchaseOfferDetailDto offer = offerDetail("00099999");
     when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
     when(applicationService.findByApplicationNumber(1000456L))
         .thenReturn(Optional.of(applicationDetail("00077881", null)));
+    mockApplicationSpeciesGradeCode();
 
     ResponseEntity<PurchaseOfferDetailDto> response =
         controller.getByOfferNumber(81009L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(offer);
+    assertThat(response.getBody()).isEqualTo(offer.withApplicationContext(45.5, "FI/HE/LUM"));
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void detailShouldReturnPayloadWhenScopedUserIsOfferingClient() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, true, false));
+    verify(service).findByOfferNumber(81009L);
+    verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void detailShouldReturnFullEditPermissionsWhenUserIsApplicationApprover() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(true, true, true, true));
+  }
+
+  @Test
+  void detailShouldReturnFullEditPermissionsForWithdrawnOfferWhenUserIsApplicationApprover() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    PurchaseOfferDetailDto offer = withdrawnOfferDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(true, true, true, true));
+  }
+
+  @Test
+  void detailShouldNotTreatAdminAsApplicationApproverForOfferEdits() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_ADMIN"));
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, false, false));
   }
 
   @Test
   void detailShouldReturnNotFoundWhenScopedUserDoesNotOwnParentApplication() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
-    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offerDetail()));
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offerDetail("00077777")));
     when(applicationService.findByApplicationNumber(1000456L))
         .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
 
@@ -250,24 +355,39 @@ class PurchaseOfferControllerTest {
   }
 
   private static PurchaseOfferDetailDto offerDetail() {
+    return offerDetail("00077881");
+  }
+
+  private static PurchaseOfferDetailDto offerDetail(String offeringClientNumber) {
+    return offerDetail(offeringClientNumber, null, null);
+  }
+
+  private static PurchaseOfferDetailDto withdrawnOfferDetail(String offeringClientNumber) {
+    return offerDetail(offeringClientNumber, LocalDate.of(2026, 3, 5), "Buyer withdrew");
+  }
+
+  private static PurchaseOfferDetailDto offerDetail(
+      String offeringClientNumber, LocalDate offerWithdrawalDate, String withdrawReason) {
     return new PurchaseOfferDetailDto(
         81009L,
         1000456L,
         "PKG-903",
+        null,
+        null,
         "Example Lumber",
         "Alex Example",
         12500.25,
         LocalDate.of(2026, 3, 2),
-        null,
+        offerWithdrawalDate,
         LocalDate.of(2026, 3, 18),
         "N",
         "Y",
         "N",
         "Initial offer",
-        null,
+        withdrawReason,
         "P",
         "Mill details",
-        "00077881",
+        offeringClientNumber,
         "Port Moody",
         "Condition notes",
         LocalDate.of(2026, 2, 26),
@@ -292,6 +412,7 @@ class PurchaseOfferControllerTest {
         LocalDate.of(2026, 3, 1),
         LocalDate.of(2026, 3, 1),
         LocalDate.of(2026, 3, 2),
+        null,
         180L,
         90.0,
         0.5,
@@ -302,8 +423,17 @@ class PurchaseOfferControllerTest {
         false,
         null,
         null,
-        List.of(),
+        List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 45.5, 12L)),
         List.of(),
         List.of());
+  }
+
+  private void mockApplicationSpeciesGradeCode() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.getSpeciesForApplication(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.SpeciesEndUseItem("FI", "LUM", "Lumber"),
+                new ApplicationDetailsRpcService.SpeciesEndUseItem("HE", "LUM", "Lumber")));
   }
 }

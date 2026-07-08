@@ -5,10 +5,14 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
@@ -45,10 +49,15 @@ public class OfferDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OfferDetailsRpcController.class);
   private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
+  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
+  private static final String FAIR_OFFER_DEFAULT = "N";
+  private static final String VALID_OFFER_DEFAULT = "Y";
+  private static final String APPROVAL_DEFAULT = "N";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
+  private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   private final ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider;
@@ -57,12 +66,14 @@ public class OfferDetailsRpcController {
 
   public OfferDetailsRpcController(
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ObjectProvider<FederalApplicationService> federalApplicationServiceProvider,
       ObjectProvider<ClientLookupService> clientLookupServiceProvider,
       ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider,
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService) {
     this.applicationServiceProvider = applicationServiceProvider;
+    this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.federalApplicationServiceProvider = federalApplicationServiceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
     this.purchaseOfferServiceProvider = purchaseOfferServiceProvider;
@@ -147,9 +158,9 @@ public class OfferDetailsRpcController {
     return ResponseEntity.ok(
         new OfferApplicationDetailsResponseDto(
             true,
-            nonNull(detail.get().productTypeCode()),
+            resolveApplicationSpeciesGradeCode(parsed),
             formatLegacyDate(detail.get().listingDate()),
-            ""));
+            formatIsoDate(detail.get().teacMeetingDate())));
   }
 
   @GetMapping("/package-list")
@@ -291,7 +302,8 @@ public class OfferDetailsRpcController {
   private ResponseEntity<OfferPersistenceResponseDto> addOffer(
       MultiValueMap<String, String> parameters,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    if (!authorizationService.canPerformAction(roles, LEGACY_ACTION_CREATE_OFFER)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -302,8 +314,12 @@ public class OfferDetailsRpcController {
     }
 
     String userId = authentication == null ? null : authentication.getName();
+    PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
+    if (!isApplicationApprover(roles)) {
+      request = withLegacyNonApproverCreateDefaults(request);
+    }
     PurchaseOfferService.CreateOfferResult result =
-        service.addOffer(toCreateOfferRequest(parameters), userId);
+        service.addOffer(request, userId);
     return ResponseEntity.ok(toPersistenceResponse(result));
   }
 
@@ -311,19 +327,36 @@ public class OfferDetailsRpcController {
   public ResponseEntity<OfferPersistenceResponseDto> updateOffer(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
-      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-    }
-
     PurchaseOfferService service = purchaseOfferServiceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Purchase offer service unavailable - returning no content for update offer");
       return ResponseEntity.noContent().build();
     }
 
+    PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    boolean canCreateOffer =
+        authorizationService.canPerformAction(roles, LEGACY_ACTION_CREATE_OFFER);
+    boolean applicationApprover = isApplicationApprover(roles);
+    if (!canCreateOffer) {
+      Optional<PurchaseOfferDetailDto> currentOffer =
+          service.findByOfferNumber(request.exportPurchaseOfferNumber());
+      if (currentOffer.isEmpty()
+          || !canScopedOfferingClientUpdate(authentication, currentOffer.get())) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+      }
+      request = restrictOfferingClientUpdate(request, currentOffer.get());
+    } else if (!applicationApprover) {
+      Optional<PurchaseOfferDetailDto> currentOffer =
+          service.findByOfferNumber(request.exportPurchaseOfferNumber());
+      if (currentOffer.isPresent()) {
+        request = preserveLegacyApproverFields(request, currentOffer.get());
+      }
+    }
+
     String userId = authentication == null ? null : authentication.getName();
     PurchaseOfferService.CreateOfferResult result =
-        service.updateOffer(toCreateOfferRequest(parameters), userId);
+        service.updateOffer(request, userId);
     return ResponseEntity.ok(toPersistenceResponse(result));
   }
 
@@ -350,6 +383,74 @@ public class OfferDetailsRpcController {
   private boolean canPerform(Authentication authentication, String action) {
     return authorizationService.canPerformAction(
         sessionService.parseRolesFromPrincipal(authentication), action);
+  }
+
+  private boolean isApplicationApprover(List<String> roles) {
+    return roles != null && roles.contains(ROLE_APPLICATION_APPROVER);
+  }
+
+  private boolean canScopedOfferingClientUpdate(
+      Authentication authentication, PurchaseOfferDetailDto currentOffer) {
+    if (!canPerform(authentication, "/offerDetails")) {
+      return false;
+    }
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    return scopedClientNumber != null
+        && matchesScopedClient(scopedClientNumber, currentOffer.offeringClientNumber());
+  }
+
+  private PurchaseOfferService.CreateOfferRequest restrictOfferingClientUpdate(
+      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+    boolean canWithdraw =
+        currentOffer.offerWithdrawalDate() == null
+            && currentOffer.offerEndDate() != null
+            && !currentOffer.offerEndDate().isBefore(LocalDate.now());
+    return new PurchaseOfferService.CreateOfferRequest(
+        currentOffer.applicationNumber(),
+        currentOffer.offerNumber(),
+        currentOffer.packageNumber(),
+        currentOffer.companyName(),
+        currentOffer.contactName(),
+        requested.purchaseOfferAmount(),
+        currentOffer.purchaseOfferDate(),
+        canWithdraw ? requested.offerWithdrawalDate() : currentOffer.offerWithdrawalDate(),
+        currentOffer.teacReviewDate(),
+        currentOffer.fairOfferIndicator(),
+        currentOffer.validOfferIndicator(),
+        currentOffer.offerRemark(),
+        currentOffer.approvalIndicator(),
+        canWithdraw ? requested.withdrawReason() : currentOffer.withdrawReason(),
+        currentOffer.exportJurisdictionCode(),
+        currentOffer.manufacturingFacilityInfo(),
+        currentOffer.offeringClientNumber(),
+        requested.pickupLocation(),
+        requested.offerCondition(),
+        requested.offerVolume());
+  }
+
+  private PurchaseOfferService.CreateOfferRequest preserveLegacyApproverFields(
+      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        requested.applicationNumber(),
+        requested.exportPurchaseOfferNumber(),
+        requested.packageNumber(),
+        requested.companyName(),
+        requested.contactName(),
+        requested.purchaseOfferAmount(),
+        requested.purchaseOfferDate(),
+        requested.offerWithdrawalDate(),
+        requested.teacReviewDate(),
+        currentOffer.fairOfferIndicator(),
+        currentOffer.validOfferIndicator(),
+        currentOffer.offerRemark(),
+        currentOffer.approvalIndicator(),
+        requested.withdrawReason(),
+        requested.exportJurisdictionCode(),
+        requested.manufacturingFacilityInfo(),
+        requested.offeringClientNumber(),
+        requested.pickupLocation(),
+        requested.offerCondition(),
+        requested.offerVolume());
   }
 
   private Long parseApplicationNumber(String applicationNumber) {
@@ -388,6 +489,31 @@ public class OfferDetailsRpcController {
         parseDouble(first(parameters, "offerVolume")));
   }
 
+  private PurchaseOfferService.CreateOfferRequest withLegacyNonApproverCreateDefaults(
+      PurchaseOfferService.CreateOfferRequest request) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        request.applicationNumber(),
+        request.exportPurchaseOfferNumber(),
+        request.packageNumber(),
+        request.companyName(),
+        request.contactName(),
+        request.purchaseOfferAmount(),
+        request.purchaseOfferDate(),
+        request.offerWithdrawalDate(),
+        request.teacReviewDate(),
+        FAIR_OFFER_DEFAULT,
+        VALID_OFFER_DEFAULT,
+        request.offerRemark(),
+        APPROVAL_DEFAULT,
+        request.withdrawReason(),
+        request.exportJurisdictionCode(),
+        request.manufacturingFacilityInfo(),
+        request.offeringClientNumber(),
+        request.pickupLocation(),
+        request.offerCondition(),
+        request.offerVolume());
+  }
+
   private OfferPersistenceResponseDto toPersistenceResponse(
       PurchaseOfferService.CreateOfferResult result) {
     return new OfferPersistenceResponseDto(
@@ -410,8 +536,23 @@ public class OfferDetailsRpcController {
     return value.format(LEGACY_DATE_FORMATTER);
   }
 
+  private String formatIsoDate(LocalDate value) {
+    return value == null ? "" : value.toString();
+  }
+
   private String formatVolume(double value) {
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+  }
+
+  private String resolveApplicationSpeciesGradeCode(Long applicationNumber) {
+    ApplicationDetailsRpcService applicationDetailsService =
+        applicationDetailsServiceProvider.getIfAvailable();
+    if (applicationDetailsService == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning blank species grade");
+      return "";
+    }
+    return ApplicationDetailsRpcService.toSpeciesEndUseSort(
+        applicationDetailsService.getSpeciesForApplication(applicationNumber));
   }
 
   private String fallbackApplicationNumber(String value) {

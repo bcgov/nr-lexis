@@ -98,6 +98,28 @@ public interface PermitDetailsRpcService {
 
   PermitMutationRpcResponseDto updateShipping(PermitMutationRequestDto request, String userId);
 
+  PermitPersistenceRpcResponseDto updateScaleAttachment(
+      String scaleDetailId, Long permitNumber, boolean attachInd, String userId);
+
+  PermitPersistenceRpcResponseDto addApplicationsToPermit(
+      Long permitNumber, String selectedApplicationsCsv, String userId);
+
+  PermitPersistenceRpcResponseDto removeApplicationFromPermit(
+      Long permitNumber, Long applicationNumber, String userId);
+
+  PermitPersistenceRpcResponseDto addBlanketOicScale(
+      Long permitNumber,
+      String packageNumber,
+      String timberMark,
+      String scaleVolume,
+      Long scalePieces,
+      String speciesCode,
+      String gradeCode,
+      String userId);
+
+  PermitPersistenceRpcResponseDto deleteBlanketOicScale(
+      String scaleDetailId, Long permitNumber, String userId);
+
   boolean hasFormChanges(PermitMutationRequestDto request);
 
   PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber);

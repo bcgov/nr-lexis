@@ -781,9 +781,9 @@ describe('Create Page Core Flows', () => {
         offerWithdrawalDate: '2026-03-20',
         withdrawReason: 'Withdrawn by buyer',
         teacReviewDate: '',
-        fairOfferIndicator: '',
-        validOfferIndicator: '',
-        approvalIndicator: '',
+        fairOfferIndicator: 'N',
+        validOfferIndicator: 'Y',
+        approvalIndicator: 'N',
         offerRemark: 'Ready for review',
         pickupLocation: 'Yard A',
         offerCondition: 'No partial loads',
@@ -852,5 +852,42 @@ describe('Create Page Core Flows', () => {
         }),
       )
     })
+  })
+
+  it('allows provincial offer creation when legacy returns no packages', async () => {
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8083'))
+    mockedFetchOfferPackageList.mockResolvedValue([])
+    mockedFetchOfferApplicationVolume.mockResolvedValue('100.0')
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=45964&offeringClientNumber=00001012&companyName=Bell%20Pole%20Company&contactName=Dave%20Kohlen&region=11&pickupLocation=Van',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Provincial offers')
+    expect(await screen.findByDisplayValue('No Packages')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeDisabled()
+    expect(screen.getByDisplayValue('100.0')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
+    await userEvent.type(screen.getByLabelText('Offer received date'), '2026-03-10')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '45964',
+          packageNumber: '',
+        }),
+      )
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8083')
   })
 })

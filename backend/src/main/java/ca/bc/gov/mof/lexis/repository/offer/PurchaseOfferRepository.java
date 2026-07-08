@@ -155,6 +155,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),
                 getLong(rs, "APPLICATION_NUMBER"),
                 getString(rs, "PACKAGE_NUMBER"),
+                null,
+                null,
                 getString(rs, "COMPANY_NAME"),
                 getString(rs, "CONTACT_NAME"),
                 coalesce(getDouble(rs, "PURCHASE_OFFER_AMOUNT"), 0.0d),

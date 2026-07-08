@@ -41,6 +41,10 @@ export type UploadQueuePreviewProps = {
   onBack?: () => void
   backLabel?: string
   showQueueManagementActions?: boolean
+  showReviewQueueTable?: boolean
+  showReviewAccordionHeader?: boolean
+  canReview?: boolean
+  reviewItems?: UploadQueueItem[]
 }
 
 const formatFileType = (file: File): string => {
@@ -86,6 +90,10 @@ function UploadQueuePreview({
   onBack,
   backLabel = 'Back',
   showQueueManagementActions = false,
+  showReviewQueueTable = true,
+  showReviewAccordionHeader = true,
+  canReview,
+  reviewItems,
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
@@ -102,13 +110,15 @@ function UploadQueuePreview({
       : !showWorkflowProgress || (items.length > 0 && reviewQueueIdentity === queueIdentity)
   const effectiveQueueFilter = isReviewStep ? queueFilter : ''
 
+  const effectiveItems = isReviewStep && reviewItems ? reviewItems : items
+
   const filteredItems = useMemo(() => {
     const query = effectiveQueueFilter.trim().toLowerCase()
     if (!query) {
-      return items
+      return effectiveItems
     }
 
-    return items.filter((item) =>
+    return effectiveItems.filter((item) =>
       [
         item.workflowLabel,
         item.file.name,
@@ -127,7 +137,7 @@ function UploadQueuePreview({
         .toLowerCase()
         .includes(query),
     )
-  }, [effectiveQueueFilter, items, targetSummary])
+  }, [effectiveItems, effectiveQueueFilter, targetSummary])
 
   const clearQueue = (): void => {
     setQueueFilter('')
@@ -159,14 +169,32 @@ function UploadQueuePreview({
   const selectedItemLabel = `${items.length} selected ${
     items.length === 1 ? itemNoun : itemNounPlural
   }`
-  const canReviewUpload = canSubmit && items.length > 0 && blockedCount === 0
+  const reviewSelectedItemLabel = `${effectiveItems.length} selected ${
+    effectiveItems.length === 1 ? itemNoun : itemNounPlural
+  }`
+  const canReviewUpload = canReview ?? (canSubmit && items.length > 0 && blockedCount === 0)
+  const reviewableItemCount =
+    reviewItems?.length ??
+    items.filter(
+      (item) =>
+        item.status === 'validated' ||
+        item.status === 'uploading' ||
+        item.status === 'complete' ||
+        item.submitted,
+    ).length
   const displayedItems = isReviewStep ? filteredItems : items
   const uploadStepDescription =
-    blockedCount > 0
-      ? `${selectedItemLabel} ${items.length === 1 ? 'needs' : 'need'} attention before review.`
-      : pendingValidationCount > 0
-        ? `${selectedItemLabel} validating. Continue after validation completes.`
-        : `${selectedItemLabel} validated. Continue to review before submitting.`
+    blockedCount > 0 && canReviewUpload
+      ? `${blockedCount} selected ${blockedCount === 1 ? itemNoun : itemNounPlural} ${
+          blockedCount === 1 ? 'needs' : 'need'
+        } attention. Review ${reviewableItemCount} validated ${
+          reviewableItemCount === 1 ? itemNoun : itemNounPlural
+        } before submitting.`
+      : blockedCount > 0
+        ? `${selectedItemLabel} ${items.length === 1 ? 'needs' : 'need'} attention before review.`
+        : pendingValidationCount > 0
+          ? `${selectedItemLabel} validating. Continue after validation completes.`
+          : `${selectedItemLabel} validated. Continue to review before submitting.`
   const actionControls = (
     <>
       {showQueueManagementActions && items.length > 0 && (
@@ -178,6 +206,7 @@ function UploadQueuePreview({
         <Button
           kind="primary"
           size="md"
+          className="admin-upload-fspts-action-button"
           onClick={onSubmit}
           disabled={isSubmitting || !canSubmit}
           renderIcon={ArrowRight}
@@ -188,6 +217,7 @@ function UploadQueuePreview({
         <Button
           kind="primary"
           size="md"
+          className="admin-upload-fspts-action-button"
           onClick={enterReviewStep}
           disabled={isSubmitting || !canReviewUpload}
           renderIcon={ArrowRight}
@@ -221,7 +251,7 @@ function UploadQueuePreview({
             {items.length === 0
               ? emptyDescription
               : isReviewStep
-                ? `Review ${selectedItemLabel} before submitting.`
+                ? `Review ${reviewSelectedItemLabel} before submitting.`
                 : uploadStepDescription}
           </p>
         </div>
@@ -240,7 +270,7 @@ function UploadQueuePreview({
         </div>
       ) : (
         <>
-          {isReviewStep && (
+          {isReviewStep && showReviewQueueTable && (
             <div className="admin-upload-preview-filter">
               <TextInput
                 id={queueFilterId}
@@ -251,79 +281,84 @@ function UploadQueuePreview({
               />
             </div>
           )}
-          <div className="admin-upload-fspts-table-wrap">
-            <table className="admin-upload-queue__table admin-upload-queue__table--generic">
-              <thead>
-                <tr>
-                  <th>{workflowColumnLabel}</th>
-                  <th>{fileColumnLabel}</th>
-                  <th>Target</th>
-                  <th>Status</th>
-                  <th>Message</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayedItems.length === 0 ? (
+          {(!isReviewStep || showReviewQueueTable) && (
+            <div className="admin-upload-fspts-table-wrap">
+              <table className="admin-upload-queue__table admin-upload-queue__table--generic">
+                <thead>
                   <tr>
-                    <td colSpan={6}>No queued {itemNounPlural} match the current filter.</td>
+                    <th>{workflowColumnLabel}</th>
+                    <th>{fileColumnLabel}</th>
+                    <th>Target</th>
+                    <th>Status</th>
+                    <th>Message</th>
+                    <th>Action</th>
                   </tr>
-                ) : (
-                  displayedItems.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.workflowLabel}</td>
-                      <td>
-                        <div className="admin-upload-file-cell">
-                          <span>{item.file.name}</span>
-                          <span>
-                            {formatFileType(item.file)} | {formatUploadFileSize(item.file.size)} |
-                            Added {formatUploadQueuedAt(item.queuedAt)}
-                          </span>
-                        </div>
-                      </td>
-                      <td>{item.targetSummary ?? targetSummary}</td>
-                      <td>
-                        <span
-                          className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
-                        >
-                          {uploadQueueStatusLabel(item.status)}
-                        </span>
-                      </td>
-                      <td>{item.message || pendingMessage}</td>
-                      <td>
-                        <div className="admin-upload-row-actions">
-                          {renderCompleteAction?.(item)}
-                          {canRemoveItem(item) && (
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => onRemove(item.id)}
-                              disabled={isSubmitting && item.status === 'uploading'}
-                            >
-                              {removeLabel}
-                            </Button>
-                          )}
-                        </div>
-                      </td>
+                </thead>
+                <tbody>
+                  {displayedItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={6}>No queued {itemNounPlural} match the current filter.</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    displayedItems.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.workflowLabel}</td>
+                        <td>
+                          <div className="admin-upload-file-cell">
+                            <span>{item.file.name}</span>
+                            <span>
+                              {formatFileType(item.file)} | {formatUploadFileSize(item.file.size)} |
+                              Added {formatUploadQueuedAt(item.queuedAt)}
+                            </span>
+                          </div>
+                        </td>
+                        <td>{item.targetSummary ?? targetSummary}</td>
+                        <td>
+                          <span
+                            className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                          >
+                            {uploadQueueStatusLabel(item.status)}
+                          </span>
+                        </td>
+                        <td>{item.message || pendingMessage}</td>
+                        <td>
+                          <div className="admin-upload-row-actions">
+                            {renderCompleteAction?.(item)}
+                            {canRemoveItem(item) && (
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => onRemove(item.id)}
+                                disabled={isSubmitting && item.status === 'uploading'}
+                              >
+                                {removeLabel}
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
           {isReviewStep && (
             <>
-              <div className="admin-upload-preview-footer">
-                <span>
-                  Showing {filteredItems.length} of {items.length}{' '}
-                  {items.length === 1 ? itemNoun : itemNounPlural}
-                </span>
-              </div>
+              {showReviewQueueTable && (
+                <div className="admin-upload-preview-footer">
+                  <span>
+                    Showing {filteredItems.length} of {effectiveItems.length}{' '}
+                    {effectiveItems.length === 1 ? itemNoun : itemNounPlural}
+                  </span>
+                </div>
+              )}
               <UploadQueueReviewAccordion
                 items={filteredItems}
                 targetSummary={targetSummary}
                 idPrefix={`${idPrefix}Review`}
                 itemNoun={itemNoun}
+                showHeader={showReviewAccordionHeader}
               />
             </>
           )}

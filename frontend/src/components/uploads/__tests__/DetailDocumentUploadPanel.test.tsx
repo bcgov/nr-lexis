@@ -122,12 +122,15 @@ describe('DetailDocumentUploadPanel', () => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
     })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Upload type' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Document File')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
 
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
 
-    expect(screen.queryByText('Showing 1 of 1 file')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'File review' })).not.toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
     expect(
       within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
@@ -139,7 +142,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
@@ -235,5 +238,72 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('allows review and submit when at least one selected document validates', async () => {
+    const infectedFile = new File(['infected document upload'], 'eicar-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    const validFile = new File(['valid document upload'], 'valid-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    mockedValidateAdminUpload
+      .mockRejectedValueOnce({
+        response: {
+          status: 422,
+          data: {
+            message: 'The uploaded file failed virus scanning.',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'validated',
+        message: 'File passed validation and virus scanning.',
+      })
+    mockedSubmitAdminUpload.mockResolvedValue({
+      status: 'success',
+      message: 'Application document upload submitted.',
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await userEvent.upload(screen.getByLabelText('Document File'), [infectedFile, validFile])
+
+    await waitFor(() => {
+      expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
+    expect(
+      screen.getByText('1 queued file needs attention and will be excluded from review.'),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+
+    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Upload type' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Document File')).not.toBeInTheDocument()
+    expect(screen.getAllByText('valid-application-upload.pdf').length).toBeGreaterThan(0)
+    expect(screen.queryByText('eicar-application-upload.pdf')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file: validFile,
+        }),
+      )
+    })
+    expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
   })
 })

@@ -26,6 +26,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   private static final String FIND_SCALE_DETAIL_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
+  private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
+  private static final String FIND_SCALE_DETAIL_BY_ID =
+      LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_ID(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PRM(?,?)";
   private static final String FIND_PACKAGES_BY_PERMIT =
@@ -58,6 +62,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "INSERT_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String UPDATE_PERMIT_DETAIL =
       LEXIS_GROUP_9_PACKAGE + "UPDATE_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String UPDATE_SCALE =
+      LEXIS_GROUP_9_PACKAGE + "UPDATE_SCALE(?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String INSERT_SCALE_DETAIL =
+      LEXIS_GROUP_9_PACKAGE + "INSERT_SCALE_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String DELETE_SCALE_DETAIL =
+      LEXIS_GROUP_9_PACKAGE + "DELETE_SCALE_DETAIL(?,?)";
   private static final String INSERT_SALES_INVOICE =
       LEXIS_GROUP_9_PACKAGE + "INSERT_SALES_INVOICE(?,?,?,?,?,?,?,?,?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
@@ -104,21 +114,97 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         FIND_SCALE_DETAIL_BY_PERMIT,
         cs -> cs.setString(1, permitNumber.toString()),
         2,
-        rs ->
-            new PermitScaleDetailRow(
-                getString(rs, "EXPORT_SCALE_DETAIL_ID"),
-                getString(rs, "TIMBER_MARK"),
-                getString(rs, "EXPORT_SPECIES_CODE"),
-                getString(rs, "EXPORT_GRADE_CODE"),
-                coalesce(getDouble(rs, "SPECIES_GRADE_VOLUME"), 0.0d),
-                coalesce(getLong(rs, "PIECES_COUNT"), 0L),
-                getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
-                getString(rs, "CASCADE_SPLIT_CODE"),
-                getString(rs, "EWB"),
-                getString(rs, "FIL"),
-                getString(rs, "MF")));
+        this::mapPermitScaleDetailRow);
+  }
+
+  public Optional<ScaleMutationRow> findScaleMutationById(String scaleDetailId) {
+    String normalizedScaleDetailId = trim(scaleDetailId);
+    if (normalizedScaleDetailId == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_SCALE_DETAIL_BY_ID,
+        cs -> cs.setString(1, normalizedScaleDetailId),
+        2,
+        this::mapScaleMutationRow);
+  }
+
+  public List<ScaleMutationRow> findScaleMutationDetailsByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+        FIND_SCALE_DETAIL_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapScaleMutationRow);
+  }
+
+  public boolean updateScaleDetail(ScaleMutationRecord record, String updateUserId) {
+    String normalizedUpdateUserId = trim(updateUserId);
+    Long normalizedScaleDetailId = record == null ? null : parseLongOrNull(record.scaleDetailId());
+    if (record == null || normalizedScaleDetailId == null || normalizedUpdateUserId == null) {
+      return false;
+    }
+
+    Timestamp now = new Timestamp(System.currentTimeMillis());
+    return executeProcedure(
+        UPDATE_SCALE,
+        cs -> {
+          cs.setLong(1, normalizedScaleDetailId);
+          setLongOrNull(cs, 2, record.exportPermitDetailNumber());
+          cs.setString(3, trim(record.timberMark()));
+          setLongOrNull(cs, 4, record.piecesCount());
+          setDoubleOrNull(cs, 5, record.speciesGradeVolume());
+          cs.setString(6, trim(record.packageNumber()));
+          cs.setString(7, trim(record.exportSpeciesCode()));
+          cs.setString(8, trim(record.exportGradeCode()));
+          cs.setString(9, auditUserOrDefault(record.entryUserId()));
+          setTimestampOrNull(cs, 10, record.entryTimestamp());
+          cs.setString(11, auditUserOrDefault(normalizedUpdateUserId));
+          cs.setTimestamp(12, now);
+        });
+  }
+
+  public Optional<PermitScaleDetailRow> insertBoicScaleDetail(BoicScaleMutationRecord record) {
+    if (record == null || trim(record.packageNumber()) == null || record.applicationNumber() == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        INSERT_SCALE_DETAIL,
+        cs -> {
+          cs.setString(1, trim(record.timberMark()));
+          setLongOrNull(cs, 2, record.piecesCount());
+          setDoubleOrNull(cs, 3, record.speciesGradeVolume());
+          cs.setString(4, auditUserOrDefault(record.entryUserId()));
+          setTimestampOrNull(cs, 5, record.entryTimestamp());
+          setStringOrNull(cs, 6, null);
+          setTimestampOrNull(cs, 7, null);
+          cs.setString(8, trim(record.packageNumber()));
+          cs.setString(9, trim(record.exportSpeciesCode()));
+          cs.setString(10, trim(record.exportGradeCode()));
+          setLongOrNull(cs, 11, record.exportPermitDetailNumber());
+          setDoubleOrNull(cs, 12, record.exemptionOverrideRate());
+        },
+        13,
+        this::mapPermitScaleDetailRow);
+  }
+
+  public boolean deleteScaleDetailById(String scaleDetailId, String userId) {
+    String normalizedScaleDetailId = trim(scaleDetailId);
+    if (normalizedScaleDetailId == null) {
+      return false;
+    }
+
+    return executeProcedure(
+        DELETE_SCALE_DETAIL,
+        cs -> {
+          cs.setString(1, normalizedScaleDetailId);
+          cs.setString(2, auditUserOrDefault(userId));
+        });
   }
 
   public List<String> findPackageNumbersByPermitNumber(Long permitNumber) {
@@ -984,6 +1070,38 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
   }
 
+  private ScaleMutationRow mapScaleMutationRow(ResultSet rs) {
+    return new ScaleMutationRow(
+        getString(rs, "EXPORT_SCALE_DETAIL_ID"),
+        getString(rs, "TIMBER_MARK"),
+        getLong(rs, "PIECES_COUNT"),
+        getDouble(rs, "SPECIES_GRADE_VOLUME"),
+        getString(rs, "PACKAGE_NUMBER"),
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_GRADE_CODE"),
+        getLong(rs, "APPLICATION_NUMBER"),
+        getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+        getString(rs, "ENTRY_USERID"),
+        getTimestamp(rs, "ENTRY_TIMESTAMP"));
+  }
+
+  private PermitScaleDetailRow mapPermitScaleDetailRow(ResultSet rs) {
+    return new PermitScaleDetailRow(
+        getString(rs, "EXPORT_SCALE_DETAIL_ID"),
+        getString(rs, "TIMBER_MARK"),
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_GRADE_CODE"),
+        coalesce(getDouble(rs, "SPECIES_GRADE_VOLUME"), 0.0d),
+        coalesce(getLong(rs, "PIECES_COUNT"), 0L),
+        getLong(rs, "APPLICATION_NUMBER"),
+        getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+        getString(rs, "PACKAGE_NUMBER"),
+        getString(rs, "CASCADE_SPLIT_CODE"),
+        getString(rs, "EWB"),
+        getString(rs, "FIL"),
+        getString(rs, "MF"));
+  }
+
   private Timestamp getTimestamp(ResultSet rs, String column) {
     try {
       return rs.getTimestamp(column);
@@ -1017,6 +1135,37 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     cs.setDouble(index, value);
   }
 
+  private void setStringOrNull(java.sql.CallableStatement cs, int index, String value)
+      throws SQLException {
+    String normalized = trim(value);
+    if (normalized == null) {
+      cs.setNull(index, Types.VARCHAR);
+      return;
+    }
+    cs.setString(index, normalized);
+  }
+
+  private void setTimestampOrNull(java.sql.CallableStatement cs, int index, Timestamp value)
+      throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.TIMESTAMP);
+      return;
+    }
+    cs.setTimestamp(index, value);
+  }
+
+  private Long parseLongOrNull(String value) {
+    String normalized = trim(value);
+    if (normalized == null) {
+      return null;
+    }
+    try {
+      return Long.valueOf(normalized);
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
   private String safeFileName(String value) {
     if (value == null || value.isBlank()) {
       return "";
@@ -1048,6 +1197,44 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String ewb,
       String fil,
       String mf) {}
+
+  public record ScaleMutationRow(
+      String scaleDetailId,
+      String timberMark,
+      Long piecesCount,
+      Double speciesGradeVolume,
+      String packageNumber,
+      String exportSpeciesCode,
+      String exportGradeCode,
+      Long applicationNumber,
+      Long exportPermitDetailNumber,
+      String entryUserId,
+      Timestamp entryTimestamp) {}
+
+  public record ScaleMutationRecord(
+      String scaleDetailId,
+      String timberMark,
+      Long piecesCount,
+      Double speciesGradeVolume,
+      String packageNumber,
+      String exportSpeciesCode,
+      String exportGradeCode,
+      Long exportPermitDetailNumber,
+      String entryUserId,
+      Timestamp entryTimestamp) {}
+
+  public record BoicScaleMutationRecord(
+      String timberMark,
+      Long piecesCount,
+      Double speciesGradeVolume,
+      String packageNumber,
+      String exportSpeciesCode,
+      String exportGradeCode,
+      Long applicationNumber,
+      Long exportPermitDetailNumber,
+      Double exemptionOverrideRate,
+      String entryUserId,
+      Timestamp entryTimestamp) {}
 
   public record PermitPolicyContextRow(
       Long permitNumber,

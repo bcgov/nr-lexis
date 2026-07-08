@@ -30,4 +30,5 @@ export type UploadQueueItem = {
   details?: UploadQueueReviewDetails
   resultApplicationNumber?: number
   targetSummary?: string
+  submitted?: boolean
 }

@@ -10,7 +10,9 @@ public record PermitDetailDto(
     String permitStatusCode,
     String permitStatusDescription,
     String applicantClientNumber,
+    String agentClientLocationCode,
     String ownerClientNumber,
+    String ownerClientLocationCode,
     String destinationCompanyName,
     String destinationCountryCode,
     String transportTypeCode,
@@ -27,4 +29,5 @@ public record PermitDetailDto(
     String federalPermitNumber,
     String invoiceNumber,
     String remarks,
+    Long oicApplicationNumber,
     String region) {}

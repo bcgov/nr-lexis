@@ -102,7 +102,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("getClientData", ACTION_OFFER_DETAILS),
           Map.entry("getClientLocations", ACTION_OFFER_DETAILS),
           Map.entry("addOffer", ACTION_CREATE_OFFER),
-          Map.entry("updateOffer", ACTION_CREATE_OFFER));
+          Map.entry("updateOffer", ACTION_OFFER_DETAILS));
 
   private static final Map<String, String> PERMIT_DETAILS_RPC_ACTIONS =
       actionMap(
@@ -120,6 +120,9 @@ final class LexisApiAuthorizationRules {
           Map.entry("addPermit", ACTION_SAVE_PERMIT),
           Map.entry("updatePermit", ACTION_SAVE_PERMIT),
           Map.entry("updateShipping", ACTION_SAVE_PERMIT),
+          Map.entry("updateScale", ACTION_SAVE_PERMIT),
+          Map.entry("addApplicationsToPermit", ACTION_SAVE_PERMIT),
+          Map.entry("removeApplicationFromPermit", ACTION_SAVE_PERMIT),
           Map.entry("getApplicationList", ACTION_PERMIT_DETAILS),
           Map.entry("getAvailableApplicationList", ACTION_PERMIT_DETAILS),
           Map.entry("getAvailablePackageList", ACTION_PERMIT_DETAILS),
@@ -456,7 +459,11 @@ final class LexisApiAuthorizationRules {
           action(
               HttpMethod.POST,
               ACTION_CREATE_OFFER,
-              "/api/lexis/rpc/offer-details/**"),
+              "/api/lexis/rpc/offer-details/offer"),
+          action(
+              HttpMethod.POST,
+              ACTION_OFFER_DETAILS,
+              "/api/lexis/rpc/offer-details/offer/update"),
           legacyAction(
               HttpMethod.POST,
               ACTION_OFFER_DETAILS,
@@ -475,6 +482,11 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/permit-details/add-permit",
               "/api/lexis/rpc/permit-details/update-permit",
               "/api/lexis/rpc/permit-details/update-shipping",
+              "/api/lexis/rpc/permit-details/update-scale-attachment",
+              "/api/lexis/rpc/permit-details/add-applications-to-permit",
+              "/api/lexis/rpc/permit-details/remove-application-from-permit",
+              "/api/lexis/rpc/permit-details/add-boic-scale",
+              "/api/lexis/rpc/permit-details/delete-boic-scale",
               "/api/lexis/rpc/permit-details/add-invoice"),
           action(
               HttpMethod.POST,

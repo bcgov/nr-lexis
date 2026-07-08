@@ -220,6 +220,36 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByRole('heading', { name: 'Upload' })).toBeVisible()
   })
 
+  it('keeps validation warnings on the upload step and omits them from review', async () => {
+    const user = userEvent.setup()
+    const warning = "Row 6 grade 'B' had no parseable AMV values and was skipped."
+    mockedPreviewUpload.mockResolvedValue({
+      ...acceptedPreview,
+      warnings: [warning],
+    })
+
+    render(<RTMEmsLogAmvPage />)
+
+    await user.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      new File(['excel bytes'], 'rtm-ems-log-amv-template.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    )
+
+    const validationTable = await screen.findByRole('table', {
+      name: 'Upload validation issues',
+    })
+    expect(within(validationTable).getByText('Warning')).toBeVisible()
+    expect(within(validationTable).getByText(warning)).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Review upload' }))
+
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeVisible()
+    expect(screen.queryByText(warning)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+  })
+
   it('keeps users on upload when validation fails', async () => {
     const user = userEvent.setup()
     mockedPreviewUpload.mockResolvedValue({
