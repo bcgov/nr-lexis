@@ -37,6 +37,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.BoicScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
@@ -951,6 +952,98 @@ class OraclePermitDetailsRpcServiceTest {
             org.mockito.ArgumentMatchers.any());
   }
 
+  @Test
+  void addBlanketOicScaleShouldPersistScaleAndRecalculatePermitTotals() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetail("EX-700", 44.5d, true)));
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-903"));
+    when(repository.findFixedExemptionRate("EX-700")).thenReturn(Optional.of(BigDecimal.valueOf(2.5d)));
+    when(repository.insertBoicScaleDetail(
+            org.mockito.ArgumentMatchers.any(BoicScaleMutationRecord.class)))
+        .thenReturn(Optional.of(scale("103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903")));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903")));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addBlanketOicScale(
+            7000123L, "PKG-903", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("Blanket OIC scale detail was added.");
+
+    org.mockito.ArgumentCaptor<BoicScaleMutationRecord> scaleCaptor =
+        org.mockito.ArgumentCaptor.forClass(BoicScaleMutationRecord.class);
+    verify(repository).insertBoicScaleDetail(scaleCaptor.capture());
+    assertThat(scaleCaptor.getValue().timberMark()).isEqualTo("TM3");
+    assertThat(scaleCaptor.getValue().piecesCount()).isEqualTo(7L);
+    assertThat(scaleCaptor.getValue().speciesGradeVolume()).isEqualTo(12.5d);
+    assertThat(scaleCaptor.getValue().packageNumber()).isEqualTo("PKG-903");
+    assertThat(scaleCaptor.getValue().exportSpeciesCode()).isEqualTo("HE");
+    assertThat(scaleCaptor.getValue().exportGradeCode()).isEqualTo("A");
+    assertThat(scaleCaptor.getValue().applicationNumber()).isEqualTo(1000999L);
+    assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isEqualTo(7000123L);
+    assertThat(scaleCaptor.getValue().exemptionOverrideRate()).isEqualTo(2.5d);
+
+    org.mockito.ArgumentCaptor<PermitMutationRow> permitCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"), org.mockito.ArgumentMatchers.isNull());
+    assertThat(permitCaptor.getValue().permitVolume()).isEqualTo(12.5d);
+    assertThat(permitCaptor.getValue().numberOfPieces()).isEqualTo(7L);
+  }
+
+  @Test
+  void addBlanketOicScaleShouldRejectPermitWithoutOicApplicationNumber() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetail("EX-700", 44.5d, true)));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addBlanketOicScale(
+            7000123L, "PKG-903", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("The permit does not have an OIC application number.");
+    verify(repository, never())
+        .insertBoicScaleDetail(org.mockito.ArgumentMatchers.any(BoicScaleMutationRecord.class));
+  }
+
+  @Test
+  void deleteBlanketOicScaleShouldRemoveScaleAndRecalculatePermitTotals() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetail("EX-700", 44.5d, true)));
+    when(repository.findScaleMutationById("103"))
+        .thenReturn(
+            Optional.of(
+                new ScaleMutationRow(
+                    "103",
+                    "TM3",
+                    7L,
+                    12.5d,
+                    "PKG-903",
+                    "HE",
+                    "A",
+                    1000999L,
+                    7000123L,
+                    "entry-user",
+                    Timestamp.valueOf("2026-01-01 10:00:00"))));
+    when(repository.deleteScaleDetailById("103", "idir\\jsmith")).thenReturn(true);
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+
+    PermitPersistenceRpcResponseDto response =
+        service.deleteBlanketOicScale("103", 7000123L, "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("Blanket OIC scale detail was removed.");
+    verify(repository).deleteScaleDetailById("103", "idir\\jsmith");
+  }
+
   private PermitScaleDetailRow scale(
       String id,
       String timbermark,
@@ -1010,6 +1103,45 @@ class OraclePermitDetailsRpcServiceTest {
         null,
         null,
         null,
+        null,
+        null,
+        "T");
+  }
+
+  private PermitMutationRow blanketOicPermitMutationRow() {
+    return new PermitMutationRow(
+        7000123L,
+        "Destination Co",
+        "MV North",
+        LocalDate.of(2026, 4, 1),
+        null,
+        LocalDate.of(2026, 3, 15),
+        LocalDate.of(2026, 3, 15),
+        LocalDate.of(2026, 3, 16),
+        "RCPT-100",
+        LocalDate.of(2026, 12, 31),
+        100.0d,
+        42L,
+        0L,
+        null,
+        "Legacy notes",
+        "idir\\jsmith",
+        null,
+        "SEA",
+        "W",
+        "00077881",
+        "01",
+        "00077880",
+        "01",
+        "EX-700",
+        1835L,
+        "VAN",
+        "ACT",
+        "S",
+        "US",
+        null,
+        null,
+        1000999L,
         null,
         null,
         "T");
@@ -1091,10 +1223,15 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   private ExemptionDetailDto exemptionDetail(String exemptionNumber, double remainingVolume) {
+    return exemptionDetail(exemptionNumber, remainingVolume, false);
+  }
+
+  private ExemptionDetailDto exemptionDetail(
+      String exemptionNumber, double remainingVolume, boolean blanketOic) {
     return new ExemptionDetailDto(
         exemptionNumber,
-        "M",
-        "Ministerial",
+        blanketOic ? "B" : "M",
+        blanketOic ? "Blanket OIC" : "Ministerial",
         "ACT",
         "Active",
         "00077881",
@@ -1107,7 +1244,7 @@ class OraclePermitDetailsRpcServiceTest {
         44.5d,
         remainingVolume,
         "",
-        false,
+        blanketOic,
         List.of(),
         List.of());
   }

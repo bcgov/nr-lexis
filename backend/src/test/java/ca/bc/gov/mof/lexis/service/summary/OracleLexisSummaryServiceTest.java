@@ -311,6 +311,7 @@ class OracleLexisSummaryServiceTest {
                     "FED-123",
                     "INV-456",
                     "",
+                    null,
                     "R2")));
 
     SummaryPermitsResponseDto response = service.permits("00077881", 0, 10, null);
@@ -389,6 +390,7 @@ class OracleLexisSummaryServiceTest {
                     "FED-123",
                     "INV-456",
                     "",
+                    null,
                     "R2")));
 
     SummaryFeesResponseDto response = service.fees("00077881", 0, 10, null);

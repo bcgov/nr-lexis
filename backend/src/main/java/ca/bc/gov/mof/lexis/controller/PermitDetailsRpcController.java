@@ -413,6 +413,61 @@ public class PermitDetailsRpcController {
             authentication == null ? null : authentication.getName()));
   }
 
+  @PostMapping("/add-boic-scale")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> addBlanketOicScale(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "timberMark", required = false) String timberMark,
+      @RequestParam(name = "scaleVolume", required = false) String scaleVolume,
+      @RequestParam(name = "scalePieces", required = false) Long scalePieces,
+      @RequestParam(name = "speciesCode", required = false) String speciesCode,
+      @RequestParam(name = "gradeCode", required = false) String gradeCode,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for add BOIC scale");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.addBlanketOicScale(
+            permitNumber,
+            packageNumber,
+            timberMark,
+            scaleVolume,
+            scalePieces,
+            speciesCode,
+            gradeCode,
+            authentication == null ? null : authentication.getName()));
+  }
+
+  @PostMapping("/delete-boic-scale")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> deleteBlanketOicScale(
+      @RequestParam(name = "scaleId", required = false) String scaleId,
+      @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId,
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for delete BOIC scale");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.deleteBlanketOicScale(
+            scaleDetailId == null || scaleDetailId.isBlank() ? scaleId : scaleDetailId,
+            permitNumber,
+            authentication == null ? null : authentication.getName()));
+  }
+
   @PostMapping("/add-invoice")
   public ResponseEntity<PermitPersistenceRpcResponseDto> addInvoice(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,

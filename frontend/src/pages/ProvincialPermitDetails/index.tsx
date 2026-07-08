@@ -24,6 +24,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
@@ -62,6 +63,8 @@ import {
 } from '@/service/provincial-permit-documents-invoices-service'
 import {
   EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS,
+  addBlanketOicScale,
+  deleteBlanketOicScale,
   fetchProvincialPermitDetailTabs,
   updatePermitScaleAttachment,
   type ProvincialPermitDetailTabsData,
@@ -90,6 +93,14 @@ const isApplicationDocumentRow = (row: PermitDocumentRow): boolean => {
 }
 
 type PermitInvoiceField = 'invoiceDraftNumber' | 'invoiceDraftExportValue' | 'invoiceDraftFeeInLieu'
+type BlanketOicScaleForm = {
+  packageNumber: string
+  timberMark: string
+  speciesCode: string
+  gradeCode: string
+  scalePieces: string
+  scaleVolume: string
+}
 
 const MAX_SALES_INVOICE_NUMBER_LENGTH = 9
 const PERMIT_DETAIL_TAB_INDEX = {
@@ -103,6 +114,15 @@ const PERMIT_DETAIL_TAB_INDEX = {
   documents: 7,
   invoices: 8,
 } as const
+
+const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
+  packageNumber: '',
+  timberMark: '',
+  speciesCode: '',
+  gradeCode: '',
+  scalePieces: '',
+  scaleVolume: '',
+}
 
 const fetchPermitClientData = (
   clientNumber: string | null,
@@ -295,6 +315,11 @@ const ProvincialPermitDetailsPage = () => {
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [isUpdatingScaleId, setIsUpdatingScaleId] = useState<string | null>(null)
+  const [isDeletingBoicScaleId, setIsDeletingBoicScaleId] = useState<string | null>(null)
+  const [isSavingBoicScale, setIsSavingBoicScale] = useState(false)
+  const [boicScaleForm, setBoicScaleForm] = useState<BlanketOicScaleForm>(
+    EMPTY_BLANKET_OIC_SCALE_FORM,
+  )
   const [invoiceDraftNumber, setInvoiceDraftNumber] = useState('')
   const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
@@ -495,6 +520,17 @@ const ProvincialPermitDetailsPage = () => {
     )
   }, [itemsFilter, tabsData])
 
+  const blanketOicPackageOptions = useMemo(
+    () =>
+      (tabsData?.packages ?? [])
+        .map((row) => row.packageNumber)
+        .filter(Boolean)
+        .map((packageNumber) => ({ value: packageNumber, label: packageNumber })),
+    [tabsData],
+  )
+  const selectedBlanketOicPackageNumber =
+    boicScaleForm.packageNumber || blanketOicPackageOptions[0]?.value || ''
+
   const filteredFees = useMemo(() => {
     if (!tabsData) {
       return []
@@ -556,6 +592,10 @@ const ProvincialPermitDetailsPage = () => {
   const canOpenPermitReport =
     canPerform('/permitReport') && detail?.permitStatusCode?.trim().toUpperCase() === 'COM'
   const canEditNormalPermitScaleRows = canSavePermit && !detail?.blanketOic
+  const canEditBlanketOicScaleRows =
+    canSavePermit && !!detail?.blanketOic && detail.permitStatusCode?.trim().toUpperCase() !== 'COM'
+  const itemTableColumnCount =
+    (canEditNormalPermitScaleRows ? 1 : 0) + 6 + (canEditBlanketOicScaleRows ? 1 : 0)
   const reloadPermitTabs = useCallback(async () => {
     const resolvedPermitNumber = detail?.permitNumber
       ? String(detail.permitNumber)
@@ -783,6 +823,110 @@ const ProvincialPermitDetailsPage = () => {
       }
     },
     [canEditNormalPermitScaleRows, detail?.permitNumber, permitNumber, reloadPermitTabs],
+  )
+
+  const setBlanketOicScaleFormField = (field: keyof BlanketOicScaleForm, value: string): void => {
+    setBoicScaleForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const onAddBlanketOicScale = useCallback(async () => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!canEditBlanketOicScaleRows || !resolvedPermitNumber) {
+      return
+    }
+
+    const request = {
+      permitNumber: resolvedPermitNumber,
+      packageNumber: selectedBlanketOicPackageNumber.trim(),
+      timberMark: boicScaleForm.timberMark.trim(),
+      scaleVolume: boicScaleForm.scaleVolume.trim(),
+      scalePieces: boicScaleForm.scalePieces.trim(),
+      speciesCode: boicScaleForm.speciesCode.trim(),
+      gradeCode: boicScaleForm.gradeCode.trim(),
+    }
+
+    if (!detail?.oicApplicationNumber) {
+      setActionErrorMessage('The permit does not have an OIC application number.')
+      return
+    }
+    if (
+      !request.packageNumber ||
+      !request.timberMark ||
+      !request.scaleVolume ||
+      !request.scalePieces ||
+      !request.speciesCode ||
+      !request.gradeCode
+    ) {
+      setActionErrorMessage('Enter package, timber mark, species, grade, pieces, and volume.')
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsSavingBoicScale(true)
+    try {
+      const result = await addBlanketOicScale(request)
+      if (!result.success) {
+        setActionErrorMessage(
+          result.errors[0] || result.message || 'Unable to add Blanket OIC scale detail.',
+        )
+        return
+      }
+
+      await reloadPermitTabs()
+      setBoicScaleForm((current) => ({
+        ...EMPTY_BLANKET_OIC_SCALE_FORM,
+        packageNumber: current.packageNumber || selectedBlanketOicPackageNumber,
+      }))
+      setActionInfoMessage(result.message || 'Blanket OIC scale detail was added.')
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to add Blanket OIC scale detail.')
+    } finally {
+      setIsSavingBoicScale(false)
+    }
+  }, [
+    boicScaleForm,
+    canEditBlanketOicScaleRows,
+    detail?.oicApplicationNumber,
+    detail?.permitNumber,
+    permitNumber,
+    reloadPermitTabs,
+    selectedBlanketOicPackageNumber,
+  ])
+
+  const onDeleteBlanketOicScale = useCallback(
+    async (scaleId: string) => {
+      const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+      if (!canEditBlanketOicScaleRows || !resolvedPermitNumber || !scaleId) {
+        return
+      }
+
+      setActionErrorMessage('')
+      setActionInfoMessage('')
+      setIsDeletingBoicScaleId(scaleId)
+      try {
+        const result = await deleteBlanketOicScale({
+          scaleId,
+          permitNumber: resolvedPermitNumber,
+        })
+        if (!result.success) {
+          setActionErrorMessage(
+            result.errors[0] || result.message || 'Unable to remove Blanket OIC scale detail.',
+          )
+          return
+        }
+
+        await reloadPermitTabs()
+        setActionInfoMessage(result.message || 'Blanket OIC scale detail was removed.')
+      } catch (error) {
+        console.error(error)
+        setActionErrorMessage('Unable to remove Blanket OIC scale detail.')
+      } finally {
+        setIsDeletingBoicScaleId(null)
+      }
+    },
+    [canEditBlanketOicScaleRows, detail?.permitNumber, permitNumber, reloadPermitTabs],
   )
 
   const refreshPermitDocuments = useCallback(async () => {
@@ -1550,6 +1694,84 @@ const ProvincialPermitDetailsPage = () => {
                         </fieldset>
                         <fieldset className="legacy-form-fieldset">
                           <legend>Summary of scale</legend>
+                          {canEditBlanketOicScaleRows && (
+                            <>
+                              <div className="legacy-search-grid">
+                                <SearchableSelect
+                                  id="boicScalePackageNumber"
+                                  labelText="Package number"
+                                  value={selectedBlanketOicPackageNumber}
+                                  options={blanketOicPackageOptions}
+                                  placeholder="Select package"
+                                  disabled={
+                                    isSavingBoicScale || blanketOicPackageOptions.length === 0
+                                  }
+                                  onChange={(value) =>
+                                    setBlanketOicScaleFormField('packageNumber', value)
+                                  }
+                                />
+                                <TextInput
+                                  id="boicScaleTimberMark"
+                                  labelText="Timber mark"
+                                  value={boicScaleForm.timberMark}
+                                  onChange={(event) =>
+                                    setBlanketOicScaleFormField('timberMark', event.target.value)
+                                  }
+                                  disabled={isSavingBoicScale}
+                                />
+                                <TextInput
+                                  id="boicScaleSpeciesCode"
+                                  labelText="Species code"
+                                  value={boicScaleForm.speciesCode}
+                                  onChange={(event) =>
+                                    setBlanketOicScaleFormField('speciesCode', event.target.value)
+                                  }
+                                  disabled={isSavingBoicScale}
+                                />
+                                <TextInput
+                                  id="boicScaleGradeCode"
+                                  labelText="Grade code"
+                                  value={boicScaleForm.gradeCode}
+                                  onChange={(event) =>
+                                    setBlanketOicScaleFormField('gradeCode', event.target.value)
+                                  }
+                                  disabled={isSavingBoicScale}
+                                />
+                                <TextInput
+                                  id="boicScalePieces"
+                                  labelText="Pieces"
+                                  value={boicScaleForm.scalePieces}
+                                  onChange={(event) =>
+                                    setBlanketOicScaleFormField('scalePieces', event.target.value)
+                                  }
+                                  disabled={isSavingBoicScale}
+                                />
+                                <TextInput
+                                  id="boicScaleVolume"
+                                  labelText="Volume (m³)"
+                                  value={boicScaleForm.scaleVolume}
+                                  onChange={(event) =>
+                                    setBlanketOicScaleFormField('scaleVolume', event.target.value)
+                                  }
+                                  disabled={isSavingBoicScale}
+                                />
+                              </div>
+                              <div className="legacy-search-actions">
+                                <Button
+                                  kind="primary"
+                                  size="sm"
+                                  disabled={
+                                    isSavingBoicScale ||
+                                    !detail.oicApplicationNumber ||
+                                    blanketOicPackageOptions.length === 0
+                                  }
+                                  onClick={() => void onAddBlanketOicScale()}
+                                >
+                                  {isSavingBoicScale ? 'Adding scale...' : 'Add scale'}
+                                </Button>
+                              </div>
+                            </>
+                          )}
                           <TextInput
                             id="permitItemsFilter"
                             labelText="Filter item rows"
@@ -1571,6 +1793,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <TableHeader>Grade</TableHeader>
                                 <TableHeader>Pieces</TableHeader>
                                 <TableHeader>Volume (m³)</TableHeader>
+                                {canEditBlanketOicScaleRows && <TableHeader>Actions</TableHeader>}
                               </TableRow>
                             </TableHead>
                             <TableBody>
@@ -1596,11 +1819,29 @@ const ProvincialPermitDetailsPage = () => {
                                   <TableCell>{row.grade || '-'}</TableCell>
                                   <TableCell>{row.pieces.toLocaleString()}</TableCell>
                                   <TableCell>{row.volume.toLocaleString()}</TableCell>
+                                  {canEditBlanketOicScaleRows && (
+                                    <TableCell>
+                                      {row.includedInPermit ? (
+                                        <Button
+                                          kind="ghost"
+                                          size="sm"
+                                          disabled={isDeletingBoicScaleId === row.id}
+                                          onClick={() => void onDeleteBlanketOicScale(row.id)}
+                                        >
+                                          {isDeletingBoicScaleId === row.id
+                                            ? 'Removing...'
+                                            : 'Remove'}
+                                        </Button>
+                                      ) : (
+                                        '-'
+                                      )}
+                                    </TableCell>
+                                  )}
                                 </TableRow>
                               ))}
                               {filteredItems.length === 0 && (
                                 <TableRow>
-                                  <TableCell colSpan={canEditNormalPermitScaleRows ? 7 : 6}>
+                                  <TableCell colSpan={itemTableColumnCount}>
                                     No permit item rows matched the current filter.
                                   </TableCell>
                                 </TableRow>

@@ -29,4 +29,5 @@ public record PermitDetailDto(
     String federalPermitNumber,
     String invoiceNumber,
     String remarks,
+    Long oicApplicationNumber,
     String region) {}

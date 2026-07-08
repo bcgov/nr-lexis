@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  addBlanketOicScale,
+  deleteBlanketOicScale,
   fetchProvincialPermitDetailTabs,
   updatePermitScaleAttachment,
 } from '@/service/provincial-permit-detail-tabs-service'
@@ -517,6 +519,80 @@ describe('provincial permit detail services', () => {
     expect(result).toEqual({
       success: true,
       message: 'Scale detail was added to the permit.',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts Blanket OIC scale adds as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Blanket OIC scale detail was added.',
+      }),
+    )
+
+    const result = await addBlanketOicScale({
+      permitNumber: ' 777 ',
+      packageNumber: ' PKG-9 ',
+      timberMark: ' TM-1 ',
+      scaleVolume: ' 10.5 ',
+      scalePieces: ' 12 ',
+      speciesCode: ' HE ',
+      gradeCode: ' A ',
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/add-boic-scale')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('packageNumber')).toBe('PKG-9')
+    expect(body.get('timberMark')).toBe('TM-1')
+    expect(body.get('scaleVolume')).toBe('10.5')
+    expect(body.get('scalePieces')).toBe('12')
+    expect(body.get('speciesCode')).toBe('HE')
+    expect(body.get('gradeCode')).toBe('A')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Blanket OIC scale detail was added.',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts Blanket OIC scale deletes as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Blanket OIC scale detail was removed.',
+      }),
+    )
+
+    const result = await deleteBlanketOicScale({
+      scaleId: ' 123 ',
+      permitNumber: ' 777 ',
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/delete-boic-scale')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('scaleId')).toBe('123')
+    expect(body.get('permitNumber')).toBe('777')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Blanket OIC scale detail was removed.',
       errors: [],
       warnings: [],
     })

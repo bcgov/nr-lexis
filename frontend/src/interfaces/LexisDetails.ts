@@ -130,6 +130,7 @@ export type ProvincialPermitDetail = {
   federalPermitNumber: string | null
   invoiceNumber: string | null
   remarks: string | null
+  oicApplicationNumber: number | null
   region: string | null
 }
 

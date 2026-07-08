@@ -7,6 +7,8 @@ import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 import {
+  addBlanketOicScale,
+  deleteBlanketOicScale,
   fetchProvincialPermitDetailTabs,
   updatePermitScaleAttachment,
   type ProvincialPermitDetailTabsData,
@@ -46,6 +48,8 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
     oicItems: [],
     boicItems: [],
   },
+  addBlanketOicScale: vi.fn(),
+  deleteBlanketOicScale: vi.fn(),
   fetchProvincialPermitDetailTabs: vi.fn(),
   updatePermitScaleAttachment: vi.fn(),
 }))
@@ -91,6 +95,8 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
 const mockedUpdatePermitScaleAttachment = vi.mocked(updatePermitScaleAttachment)
+const mockedAddBlanketOicScale = vi.mocked(addBlanketOicScale)
+const mockedDeleteBlanketOicScale = vi.mocked(deleteBlanketOicScale)
 const mockedAddPermitInvoice = vi.mocked(addPermitInvoice)
 const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
 const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
@@ -139,6 +145,7 @@ const permitDetail: ProvincialPermitDetail = {
   federalPermitNumber: null,
   invoiceNumber: 'INV-1',
   remarks: 'ok',
+  oicApplicationNumber: null,
   region: '12',
 }
 
@@ -167,6 +174,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedUpdatePermitScaleAttachment.mockResolvedValue({
       success: true,
       message: 'Scale detail was added to the permit.',
+      errors: [],
+      warnings: [],
+    })
+    mockedAddBlanketOicScale.mockResolvedValue({
+      success: true,
+      message: 'Blanket OIC scale detail was added.',
+      errors: [],
+      warnings: [],
+    })
+    mockedDeleteBlanketOicScale.mockResolvedValue({
+      success: true,
+      message: 'Blanket OIC scale detail was removed.',
       errors: [],
       warnings: [],
     })
@@ -562,6 +581,90 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitNumber: '777',
       receiptNumber: 'R-1',
       blanketOic: true,
+    })
+  })
+
+  it('adds and removes Blanket OIC scale rows from the items tab', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: 1000999,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        {
+          packageNumber: 'BOIC-9',
+          region: 'Coast',
+          speciesEndUseSort: 'HE/PL',
+          ageClass: 'Old growth',
+          packageVolume: '120.5',
+          averageLength: '7.1',
+          averageTopDiameter: '16.2',
+          productType: 'Unmanufactured',
+          currentPackageVolume: '118.5',
+          status: 'APP - Approved',
+          reprocessed: 'N',
+          comments: 'Current OIC package',
+        },
+      ],
+      items: [
+        {
+          id: 'SCALE-9',
+          timberMark: 'TM-9',
+          species: 'HE',
+          grade: 'A',
+          pieces: 12,
+          volume: 10.5,
+          packageNumber: 'BOIC-9',
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+    await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
+    await userEvent.type(screen.getByLabelText('Species code'), 'HE')
+    await userEvent.type(screen.getByLabelText('Grade code'), 'A')
+    await userEvent.type(screen.getByLabelText('Pieces'), '12')
+    await userEvent.type(screen.getByLabelText('Volume (m³)'), '10.5')
+    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
+
+    await waitFor(() => {
+      expect(mockedAddBlanketOicScale).toHaveBeenCalledWith({
+        permitNumber: '777',
+        packageNumber: 'BOIC-9',
+        timberMark: 'TM-NEW',
+        speciesCode: 'HE',
+        gradeCode: 'A',
+        scalePieces: '12',
+        scaleVolume: '10.5',
+      })
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await waitFor(() => {
+      expect(mockedDeleteBlanketOicScale).toHaveBeenCalledWith({
+        scaleId: 'SCALE-9',
+        permitNumber: '777',
+      })
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(3)
     })
   })
 

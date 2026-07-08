@@ -726,6 +726,31 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernPermitBlanketOicScaleAddShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/add-boic-scale")
+                .param("permitNumber", "7000123")
+                .param("packageNumber", "PKG-903")
+                .param("timberMark", "TM1")
+                .param("scaleVolume", "12.5")
+                .param("scalePieces", "7")
+                .param("speciesCode", "HE")
+                .param("gradeCode", "A")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void modernPermitBlanketOicScaleDeleteShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/delete-boic-scale")
+                .param("permitNumber", "7000123")
+                .param("scaleId", "101")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyPermitDetailsAddShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/permitDetails")

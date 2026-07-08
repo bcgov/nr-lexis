@@ -71,6 +71,7 @@ class OracleFeeDetailsServiceTest {
                     "FED-123",
                     "INV-456",
                     "",
+                    null,
                     "R2")));
 
     var result = service.getPermitSummary(7000123L);

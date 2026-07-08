@@ -76,6 +76,21 @@ export type UpdatePermitScaleAttachmentRequest = {
   attachInd: boolean
 }
 
+export type AddBlanketOicScaleRequest = {
+  permitNumber: string
+  packageNumber: string
+  timberMark: string
+  scaleVolume: string
+  scalePieces: string
+  speciesCode: string
+  gradeCode: string
+}
+
+export type DeleteBlanketOicScaleRequest = {
+  scaleId: string
+  permitNumber: string
+}
+
 export type UpdatePermitScaleAttachmentResult = {
   success: boolean
   message: string
@@ -492,6 +507,69 @@ export const updatePermitScaleAttachment = async (
     message:
       message ||
       (success ? 'Permit item rows were updated.' : 'Unable to update permit item rows.'),
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
+  }
+}
+
+export const addBlanketOicScale = async (
+  request: AddBlanketOicScaleRequest,
+): Promise<UpdatePermitScaleAttachmentResult> => {
+  const response = await apiService.getAxiosInstance().post<unknown>(
+    '/lexis/rpc/permit-details/add-boic-scale',
+    toUrlEncodedParams({
+      permitNumber: request.permitNumber.trim(),
+      packageNumber: request.packageNumber.trim(),
+      timberMark: request.timberMark.trim(),
+      scaleVolume: request.scaleVolume.trim(),
+      scalePieces: request.scalePieces.trim(),
+      speciesCode: request.speciesCode.trim(),
+      gradeCode: request.gradeCode.trim(),
+    }),
+    {
+      headers: {
+        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
+      },
+    },
+  )
+  const payload = recordOrEmpty(response.data)
+  const success = asBoolean(payload.success ?? payload.valid)
+  const message = asString(payload.message)
+  return {
+    success,
+    message:
+      message ||
+      (success ? 'Blanket OIC scale detail was added.' : 'Unable to add Blanket OIC scale detail.'),
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
+  }
+}
+
+export const deleteBlanketOicScale = async (
+  request: DeleteBlanketOicScaleRequest,
+): Promise<UpdatePermitScaleAttachmentResult> => {
+  const response = await apiService.getAxiosInstance().post<unknown>(
+    '/lexis/rpc/permit-details/delete-boic-scale',
+    toUrlEncodedParams({
+      scaleId: request.scaleId.trim(),
+      permitNumber: request.permitNumber.trim(),
+    }),
+    {
+      headers: {
+        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
+      },
+    },
+  )
+  const payload = recordOrEmpty(response.data)
+  const success = asBoolean(payload.success ?? payload.valid)
+  const message = asString(payload.message)
+  return {
+    success,
+    message:
+      message ||
+      (success
+        ? 'Blanket OIC scale detail was removed.'
+        : 'Unable to remove Blanket OIC scale detail.'),
     errors: asStringArray(payload.errors),
     warnings: asStringArray(payload.warnings),
   }

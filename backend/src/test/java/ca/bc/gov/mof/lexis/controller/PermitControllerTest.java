@@ -291,6 +291,7 @@ class PermitControllerTest {
         "FED-1122",
         "SI-99881",
         "Permit remarks",
+        null,
         "R2");
   }
 }

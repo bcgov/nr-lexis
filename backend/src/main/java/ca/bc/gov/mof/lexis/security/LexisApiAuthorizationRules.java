@@ -481,6 +481,8 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/permit-details/update-permit",
               "/api/lexis/rpc/permit-details/update-shipping",
               "/api/lexis/rpc/permit-details/update-scale-attachment",
+              "/api/lexis/rpc/permit-details/add-boic-scale",
+              "/api/lexis/rpc/permit-details/delete-boic-scale",
               "/api/lexis/rpc/permit-details/add-invoice"),
           action(
               HttpMethod.POST,
