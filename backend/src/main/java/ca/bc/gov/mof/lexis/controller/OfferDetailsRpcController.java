@@ -49,6 +49,10 @@ public class OfferDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OfferDetailsRpcController.class);
   private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
+  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
+  private static final String FAIR_OFFER_DEFAULT = "N";
+  private static final String VALID_OFFER_DEFAULT = "Y";
+  private static final String APPROVAL_DEFAULT = "N";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -298,7 +302,8 @@ public class OfferDetailsRpcController {
   private ResponseEntity<OfferPersistenceResponseDto> addOffer(
       MultiValueMap<String, String> parameters,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    if (!authorizationService.canPerformAction(roles, LEGACY_ACTION_CREATE_OFFER)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -309,8 +314,12 @@ public class OfferDetailsRpcController {
     }
 
     String userId = authentication == null ? null : authentication.getName();
+    PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
+    if (!roles.contains(ROLE_APPLICATION_APPROVER)) {
+      request = withLegacyNonApproverCreateDefaults(request);
+    }
     PurchaseOfferService.CreateOfferResult result =
-        service.addOffer(toCreateOfferRequest(parameters), userId);
+        service.addOffer(request, userId);
     return ResponseEntity.ok(toPersistenceResponse(result));
   }
 
@@ -440,6 +449,31 @@ public class OfferDetailsRpcController {
         first(parameters, "pickupLocation"),
         first(parameters, "offerCondition"),
         parseDouble(first(parameters, "offerVolume")));
+  }
+
+  private PurchaseOfferService.CreateOfferRequest withLegacyNonApproverCreateDefaults(
+      PurchaseOfferService.CreateOfferRequest request) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        request.applicationNumber(),
+        request.exportPurchaseOfferNumber(),
+        request.packageNumber(),
+        request.companyName(),
+        request.contactName(),
+        request.purchaseOfferAmount(),
+        request.purchaseOfferDate(),
+        request.offerWithdrawalDate(),
+        request.teacReviewDate(),
+        FAIR_OFFER_DEFAULT,
+        VALID_OFFER_DEFAULT,
+        request.offerRemark(),
+        APPROVAL_DEFAULT,
+        request.withdrawReason(),
+        request.exportJurisdictionCode(),
+        request.manufacturingFacilityInfo(),
+        request.offeringClientNumber(),
+        request.pickupLocation(),
+        request.offerCondition(),
+        request.offerVolume());
   }
 
   private OfferPersistenceResponseDto toPersistenceResponse(

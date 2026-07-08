@@ -265,6 +265,9 @@ class OfferDetailsRpcControllerTest {
     params.add("pickupLocation", "Port Moody");
     params.add("offerCondition", "Condition notes");
     params.add("offerVolume", "99.99");
+    params.add("fairOfferIndicator", "Y");
+    params.add("validOfferIndicator", "N");
+    params.add("approvalIndicator", "Y");
 
     ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
         controller.addOfferLegacy(params, authentication);
@@ -288,6 +291,9 @@ class OfferDetailsRpcControllerTest {
     assertThat(request.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 18));
     assertThat(request.offeringClientNumber()).isEqualTo("00077881");
     assertThat(request.offerVolume()).isEqualTo(99.99d);
+    assertThat(request.fairOfferIndicator()).isEqualTo("N");
+    assertThat(request.validOfferIndicator()).isEqualTo("Y");
+    assertThat(request.approvalIndicator()).isEqualTo("N");
   }
 
   @Test
