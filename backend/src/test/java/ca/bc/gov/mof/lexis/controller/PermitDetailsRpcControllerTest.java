@@ -71,7 +71,7 @@ class PermitDetailsRpcControllerTest {
   @BeforeEach
   void setup() {
     when(sessionService.getConfiguredIndustryRoles())
-        .thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER"));
+        .thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER"));
     controller =
         new PermitDetailsRpcController(serviceProvider, sessionService, authorizationService);
   }

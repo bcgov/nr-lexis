@@ -100,7 +100,7 @@ class LexisSummaryControllerTest {
         new TestingAuthenticationToken(
             "idir\\jsmith",
             "n/a",
-            List.of(new SimpleGrantedAuthority("FEDERAL_SUBMITTER_00077881")));
+            List.of(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00077881")));
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryOffersResponseDto payload =
@@ -168,7 +168,7 @@ class LexisSummaryControllerTest {
         new TestingAuthenticationToken(
             "idir\\jsmith",
             "n/a",
-            List.of(new SimpleGrantedAuthority("FEDERAL_SUBMITTER_00077881")));
+            List.of(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00077881")));
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryPermitsResponseDto payload =
@@ -236,7 +236,7 @@ class LexisSummaryControllerTest {
         new TestingAuthenticationToken(
             "idir\\jsmith",
             "n/a",
-            List.of(new SimpleGrantedAuthority("FEDERAL_SUBMITTER_00077881")));
+            List.of(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00077881")));
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryOffersResponseDto payload =

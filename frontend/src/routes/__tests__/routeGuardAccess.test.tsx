@@ -133,12 +133,12 @@ describe('Protected route guard access', () => {
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
-  it('blocks stale federal submitter roles from the provincial application submission upload route', async () => {
+  it('blocks unknown roles from the provincial application submission upload route', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
           principal: 'bceid\\federal',
-          roles: ['LEXIS_FEDERAL_SUBMITTER'],
+          roles: ['LEXIS_UNKNOWN_ROLE'],
           welcomeTarget: null,
           grantedActions: [],
         }),

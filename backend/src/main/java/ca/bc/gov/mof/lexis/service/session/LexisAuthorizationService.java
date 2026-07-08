@@ -21,7 +21,6 @@ public class LexisAuthorizationService {
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
-  private static final String ROLE_FEDERAL_SUBMITTER = "LEXIS_FEDERAL_SUBMITTER";
   private static final Set<String> PROD_RTM_ONLY_ACTIONS = Set.of("/lexisAgentAdmin");
 
   private final Set<String> configuredIndustryRoles;

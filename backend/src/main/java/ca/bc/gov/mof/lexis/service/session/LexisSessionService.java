@@ -22,10 +22,7 @@ public class LexisSessionService {
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
-  private static final String ROLE_FEDERAL_SERVICE_SUBMITTER = "LEXIS_FEDERAL_SERVICE_SUBMITTER";
   private static final String ROLE_DELEGATED_ADMIN = "LEXIS_DELEGATED_ADMIN";
-  private static final String RETIRED_FEDERAL_SUBMITTER_ROLE = "LEXIS_FEDERAL_SUBMITTER";
-  private static final String RETIRED_FEDERAL_SUBMITTER_ALIAS = "FEDERAL_SUBMITTER";
   private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
 
   private static final Set<String> CANONICAL_ROLES =
@@ -35,7 +32,6 @@ public class LexisSessionService {
           ROLE_APPLICATION_APPROVER,
           ROLE_EXEMPTION_APPROVER,
           ROLE_PROVINCIAL_SUBMITTER,
-          ROLE_FEDERAL_SERVICE_SUBMITTER,
           ROLE_DELEGATED_ADMIN);
 
   private final Set<String> configuredIndustryRoles;
@@ -50,13 +46,11 @@ public class LexisSessionService {
 
     boolean adminUser = roleSet.contains(ROLE_ADMIN);
     boolean readOnlyUser = roleSet.contains(ROLE_READ_ONLY);
+    boolean applicationApprover = roleSet.contains(ROLE_APPLICATION_APPROVER);
     boolean provincialSubmitter = roleSet.contains(ROLE_PROVINCIAL_SUBMITTER);
-    boolean retiredFederalSubmitter = containsRetiredFederalSubmitterRole(rawRoles);
     boolean industryUser = roleSet.stream().anyMatch(this::isIndustryRole);
     boolean exemptionApprover = roleSet.contains(ROLE_EXEMPTION_APPROVER);
     boolean delegatedAdminOnly = roleSet.size() == 1 && roleSet.contains(ROLE_DELEGATED_ADMIN);
-    boolean federalServiceSubmitterOnly =
-        roleSet.size() == 1 && roleSet.contains(ROLE_FEDERAL_SERVICE_SUBMITTER);
 
     WelcomeTarget target;
     if (adminUser) {
@@ -69,7 +63,9 @@ public class LexisSessionService {
       target = WelcomeTarget.INDUSTRY_USER;
     } else if (exemptionApprover) {
       target = WelcomeTarget.EXEMPTION_APPROVER;
-    } else if (retiredFederalSubmitter || delegatedAdminOnly || federalServiceSubmitterOnly) {
+    } else if (applicationApprover) {
+      target = WelcomeTarget.MOFR_USER;
+    } else if (delegatedAdminOnly || !roleSet.isEmpty()) {
       target = WelcomeTarget.NO_ACCESS;
     } else {
       target = WelcomeTarget.MOFR_USER;
@@ -210,9 +206,6 @@ public class LexisSessionService {
     if (normalizedRole.startsWith(SCOPE_AUTHORITY_PREFIX)) {
       return null;
     }
-    if (isRetiredFederalSubmitterRole(normalizedRole)) {
-      return null;
-    }
 
     if (CANONICAL_ROLES.contains(normalizedRole)) {
       return normalizedRole;
@@ -227,22 +220,6 @@ public class LexisSessionService {
     }
 
     return normalizedRole;
-  }
-
-  private boolean containsRetiredFederalSubmitterRole(List<String> rawRoles) {
-    if (rawRoles == null || rawRoles.isEmpty()) {
-      return false;
-    }
-    return rawRoles.stream()
-        .map(role -> role == null ? "" : role.trim().toUpperCase(Locale.ROOT))
-        .anyMatch(this::isRetiredFederalSubmitterRole);
-  }
-
-  private boolean isRetiredFederalSubmitterRole(String normalizedRole) {
-    return RETIRED_FEDERAL_SUBMITTER_ROLE.equals(normalizedRole)
-        || RETIRED_FEDERAL_SUBMITTER_ALIAS.equals(normalizedRole)
-        || normalizedRole.startsWith(RETIRED_FEDERAL_SUBMITTER_ROLE + "_")
-        || normalizedRole.startsWith(RETIRED_FEDERAL_SUBMITTER_ALIAS + "_");
   }
 
   private String extractForestClientSuffix(String normalizedRole) {

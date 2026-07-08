@@ -64,7 +64,7 @@ lexis:
       additional-issuer-uris: ${KEYCLOAK_ADDITIONAL_ISSUER_URIS:}
       jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:}
     # Mirrors legacy WebADE "industry-roles" behaviour with renamed submitter roles.
-    industry-roles: "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER"
+    industry-roles: "LEXIS_PROVINCIAL_SUBMITTER"
   authz:
     # Role names match FAM roles exactly; action keys match legacy canPerformAction/grantedAction keys.
     # OAuth scopes are for Keycloak machine-to-machine clients and do not grant interactive UI roles.
@@ -82,6 +82,9 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "viewFederalApplication"
       LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/applicationSearch"
@@ -94,6 +97,9 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "viewFederalApplication"
         - "/applicationReport"
         - "/offerReport"
         - "/teacReport"
@@ -116,6 +122,9 @@ lexis:
         - "/createExemption"
         - "/exemptionSearch"
         - "/exemptionDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "viewFederalApplication"
         - "approveExemption"
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
@@ -129,11 +138,6 @@ lexis:
         - "/permitDetails"
         - "createApplication"
         - "uploadApplicationSubmission"
-      LEXIS_FEDERAL_SUBMITTER:
-        - "/federalApplicationSearch"
-        - "/federalApplicationDetails"
-        - "uploadApplicationSubmission"
-        - "viewFederalApplication"
       LEXIS_DELEGATED_ADMIN: []
   federal-submission:
     require-request-id: false

@@ -321,11 +321,11 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void federalApplicationSearchShouldRejectReadOnlyRole() throws Exception {
+  void federalApplicationSearchShouldAllowReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/federal/applications/search")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNoContent());
   }
 
   @Test
@@ -384,7 +384,7 @@ class LexisRouteAuthorizationIntegrationTest {
             post("/api/lexis/offerDetailsRPC")
                 .param("actionMapping", "addOffer")
                 .param("applicationNumber", "1000456")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
   }
 
@@ -1260,38 +1260,26 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationSubmissionUploadShouldAllowFederalSubmitterRole() throws Exception {
+  void applicationSubmissionUploadShouldRejectUnknownRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/application-submissions")
                 .file(file)
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
-        .andExpect(status().isUnprocessableEntity());
-  }
-
-  @Test
-  void federalApplicationSubmissionUploadShouldRejectFederalSubmitterRole() throws Exception {
-    mockMvc.perform(
-            post("/api/lexis/federal/submissions")
-                .param("userReference", "FED-REF-1")
-                .param("originalFileName", "federal-submission.xml")
-                .contentType(MediaType.APPLICATION_XML)
-                .content("<xml />")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
         .andExpect(status().isForbidden());
   }
 
   @Test
-  void federalApplicationSubmissionUploadShouldRejectFederalServiceSubmitterRole() throws Exception {
+  void federalApplicationSubmissionUploadShouldRejectUnknownRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/federal/submissions")
                 .param("userReference", "FED-REF-1")
                 .param("originalFileName", "federal-submission.xml")
                 .contentType(MediaType.APPLICATION_XML)
                 .content("<xml />")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SERVICE_SUBMITTER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
         .andExpect(status().isForbidden());
   }
 
@@ -1347,14 +1335,6 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void federalApplicationReadbackShouldRejectFederalServiceSubmitterRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/federal/applications/9001")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SERVICE_SUBMITTER"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
   void federalApplicationReadbackShouldRejectFederalUploadScope() throws Exception {
     mockMvc.perform(
             get("/api/lexis/federal/applications/9001")
@@ -1363,47 +1343,39 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void federalApplicationReadbackShouldAllowFederalSubmitterRole() throws Exception {
+  void federalApplicationReadbackShouldRejectUnknownRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/federal/applications/9001")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void federalApplicationReadbackShouldAllowReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/federal/applications/9001")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isNoContent());
   }
 
   @Test
-  void federalApplicationReadbackShouldRejectReadOnlyRole() throws Exception {
+  void federalApplicationPermitReadbackShouldRejectUnknownRole() throws Exception {
     mockMvc.perform(
-            get("/api/lexis/federal/applications/9001")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+            get("/api/lexis/federal/applications/9001/permit")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
         .andExpect(status().isForbidden());
   }
 
   @Test
-  void federalApplicationPermitReadbackShouldAllowFederalSubmitterRole() throws Exception {
+  void federalApplicationPermitReadbackShouldAllowReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/federal/applications/9001/permit")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isNoContent());
   }
 
   @Test
-  void federalApplicationPermitReadbackShouldRejectFederalServiceSubmitterRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/federal/applications/9001/permit")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SERVICE_SUBMITTER"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void federalApplicationPermitReadbackShouldRejectReadOnlyRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/federal/applications/9001/permit")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void federalApplicationSubmissionMultipartUploadShouldRejectFederalSubmitterRole() throws Exception {
+  void federalApplicationSubmissionMultipartUploadShouldRejectUnknownRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("file", "federal-submission.xml", "application/xml", "<xml />".getBytes());
 
@@ -1411,31 +1383,31 @@ class LexisRouteAuthorizationIntegrationTest {
             multipart("/api/lexis/federal/submissions")
                 .file(file)
                 .param("userReference", "FED-REF-1")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
         .andExpect(status().isForbidden());
   }
 
   @Test
-  void applicationSubmissionUploadShouldRejectFederalServiceSubmitterRole() throws Exception {
+  void applicationSubmissionUploadShouldRejectFederalUploadScope() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/application-submissions")
                 .file(file)
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SERVICE_SUBMITTER"))))
+                .with(federalUploadScopeJwt()))
         .andExpect(status().isForbidden());
   }
 
   @Test
-  void applicationSubmissionValidationShouldRejectFederalServiceSubmitterRole() throws Exception {
+  void applicationSubmissionValidationShouldRejectFederalUploadScope() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/application-submissions/validation")
                 .file(file)
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SERVICE_SUBMITTER"))))
+                .with(federalUploadScopeJwt()))
         .andExpect(status().isForbidden());
   }
 
@@ -1462,25 +1434,13 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void federalApplicationSubmissionValidationShouldRejectFederalSubmitterRole() throws Exception {
+  void federalApplicationSubmissionValidationShouldRejectUnknownRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/federal/submissions/validation")
                 .param("userReference", "FED-REF-1")
                 .contentType(MediaType.APPLICATION_XML)
                 .content("<xml />")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void federalApplicationSubmissionValidationShouldRejectFederalServiceSubmitterRole()
-      throws Exception {
-    mockMvc.perform(
-            post("/api/lexis/federal/submissions/validation")
-                .param("userReference", "FED-REF-1")
-                .contentType(MediaType.APPLICATION_XML)
-                .content("<xml />")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SERVICE_SUBMITTER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
         .andExpect(status().isForbidden());
   }
 
@@ -1656,15 +1616,15 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationSubmissionValidationShouldAllowFederalSubmitterRole() throws Exception {
+  void applicationSubmissionValidationShouldRejectUnknownRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/application-submissions/validation")
                 .file(file)
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
-        .andExpect(status().isUnprocessableEntity());
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -1679,20 +1639,20 @@ class LexisRouteAuthorizationIntegrationTest {
   void sessionCanPerformActionShouldEvaluateTokenAuthorities() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
-                .param("action", "/federalApplicationSearch")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+                .param("action", "uploadApplicationSubmission")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.granted").value(true));
   }
 
   @Test
-  void sessionCanPerformActionShouldRejectFederalAccessForReadOnly() throws Exception {
+  void sessionCanPerformActionShouldAllowFederalReadForReadOnly() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/federalApplicationSearch")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.granted").value(false));
+        .andExpect(jsonPath("$.granted").value(true));
   }
 
   @Test

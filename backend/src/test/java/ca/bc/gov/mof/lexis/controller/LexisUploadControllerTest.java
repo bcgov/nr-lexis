@@ -449,7 +449,7 @@ class LexisUploadControllerTest {
             null,
             "FEDERAL-SYSTEM",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     assertThat(response.getBody())
@@ -500,7 +500,7 @@ class LexisUploadControllerTest {
             "FEDERAL-HEADER",
             "FEDERAL-PARAMETER",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     assertThat(response.getBody())
@@ -619,7 +619,7 @@ class LexisUploadControllerTest {
             "FEDERAL-SYSTEM",
             null,
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
     assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
@@ -690,7 +690,7 @@ class LexisUploadControllerTest {
             "FEDERAL-SYSTEM",
             null,
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
     assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
@@ -990,7 +990,7 @@ class LexisUploadControllerTest {
             "S".repeat(201),
             null,
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
@@ -1115,7 +1115,7 @@ class LexisUploadControllerTest {
             null,
             "S".repeat(201),
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
@@ -1142,7 +1142,7 @@ class LexisUploadControllerTest {
             "REQ-1",
             "IDEMP-1",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
@@ -1213,7 +1213,7 @@ class LexisUploadControllerTest {
             "FEDERAL-SYSTEM",
             null,
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
@@ -1265,7 +1265,7 @@ class LexisUploadControllerTest {
             "FEDERAL-SYSTEM",
             null,
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     assertThat(
@@ -1423,7 +1423,7 @@ class LexisUploadControllerTest {
             null,
             "FEDERAL-SYSTEM",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody())
@@ -1467,7 +1467,7 @@ class LexisUploadControllerTest {
             "FEDERAL-HEADER",
             "FEDERAL-PARAMETER",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody())
@@ -1593,7 +1593,7 @@ class LexisUploadControllerTest {
             null,
             "FEDERAL-SYSTEM",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     assertThat(response.getBody())
@@ -1641,7 +1641,7 @@ class LexisUploadControllerTest {
             "FEDERAL-HEADER",
             "FEDERAL-PARAMETER",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     assertThat(response.getBody())
@@ -1744,7 +1744,7 @@ class LexisUploadControllerTest {
             "S".repeat(201),
             null,
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
@@ -1771,7 +1771,7 @@ class LexisUploadControllerTest {
             "REQ-1",
             "IDEMP-1",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
@@ -1844,7 +1844,7 @@ class LexisUploadControllerTest {
             "FEDERAL-HEADER",
             "FEDERAL-PARAMETER",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody())
@@ -1875,7 +1875,7 @@ class LexisUploadControllerTest {
             null,
             "S".repeat(201),
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
@@ -1902,7 +1902,7 @@ class LexisUploadControllerTest {
             "REQ-1",
             "IDEMP-1",
             new TestingAuthenticationToken(
-                "bceid\\federal-user", "n/a", "LEXIS_FEDERAL_SERVICE_SUBMITTER"));
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();

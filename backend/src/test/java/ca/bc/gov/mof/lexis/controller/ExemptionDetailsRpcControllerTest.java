@@ -95,7 +95,7 @@ class ExemptionDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_READ_ONLY"));
     when(sessionService.getConfiguredIndustryRoles())
-        .thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER"));
+        .thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER"));
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(service.getPermits("EX-205", true, true, "00077881"))
         .thenReturn(
