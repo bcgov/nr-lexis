@@ -197,6 +197,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     }
 
     ApplicationSnapshot app = snapshot.get();
+    Optional<ScheduleSnapshot> schedule = loadScheduleByApplication(applicationNumber);
     List<LexisApplicationDetailDto.LexisPackageDto> packages =
         loadPackagesByApplication(applicationNumber);
     List<LexisApplicationDetailDto.LexisRemarkDto> remarks = loadRemarksByApplication(applicationNumber);
@@ -217,10 +218,11 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             app.applicationDate(),
             app.receivedDate(),
             app.listingDate(),
+            schedule.map(ScheduleSnapshot::teacMeetingDate).orElse(null),
             app.termDays(),
             coalesce(app.applicationVolume(), 0.0d),
             coalesce(app.averageLogVolume(), 0.0d),
-            canCreateOffers(applicationNumber),
+            canCreateOffers(schedule),
             false,
             false,
             false,
@@ -473,13 +475,25 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   private boolean canCreateOffers(Long applicationNumber) {
-    Optional<ScheduleSnapshot> schedule =
-        queryCursorSingle(
-            FIND_SCHEDULE_BY_APPLICATION,
-            cs -> cs.setString(1, applicationNumber.toString()),
-            2,
-            rs -> new ScheduleSnapshot(getLocalDate(rs, "ADVERTISING_DATE"), getLocalDate(rs, "OFFER_RECEIPT_DATE")));
+    return canCreateOffers(loadScheduleByApplication(applicationNumber));
+  }
 
+  private Optional<ScheduleSnapshot> loadScheduleByApplication(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_SCHEDULE_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ScheduleSnapshot(
+                getLocalDate(rs, "ADVERTISING_DATE"),
+                getLocalDate(rs, "OFFER_RECEIPT_DATE"),
+                getLocalDate(rs, "TEAC_MEETING_DATE")));
+  }
+
+  private boolean canCreateOffers(Optional<ScheduleSnapshot> schedule) {
     if (schedule.isEmpty()) {
       return false;
     }
@@ -588,7 +602,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       Double applicationVolume,
       Double averageLogVolume) {}
 
-  private record ScheduleSnapshot(LocalDate advertisingDate, LocalDate offerReceiptDate) {}
+  private record ScheduleSnapshot(
+      LocalDate advertisingDate, LocalDate offerReceiptDate, LocalDate teacMeetingDate) {}
 
   private record PieceCountSnapshot(String packageNumber, Long pieceCount) {}
 }

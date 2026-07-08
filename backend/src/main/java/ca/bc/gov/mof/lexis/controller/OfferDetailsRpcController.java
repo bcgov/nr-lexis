@@ -156,7 +156,7 @@ public class OfferDetailsRpcController {
             true,
             resolveApplicationSpeciesGradeCode(parsed),
             formatLegacyDate(detail.get().listingDate()),
-            ""));
+            formatIsoDate(detail.get().teacMeetingDate())));
   }
 
   @GetMapping("/package-list")
@@ -462,6 +462,10 @@ public class OfferDetailsRpcController {
       return "";
     }
     return value.format(LEGACY_DATE_FORMATTER);
+  }
+
+  private String formatIsoDate(LocalDate value) {
+    return value == null ? "" : value.toString();
   }
 
   private String formatVolume(double value) {

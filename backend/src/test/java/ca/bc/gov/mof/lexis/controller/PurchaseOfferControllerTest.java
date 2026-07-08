@@ -364,6 +364,7 @@ class PurchaseOfferControllerTest {
         LocalDate.of(2026, 3, 1),
         LocalDate.of(2026, 3, 1),
         LocalDate.of(2026, 3, 2),
+        null,
         180L,
         90.0,
         0.5,

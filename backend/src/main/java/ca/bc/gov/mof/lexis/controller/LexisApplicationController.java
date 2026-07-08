@@ -246,6 +246,7 @@ public class LexisApplicationController {
         detail.applicationDate(),
         detail.receivedDate(),
         detail.listingDate(),
+        detail.teacMeetingDate(),
         detail.termDays(),
         detail.applicationVolume(),
         detail.averageLogVolume(),

@@ -159,6 +159,7 @@ class OfferDetailsRpcControllerTest {
     assertThat(response.getBody().success()).isTrue();
     assertThat(response.getBody().speciesGradeCode()).isEqualTo("FI/HE/LUM");
     assertThat(response.getBody().advertisingDate()).isEqualTo("02/26/2026");
+    assertThat(response.getBody().teacReviewDate()).isEqualTo("2026-03-05");
   }
 
   @Test
@@ -445,6 +446,7 @@ class OfferDetailsRpcControllerTest {
         LocalDate.of(2026, 2, 20),
         LocalDate.of(2026, 2, 21),
         listingDate,
+        LocalDate.of(2026, 3, 5),
         120L,
         95.0d,
         1.6d,

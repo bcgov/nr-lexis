@@ -181,6 +181,7 @@ class OracleLexisApplicationServiceTest {
             LocalDate.of(2026, 2, 20),
             LocalDate.of(2026, 2, 21),
             LocalDate.of(2026, 2, 26),
+            null,
             120L,
             95.0,
             1.6,
