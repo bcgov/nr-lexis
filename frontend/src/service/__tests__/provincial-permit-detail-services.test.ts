@@ -122,6 +122,10 @@ describe('provincial permit detail services', () => {
           averageLength: '7.1',
           averageTopDiameter: '16.2',
           productType: 'Unmanufactured',
+          currentPackageVolume: '',
+          status: '',
+          reprocessed: '',
+          comments: '',
         },
       ],
       items: [
@@ -158,6 +162,139 @@ describe('provincial permit detail services', () => {
       oicItems: [],
       boicItems: [],
     })
+  })
+
+  it('loads Blanket OIC package rows from the legacy OIC permit endpoints', async () => {
+    getCachedResponseMock
+      .mockResolvedValueOnce(response({ packageList: ['BOIC-100'] }))
+      .mockResolvedValueOnce(
+        response({
+          region: 'Coast',
+          enduse: 'HE/PL',
+          ageclass: 'Old growth',
+          volume: '40.0',
+          length: '7.5',
+          diameter: '18.0',
+          productType: 'Unmanufactured',
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          scaleList: [
+            {
+              id: 'OIC-SCALE-1',
+              timbermark: 'TM-OIC',
+              species: 'Hemlock',
+              grade: 'B',
+              pieces: 5,
+              volume: '12.5',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          scaleList: [
+            {
+              id: 'OIC-FEE-1',
+              timbermark: 'TM-OIC',
+              species: 'Hemlock',
+              grade: 'B',
+              fil: 'FIL',
+              fee: '$10.50',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          volume: '38.5',
+          status: 'APP',
+          statusDesc: 'Approved',
+          reprocessed: 'N',
+          comments: 'Current OIC package',
+          ageClass: 'Second growth',
+        }),
+      )
+
+    const result = await fetchProvincialPermitDetailTabs({
+      permitNumber: 'P-888',
+      blanketOic: true,
+    })
+
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(5)
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/rpc/permit-details/oic-package-list',
+      { params: { permitNumber: 'P-888' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/rpc/permit-details/package-info',
+      { params: { packageNumber: 'BOIC-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      3,
+      '/lexis/rpc/permit-details/scales-for-package',
+      { params: { packageNumber: 'BOIC-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      4,
+      '/lexis/rpc/permit-details/scale-fees-for-package',
+      {
+        params: {
+          packageNumber: 'BOIC-100',
+          permitNumber: 'P-888',
+        },
+      },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      5,
+      '/lexis/rpc/permit-details/package-details',
+      { params: { packageNumber: 'BOIC-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(result.packages).toEqual([
+      {
+        packageNumber: 'BOIC-100',
+        region: 'Coast',
+        speciesEndUseSort: 'HE/PL',
+        ageClass: 'Second growth',
+        packageVolume: '40.0',
+        averageLength: '7.5',
+        averageTopDiameter: '18.0',
+        productType: 'Unmanufactured',
+        currentPackageVolume: '38.5',
+        status: 'APP - Approved',
+        reprocessed: 'N',
+        comments: 'Current OIC package',
+      },
+    ])
+    expect(result.items).toEqual([
+      {
+        id: 'OIC-SCALE-1',
+        timberMark: 'TM-OIC',
+        species: 'Hemlock',
+        grade: 'B',
+        pieces: 5,
+        volume: 12.5,
+      },
+    ])
+    expect(result.fees).toEqual([
+      {
+        id: 'OIC-FEE-1',
+        feeCode: 'FIL',
+        feeDescription: 'TM-OIC / Hemlock / B',
+        amount: 10.5,
+        status: '',
+        invoiceNumber: '',
+        receiptNumber: '',
+      },
+    ])
   })
 
   it('returns empty permit detail tab rows when optional RPC tables are unavailable', async () => {

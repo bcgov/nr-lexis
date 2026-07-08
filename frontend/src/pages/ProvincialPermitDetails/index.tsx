@@ -98,9 +98,8 @@ const PERMIT_DETAIL_TAB_INDEX = {
   items: 4,
   fees: 5,
   gbms: 6,
-  orders: 7,
-  documents: 8,
-  invoices: 9,
+  documents: 7,
+  invoices: 8,
 } as const
 
 const fetchPermitClientData = (
@@ -315,20 +314,11 @@ const ProvincialPermitDetailsPage = () => {
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
   const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
-  const oicFilter = searchParams.get('oicFilter') ?? ''
-  const boicFilter = searchParams.get('boicFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const invoicesFilter = searchParams.get('invoicesFilter') ?? ''
   const updateFilterParam = useCallback(
     (
-      key:
-        | 'itemsFilter'
-        | 'feesFilter'
-        | 'gbmsFilter'
-        | 'oicFilter'
-        | 'boicFilter'
-        | 'documentsFilter'
-        | 'invoicesFilter',
+      key: 'itemsFilter' | 'feesFilter' | 'gbmsFilter' | 'documentsFilter' | 'invoicesFilter',
       value: string,
     ) => {
       const nextSearchParams = searchParamsWithValue(searchParams, key, value)
@@ -384,6 +374,7 @@ const ProvincialPermitDetailsPage = () => {
           const tabsResult = await fetchProvincialPermitDetailTabs({
             permitNumber,
             receiptNumber: response.receiptNumber,
+            blanketOic: response.blanketOic,
           })
           if (isLatestRequest()) {
             setTabsData(tabsResult)
@@ -534,32 +525,6 @@ const ProvincialPermitDetailsPage = () => {
       ),
     )
   }, [gbmsFilter, tabsData])
-
-  const filteredOicItems = useMemo(() => {
-    if (!tabsData) {
-      return []
-    }
-
-    return tabsData.oicItems.filter((row) =>
-      matchesFilter(
-        [row.id, row.eventDate, row.eventType, row.status, row.reference, row.notes],
-        oicFilter,
-      ),
-    )
-  }, [oicFilter, tabsData])
-
-  const filteredBoicItems = useMemo(() => {
-    if (!tabsData) {
-      return []
-    }
-
-    return tabsData.boicItems.filter((row) =>
-      matchesFilter(
-        [row.id, row.eventDate, row.eventType, row.status, row.reference, row.notes],
-        boicFilter,
-      ),
-    )
-  }, [boicFilter, tabsData])
 
   const filteredDocumentRows = useMemo(() => {
     return documentRows.filter((row) =>
@@ -1122,7 +1087,6 @@ const ProvincialPermitDetailsPage = () => {
                 <Tab>Items</Tab>
                 <Tab>Fees</Tab>
                 <Tab>GBMS</Tab>
-                <Tab>Orders</Tab>
                 <Tab>Documents</Tab>
                 <Tab>Invoices</Tab>
               </TabList>
@@ -1168,6 +1132,10 @@ const ProvincialPermitDetailsPage = () => {
                             {
                               label: 'Exemption number',
                               value: displayValue(detail.exemptionNumber),
+                            },
+                            {
+                              label: 'Exemption type',
+                              value: displayValue(detail.exemptionTypeDescription),
                             },
                             {
                               label: 'Status',
@@ -1469,7 +1437,9 @@ const ProvincialPermitDetailsPage = () => {
                       <Tile>
                         <h2 className="detail-tile-title">Permit items</h2>
                         <fieldset className="legacy-form-fieldset">
-                          <legend>Package details</legend>
+                          <legend>
+                            {detail.blanketOic ? 'Blanket OIC package details' : 'Package details'}
+                          </legend>
                           <Table useZebraStyles>
                             <TableHead>
                               <TableRow>
@@ -1481,6 +1451,14 @@ const ProvincialPermitDetailsPage = () => {
                                 <TableHeader>Average length</TableHeader>
                                 <TableHeader>Average top diameter</TableHeader>
                                 <TableHeader>Product type</TableHeader>
+                                {detail.blanketOic && (
+                                  <>
+                                    <TableHeader>Current package volume (m³)</TableHeader>
+                                    <TableHeader>Status</TableHeader>
+                                    <TableHeader>Reprocessed</TableHeader>
+                                    <TableHeader>Comments</TableHeader>
+                                  </>
+                                )}
                               </TableRow>
                             </TableHead>
                             <TableBody>
@@ -1496,11 +1474,19 @@ const ProvincialPermitDetailsPage = () => {
                                   <TableCell>{row.averageLength || '-'}</TableCell>
                                   <TableCell>{row.averageTopDiameter || '-'}</TableCell>
                                   <TableCell>{row.productType || '-'}</TableCell>
+                                  {detail.blanketOic && (
+                                    <>
+                                      <TableCell>{row.currentPackageVolume || '-'}</TableCell>
+                                      <TableCell>{row.status || '-'}</TableCell>
+                                      <TableCell>{row.reprocessed || '-'}</TableCell>
+                                      <TableCell>{row.comments || '-'}</TableCell>
+                                    </>
+                                  )}
                                 </TableRow>
                               ))}
                               {(tabsData?.packages ?? []).length === 0 && (
                                 <TableRow>
-                                  <TableCell colSpan={8}>
+                                  <TableCell colSpan={detail.blanketOic ? 12 : 8}>
                                     No package detail rows are available for this permit.
                                   </TableCell>
                                 </TableRow>
@@ -1640,89 +1626,6 @@ const ProvincialPermitDetailsPage = () => {
                               <TableRow>
                                 <TableCell colSpan={5}>
                                   No billing system rows matched the current filter.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </Tile>
-                    </Column>
-                  </Grid>
-                </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={8}>
-                      <Tile>
-                        <h2 className="detail-tile-title">Order in Council items</h2>
-                        <TextInput
-                          id="permitOicFilter"
-                          labelText="Filter Order in Council rows"
-                          value={oicFilter}
-                          onChange={(event) => updateFilterParam('oicFilter', event.target.value)}
-                          placeholder="Filter by type, status, date, reference, or notes"
-                        />
-                        <Table useZebraStyles>
-                          <TableHead>
-                            <TableRow>
-                              <TableHeader>Date</TableHeader>
-                              <TableHeader>Type</TableHeader>
-                              <TableHeader>Status</TableHeader>
-                              <TableHeader>Reference</TableHeader>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {filteredOicItems.map((row) => (
-                              <TableRow key={row.id}>
-                                <TableCell>{row.eventDate || '-'}</TableCell>
-                                <TableCell>{row.eventType || '-'}</TableCell>
-                                <TableCell>{row.status || '-'}</TableCell>
-                                <TableCell>{row.reference || '-'}</TableCell>
-                              </TableRow>
-                            ))}
-                            {filteredOicItems.length === 0 && (
-                              <TableRow>
-                                <TableCell colSpan={4}>
-                                  No Order in Council rows matched the current filter.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </Tile>
-                    </Column>
-
-                    <Column sm={4} md={8} lg={8}>
-                      <Tile>
-                        <h2 className="detail-tile-title">Blanket Order in Council items</h2>
-                        <TextInput
-                          id="permitBoicFilter"
-                          labelText="Filter Blanket Order in Council rows"
-                          value={boicFilter}
-                          onChange={(event) => updateFilterParam('boicFilter', event.target.value)}
-                          placeholder="Filter by type, status, date, reference, or notes"
-                        />
-                        <Table useZebraStyles>
-                          <TableHead>
-                            <TableRow>
-                              <TableHeader>Date</TableHeader>
-                              <TableHeader>Type</TableHeader>
-                              <TableHeader>Status</TableHeader>
-                              <TableHeader>Reference</TableHeader>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {filteredBoicItems.map((row) => (
-                              <TableRow key={row.id}>
-                                <TableCell>{row.eventDate || '-'}</TableCell>
-                                <TableCell>{row.eventType || '-'}</TableCell>
-                                <TableCell>{row.status || '-'}</TableCell>
-                                <TableCell>{row.reference || '-'}</TableCell>
-                              </TableRow>
-                            ))}
-                            {filteredBoicItems.length === 0 && (
-                              <TableRow>
-                                <TableCell colSpan={4}>
-                                  No Blanket Order in Council rows matched the current filter.
                                 </TableCell>
                               </TableRow>
                             )}

@@ -32,10 +32,16 @@ describe('lexis detail service', () => {
       )
       .mockResolvedValueOnce(response({ approvedExemptionVolume: '250.5' }))
       .mockResolvedValueOnce(response({ exemptionVolumeRemaining: 130 }))
+      .mockResolvedValueOnce(
+        response({
+          exemptionTypeDescription: 'Blanket OIC',
+          blanketOic: true,
+        }),
+      )
 
     const result = await fetchProvincialPermitDetail('777')
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(3)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(4)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(1, '/lexis/permits/777', undefined, {
       ttlMs: 30_000,
     })
@@ -51,11 +57,16 @@ describe('lexis detail service', () => {
       { params: { exemptionNumber: 'EX-9' } },
       { ttlMs: 30_000 },
     )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(4, '/lexis/exemptions/EX-9', undefined, {
+      ttlMs: 30_000,
+    })
     expect(result).toMatchObject({
       permitNumber: 777,
       exemptionNumber: 'EX-9',
       approvedExemptionVolume: 250.5,
       exemptionVolumeRemaining: 130,
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
     })
   })
 })

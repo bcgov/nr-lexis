@@ -138,6 +138,28 @@ const fetchPermitExemptionVolumeRemaining = async (
   }
 }
 
+const fetchPermitExemptionContext = async (
+  exemptionNumber: string,
+): Promise<Pick<ProvincialPermitDetail, 'exemptionTypeDescription' | 'blanketOic'>> => {
+  try {
+    const response = await apiService.getCachedResponse<ProvincialExemptionDetail>(
+      `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+      undefined,
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
+
+    return {
+      exemptionTypeDescription: response.data.exemptionTypeDescription ?? null,
+      blanketOic: response.data.blanketOic,
+    }
+  } catch {
+    return {
+      exemptionTypeDescription: null,
+      blanketOic: false,
+    }
+  }
+}
+
 export const fetchProvincialPermitDetail = async (
   permitNumber: string,
 ): Promise<ProvincialPermitDetail | null> => {
@@ -153,18 +175,23 @@ export const fetchProvincialPermitDetail = async (
         ...permitDetail,
         approvedExemptionVolume: permitDetail.approvedExemptionVolume ?? null,
         exemptionVolumeRemaining: permitDetail.exemptionVolumeRemaining ?? null,
+        exemptionTypeDescription: permitDetail.exemptionTypeDescription ?? null,
+        blanketOic: permitDetail.blanketOic ?? false,
       }
     }
 
-    const [approvedVolume, remainingVolume] = await Promise.all([
+    const [approvedVolume, remainingVolume, exemptionContext] = await Promise.all([
       fetchPermitApprovedExemptionVolume(permitDetail.exemptionNumber),
       fetchPermitExemptionVolumeRemaining(permitDetail.exemptionNumber),
+      fetchPermitExemptionContext(permitDetail.exemptionNumber),
     ])
 
     return {
       ...permitDetail,
       approvedExemptionVolume: approvedVolume,
       exemptionVolumeRemaining: remainingVolume,
+      exemptionTypeDescription: exemptionContext.exemptionTypeDescription,
+      blanketOic: exemptionContext.blanketOic,
     }
   } catch (error) {
     if (isNotFound(error)) {

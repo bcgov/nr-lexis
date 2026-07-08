@@ -38,6 +38,7 @@ vi.mock('@/service/lexis-detail-service', () => ({
 
 vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
   EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: {
+    packages: [],
     items: [],
     fees: [],
     gbmsEvents: [],
@@ -128,6 +129,8 @@ const permitDetail: ProvincialPermitDetail = {
   permitVolume: 120,
   approvedExemptionVolume: 250,
   exemptionVolumeRemaining: 130,
+  exemptionTypeDescription: 'Standard exemption',
+  blanketOic: false,
   numberOfPieces: 10,
   receiptNumber: 'R-1',
   federalPermitNumber: null,
@@ -301,7 +304,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'Items',
       'Fees',
       'GBMS',
-      'Orders',
       'Documents',
       'Invoices',
     ]) {
@@ -383,6 +385,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
           averageLength: '7.1',
           averageTopDiameter: '16.2',
           productType: 'Unmanufactured',
+          currentPackageVolume: '',
+          status: '',
+          reprocessed: '',
+          comments: '',
         },
       ],
     })
@@ -408,6 +414,60 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('cell', { name: 'Second growth' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '120.5' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Unmanufactured' })).toBeInTheDocument()
+  })
+
+  it('shows Blanket OIC package columns on the items tab', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        {
+          packageNumber: 'BOIC-9',
+          region: 'Coast',
+          speciesEndUseSort: 'HE/PL',
+          ageClass: 'Old growth',
+          packageVolume: '120.5',
+          averageLength: '7.1',
+          averageTopDiameter: '16.2',
+          productType: 'Unmanufactured',
+          currentPackageVolume: '118.5',
+          status: 'APP - Approved',
+          reprocessed: 'N',
+          comments: 'Current OIC package',
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+
+    expect(await screen.findByText('Blanket OIC package details')).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Current package volume (m³)' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Reprocessed' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '118.5' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'APP - Approved' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Current OIC package' })).toBeInTheDocument()
+    expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
+      permitNumber: '777',
+      receiptNumber: 'R-1',
+      blanketOic: true,
+    })
   })
 
   it('shows field validation when adding invoice without required values', async () => {
@@ -930,6 +990,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
       permitNumber: '777',
       receiptNumber: 'R-1',
+      blanketOic: false,
     })
     expect(screen.queryByText('Permit Tables Unavailable')).not.toBeInTheDocument()
     expect(screen.getByText('No permit item rows matched the current filter.')).toBeInTheDocument()

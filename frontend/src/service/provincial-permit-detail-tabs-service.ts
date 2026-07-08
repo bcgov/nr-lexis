@@ -26,6 +26,10 @@ export type ProvincialPermitPackageInfoRow = {
   averageLength: string
   averageTopDiameter: string
   productType: string
+  currentPackageVolume: string
+  status: string
+  reprocessed: string
+  comments: string
 }
 
 export type ProvincialPermitFeeRow = {
@@ -59,6 +63,7 @@ export type ProvincialPermitDetailTabsData = {
 export type ProvincialPermitDetailTabsRequest = {
   permitNumber: string
   receiptNumber?: string | number | null
+  blanketOic?: boolean | null
 }
 
 const PERMIT_TAB_CACHE_TTL_MS = 30_000
@@ -179,10 +184,14 @@ const fetchOptionalRows = async <TRow>(
   }
 }
 
-const fetchPackageList = async (permitNumber: string): Promise<string[]> => {
+const fetchPackageList = async (permitNumber: string, blanketOic: boolean): Promise<string[]> => {
+  const path = blanketOic
+    ? '/lexis/rpc/permit-details/oic-package-list'
+    : '/lexis/rpc/permit-details/package-list'
+
   try {
     const response = await apiService.getCachedResponse<unknown>(
-      '/lexis/rpc/permit-details/package-list',
+      path,
       {
         params: {
           permitNumber,
@@ -218,10 +227,61 @@ const normalizePackageInfoRow = (
     averageLength: asString(source.length || source.averageLength),
     averageTopDiameter: asString(source.diameter || source.averageTopDiameter),
     productType: asString(source.productType),
+    currentPackageVolume: '',
+    status: '',
+    reprocessed: '',
+    comments: '',
   }
 }
 
-const fetchPackageInfo = async (packageNumber: string): Promise<ProvincialPermitPackageInfoRow> => {
+const normalizePackageDetailsFields = (
+  payload: unknown,
+): Pick<
+  ProvincialPermitPackageInfoRow,
+  'currentPackageVolume' | 'status' | 'reprocessed' | 'comments' | 'ageClass'
+> => {
+  const source = recordOrEmpty(payload)
+  const statusCode = asString(source.status)
+  const statusDescription = asString(source.statusDesc || source.statusDescription)
+
+  return {
+    currentPackageVolume: asString(source.volume || source.packageVolume),
+    status: [statusCode, statusDescription].filter(Boolean).join(' - '),
+    reprocessed: asString(source.reprocessed || source.reprocessedIndicator),
+    comments: asString(source.comments),
+    ageClass: asString(source.ageClass || source.ageclass),
+  }
+}
+
+const fetchPackageDetails = async (
+  packageNumber: string,
+): Promise<
+  Pick<
+    ProvincialPermitPackageInfoRow,
+    'currentPackageVolume' | 'status' | 'reprocessed' | 'comments' | 'ageClass'
+  >
+> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/permit-details/package-details',
+      {
+        params: {
+          packageNumber,
+        },
+      },
+      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
+    )
+
+    return normalizePackageDetailsFields(response.status === 204 ? {} : response.data)
+  } catch {
+    return normalizePackageDetailsFields({})
+  }
+}
+
+const fetchPackageInfo = async (
+  packageNumber: string,
+  blanketOic: boolean,
+): Promise<ProvincialPermitPackageInfoRow> => {
   try {
     const response = await apiService.getCachedResponse<unknown>(
       '/lexis/rpc/permit-details/package-info',
@@ -233,13 +293,58 @@ const fetchPackageInfo = async (packageNumber: string): Promise<ProvincialPermit
       { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
     )
 
-    return normalizePackageInfoRow(packageNumber, response.status === 204 ? {} : response.data)
+    const packageInfo = normalizePackageInfoRow(
+      packageNumber,
+      response.status === 204 ? {} : response.data,
+    )
+    if (!blanketOic) {
+      return packageInfo
+    }
+
+    const packageDetails = await fetchPackageDetails(packageNumber)
+    return {
+      ...packageInfo,
+      ageClass: packageDetails.ageClass || packageInfo.ageClass,
+      currentPackageVolume: packageDetails.currentPackageVolume,
+      status: packageDetails.status,
+      reprocessed: packageDetails.reprocessed,
+      comments: packageDetails.comments,
+    }
   } catch {
     return normalizePackageInfoRow(packageNumber, {})
   }
 }
 
-const fetchScaleRows = async (permitNumber: string, packageNumber: string): Promise<unknown[]> => {
+const fetchScaleRows = async (
+  permitNumber: string,
+  packageNumber: string,
+  blanketOic: boolean,
+): Promise<unknown[]> => {
+  const path = blanketOic
+    ? '/lexis/rpc/permit-details/scales-for-package'
+    : '/lexis/rpc/permit-details/scale-fees-for-package'
+  const params = blanketOic ? { packageNumber } : { packageNumber, permitNumber }
+
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      path,
+      { params },
+      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
+    )
+    if (response.status === 204) {
+      return []
+    }
+
+    return parsePayloadArray(response.data, PERMIT_TAB_ARRAY_KEYS) ?? []
+  } catch {
+    return []
+  }
+}
+
+const fetchScaleFeeRows = async (
+  permitNumber: string,
+  packageNumber: string,
+): Promise<unknown[]> => {
   try {
     const response = await apiService.getCachedResponse<unknown>(
       '/lexis/rpc/permit-details/scale-fees-for-package',
@@ -287,19 +392,28 @@ export const fetchProvincialPermitDetailTabs = async (
 ): Promise<ProvincialPermitDetailTabsData> => {
   const permitNumber = typeof request === 'string' ? request : request.permitNumber
   const receiptNumber = typeof request === 'string' ? undefined : request.receiptNumber
-  const packageList = await fetchPackageList(permitNumber)
+  const blanketOic = typeof request === 'string' ? false : !!request.blanketOic
+  const packageList = await fetchPackageList(permitNumber, blanketOic)
 
-  const [packages, packageScaleRows] = await Promise.all([
-    Promise.all(packageList.map(fetchPackageInfo)),
-    Promise.all(packageList.map((packageNumber) => fetchScaleRows(permitNumber, packageNumber))),
+  const [packages, packageScaleRows, packageFeeRows] = await Promise.all([
+    Promise.all(packageList.map((packageNumber) => fetchPackageInfo(packageNumber, blanketOic))),
+    Promise.all(
+      packageList.map((packageNumber) => fetchScaleRows(permitNumber, packageNumber, blanketOic)),
+    ),
+    blanketOic
+      ? Promise.all(
+          packageList.map((packageNumber) => fetchScaleFeeRows(permitNumber, packageNumber)),
+        )
+      : Promise.resolve<unknown[][] | null>(null),
   ])
   const scaleRows = packageScaleRows.flat()
+  const feeRows = (packageFeeRows ?? packageScaleRows).flat()
   const gbmsEvents = await fetchGbmsRows(permitNumber, receiptNumber)
 
   return {
     packages,
     items: scaleRows.map(normalizePermitItemRow),
-    fees: scaleRows.map(normalizeScaleFeeRow),
+    fees: feeRows.map(normalizeScaleFeeRow),
     gbmsEvents,
     oicItems: [],
     boicItems: [],
