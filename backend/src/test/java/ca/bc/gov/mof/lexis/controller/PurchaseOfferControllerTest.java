@@ -298,6 +298,27 @@ class PurchaseOfferControllerTest {
   }
 
   @Test
+  void detailShouldReturnFullEditPermissionsForWithdrawnOfferWhenUserIsApplicationApprover() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    PurchaseOfferDetailDto offer = withdrawnOfferDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(true, true, true, true));
+  }
+
+  @Test
   void detailShouldNotTreatAdminAsApplicationApproverForOfferEdits() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_ADMIN"));
@@ -338,6 +359,15 @@ class PurchaseOfferControllerTest {
   }
 
   private static PurchaseOfferDetailDto offerDetail(String offeringClientNumber) {
+    return offerDetail(offeringClientNumber, null, null);
+  }
+
+  private static PurchaseOfferDetailDto withdrawnOfferDetail(String offeringClientNumber) {
+    return offerDetail(offeringClientNumber, LocalDate.of(2026, 3, 5), "Buyer withdrew");
+  }
+
+  private static PurchaseOfferDetailDto offerDetail(
+      String offeringClientNumber, LocalDate offerWithdrawalDate, String withdrawReason) {
     return new PurchaseOfferDetailDto(
         81009L,
         1000456L,
@@ -348,13 +378,13 @@ class PurchaseOfferControllerTest {
         "Alex Example",
         12500.25,
         LocalDate.of(2026, 3, 2),
-        null,
+        offerWithdrawalDate,
         LocalDate.of(2026, 3, 18),
         "N",
         "Y",
         "N",
         "Initial offer",
-        null,
+        withdrawReason,
         "P",
         "Mill details",
         offeringClientNumber,

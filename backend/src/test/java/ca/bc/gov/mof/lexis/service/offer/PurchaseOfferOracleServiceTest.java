@@ -414,6 +414,74 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void updateOfferShouldTreatApprovalIndicatorsAsMaterialUpdates() {
+    Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+                    81001L,
+                    1000456L,
+                    "PKG-903",
+                    "Example Lumber",
+                    "Alex Example",
+                    12500.25d,
+                    LocalDate.of(2026, 3, 2),
+                    null,
+                    LocalDate.of(2026, 3, 18),
+                    "N",
+                    "Y",
+                    "Existing remark",
+                    "N",
+                    null,
+                    "P",
+                    "Existing mill",
+                    "Port Moody",
+                    "Existing condition",
+                    "creator",
+                    entryTimestamp,
+                    95.5d)));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                81001L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "Y",
+                "N",
+                null,
+                "Y",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.sendEmail()).isTrue();
+
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(recordCaptor.capture());
+    PurchaseOfferRepository.PurchaseOfferUpdateRecord record = recordCaptor.getValue();
+    assertThat(record.fairOfferIndicator()).isEqualTo("Y");
+    assertThat(record.validOfferIndicator()).isEqualTo("N");
+    assertThat(record.approvalIndicator()).isEqualTo("Y");
+  }
+
+  @Test
   void updateOfferShouldDefaultUpdateUserWhenPrincipalIsMissing() {
     Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
     when(repository.findUpdateSourceByOfferNumber(81001L))
