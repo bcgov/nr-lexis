@@ -41,6 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PurchaseOfferController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PurchaseOfferController.class);
+  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
 
   private final ObjectProvider<PurchaseOfferService> serviceProvider;
   private final LexisSessionService sessionService;
@@ -272,25 +273,28 @@ public class PurchaseOfferController {
   }
 
   private boolean canEditScheduleDates(List<String> roles) {
-    return authorizationService.canPerformAction(roles, "createOffer");
+    return isApplicationApprover(roles);
   }
 
   private boolean canEditOfferRemarks(List<String> roles) {
-    return authorizationService.canPerformAction(roles, "createOffer");
+    return isApplicationApprover(roles);
   }
 
   private boolean canEditOfferDetails(
       String scopedClientNumber, List<String> roles, PurchaseOfferDetailDto detail) {
-    return authorizationService.canPerformAction(roles, "createOffer")
-        || isOfferingClient(scopedClientNumber, detail);
+    return isApplicationApprover(roles) || isOfferingClient(scopedClientNumber, detail);
   }
 
   private boolean canEditWithdrawFields(
       String scopedClientNumber, List<String> roles, PurchaseOfferDetailDto detail) {
-    return authorizationService.canPerformAction(roles, "createOffer")
+    return isApplicationApprover(roles)
         || (isOfferingClient(scopedClientNumber, detail)
             && detail.offerWithdrawalDate() == null
             && canWithdrawByDate(detail.offerEndDate()));
+  }
+
+  private boolean isApplicationApprover(List<String> roles) {
+    return roles != null && roles.contains(ROLE_APPLICATION_APPROVER);
   }
 
   private boolean isOfferingClient(String scopedClientNumber, PurchaseOfferDetailDto detail) {

@@ -315,7 +315,7 @@ public class OfferDetailsRpcController {
 
     String userId = authentication == null ? null : authentication.getName();
     PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
-    if (!roles.contains(ROLE_APPLICATION_APPROVER)) {
+    if (!isApplicationApprover(roles)) {
       request = withLegacyNonApproverCreateDefaults(request);
     }
     PurchaseOfferService.CreateOfferResult result =
@@ -334,7 +334,10 @@ public class OfferDetailsRpcController {
     }
 
     PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
-    boolean canCreateOffer = canPerform(authentication, LEGACY_ACTION_CREATE_OFFER);
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    boolean canCreateOffer =
+        authorizationService.canPerformAction(roles, LEGACY_ACTION_CREATE_OFFER);
+    boolean applicationApprover = isApplicationApprover(roles);
     if (!canCreateOffer) {
       Optional<PurchaseOfferDetailDto> currentOffer =
           service.findByOfferNumber(request.exportPurchaseOfferNumber());
@@ -343,6 +346,12 @@ public class OfferDetailsRpcController {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
       }
       request = restrictOfferingClientUpdate(request, currentOffer.get());
+    } else if (!applicationApprover) {
+      Optional<PurchaseOfferDetailDto> currentOffer =
+          service.findByOfferNumber(request.exportPurchaseOfferNumber());
+      if (currentOffer.isPresent()) {
+        request = preserveLegacyApproverFields(request, currentOffer.get());
+      }
     }
 
     String userId = authentication == null ? null : authentication.getName();
@@ -374,6 +383,10 @@ public class OfferDetailsRpcController {
   private boolean canPerform(Authentication authentication, String action) {
     return authorizationService.canPerformAction(
         sessionService.parseRolesFromPrincipal(authentication), action);
+  }
+
+  private boolean isApplicationApprover(List<String> roles) {
+    return roles != null && roles.contains(ROLE_APPLICATION_APPROVER);
   }
 
   private boolean canScopedOfferingClientUpdate(
@@ -410,6 +423,31 @@ public class OfferDetailsRpcController {
         currentOffer.exportJurisdictionCode(),
         currentOffer.manufacturingFacilityInfo(),
         currentOffer.offeringClientNumber(),
+        requested.pickupLocation(),
+        requested.offerCondition(),
+        requested.offerVolume());
+  }
+
+  private PurchaseOfferService.CreateOfferRequest preserveLegacyApproverFields(
+      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        requested.applicationNumber(),
+        requested.exportPurchaseOfferNumber(),
+        requested.packageNumber(),
+        requested.companyName(),
+        requested.contactName(),
+        requested.purchaseOfferAmount(),
+        requested.purchaseOfferDate(),
+        requested.offerWithdrawalDate(),
+        requested.teacReviewDate(),
+        currentOffer.fairOfferIndicator(),
+        currentOffer.validOfferIndicator(),
+        currentOffer.offerRemark(),
+        currentOffer.approvalIndicator(),
+        requested.withdrawReason(),
+        requested.exportJurisdictionCode(),
+        requested.manufacturingFacilityInfo(),
+        requested.offeringClientNumber(),
         requested.pickupLocation(),
         requested.offerCondition(),
         requested.offerVolume());

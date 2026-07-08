@@ -277,12 +277,10 @@ class PurchaseOfferControllerTest {
   }
 
   @Test
-  void detailShouldReturnFullEditPermissionsWhenUserCanCreateOffer() {
+  void detailShouldReturnFullEditPermissionsWhenUserIsApplicationApprover() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
-    when(authorizationService.canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "createOffer"))
-        .thenReturn(true);
     PurchaseOfferDetailDto offer = offerDetail("00077881");
     when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
     when(applicationService.findByApplicationNumber(1000456L))
@@ -297,6 +295,26 @@ class PurchaseOfferControllerTest {
         .isEqualTo(
             offer.withApplicationContext(45.5, "FI/HE/LUM")
                 .withEditPermissions(true, true, true, true));
+  }
+
+  @Test
+  void detailShouldNotTreatAdminAsApplicationApproverForOfferEdits() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_ADMIN"));
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, false, false));
   }
 
   @Test
