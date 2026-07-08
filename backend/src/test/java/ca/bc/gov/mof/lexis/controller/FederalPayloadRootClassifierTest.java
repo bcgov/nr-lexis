@@ -103,6 +103,24 @@ class FederalPayloadRootClassifierTest {
         .isEqualTo("esf-submission");
   }
 
+  @Test
+  void shouldClassifySubmissionContentAfterRepeatedNearMissTags() {
+    String lexisXml = "<lexis:LexisSubmission xmlns:lexis=\"urn:test\"/>";
+    String nearMisses = "<submissionContentb>".repeat(512);
+
+    assertThat(
+            FederalPayloadRootClassifier.classify(
+                xml(
+                    """
+                    <esf:ESFSubmission xmlns:esf="urn:esf">
+                      %s
+                      <esf:submissionContent>%s</esf:submissionContent>
+                    </esf:ESFSubmission>
+                    """
+                        .formatted(nearMisses, lexisXml))))
+        .isEqualTo("esf-submission:lexis-child");
+  }
+
   private static byte[] xml(String xml) {
     return xml.getBytes(StandardCharsets.UTF_8);
   }
