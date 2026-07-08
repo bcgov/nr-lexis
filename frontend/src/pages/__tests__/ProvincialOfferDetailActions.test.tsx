@@ -117,4 +117,35 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
+
+  it('blocks offer numeric values outside legacy limits', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Provincial offer details' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+
+    const amountInput = screen.getByLabelText('Offer amount ($/m³)')
+    await userEvent.clear(amountInput)
+    await userEvent.type(amountInput, '10000000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText('Offer amount must be 9999999.99 or less.').length,
+      ).toBeGreaterThan(0)
+    })
+    expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
+  })
+
+  it('keeps legacy text area character caps', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Provincial offer details' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+
+    expect(screen.getByLabelText('Pickup location')).toHaveAttribute('maxlength', '250')
+    expect(screen.getByLabelText('Offer conditions / remarks')).toHaveAttribute('maxlength', '250')
+    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('maxlength', '250')
+    expect(screen.getByLabelText('Offer remarks')).toHaveAttribute('maxlength', '250')
+  })
 })

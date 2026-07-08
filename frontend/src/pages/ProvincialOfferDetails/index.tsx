@@ -10,6 +10,8 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  maxLengthFieldError,
+  maxNumericValueFieldError,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -36,6 +38,10 @@ const YES_NO_OPTIONS = [
   { value: 'N', label: 'No' },
 ]
 
+const LEGACY_OFFER_TEXT_LIMIT = 250
+const LEGACY_OFFER_MAX_NUMERIC_VALUE = 9_999_999.99
+const LEGACY_OFFER_DECIMAL_PATTERN = /^\d{1,7}(\.\d{1,2})?$/
+
 const textValue = (value: string | number | null | undefined): string =>
   value === null || value === undefined ? '' : String(value)
 
@@ -48,6 +54,23 @@ const nullableNumber = (value: string): number | null => {
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : null
 }
+
+const legacyOfferDecimalFieldError = (value: string, label: string): string | null => {
+  if (!value.trim()) {
+    return null
+  }
+
+  return LEGACY_OFFER_DECIMAL_PATTERN.test(value.trim())
+    ? null
+    : `${label} must be a number with up to two decimal places.`
+}
+
+const legacyOfferNumericFieldError = (value: string, label: string): string | null =>
+  firstValidationError(
+    () => positiveNumericFieldError(value),
+    () => maxNumericValueFieldError(value, LEGACY_OFFER_MAX_NUMERIC_VALUE, label),
+    () => legacyOfferDecimalFieldError(value, label),
+  ) ?? null
 
 const buildOfferForm = (detail: ProvincialOfferDetail): ProvincialOfferUpdateSubmission => ({
   offerNumber: textValue(detail.offerNumber),
@@ -161,23 +184,48 @@ const ProvincialOfferDetailsPage = () => {
         requiredFieldError(form?.offeringClientNumber ?? '', 'Offering client number') ?? undefined,
       companyName: requiredFieldError(form?.companyName ?? '', 'Company name') ?? undefined,
       contactName: requiredFieldError(form?.contactName ?? '', 'Contact name') ?? undefined,
-      offerVolume: positiveNumericFieldError(form?.offerVolume ?? '') ?? undefined,
+      offerVolume:
+        legacyOfferNumericFieldError(form?.offerVolume ?? '', 'Offer volume') ?? undefined,
       purchaseOfferAmount: firstValidationError(
         () => requiredFieldError(form?.purchaseOfferAmount ?? '', 'Offer amount'),
-        () => positiveNumericFieldError(form?.purchaseOfferAmount ?? ''),
+        () => legacyOfferNumericFieldError(form?.purchaseOfferAmount ?? '', 'Offer amount'),
       ),
       purchaseOfferDate: firstValidationError(
         () => requiredFieldError(form?.purchaseOfferDate ?? '', 'Offer date'),
         () => isoDateFieldError(form?.purchaseOfferDate ?? ''),
       ),
       offerWithdrawalDate: isoDateFieldError(form?.offerWithdrawalDate ?? '') ?? undefined,
-      withdrawReason:
-        (form?.offerWithdrawalDate ?? '').trim().length > 0
-          ? (requiredFieldError(form?.withdrawReason ?? '', 'Withdraw reason') ?? undefined)
-          : undefined,
+      withdrawReason: firstValidationError(
+        () =>
+          (form?.offerWithdrawalDate ?? '').trim().length > 0
+            ? requiredFieldError(form?.withdrawReason ?? '', 'Withdraw reason')
+            : null,
+        () =>
+          maxLengthFieldError(
+            form?.withdrawReason ?? '',
+            LEGACY_OFFER_TEXT_LIMIT,
+            'Withdraw reason',
+          ),
+      ),
       teacReviewDate: isoDateFieldError(form?.teacReviewDate ?? '') ?? undefined,
-      pickupLocation:
-        requiredFieldError(form?.pickupLocation ?? '', 'Pickup location') ?? undefined,
+      pickupLocation: firstValidationError(
+        () => requiredFieldError(form?.pickupLocation ?? '', 'Pickup location'),
+        () =>
+          maxLengthFieldError(
+            form?.pickupLocation ?? '',
+            LEGACY_OFFER_TEXT_LIMIT,
+            'Pickup location',
+          ),
+      ),
+      offerCondition:
+        maxLengthFieldError(
+          form?.offerCondition ?? '',
+          LEGACY_OFFER_TEXT_LIMIT,
+          'Offer conditions / remarks',
+        ) ?? undefined,
+      offerRemark:
+        maxLengthFieldError(form?.offerRemark ?? '', LEGACY_OFFER_TEXT_LIMIT, 'Offer remarks') ??
+        undefined,
     }),
     [form],
   )
@@ -439,13 +487,18 @@ const ProvincialOfferDetailsPage = () => {
                   invalidText={fieldError('pickupLocation')}
                   onBlur={() => markFieldTouched('pickupLocation')}
                   onChange={(event) => updateFormField('pickupLocation', event.target.value)}
+                  maxLength={LEGACY_OFFER_TEXT_LIMIT}
                 />
                 <TextArea
                   id="offerCondition"
                   labelText="Offer conditions / remarks"
                   value={form.offerCondition}
                   readOnly={!isEditing}
+                  invalid={isEditing && !!fieldError('offerCondition')}
+                  invalidText={fieldError('offerCondition')}
+                  onBlur={() => markFieldTouched('offerCondition')}
                   onChange={(event) => updateFormField('offerCondition', event.target.value)}
+                  maxLength={LEGACY_OFFER_TEXT_LIMIT}
                 />
               </div>
             </fieldset>
@@ -472,6 +525,7 @@ const ProvincialOfferDetailsPage = () => {
                   invalidText={fieldError('withdrawReason')}
                   onBlur={() => markFieldTouched('withdrawReason')}
                   onChange={(event) => updateFormField('withdrawReason', event.target.value)}
+                  maxLength={LEGACY_OFFER_TEXT_LIMIT}
                 />
               </div>
             </fieldset>
@@ -521,7 +575,11 @@ const ProvincialOfferDetailsPage = () => {
                   labelText="Offer remarks"
                   value={form.offerRemark}
                   readOnly={!isEditing}
+                  invalid={isEditing && !!fieldError('offerRemark')}
+                  invalidText={fieldError('offerRemark')}
+                  onBlur={() => markFieldTouched('offerRemark')}
                   onChange={(event) => updateFormField('offerRemark', event.target.value)}
+                  maxLength={LEGACY_OFFER_TEXT_LIMIT}
                 />
               </div>
             </fieldset>
