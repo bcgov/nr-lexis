@@ -48,6 +48,7 @@ const offerDetail: ProvincialOfferDetail = {
   advertisingDate: '2026-02-25',
   offerEndDate: '2026-03-18',
   packageVolume: 45.5,
+  speciesGradeCode: 'FI/HE/LUM',
   offerVolume: 99.99,
   region: '12',
 }
@@ -125,6 +126,7 @@ describe('Provincial Offer Detail Actions', () => {
     expect(await screen.findByLabelText('Application/package volume (m³)')).toHaveDisplayValue(
       '45.5',
     )
+    expect(screen.getByLabelText('Species/grade')).toHaveDisplayValue('FI/HE/LUM')
   })
 
   it('blocks offer numeric values outside legacy limits', async () => {

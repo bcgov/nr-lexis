@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
@@ -36,10 +37,12 @@ import org.springframework.util.MultiValueMap;
 class OfferDetailsRpcControllerTest {
 
   @Mock private ObjectProvider<LexisApplicationService> applicationServiceProvider;
+  @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   @Mock private ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
   @Mock private ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   @Mock private ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider;
   @Mock private LexisApplicationService applicationService;
+  @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private FederalApplicationService federalApplicationService;
   @Mock private ClientLookupService clientLookupService;
   @Mock private PurchaseOfferService purchaseOfferService;
@@ -54,6 +57,7 @@ class OfferDetailsRpcControllerTest {
     controller =
         new OfferDetailsRpcController(
             applicationServiceProvider,
+            applicationDetailsServiceProvider,
             federalApplicationServiceProvider,
             clientLookupServiceProvider,
             purchaseOfferServiceProvider,
@@ -135,10 +139,16 @@ class OfferDetailsRpcControllerTest {
   @Test
   void applicationDetailsShouldReturnSuccessPayload() {
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationService.findByApplicationNumber(1000456L))
         .thenReturn(
             Optional.of(
                 application(1000456L, "APP", LocalDate.of(2026, 2, 26), true, List.of())));
+    when(applicationDetailsService.getSpeciesForApplication(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.SpeciesEndUseItem("FI", "LUM", "Lumber"),
+                new ApplicationDetailsRpcService.SpeciesEndUseItem("HE", "LUM", "Lumber")));
 
     ResponseEntity<OfferDetailsRpcController.OfferApplicationDetailsResponseDto> response =
         controller.getApplicationDetails("1000456");
@@ -146,7 +156,7 @@ class OfferDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
-    assertThat(response.getBody().speciesGradeCode()).isEqualTo("S");
+    assertThat(response.getBody().speciesGradeCode()).isEqualTo("FI/HE/LUM");
     assertThat(response.getBody().advertisingDate()).isEqualTo("02/26/2026");
   }
 

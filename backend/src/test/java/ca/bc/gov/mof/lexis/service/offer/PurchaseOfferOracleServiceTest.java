@@ -125,6 +125,7 @@ class PurchaseOfferOracleServiceTest {
             1000456L,
             "PKG-903",
             null,
+            null,
             "Example Lumber",
             "Alex Example",
             12500.25,

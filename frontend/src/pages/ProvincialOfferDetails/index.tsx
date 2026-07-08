@@ -455,6 +455,12 @@ const ProvincialOfferDetailsPage = () => {
                   readOnly
                 />
                 <TextInput
+                  id="offerSpeciesGradeCode"
+                  labelText="Species/grade"
+                  value={textValue(detail.speciesGradeCode)}
+                  readOnly
+                />
+                <TextInput
                   id="offerVolume"
                   labelText="Offer volume (m³)"
                   value={form.offerVolume}

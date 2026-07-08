@@ -9,6 +9,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
@@ -49,6 +50,7 @@ public class OfferDetailsRpcController {
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
+  private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   private final ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider;
@@ -57,12 +59,14 @@ public class OfferDetailsRpcController {
 
   public OfferDetailsRpcController(
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ObjectProvider<FederalApplicationService> federalApplicationServiceProvider,
       ObjectProvider<ClientLookupService> clientLookupServiceProvider,
       ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider,
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService) {
     this.applicationServiceProvider = applicationServiceProvider;
+    this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.federalApplicationServiceProvider = federalApplicationServiceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
     this.purchaseOfferServiceProvider = purchaseOfferServiceProvider;
@@ -147,7 +151,7 @@ public class OfferDetailsRpcController {
     return ResponseEntity.ok(
         new OfferApplicationDetailsResponseDto(
             true,
-            nonNull(detail.get().productTypeCode()),
+            resolveApplicationSpeciesGradeCode(parsed),
             formatLegacyDate(detail.get().listingDate()),
             ""));
   }
@@ -412,6 +416,17 @@ public class OfferDetailsRpcController {
 
   private String formatVolume(double value) {
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+  }
+
+  private String resolveApplicationSpeciesGradeCode(Long applicationNumber) {
+    ApplicationDetailsRpcService applicationDetailsService =
+        applicationDetailsServiceProvider.getIfAvailable();
+    if (applicationDetailsService == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning blank species grade");
+      return "";
+    }
+    return ApplicationDetailsRpcService.toSpeciesEndUseSort(
+        applicationDetailsService.getSpeciesForApplication(applicationNumber));
   }
 
   private String fallbackApplicationNumber(String value) {

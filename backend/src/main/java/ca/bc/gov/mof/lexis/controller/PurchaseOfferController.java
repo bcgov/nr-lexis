@@ -5,12 +5,13 @@ import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
-import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
@@ -42,14 +43,17 @@ public class PurchaseOfferController {
   private final ObjectProvider<PurchaseOfferService> serviceProvider;
   private final LexisSessionService sessionService;
   private final LexisApplicationService applicationService;
+  private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
 
   public PurchaseOfferController(
       ObjectProvider<PurchaseOfferService> serviceProvider,
       LexisSessionService sessionService,
-      LexisApplicationService applicationService) {
+      LexisApplicationService applicationService,
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
     this.applicationService = applicationService;
+    this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
   }
 
   @GetMapping("/search/options")
@@ -181,7 +185,9 @@ public class PurchaseOfferController {
       return Optional.empty();
     }
     return Optional.of(
-        detail.withPackageVolume(resolveApplicationPackageVolume(detail, application)));
+        detail.withApplicationContext(
+            resolveApplicationPackageVolume(detail, application),
+            resolveApplicationSpeciesGradeCode(detail.applicationNumber())));
   }
 
   private Optional<LexisApplicationDetailDto> findOfferApplication(PurchaseOfferDetailDto detail) {
@@ -234,6 +240,16 @@ public class PurchaseOfferController {
         .findFirst()
         .map(LexisApplicationDetailDto.LexisPackageDto::volume)
         .orElse(null);
+  }
+
+  private String resolveApplicationSpeciesGradeCode(Long applicationNumber) {
+    ApplicationDetailsRpcService applicationDetailsService =
+        applicationDetailsServiceProvider.getIfAvailable();
+    if (applicationDetailsService == null || applicationNumber == null || applicationNumber < 1) {
+      return null;
+    }
+    return ApplicationDetailsRpcService.toSpeciesEndUseSort(
+        applicationDetailsService.getSpeciesForApplication(applicationNumber));
   }
 
   private boolean matchesScopedApplicationClient(

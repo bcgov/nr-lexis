@@ -7,6 +7,7 @@ public record PurchaseOfferDetailDto(
     Long applicationNumber,
     String packageNumber,
     Double packageVolume,
+    String speciesGradeCode,
     String companyName,
     String contactName,
     double purchaseOfferAmount,
@@ -28,12 +29,14 @@ public record PurchaseOfferDetailDto(
     double offerVolume,
     String region) {
 
-  public PurchaseOfferDetailDto withPackageVolume(Double packageVolume) {
+  public PurchaseOfferDetailDto withApplicationContext(
+      Double packageVolume, String speciesGradeCode) {
     return new PurchaseOfferDetailDto(
         offerNumber,
         applicationNumber,
         packageNumber,
         packageVolume,
+        speciesGradeCode,
         companyName,
         contactName,
         purchaseOfferAmount,

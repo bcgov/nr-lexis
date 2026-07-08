@@ -90,6 +90,7 @@ export type ProvincialOfferDetail = {
   advertisingDate: string | null
   offerEndDate: string | null
   packageVolume: number | null
+  speciesGradeCode: string | null
   offerVolume: number | null
   region: string | null
 }
