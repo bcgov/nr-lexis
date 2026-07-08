@@ -135,6 +135,7 @@ const permitDetail: ProvincialPermitDetail = {
 }
 
 const tabsResult: ProvincialPermitDetailTabsData = {
+  packages: [],
   items: [],
   fees: [],
   gbmsEvents: [],
@@ -358,6 +359,46 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.getByText('INV-NEW')).toBeInTheDocument()
     })
   }, 15000)
+
+  it('shows legacy package metadata on the items tab', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        {
+          packageNumber: 'PKG-9',
+          region: 'Coast',
+          speciesEndUseSort: 'HE/PL',
+          ageClass: 'Second growth',
+          packageVolume: '120.5',
+          averageLength: '7.1',
+          averageTopDiameter: '16.2',
+          productType: 'Unmanufactured',
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+
+    expect(
+      await screen.findByRole('columnheader', { name: 'Species and end use sort' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Coast' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'HE/PL' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Second growth' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '120.5' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Unmanufactured' })).toBeInTheDocument()
+  })
 
   it('shows field validation when adding invoice without required values', async () => {
     render(

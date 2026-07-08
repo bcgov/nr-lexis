@@ -1448,44 +1448,89 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <h2 className="detail-tile-title">Permit items</h2>
-                        <TextInput
-                          id="permitItemsFilter"
-                          labelText="Filter item rows"
-                          value={itemsFilter}
-                          onChange={(event) => updateFilterParam('itemsFilter', event.target.value)}
-                          placeholder="Filter by mark, species, grade, pieces, or volume"
-                        />
-                        <Table useZebraStyles>
-                          <TableHead>
-                            <TableRow>
-                              <TableHeader>Item</TableHeader>
-                              <TableHeader>Timber mark</TableHeader>
-                              <TableHeader>Species</TableHeader>
-                              <TableHeader>Grade</TableHeader>
-                              <TableHeader>Pieces</TableHeader>
-                              <TableHeader>Volume (m³)</TableHeader>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {filteredItems.map((row) => (
-                              <TableRow key={row.id}>
-                                <TableCell>{row.id}</TableCell>
-                                <TableCell>{row.timberMark || '-'}</TableCell>
-                                <TableCell>{row.species || '-'}</TableCell>
-                                <TableCell>{row.grade || '-'}</TableCell>
-                                <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                                <TableCell>{row.volume.toLocaleString()}</TableCell>
-                              </TableRow>
-                            ))}
-                            {filteredItems.length === 0 && (
+                        <fieldset className="legacy-form-fieldset">
+                          <legend>Package details</legend>
+                          <Table useZebraStyles>
+                            <TableHead>
                               <TableRow>
-                                <TableCell colSpan={6}>
-                                  No permit item rows matched the current filter.
-                                </TableCell>
+                                <TableHeader>Package number</TableHeader>
+                                <TableHeader>Region</TableHeader>
+                                <TableHeader>Species and end use sort</TableHeader>
+                                <TableHeader>Age class</TableHeader>
+                                <TableHeader>Package volume (m³)</TableHeader>
+                                <TableHeader>Average length</TableHeader>
+                                <TableHeader>Average top diameter</TableHeader>
+                                <TableHeader>Product type</TableHeader>
                               </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
+                            </TableHead>
+                            <TableBody>
+                              {(tabsData?.packages ?? []).map((row) => (
+                                <TableRow key={row.packageNumber}>
+                                  <TableCell>{row.packageNumber || '-'}</TableCell>
+                                  <TableCell>{row.region || '-'}</TableCell>
+                                  <TableCell style={{ whiteSpace: 'pre-line' }}>
+                                    {row.speciesEndUseSort || '-'}
+                                  </TableCell>
+                                  <TableCell>{row.ageClass || '-'}</TableCell>
+                                  <TableCell>{row.packageVolume || '-'}</TableCell>
+                                  <TableCell>{row.averageLength || '-'}</TableCell>
+                                  <TableCell>{row.averageTopDiameter || '-'}</TableCell>
+                                  <TableCell>{row.productType || '-'}</TableCell>
+                                </TableRow>
+                              ))}
+                              {(tabsData?.packages ?? []).length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={8}>
+                                    No package detail rows are available for this permit.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </fieldset>
+                        <fieldset className="legacy-form-fieldset">
+                          <legend>Summary of scale</legend>
+                          <TextInput
+                            id="permitItemsFilter"
+                            labelText="Filter item rows"
+                            value={itemsFilter}
+                            onChange={(event) =>
+                              updateFilterParam('itemsFilter', event.target.value)
+                            }
+                            placeholder="Filter by mark, species, grade, pieces, or volume"
+                          />
+                          <Table useZebraStyles>
+                            <TableHead>
+                              <TableRow>
+                                <TableHeader>Item</TableHeader>
+                                <TableHeader>Timber mark</TableHeader>
+                                <TableHeader>Species</TableHeader>
+                                <TableHeader>Grade</TableHeader>
+                                <TableHeader>Pieces</TableHeader>
+                                <TableHeader>Volume (m³)</TableHeader>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {filteredItems.map((row) => (
+                                <TableRow key={row.id}>
+                                  <TableCell>{row.id}</TableCell>
+                                  <TableCell>{row.timberMark || '-'}</TableCell>
+                                  <TableCell>{row.species || '-'}</TableCell>
+                                  <TableCell>{row.grade || '-'}</TableCell>
+                                  <TableCell>{row.pieces.toLocaleString()}</TableCell>
+                                  <TableCell>{row.volume.toLocaleString()}</TableCell>
+                                </TableRow>
+                              ))}
+                              {filteredItems.length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={6}>
+                                    No permit item rows matched the current filter.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </fieldset>
                       </Tile>
                     </Column>
                   </Grid>

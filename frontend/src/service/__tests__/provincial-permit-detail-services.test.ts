@@ -36,6 +36,17 @@ describe('provincial permit detail services', () => {
       .mockResolvedValueOnce(response({ packageList: ['PKG-100'] }))
       .mockResolvedValueOnce(
         response({
+          region: 'Coast',
+          enduse: 'FI/PL',
+          ageclass: 'Second growth',
+          volume: '34.5',
+          length: '7.1',
+          diameter: '16.2',
+          productType: 'Unmanufactured',
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
           scaleList: [
             {
               id: 'SCALE-1',
@@ -65,7 +76,7 @@ describe('provincial permit detail services', () => {
       receiptNumber: 'RCPT-1',
     })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(3)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(4)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       1,
       '/lexis/rpc/permit-details/package-list',
@@ -74,6 +85,12 @@ describe('provincial permit detail services', () => {
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       2,
+      '/lexis/rpc/permit-details/package-info',
+      { params: { packageNumber: 'PKG-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      3,
       '/lexis/rpc/permit-details/scale-fees-for-package',
       {
         params: {
@@ -84,7 +101,7 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       '/lexis/rpc/permit-details/gbms-invoice-history',
       {
         params: {
@@ -95,6 +112,18 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(result).toEqual({
+      packages: [
+        {
+          packageNumber: 'PKG-100',
+          region: 'Coast',
+          speciesEndUseSort: 'FI/PL',
+          ageClass: 'Second growth',
+          packageVolume: '34.5',
+          averageLength: '7.1',
+          averageTopDiameter: '16.2',
+          productType: 'Unmanufactured',
+        },
+      ],
       items: [
         {
           id: 'SCALE-1',
@@ -142,6 +171,7 @@ describe('provincial permit detail services', () => {
     })
 
     expect(result).toEqual({
+      packages: [],
       items: [],
       fees: [],
       gbmsEvents: [],

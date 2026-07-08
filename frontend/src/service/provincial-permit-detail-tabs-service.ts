@@ -17,6 +17,17 @@ export type ProvincialPermitItemRow = {
   volume: number
 }
 
+export type ProvincialPermitPackageInfoRow = {
+  packageNumber: string
+  region: string
+  speciesEndUseSort: string
+  ageClass: string
+  packageVolume: string
+  averageLength: string
+  averageTopDiameter: string
+  productType: string
+}
+
 export type ProvincialPermitFeeRow = {
   id: string
   feeCode: string
@@ -37,6 +48,7 @@ export type ProvincialPermitEventRow = {
 }
 
 export type ProvincialPermitDetailTabsData = {
+  packages: ProvincialPermitPackageInfoRow[]
   items: ProvincialPermitItemRow[]
   fees: ProvincialPermitFeeRow[]
   gbmsEvents: ProvincialPermitEventRow[]
@@ -53,6 +65,7 @@ const PERMIT_TAB_CACHE_TTL_MS = 30_000
 const PERMIT_TAB_ARRAY_KEYS = ['scaleList', ...DEFAULT_PAYLOAD_ARRAY_KEYS]
 
 export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData = {
+  packages: [],
   items: [],
   fees: [],
   gbmsEvents: [],
@@ -191,6 +204,41 @@ const fetchPackageList = async (permitNumber: string): Promise<string[]> => {
   }
 }
 
+const normalizePackageInfoRow = (
+  packageNumber: string,
+  payload: unknown,
+): ProvincialPermitPackageInfoRow => {
+  const source = recordOrEmpty(payload)
+  return {
+    packageNumber,
+    region: asString(source.region),
+    speciesEndUseSort: asString(source.enduse || source.endUse || source.speciesEndUseSort),
+    ageClass: asString(source.ageclass || source.ageClass),
+    packageVolume: asString(source.volume || source.packageVolume),
+    averageLength: asString(source.length || source.averageLength),
+    averageTopDiameter: asString(source.diameter || source.averageTopDiameter),
+    productType: asString(source.productType),
+  }
+}
+
+const fetchPackageInfo = async (packageNumber: string): Promise<ProvincialPermitPackageInfoRow> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/permit-details/package-info',
+      {
+        params: {
+          packageNumber,
+        },
+      },
+      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
+    )
+
+    return normalizePackageInfoRow(packageNumber, response.status === 204 ? {} : response.data)
+  } catch {
+    return normalizePackageInfoRow(packageNumber, {})
+  }
+}
+
 const fetchScaleRows = async (permitNumber: string, packageNumber: string): Promise<unknown[]> => {
   try {
     const response = await apiService.getCachedResponse<unknown>(
@@ -241,13 +289,15 @@ export const fetchProvincialPermitDetailTabs = async (
   const receiptNumber = typeof request === 'string' ? undefined : request.receiptNumber
   const packageList = await fetchPackageList(permitNumber)
 
-  const packageScaleRows = await Promise.all(
-    packageList.map((packageNumber) => fetchScaleRows(permitNumber, packageNumber)),
-  )
+  const [packages, packageScaleRows] = await Promise.all([
+    Promise.all(packageList.map(fetchPackageInfo)),
+    Promise.all(packageList.map((packageNumber) => fetchScaleRows(permitNumber, packageNumber))),
+  ])
   const scaleRows = packageScaleRows.flat()
   const gbmsEvents = await fetchGbmsRows(permitNumber, receiptNumber)
 
   return {
+    packages,
     items: scaleRows.map(normalizePermitItemRow),
     fees: scaleRows.map(normalizeScaleFeeRow),
     gbmsEvents,
