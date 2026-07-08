@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
@@ -53,11 +53,17 @@ const offerDetail: ProvincialOfferDetail = {
   region: '12',
 }
 
+const LocationDisplay = () => {
+  const location = useLocation()
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
+}
+
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={['/provincial/offers/81001']}>
       <Routes>
         <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
+        <Route path="/provincial/application/:applicationNumber" element={<LocationDisplay />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -127,6 +133,17 @@ describe('Provincial Offer Detail Actions', () => {
       '45.5',
     )
     expect(screen.getByLabelText('Species/grade')).toHaveDisplayValue('FI/HE/LUM')
+  })
+
+  it('opens the parent application scale detail filtered to the offer package', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Provincial offer details' })
+    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '/provincial/application/1000456?packageFilter=PKG-903',
+    )
   })
 
   it('blocks offer numeric values outside legacy limits', async () => {

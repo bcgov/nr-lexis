@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Column, Grid, InlineLoading, TextArea, TextInput, Tile } from '@carbon/react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -120,6 +120,7 @@ const mergeOfferFormIntoDetail = (
 const ProvincialOfferDetailsPage = () => {
   const { canPerform } = useAuth()
   const { offerNumber } = useParams()
+  const navigate = useNavigate()
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
   const [form, setForm] = useState<ProvincialOfferUpdateSubmission | null>(null)
   const [loading, setLoading] = useState(true)
@@ -250,6 +251,16 @@ const ProvincialOfferDetailsPage = () => {
     setShowAllValidationErrors(false)
     setStatus(null)
     setIsEditing(false)
+  }
+
+  const onViewScaleDetail = (): void => {
+    const applicationNumber = form?.applicationNumber.trim()
+    const packageNumber = form?.packageNumber.trim()
+    if (!applicationNumber || !packageNumber) {
+      return
+    }
+    const params = new URLSearchParams({ packageFilter: packageNumber })
+    navigate(`/provincial/application/${applicationNumber}?${params}`)
   }
 
   const onSave = async () => {
@@ -406,6 +417,16 @@ const ProvincialOfferDetailsPage = () => {
                   value={textValue(detail.offerEndDate)}
                   readOnly
                 />
+              </div>
+              <div className="legacy-search-actions">
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  disabled={!form.applicationNumber.trim() || !form.packageNumber.trim()}
+                  onClick={onViewScaleDetail}
+                >
+                  See Scale Detail
+                </Button>
               </div>
             </fieldset>
 
