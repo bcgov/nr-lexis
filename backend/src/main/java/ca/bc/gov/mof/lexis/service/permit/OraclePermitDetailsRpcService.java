@@ -499,20 +499,20 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     Set<String> selectedApplications = parseCsvSet(selectedApplicationsCsv);
-    Map<Long, Boolean> hasAssignedPermitByApplication = new LinkedHashMap<>();
+    Map<Long, Boolean> hasUnassignedPermitByApplication = new LinkedHashMap<>();
     for (PackageCandidateRow row : repository.findPackagesByExemptionNumber(normalizedExemptionNumber)) {
       if (row.applicationNumber() == null || row.applicationNumber() < 1) {
         continue;
       }
-      boolean hasAssignedPermit =
-          row.exportPermitNumber() != null && row.exportPermitNumber() > 0;
-      hasAssignedPermitByApplication.merge(
-          row.applicationNumber(), hasAssignedPermit, Boolean::logicalOr);
+      boolean hasUnassignedPermit =
+          row.exportPermitNumber() == null || row.exportPermitNumber() < 1;
+      hasUnassignedPermitByApplication.merge(
+          row.applicationNumber(), hasUnassignedPermit, Boolean::logicalOr);
     }
 
     List<String> applicationList =
-        hasAssignedPermitByApplication.entrySet().stream()
-            .filter(entry -> !entry.getValue())
+        hasUnassignedPermitByApplication.entrySet().stream()
+            .filter(Map.Entry::getValue)
             .map(entry -> String.valueOf(entry.getKey()))
             .filter(applicationNumber -> !selectedApplications.contains(applicationNumber))
             .sorted()

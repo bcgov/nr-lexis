@@ -386,6 +386,37 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void availableApplicationListShouldIncludeApplicationsWithDetachedScaleRows() {
+    when(repository.findPackagesByExemptionNumber("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(45181L, "TEST26-UNMANU-11-02", null),
+                new PackageCandidateRow(45182L, "TEST26-ASSIGNED", 9020931L)));
+
+    PermitAvailableApplicationListRpcResponseDto response =
+        service.getAvailableApplicationList("EX-700", "");
+
+    assertThat(response.applicationList()).containsExactly("45181");
+    assertThat(response.errorMessage()).isNull();
+  }
+
+  @Test
+  void availableApplicationListShouldIncludeApplicationsWithMixedAssignedAndDetachedRows() {
+    when(repository.findPackagesByExemptionNumber("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(45181L, "TEST26-UNMANU-11-02", 9020931L),
+                new PackageCandidateRow(45181L, "TEST26-UNMANU-11-02", null),
+                new PackageCandidateRow(45182L, "TEST26-ASSIGNED", 9020931L)));
+
+    PermitAvailableApplicationListRpcResponseDto response =
+        service.getAvailableApplicationList("EX-700", "");
+
+    assertThat(response.applicationList()).containsExactly("45181");
+    assertThat(response.errorMessage()).isNull();
+  }
+
+  @Test
   void availablePackageListShouldExcludeSelectedAndAssignedPackages() {
     when(repository.findPackagesByExemptionNumber("EX-700"))
         .thenReturn(
