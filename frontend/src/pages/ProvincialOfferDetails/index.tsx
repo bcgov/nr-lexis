@@ -449,6 +449,12 @@ const ProvincialOfferDetailsPage = () => {
               <legend>Offer details</legend>
               <div className="legacy-search-grid">
                 <TextInput
+                  id="offerPackageVolume"
+                  labelText="Application/package volume (m³)"
+                  value={textValue(detail.packageVolume)}
+                  readOnly
+                />
+                <TextInput
                   id="offerVolume"
                   labelText="Offer volume (m³)"
                   value={form.offerVolume}

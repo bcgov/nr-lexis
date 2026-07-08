@@ -207,12 +207,15 @@ class PurchaseOfferControllerTest {
     PurchaseOfferDetailDto dto =
         offerDetail();
     when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(dto));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00077881", null)));
 
     ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
+    assertThat(response.getBody()).isEqualTo(dto.withPackageVolume(45.5));
     verify(service).findByOfferNumber(81009L);
+    verify(applicationService).findByApplicationNumber(1000456L);
   }
 
   @Test
@@ -228,7 +231,7 @@ class PurchaseOfferControllerTest {
         controller.getByOfferNumber(81009L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(offer);
+    assertThat(response.getBody()).isEqualTo(offer.withPackageVolume(45.5));
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
   }
@@ -239,14 +242,16 @@ class PurchaseOfferControllerTest {
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     PurchaseOfferDetailDto offer = offerDetail("00077881");
     when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
 
     ResponseEntity<PurchaseOfferDetailDto> response =
         controller.getByOfferNumber(81009L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(offer);
+    assertThat(response.getBody()).isEqualTo(offer.withPackageVolume(45.5));
     verify(service).findByOfferNumber(81009L);
-    verifyNoInteractions(applicationService);
+    verify(applicationService).findByApplicationNumber(1000456L);
   }
 
   @Test
@@ -274,6 +279,7 @@ class PurchaseOfferControllerTest {
         81009L,
         1000456L,
         "PKG-903",
+        null,
         "Example Lumber",
         "Alex Example",
         12500.25,
@@ -322,7 +328,7 @@ class PurchaseOfferControllerTest {
         false,
         null,
         null,
-        List.of(),
+        List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 45.5, 12L)),
         List.of(),
         List.of());
   }

@@ -19,6 +19,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -164,13 +165,37 @@ public class PurchaseOfferController {
     }
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     return service.findByOfferNumber(offerNumber)
-        .filter(detail -> canAccessOfferDetail(scopedClientNumber, detail))
+        .flatMap(detail -> authorizeAndEnrichOfferDetail(scopedClientNumber, detail))
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
-  private boolean canAccessOfferDetail(
+  private Optional<PurchaseOfferDetailDto> authorizeAndEnrichOfferDetail(
       String scopedClientNumber, PurchaseOfferDetailDto detail) {
+    if (detail == null) {
+      return Optional.empty();
+    }
+
+    Optional<LexisApplicationDetailDto> application = findOfferApplication(detail);
+    if (!canAccessOfferDetail(scopedClientNumber, detail, application)) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        detail.withPackageVolume(resolveApplicationPackageVolume(detail, application)));
+  }
+
+  private Optional<LexisApplicationDetailDto> findOfferApplication(PurchaseOfferDetailDto detail) {
+    Long applicationNumber = detail.applicationNumber();
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return applicationService.findByApplicationNumber(applicationNumber);
+  }
+
+  private boolean canAccessOfferDetail(
+      String scopedClientNumber,
+      PurchaseOfferDetailDto detail,
+      Optional<LexisApplicationDetailDto> application) {
     if (scopedClientNumber == null || scopedClientNumber.isBlank()) {
       return true;
     }
@@ -181,9 +206,34 @@ public class PurchaseOfferController {
     if (matchesScopedClient(scopedClientNumber, detail.offeringClientNumber())) {
       return true;
     }
-    return applicationService.findByApplicationNumber(applicationNumber)
-        .map(application -> matchesScopedApplicationClient(scopedClientNumber, application))
+    return application
+        .map(
+            parentApplication ->
+                matchesScopedApplicationClient(scopedClientNumber, parentApplication))
         .orElse(false);
+  }
+
+  private Double resolveApplicationPackageVolume(
+      PurchaseOfferDetailDto detail, Optional<LexisApplicationDetailDto> application) {
+    if (application.isEmpty()) {
+      return null;
+    }
+
+    LexisApplicationDetailDto parentApplication = application.get();
+    String packageNumber = detail.packageNumber();
+    if (packageNumber == null || packageNumber.isBlank()) {
+      return parentApplication.applicationVolume();
+    }
+
+    List<LexisApplicationDetailDto.LexisPackageDto> packages = parentApplication.packages();
+    if (packages == null) {
+      return null;
+    }
+    return packages.stream()
+        .filter(pack -> packageNumber.equalsIgnoreCase(pack.packageNumber()))
+        .findFirst()
+        .map(LexisApplicationDetailDto.LexisPackageDto::volume)
+        .orElse(null);
   }
 
   private boolean matchesScopedApplicationClient(

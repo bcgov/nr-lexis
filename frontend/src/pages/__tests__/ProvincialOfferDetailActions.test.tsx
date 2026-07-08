@@ -47,6 +47,7 @@ const offerDetail: ProvincialOfferDetail = {
   offerCondition: 'Original conditions',
   advertisingDate: '2026-02-25',
   offerEndDate: '2026-03-18',
+  packageVolume: 45.5,
   offerVolume: 99.99,
   region: '12',
 }
@@ -116,6 +117,14 @@ describe('Provincial Offer Detail Actions', () => {
     expect(await screen.findByDisplayValue('Original Buyer')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
+  })
+
+  it('shows the legacy application or package volume on the offer detail page', async () => {
+    renderPage()
+
+    expect(await screen.findByLabelText('Application/package volume (m³)')).toHaveDisplayValue(
+      '45.5',
+    )
   })
 
   it('blocks offer numeric values outside legacy limits', async () => {

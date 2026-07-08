@@ -6,6 +6,7 @@ public record PurchaseOfferDetailDto(
     Long offerNumber,
     Long applicationNumber,
     String packageNumber,
+    Double packageVolume,
     String companyName,
     String contactName,
     double purchaseOfferAmount,
@@ -25,4 +26,33 @@ public record PurchaseOfferDetailDto(
     LocalDate advertisingDate,
     LocalDate offerEndDate,
     double offerVolume,
-    String region) {}
+    String region) {
+
+  public PurchaseOfferDetailDto withPackageVolume(Double packageVolume) {
+    return new PurchaseOfferDetailDto(
+        offerNumber,
+        applicationNumber,
+        packageNumber,
+        packageVolume,
+        companyName,
+        contactName,
+        purchaseOfferAmount,
+        purchaseOfferDate,
+        offerWithdrawalDate,
+        teacReviewDate,
+        approvalIndicator,
+        validOfferIndicator,
+        fairOfferIndicator,
+        offerRemark,
+        withdrawReason,
+        exportJurisdictionCode,
+        manufacturingFacilityInfo,
+        offeringClientNumber,
+        pickupLocation,
+        offerCondition,
+        advertisingDate,
+        offerEndDate,
+        offerVolume,
+        region);
+  }
+}
