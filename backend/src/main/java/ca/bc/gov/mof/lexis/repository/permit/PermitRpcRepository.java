@@ -26,6 +26,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   private static final String FIND_SCALE_DETAIL_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
+  private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_ID(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_PERMIT =
@@ -124,6 +126,18 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return queryCursorSingle(
         FIND_SCALE_DETAIL_BY_ID,
         cs -> cs.setString(1, normalizedScaleDetailId),
+        2,
+        this::mapScaleMutationRow);
+  }
+
+  public List<ScaleMutationRow> findScaleMutationDetailsByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+        FIND_SCALE_DETAIL_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
         2,
         this::mapScaleMutationRow);
   }

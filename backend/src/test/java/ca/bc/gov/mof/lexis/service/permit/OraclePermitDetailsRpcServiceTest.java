@@ -52,6 +52,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRow;
+import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import java.math.BigDecimal;
@@ -73,6 +74,7 @@ class OraclePermitDetailsRpcServiceTest {
   @Mock private PermitRpcRepository repository;
   @Mock private LexisApplicationService applicationService;
   @Mock private ExemptionService exemptionService;
+  @Mock private ApplicationReviewRepository applicationReviewRepository;
 
   @InjectMocks private OraclePermitDetailsRpcService service;
 
@@ -953,6 +955,82 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addApplicationsToPermitShouldAttachUnassignedScaleRowsAndMarkApplicationsPermitted() {
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetail("EX-700", 44.5d)));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                scaleMutation("101", 1000456L, null, entryTimestamp),
+                scaleMutation("102", 1000456L, 7000999L, entryTimestamp)));
+    when(repository.updateScaleDetail(
+            org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(applicationReviewRepository.updateStatus(1000456L, "PMT", null, "idir\\jsmith"))
+        .thenReturn(true);
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 34.5d, 12L, "7000123", "PKG-903")));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addApplicationsToPermit(7000123L, "1000456", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("Application scale row was added to the permit.");
+
+    org.mockito.ArgumentCaptor<ScaleMutationRecord> scaleCaptor =
+        org.mockito.ArgumentCaptor.forClass(ScaleMutationRecord.class);
+    verify(repository)
+        .updateScaleDetail(
+            scaleCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(scaleCaptor.getValue().scaleDetailId()).isEqualTo("101");
+    assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isEqualTo(7000123L);
+    verify(applicationReviewRepository).updateStatus(1000456L, "PMT", null, "idir\\jsmith");
+  }
+
+  @Test
+  void removeApplicationFromPermitShouldDetachScaleRowsAssignedToCurrentPermit() {
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetail("EX-700", 44.5d)));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                scaleMutation("101", 1000456L, 7000123L, entryTimestamp),
+                scaleMutation("102", 1000456L, 7000999L, entryTimestamp)));
+    when(repository.updateScaleDetail(
+            org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+
+    PermitPersistenceRpcResponseDto response =
+        service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("Application scale row was removed from the permit.");
+
+    org.mockito.ArgumentCaptor<ScaleMutationRecord> scaleCaptor =
+        org.mockito.ArgumentCaptor.forClass(ScaleMutationRecord.class);
+    verify(repository)
+        .updateScaleDetail(
+            scaleCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(scaleCaptor.getValue().scaleDetailId()).isEqualTo("101");
+    assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isNull();
+    verify(applicationReviewRepository, never())
+        .updateStatus(
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString());
+  }
+
+  @Test
   void addBlanketOicScaleShouldPersistScaleAndRecalculatePermitTotals() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
@@ -1067,6 +1145,22 @@ class OraclePermitDetailsRpcServiceTest {
         "100.00",
         "12.0",
         "1.5");
+  }
+
+  private ScaleMutationRow scaleMutation(
+      String id, Long applicationNumber, Long permitNumber, Timestamp entryTimestamp) {
+    return new ScaleMutationRow(
+        id,
+        "TM1",
+        12L,
+        34.5d,
+        "PKG-903",
+        "HEM",
+        "J",
+        applicationNumber,
+        permitNumber,
+        "entry-user",
+        entryTimestamp);
   }
 
   private PermitMutationRow permitMutationRow() {

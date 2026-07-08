@@ -53,6 +53,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRow;
+import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.util.TextUtils;
@@ -87,6 +88,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
   private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
+  private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final String SPECIES_FIR = "FI";
   private static final int MAX_SALES_INVOICE_NUMBER_LENGTH = 9;
   private static final long RCO_REGION_CODE = 1835L;
@@ -101,14 +103,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private final PermitRpcRepository repository;
   private final LexisApplicationService applicationService;
   private final ExemptionService exemptionService;
+  private final ApplicationReviewRepository applicationReviewRepository;
 
   public OraclePermitDetailsRpcService(
       PermitRpcRepository repository,
       LexisApplicationService applicationService,
-      ExemptionService exemptionService) {
+      ExemptionService exemptionService,
+      ApplicationReviewRepository applicationReviewRepository) {
     this.repository = repository;
     this.applicationService = applicationService;
     this.exemptionService = exemptionService;
+    this.applicationReviewRepository = applicationReviewRepository;
   }
 
   @Override
@@ -985,6 +990,111 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public PermitPersistenceRpcResponseDto addApplicationsToPermit(
+      Long permitNumber, String selectedApplicationsCsv, String userId) {
+    String normalizedUserId = trimToNull(userId);
+    List<Long> applicationNumbers =
+        parseCsvSet(selectedApplicationsCsv).stream()
+            .map(ca.bc.gov.mof.lexis.util.ValueUtils::parsePositiveLong)
+            .filter(java.util.Objects::nonNull)
+            .toList();
+
+    List<String> validationErrors =
+        validateApplicationAssociationRequest(permitNumber, normalizedUserId, applicationNumbers);
+    if (!validationErrors.isEmpty()) {
+      return failurePersistenceResponse(validationErrors, permitNumber);
+    }
+
+    List<String> errors = new ArrayList<>();
+    int attachedScaleCount = 0;
+    for (Long applicationNumber : applicationNumbers) {
+      boolean applicationHadScaleAttached = false;
+      for (ScaleMutationRow scale : repository.findScaleMutationDetailsByApplicationNumber(applicationNumber)) {
+        if (scale.exportPermitDetailNumber() != null) {
+          continue;
+        }
+        if (!updateScalePermitAssignment(scale, permitNumber, normalizedUserId)) {
+          errors.add("Unable to add application " + applicationNumber + " to the permit.");
+          break;
+        }
+        applicationHadScaleAttached = true;
+        attachedScaleCount++;
+      }
+
+      if (applicationHadScaleAttached
+          && !applicationReviewRepository.updateStatus(
+              applicationNumber, APPLICATION_STATUS_PERMITTED, null, normalizedUserId)) {
+        errors.add("Unable to update application " + applicationNumber + " status.");
+      }
+    }
+
+    if (!errors.isEmpty()) {
+      return failurePersistenceResponse(errors, permitNumber);
+    }
+
+    updatePermitTotals(permitNumber, normalizedUserId);
+    return new PermitPersistenceRpcResponseDto(
+        true,
+        attachedScaleCount == 1
+            ? "Application scale row was added to the permit."
+            : "Application scale rows were added to the permit.",
+        List.of(),
+        List.of(),
+        permitNumber);
+  }
+
+  @Override
+  public PermitPersistenceRpcResponseDto removeApplicationFromPermit(
+      Long permitNumber, Long applicationNumber, String userId) {
+    String normalizedUserId = trimToNull(userId);
+    if (normalizedUserId == null) {
+      return failurePersistenceResponse(List.of("A valid user identifier is required."), permitNumber);
+    }
+    if (permitNumber == null || permitNumber < 1) {
+      return failurePersistenceResponse(List.of("A valid permit number is required."), permitNumber);
+    }
+    if (applicationNumber == null || applicationNumber < 1) {
+      return failurePersistenceResponse(List.of("A valid application number is required."), permitNumber);
+    }
+
+    Optional<PermitMutationRow> existing = repository.findPermitMutationByPermitNumber(permitNumber);
+    if (existing.isEmpty()) {
+      return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
+    }
+    PermitMutationRow permit = existing.get();
+    if (isBlanketOicPermit(permit)) {
+      return failurePersistenceResponse(
+          List.of("Application associations are not changed this way for Blanket OIC permits."), permitNumber);
+    }
+    if (EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(trimToNull(permit.permitStatusCode()))) {
+      return failurePersistenceResponse(
+          List.of("Applications cannot be changed for a completed permit."), permitNumber);
+    }
+
+    int removedScaleCount = 0;
+    for (ScaleMutationRow scale : repository.findScaleMutationDetailsByApplicationNumber(applicationNumber)) {
+      if (!permitNumber.equals(scale.exportPermitDetailNumber())) {
+        continue;
+      }
+      if (!updateScalePermitAssignment(scale, null, normalizedUserId)) {
+        return failurePersistenceResponse(
+            List.of("Unable to remove application " + applicationNumber + " from the permit."), permitNumber);
+      }
+      removedScaleCount++;
+    }
+
+    updatePermitTotals(permitNumber, normalizedUserId);
+    return new PermitPersistenceRpcResponseDto(
+        true,
+        removedScaleCount == 1
+            ? "Application scale row was removed from the permit."
+            : "Application scale rows were removed from the permit.",
+        List.of(),
+        List.of(),
+        permitNumber);
+  }
+
+  @Override
   public PermitPersistenceRpcResponseDto addBlanketOicScale(
       Long permitNumber,
       String packageNumber,
@@ -1742,6 +1852,56 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private PermitPersistenceRpcResponseDto failurePersistenceResponse(
       List<String> errors, Long permitNumber) {
     return new PermitPersistenceRpcResponseDto(false, "", errors, List.of(), permitNumber);
+  }
+
+  private List<String> validateApplicationAssociationRequest(
+      Long permitNumber, String userId, List<Long> applicationNumbers) {
+    List<String> errors = new ArrayList<>();
+    if (userId == null) {
+      errors.add("A valid user identifier is required.");
+    }
+    if (permitNumber == null || permitNumber < 1) {
+      errors.add("A valid permit number is required.");
+    }
+    if (applicationNumbers == null || applicationNumbers.isEmpty()) {
+      errors.add("Select at least one application.");
+    }
+    if (!errors.isEmpty()) {
+      return errors;
+    }
+
+    Optional<PermitMutationRow> existing = repository.findPermitMutationByPermitNumber(permitNumber);
+    if (existing.isEmpty()) {
+      return List.of("Permit not found.");
+    }
+    PermitMutationRow permit = existing.get();
+    if (isBlanketOicPermit(permit)) {
+      return List.of("Application associations are not changed this way for Blanket OIC permits.");
+    }
+    if (EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(trimToNull(permit.permitStatusCode()))) {
+      return List.of("Applications cannot be changed for a completed permit.");
+    }
+    return List.of();
+  }
+
+  private boolean updateScalePermitAssignment(
+      ScaleMutationRow scale, Long permitNumber, String userId) {
+    if (scale == null) {
+      return false;
+    }
+    return repository.updateScaleDetail(
+        new ScaleMutationRecord(
+            scale.scaleDetailId(),
+            scale.timberMark(),
+            scale.piecesCount(),
+            scale.speciesGradeVolume(),
+            scale.packageNumber(),
+            scale.exportSpeciesCode(),
+            scale.exportGradeCode(),
+            permitNumber,
+            scale.entryUserId(),
+            scale.entryTimestamp()),
+        userId);
   }
 
   private boolean isBlanketOicPermit(PermitMutationRow permit) {

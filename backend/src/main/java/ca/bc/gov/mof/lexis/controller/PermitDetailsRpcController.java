@@ -413,6 +413,50 @@ public class PermitDetailsRpcController {
             authentication == null ? null : authentication.getName()));
   }
 
+  @PostMapping("/add-applications-to-permit")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> addApplicationsToPermit(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "selectedApplications", required = false) String selectedApplications,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for add applications to permit");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.addApplicationsToPermit(
+            permitNumber,
+            selectedApplications,
+            authentication == null ? null : authentication.getName()));
+  }
+
+  @PostMapping("/remove-application-from-permit")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> removeApplicationFromPermit(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "applicationNumber", required = false) Long applicationNumber,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for remove application from permit");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.removeApplicationFromPermit(
+            permitNumber,
+            applicationNumber,
+            authentication == null ? null : authentication.getName()));
+  }
+
   @PostMapping("/add-boic-scale")
   public ResponseEntity<PermitPersistenceRpcResponseDto> addBlanketOicScale(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,

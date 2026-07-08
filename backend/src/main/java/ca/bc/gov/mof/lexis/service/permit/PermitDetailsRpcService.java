@@ -101,6 +101,12 @@ public interface PermitDetailsRpcService {
   PermitPersistenceRpcResponseDto updateScaleAttachment(
       String scaleDetailId, Long permitNumber, boolean attachInd, String userId);
 
+  PermitPersistenceRpcResponseDto addApplicationsToPermit(
+      Long permitNumber, String selectedApplicationsCsv, String userId);
+
+  PermitPersistenceRpcResponseDto removeApplicationFromPermit(
+      Long permitNumber, Long applicationNumber, String userId);
+
   PermitPersistenceRpcResponseDto addBlanketOicScale(
       Long permitNumber,
       String packageNumber,

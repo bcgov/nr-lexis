@@ -726,6 +726,26 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernPermitApplicationAddShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/add-applications-to-permit")
+                .param("permitNumber", "7000123")
+                .param("selectedApplications", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void modernPermitApplicationRemoveShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/remove-application-from-permit")
+                .param("permitNumber", "7000123")
+                .param("applicationNumber", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void modernPermitBlanketOicScaleAddShouldAllowCanonicalApproverRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/rpc/permit-details/add-boic-scale")

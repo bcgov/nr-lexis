@@ -63,9 +63,12 @@ import {
 } from '@/service/provincial-permit-documents-invoices-service'
 import {
   EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS,
+  addApplicationsToPermit,
   addBlanketOicScale,
   deleteBlanketOicScale,
+  fetchAvailablePermitApplications,
   fetchProvincialPermitDetailTabs,
+  removeApplicationFromPermit,
   updatePermitScaleAttachment,
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
@@ -317,6 +320,13 @@ const ProvincialPermitDetailsPage = () => {
   const [isUpdatingScaleId, setIsUpdatingScaleId] = useState<string | null>(null)
   const [isDeletingBoicScaleId, setIsDeletingBoicScaleId] = useState<string | null>(null)
   const [isSavingBoicScale, setIsSavingBoicScale] = useState(false)
+  const [availablePermitApplications, setAvailablePermitApplications] = useState<string[]>([])
+  const [permitApplicationToAdd, setPermitApplicationToAdd] = useState('')
+  const [isLoadingAvailableApplications, setIsLoadingAvailableApplications] = useState(false)
+  const [isSavingPermitApplication, setIsSavingPermitApplication] = useState(false)
+  const [isRemovingPermitApplication, setIsRemovingPermitApplication] = useState<string | null>(
+    null,
+  )
   const [boicScaleForm, setBoicScaleForm] = useState<BlanketOicScaleForm>(
     EMPTY_BLANKET_OIC_SCALE_FORM,
   )
@@ -530,6 +540,18 @@ const ProvincialPermitDetailsPage = () => {
   )
   const selectedBlanketOicPackageNumber =
     boicScaleForm.packageNumber || blanketOicPackageOptions[0]?.value || ''
+  const availablePermitApplicationOptions = useMemo(
+    () =>
+      availablePermitApplications.map((applicationNumber) => ({
+        value: applicationNumber,
+        label: applicationNumber,
+      })),
+    [availablePermitApplications],
+  )
+  const selectedPermitApplicationToAdd =
+    permitApplicationToAdd || availablePermitApplicationOptions[0]?.value || ''
+  const associatedPermitApplications =
+    tabsData?.applications ?? EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS.applications
 
   const filteredFees = useMemo(() => {
     if (!tabsData) {
@@ -591,6 +613,11 @@ const ProvincialPermitDetailsPage = () => {
   const canSavePermit = canPerform('savePermit')
   const canOpenPermitReport =
     canPerform('/permitReport') && detail?.permitStatusCode?.trim().toUpperCase() === 'COM'
+  const canEditPermitApplications =
+    canSavePermit &&
+    !!detail?.permitNumber &&
+    !detail?.blanketOic &&
+    detail.permitStatusCode?.trim().toUpperCase() !== 'COM'
   const canEditNormalPermitScaleRows = canSavePermit && !detail?.blanketOic
   const canEditBlanketOicScaleRows =
     canSavePermit && !!detail?.blanketOic && detail.permitStatusCode?.trim().toUpperCase() !== 'COM'
@@ -611,6 +638,35 @@ const ProvincialPermitDetailsPage = () => {
     })
     setTabsData(tabsResult)
   }, [detail, permitNumber])
+
+  const reloadAvailablePermitApplications = useCallback(async () => {
+    if (!canEditPermitApplications || !detail?.exemptionNumber) {
+      setAvailablePermitApplications([])
+      setPermitApplicationToAdd('')
+      return
+    }
+
+    setIsLoadingAvailableApplications(true)
+    try {
+      const result = await fetchAvailablePermitApplications(
+        detail.exemptionNumber,
+        associatedPermitApplications,
+      )
+      setAvailablePermitApplications(result.applicationList)
+      setPermitApplicationToAdd((current) =>
+        result.applicationList.includes(current) ? current : '',
+      )
+    } catch (error) {
+      console.error(error)
+      setAvailablePermitApplications([])
+    } finally {
+      setIsLoadingAvailableApplications(false)
+    }
+  }, [associatedPermitApplications, canEditPermitApplications, detail?.exemptionNumber])
+
+  useEffect(() => {
+    void reloadAvailablePermitApplications()
+  }, [reloadAvailablePermitApplications])
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
     if (!permitForm) {
       return {}
@@ -823,6 +879,78 @@ const ProvincialPermitDetailsPage = () => {
       }
     },
     [canEditNormalPermitScaleRows, detail?.permitNumber, permitNumber, reloadPermitTabs],
+  )
+
+  const onAddPermitApplication = useCallback(async () => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!canEditPermitApplications || !resolvedPermitNumber || !selectedPermitApplicationToAdd) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsSavingPermitApplication(true)
+    try {
+      const result = await addApplicationsToPermit({
+        permitNumber: resolvedPermitNumber,
+        selectedApplications: [selectedPermitApplicationToAdd],
+      })
+      if (!result.success) {
+        setActionErrorMessage(
+          result.errors[0] || result.message || 'Unable to add application to the permit.',
+        )
+        return
+      }
+
+      await reloadPermitTabs()
+      setPermitApplicationToAdd('')
+      setActionInfoMessage(result.message || 'Application was added to the permit.')
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to add application to the permit.')
+    } finally {
+      setIsSavingPermitApplication(false)
+    }
+  }, [
+    canEditPermitApplications,
+    detail?.permitNumber,
+    permitNumber,
+    reloadPermitTabs,
+    selectedPermitApplicationToAdd,
+  ])
+
+  const onRemovePermitApplication = useCallback(
+    async (applicationNumber: string) => {
+      const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+      if (!canEditPermitApplications || !resolvedPermitNumber || !applicationNumber) {
+        return
+      }
+
+      setActionErrorMessage('')
+      setActionInfoMessage('')
+      setIsRemovingPermitApplication(applicationNumber)
+      try {
+        const result = await removeApplicationFromPermit({
+          permitNumber: resolvedPermitNumber,
+          applicationNumber,
+        })
+        if (!result.success) {
+          setActionErrorMessage(
+            result.errors[0] || result.message || 'Unable to remove application from the permit.',
+          )
+          return
+        }
+
+        await reloadPermitTabs()
+        setActionInfoMessage(result.message || 'Application was removed from the permit.')
+      } catch (error) {
+        console.error(error)
+        setActionErrorMessage('Unable to remove application from the permit.')
+      } finally {
+        setIsRemovingPermitApplication(null)
+      }
+    },
+    [canEditPermitApplications, detail?.permitNumber, permitNumber, reloadPermitTabs],
   )
 
   const setBlanketOicScaleFormField = (field: keyof BlanketOicScaleForm, value: string): void => {
@@ -1454,6 +1582,88 @@ const ProvincialPermitDetailsPage = () => {
                         />
                       )}
                     </Column>
+                    {!detail.blanketOic && (
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile>
+                          <h2 className="detail-tile-title">Associated applications</h2>
+                          <Table useZebraStyles>
+                            <TableHead>
+                              <TableRow>
+                                <TableHeader>Application number</TableHeader>
+                                {canEditPermitApplications && <TableHeader>Actions</TableHeader>}
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {associatedPermitApplications.map((applicationNumber) => (
+                                <TableRow key={applicationNumber}>
+                                  <TableCell>{applicationNumber}</TableCell>
+                                  {canEditPermitApplications && (
+                                    <TableCell>
+                                      <Button
+                                        kind="ghost"
+                                        size="sm"
+                                        disabled={isRemovingPermitApplication === applicationNumber}
+                                        onClick={() =>
+                                          void onRemovePermitApplication(applicationNumber)
+                                        }
+                                      >
+                                        {isRemovingPermitApplication === applicationNumber
+                                          ? 'Removing...'
+                                          : 'Remove'}
+                                      </Button>
+                                    </TableCell>
+                                  )}
+                                </TableRow>
+                              ))}
+                              {associatedPermitApplications.length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={canEditPermitApplications ? 2 : 1}>
+                                    No applications are associated with this permit.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                          {canEditPermitApplications && (
+                            <>
+                              <div className="legacy-search-grid">
+                                <SearchableSelect
+                                  id="permitApplicationToAdd"
+                                  labelText="Available application"
+                                  value={selectedPermitApplicationToAdd}
+                                  options={availablePermitApplicationOptions}
+                                  placeholder={
+                                    isLoadingAvailableApplications
+                                      ? 'Loading applications'
+                                      : 'Select application'
+                                  }
+                                  disabled={
+                                    isSavingPermitApplication ||
+                                    isLoadingAvailableApplications ||
+                                    availablePermitApplicationOptions.length === 0
+                                  }
+                                  onChange={setPermitApplicationToAdd}
+                                />
+                              </div>
+                              <div className="legacy-search-actions">
+                                <Button
+                                  kind="primary"
+                                  size="sm"
+                                  disabled={
+                                    isSavingPermitApplication ||
+                                    isLoadingAvailableApplications ||
+                                    !selectedPermitApplicationToAdd
+                                  }
+                                  onClick={() => void onAddPermitApplication()}
+                                >
+                                  {isSavingPermitApplication ? 'Adding...' : 'Add application'}
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </Tile>
+                      </Column>
+                    )}
                     {canSavePermit && (
                       <Column sm={4} md={8} lg={16}>
                         <div className="legacy-search-actions">

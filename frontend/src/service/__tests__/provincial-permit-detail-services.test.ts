@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  addApplicationsToPermit,
   addBlanketOicScale,
   deleteBlanketOicScale,
+  fetchAvailablePermitApplications,
   fetchProvincialPermitDetailTabs,
+  removeApplicationFromPermit,
   updatePermitScaleAttachment,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
@@ -38,6 +41,7 @@ describe('provincial permit detail services', () => {
 
   it('loads permit detail tab rows from permit RPC endpoints', async () => {
     getCachedResponseMock
+      .mockResolvedValueOnce(response({ applicationList: ['1000456'] }))
       .mockResolvedValueOnce(response({ packageList: ['PKG-100'] }))
       .mockResolvedValueOnce(
         response({
@@ -112,27 +116,33 @@ describe('provincial permit detail services', () => {
       receiptNumber: 'RCPT-1',
     })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(5)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(6)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       1,
-      '/lexis/rpc/permit-details/package-list',
+      '/lexis/rpc/permit-details/application-list',
       { params: { permitNumber: 'P-777' } },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       2,
+      '/lexis/rpc/permit-details/package-list',
+      { params: { permitNumber: 'P-777' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      3,
       '/lexis/rpc/permit-details/package-info',
       { params: { packageNumber: 'PKG-100' } },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       '/lexis/rpc/permit-details/scales-for-package',
       { params: { packageNumber: 'PKG-100' } },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      4,
+      5,
       '/lexis/rpc/permit-details/scale-fees-for-package',
       {
         params: {
@@ -143,7 +153,7 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      5,
+      6,
       '/lexis/rpc/permit-details/gbms-invoice-history',
       {
         params: {
@@ -154,6 +164,7 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(result).toEqual({
+      applications: ['1000456'],
       packages: [
         {
           packageNumber: 'PKG-100',
@@ -222,6 +233,7 @@ describe('provincial permit detail services', () => {
 
   it('loads Blanket OIC package rows from the legacy OIC permit endpoints', async () => {
     getCachedResponseMock
+      .mockResolvedValueOnce(response({ applicationList: [] }))
       .mockResolvedValueOnce(response({ packageList: ['BOIC-100'] }))
       .mockResolvedValueOnce(
         response({
@@ -278,27 +290,33 @@ describe('provincial permit detail services', () => {
       blanketOic: true,
     })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(5)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(6)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       1,
-      '/lexis/rpc/permit-details/oic-package-list',
+      '/lexis/rpc/permit-details/application-list',
       { params: { permitNumber: 'P-888' } },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       2,
+      '/lexis/rpc/permit-details/oic-package-list',
+      { params: { permitNumber: 'P-888' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      3,
       '/lexis/rpc/permit-details/package-info',
       { params: { packageNumber: 'BOIC-100' } },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       '/lexis/rpc/permit-details/scales-for-package',
       { params: { packageNumber: 'BOIC-100' } },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      4,
+      5,
       '/lexis/rpc/permit-details/scale-fees-for-package',
       {
         params: {
@@ -309,7 +327,7 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      5,
+      6,
       '/lexis/rpc/permit-details/package-details',
       { params: { packageNumber: 'BOIC-100' } },
       { ttlMs: 30_000 },
@@ -367,12 +385,39 @@ describe('provincial permit detail services', () => {
     })
 
     expect(result).toEqual({
+      applications: [],
       packages: [],
       items: [],
       fees: [],
       gbmsEvents: [],
       oicItems: [],
       boicItems: [],
+    })
+  })
+
+  it('loads available permit applications with the selected application filter', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        applicationList: ['1000456', '1000457'],
+        errorMessage: '',
+      }),
+    )
+
+    const result = await fetchAvailablePermitApplications(' EX-700 ', [' 1000455 '])
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/permit-details/available-application-list',
+      {
+        params: {
+          exemptionNumber: 'EX-700',
+          selectedApplications: '1000455',
+        },
+      },
+      { ttlMs: 30_000 },
+    )
+    expect(result).toEqual({
+      applicationList: ['1000456', '1000457'],
+      errorMessage: '',
     })
   })
 
@@ -519,6 +564,70 @@ describe('provincial permit detail services', () => {
     expect(result).toEqual({
       success: true,
       message: 'Scale detail was added to the permit.',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts permit application adds as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Applications were added to the permit.',
+      }),
+    )
+
+    const result = await addApplicationsToPermit({
+      permitNumber: ' 777 ',
+      selectedApplications: [' 1000456 ', '1000457'],
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/add-applications-to-permit')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('selectedApplications')).toBe('1000456,1000457')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Applications were added to the permit.',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts permit application removals as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Application was removed from the permit.',
+      }),
+    )
+
+    const result = await removeApplicationFromPermit({
+      permitNumber: ' 777 ',
+      applicationNumber: ' 1000456 ',
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/remove-application-from-permit')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('applicationNumber')).toBe('1000456')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Application was removed from the permit.',
       errors: [],
       warnings: [],
     })

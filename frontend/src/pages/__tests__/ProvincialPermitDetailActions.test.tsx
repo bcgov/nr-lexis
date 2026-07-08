@@ -7,9 +7,12 @@ import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 import {
+  addApplicationsToPermit,
   addBlanketOicScale,
   deleteBlanketOicScale,
+  fetchAvailablePermitApplications,
   fetchProvincialPermitDetailTabs,
+  removeApplicationFromPermit,
   updatePermitScaleAttachment,
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
@@ -41,6 +44,7 @@ vi.mock('@/service/lexis-detail-service', () => ({
 
 vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
   EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: {
+    applications: [],
     packages: [],
     items: [],
     fees: [],
@@ -48,9 +52,12 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
     oicItems: [],
     boicItems: [],
   },
+  addApplicationsToPermit: vi.fn(),
   addBlanketOicScale: vi.fn(),
   deleteBlanketOicScale: vi.fn(),
+  fetchAvailablePermitApplications: vi.fn(),
   fetchProvincialPermitDetailTabs: vi.fn(),
+  removeApplicationFromPermit: vi.fn(),
   updatePermitScaleAttachment: vi.fn(),
 }))
 
@@ -95,6 +102,9 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
 const mockedUpdatePermitScaleAttachment = vi.mocked(updatePermitScaleAttachment)
+const mockedFetchAvailablePermitApplications = vi.mocked(fetchAvailablePermitApplications)
+const mockedAddApplicationsToPermit = vi.mocked(addApplicationsToPermit)
+const mockedRemoveApplicationFromPermit = vi.mocked(removeApplicationFromPermit)
 const mockedAddBlanketOicScale = vi.mocked(addBlanketOicScale)
 const mockedDeleteBlanketOicScale = vi.mocked(deleteBlanketOicScale)
 const mockedAddPermitInvoice = vi.mocked(addPermitInvoice)
@@ -150,6 +160,7 @@ const permitDetail: ProvincialPermitDetail = {
 }
 
 const tabsResult: ProvincialPermitDetailTabsData = {
+  applications: [],
   packages: [],
   items: [],
   fees: [],
@@ -165,15 +176,39 @@ const selectPermitDetailTab = async (name: string) => {
   }
 }
 
+const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
+  await userEvent.click(combobox)
+  await userEvent.clear(combobox)
+  await userEvent.type(combobox, optionName)
+  const options = await screen.findAllByRole('option', { name: optionName })
+  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+}
+
 describe('Provincial Permit Detail Action Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: [],
+      errorMessage: '',
+    })
     mockedUpdatePermitScaleAttachment.mockResolvedValue({
       success: true,
       message: 'Scale detail was added to the permit.',
+      errors: [],
+      warnings: [],
+    })
+    mockedAddApplicationsToPermit.mockResolvedValue({
+      success: true,
+      message: 'Application was added to the permit.',
+      errors: [],
+      warnings: [],
+    })
+    mockedRemoveApplicationFromPermit.mockResolvedValue({
+      success: true,
+      message: 'Application was removed from the permit.',
       errors: [],
       warnings: [],
     })
@@ -528,6 +563,84 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('Scale detail was added to the permit.')).toBeInTheDocument()
+  })
+
+  it('adds and removes applications associated with an editable permit', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['1000457'],
+      errorMessage: '',
+    })
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        applications: ['1000456'],
+      })
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        applications: ['1000456', '1000457'],
+      })
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        applications: ['1000457'],
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const applicationsTile = (
+      await screen.findByRole('heading', { name: 'Associated applications' })
+    ).closest('.cds--tile') as HTMLElement
+    expect(within(applicationsTile).getByText('1000456')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-9', ['1000456'])
+    })
+
+    await chooseComboBoxOption(
+      within(applicationsTile).getByRole('combobox', { name: 'Available application' }),
+      '1000457',
+    )
+    const addApplicationButton = within(applicationsTile).getByRole('button', {
+      name: 'Add application',
+    })
+    await waitFor(() => {
+      expect(addApplicationButton).toBeEnabled()
+    })
+    await userEvent.click(addApplicationButton)
+
+    await waitFor(() => {
+      expect(mockedAddApplicationsToPermit).toHaveBeenCalledWith({
+        permitNumber: '777',
+        selectedApplications: ['1000457'],
+      })
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+    })
+
+    const associatedApplicationRow = within(applicationsTile).getByText('1000456').closest('tr')
+    expect(associatedApplicationRow).toBeTruthy()
+    await userEvent.click(
+      within(associatedApplicationRow as HTMLElement).getByRole('button', { name: 'Remove' }),
+    )
+
+    await waitFor(() => {
+      expect(mockedRemoveApplicationFromPermit).toHaveBeenCalledWith({
+        permitNumber: '777',
+        applicationNumber: '1000456',
+      })
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(3)
+    })
   })
 
   it('shows Blanket OIC package columns on the items tab', async () => {

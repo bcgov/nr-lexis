@@ -69,6 +69,8 @@ public class LegacyRouteController {
   private static final String ACTION_ADD_PERMIT = "addPermit";
   private static final String ACTION_UPDATE_PERMIT = "updatePermit";
   private static final String ACTION_UPDATE_SHIPPING = "updateShipping";
+  private static final String ACTION_ADD_APPLICATIONS_TO_PERMIT = "addApplicationsToPermit";
+  private static final String ACTION_REMOVE_APPLICATION_FROM_PERMIT = "removeApplicationFromPermit";
   private static final String ACTION_GET_APPLICATION_LIST = "getApplicationList";
   private static final String ACTION_GET_AVAILABLE_APPLICATION_LIST = "getAvailableApplicationList";
   private static final String ACTION_GET_AVAILABLE_PACKAGE_LIST = "getAvailablePackageList";
@@ -567,6 +569,7 @@ public class LegacyRouteController {
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
       @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
       @RequestParam(name = "selectedApplications", required = false) String selectedApplications,
+      @RequestParam(name = "applicationNumber", required = false) Long permitApplicationNumber,
       @RequestParam(name = "selectedPackages", required = false) String selectedPackages,
       @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
       @RequestParam(name = "invoiceExportValue", required = false) String invoiceExportValue,
@@ -628,6 +631,14 @@ public class LegacyRouteController {
     }
     if (ACTION_UPDATE_SHIPPING.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.updateShipping(request, authentication);
+    }
+    if (ACTION_ADD_APPLICATIONS_TO_PERMIT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.addApplicationsToPermit(
+          permitNumber, selectedApplications, authentication);
+    }
+    if (ACTION_REMOVE_APPLICATION_FROM_PERMIT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.removeApplicationFromPermit(
+          permitNumber, permitApplicationNumber, authentication);
     }
     if (ACTION_GET_APPLICATION_LIST.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getApplicationList(permitNumber);

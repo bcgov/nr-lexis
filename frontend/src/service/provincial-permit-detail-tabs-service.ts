@@ -56,6 +56,7 @@ export type ProvincialPermitEventRow = {
 }
 
 export type ProvincialPermitDetailTabsData = {
+  applications: string[]
   packages: ProvincialPermitPackageInfoRow[]
   items: ProvincialPermitItemRow[]
   fees: ProvincialPermitFeeRow[]
@@ -91,6 +92,16 @@ export type DeleteBlanketOicScaleRequest = {
   permitNumber: string
 }
 
+export type AddApplicationsToPermitRequest = {
+  permitNumber: string
+  selectedApplications: string[]
+}
+
+export type RemoveApplicationFromPermitRequest = {
+  permitNumber: string
+  applicationNumber: string
+}
+
 export type UpdatePermitScaleAttachmentResult = {
   success: boolean
   message: string
@@ -102,6 +113,7 @@ const PERMIT_TAB_CACHE_TTL_MS = 30_000
 const PERMIT_TAB_ARRAY_KEYS = ['scaleList', ...DEFAULT_PAYLOAD_ARRAY_KEYS]
 
 export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData = {
+  applications: [],
   packages: [],
   items: [],
   fees: [],
@@ -269,6 +281,31 @@ const fetchPackageList = async (permitNumber: string, blanketOic: boolean): Prom
     return packageList
       .map(asString)
       .filter((packageNumber) => packageNumber && packageNumber !== 'No Packages')
+  } catch {
+    return []
+  }
+}
+
+const fetchApplicationList = async (permitNumber: string): Promise<string[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/permit-details/application-list',
+      {
+        params: {
+          permitNumber,
+        },
+      },
+      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
+    )
+    if (response.status === 204) {
+      return []
+    }
+
+    const objectPayload = recordOrEmpty(response.data)
+    const applicationList = Array.isArray(objectPayload.applicationList)
+      ? objectPayload.applicationList
+      : []
+    return applicationList.map(asString).filter(Boolean)
   } catch {
     return []
   }
@@ -460,7 +497,10 @@ export const fetchProvincialPermitDetailTabs = async (
   const permitNumber = typeof request === 'string' ? request : request.permitNumber
   const receiptNumber = typeof request === 'string' ? undefined : request.receiptNumber
   const blanketOic = typeof request === 'string' ? false : !!request.blanketOic
-  const packageList = await fetchPackageList(permitNumber, blanketOic)
+  const [applicationList, packageList] = await Promise.all([
+    fetchApplicationList(permitNumber),
+    fetchPackageList(permitNumber, blanketOic),
+  ])
 
   const [packages, packageScaleRows, packageFeeRows] = await Promise.all([
     Promise.all(packageList.map((packageNumber) => fetchPackageInfo(packageNumber, blanketOic))),
@@ -474,12 +514,37 @@ export const fetchProvincialPermitDetailTabs = async (
   const gbmsEvents = await fetchGbmsRows(permitNumber, receiptNumber)
 
   return {
+    applications: applicationList,
     packages,
     items: scaleRows,
     fees: feeRows.map(normalizeScaleFeeRow),
     gbmsEvents,
     oicItems: [],
     boicItems: [],
+  }
+}
+
+export const fetchAvailablePermitApplications = async (
+  exemptionNumber: string,
+  selectedApplications: string[],
+): Promise<{ applicationList: string[]; errorMessage: string }> => {
+  const response = await apiService.getCachedResponse<unknown>(
+    '/lexis/rpc/permit-details/available-application-list',
+    {
+      params: {
+        exemptionNumber: exemptionNumber.trim(),
+        selectedApplications: selectedApplications
+          .map((application) => application.trim())
+          .join(','),
+      },
+    },
+    { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
+  )
+  const payload = recordOrEmpty(response.status === 204 ? {} : response.data)
+  const applicationList = Array.isArray(payload.applicationList) ? payload.applicationList : []
+  return {
+    applicationList: applicationList.map(asString).filter(Boolean),
+    errorMessage: asString(payload.errorMessage),
   }
 }
 
@@ -507,6 +572,69 @@ export const updatePermitScaleAttachment = async (
     message:
       message ||
       (success ? 'Permit item rows were updated.' : 'Unable to update permit item rows.'),
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
+  }
+}
+
+export const addApplicationsToPermit = async (
+  request: AddApplicationsToPermitRequest,
+): Promise<UpdatePermitScaleAttachmentResult> => {
+  const response = await apiService.getAxiosInstance().post<unknown>(
+    '/lexis/rpc/permit-details/add-applications-to-permit',
+    toUrlEncodedParams({
+      permitNumber: request.permitNumber.trim(),
+      selectedApplications: request.selectedApplications
+        .map((applicationNumber) => applicationNumber.trim())
+        .filter(Boolean)
+        .join(','),
+    }),
+    {
+      headers: {
+        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
+      },
+    },
+  )
+  const payload = recordOrEmpty(response.data)
+  const success = asBoolean(payload.success ?? payload.valid)
+  const message = asString(payload.message)
+  return {
+    success,
+    message:
+      message ||
+      (success
+        ? 'Applications were added to the permit.'
+        : 'Unable to add applications to the permit.'),
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
+  }
+}
+
+export const removeApplicationFromPermit = async (
+  request: RemoveApplicationFromPermitRequest,
+): Promise<UpdatePermitScaleAttachmentResult> => {
+  const response = await apiService.getAxiosInstance().post<unknown>(
+    '/lexis/rpc/permit-details/remove-application-from-permit',
+    toUrlEncodedParams({
+      permitNumber: request.permitNumber.trim(),
+      applicationNumber: request.applicationNumber.trim(),
+    }),
+    {
+      headers: {
+        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
+      },
+    },
+  )
+  const payload = recordOrEmpty(response.data)
+  const success = asBoolean(payload.success ?? payload.valid)
+  const message = asString(payload.message)
+  return {
+    success,
+    message:
+      message ||
+      (success
+        ? 'Application was removed from the permit.'
+        : 'Unable to remove application from the permit.'),
     errors: asStringArray(payload.errors),
     warnings: asStringArray(payload.warnings),
   }
