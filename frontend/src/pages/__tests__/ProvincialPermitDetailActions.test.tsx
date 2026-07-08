@@ -607,10 +607,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
 
     expect(await screen.findByText('SCALE-1')).toBeInTheDocument()
-    expect(screen.queryByRole('columnheader', { name: 'Include in permit' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Include in permit' })).toBeInTheDocument()
+    const includeScale = screen.getByRole('checkbox', {
+      name: 'Include scale SCALE-1 in permit',
+    })
+    expect(includeScale).toBeChecked()
+    expect(includeScale).toBeDisabled()
+    await userEvent.click(includeScale)
+    expect(mockedUpdatePermitScaleAttachment).not.toHaveBeenCalled()
   })
 
   it('adds and removes applications associated with an editable permit', async () => {

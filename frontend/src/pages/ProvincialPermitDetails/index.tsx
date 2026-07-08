@@ -622,10 +622,13 @@ const ProvincialPermitDetailsPage = () => {
     permitStatusCode !== 'COM'
   const canEditNormalPermitScaleRows =
     canSavePermit && !detail?.blanketOic && !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
+  const canDisplayNormalPermitScaleMembership = !detail?.blanketOic
   const canEditBlanketOicScaleRows =
     canSavePermit && !!detail?.blanketOic && permitStatusCode !== 'COM'
   const itemTableColumnCount =
-    (canEditNormalPermitScaleRows ? 1 : 0) + 6 + (canEditBlanketOicScaleRows ? 1 : 0)
+    (canDisplayNormalPermitScaleMembership ? 1 : 0) +
+    6 +
+    (canEditBlanketOicScaleRows ? 1 : 0)
   const reloadPermitTabs = useCallback(async () => {
     const resolvedPermitNumber = detail?.permitNumber
       ? String(detail.permitNumber)
@@ -1997,7 +2000,7 @@ const ProvincialPermitDetailsPage = () => {
                           <Table useZebraStyles>
                             <TableHead>
                               <TableRow>
-                                {canEditNormalPermitScaleRows && (
+                                {canDisplayNormalPermitScaleMembership && (
                                   <TableHeader>Include in permit</TableHeader>
                                 )}
                                 <TableHeader>Item</TableHeader>
@@ -2012,14 +2015,16 @@ const ProvincialPermitDetailsPage = () => {
                             <TableBody>
                               {filteredItems.map((row) => (
                                 <TableRow key={row.id}>
-                                  {canEditNormalPermitScaleRows && (
+                                  {canDisplayNormalPermitScaleMembership && (
                                     <TableCell>
                                       <Checkbox
                                         id={`permit-scale-${row.id}`}
                                         labelText={`Include scale ${row.id} in permit`}
                                         hideLabel
                                         checked={row.includedInPermit}
-                                        disabled={isUpdatingScaleId === row.id}
+                                        disabled={
+                                          !canEditNormalPermitScaleRows || isUpdatingScaleId === row.id
+                                        }
                                         onChange={(_, { checked }) =>
                                           void onToggleScaleAttachment(row.id, Boolean(checked))
                                         }
