@@ -957,6 +957,58 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updateScaleAttachmentShouldDetachScaleAndRecalculatePermitTotals() {
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findScaleMutationById("101"))
+        .thenReturn(
+            Optional.of(
+                new ScaleMutationRow(
+                    "101",
+                    "TM1",
+                    12L,
+                    34.5d,
+                    "PKG-903",
+                    "HEM",
+                    "J",
+                    1000456L,
+                    7000123L,
+                    "entry-user",
+                    entryTimestamp)));
+    when(repository.updateScaleDetail(
+            org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("102", "TM2", "CED", "B", 8.25d, 4L, "7000123", "PKG-903")));
+
+    PermitPersistenceRpcResponseDto response =
+        service.updateScaleAttachment("101", 7000123L, false, "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("Scale detail was removed from the permit.");
+
+    org.mockito.ArgumentCaptor<ScaleMutationRecord> scaleCaptor =
+        org.mockito.ArgumentCaptor.forClass(ScaleMutationRecord.class);
+    verify(repository)
+        .updateScaleDetail(
+            scaleCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(scaleCaptor.getValue().scaleDetailId()).isEqualTo("101");
+    assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isNull();
+    assertThat(scaleCaptor.getValue().entryUserId()).isEqualTo("entry-user");
+    assertThat(scaleCaptor.getValue().entryTimestamp()).isEqualTo(entryTimestamp);
+
+    org.mockito.ArgumentCaptor<PermitMutationRow> permitCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"), org.mockito.ArgumentMatchers.isNull());
+    assertThat(permitCaptor.getValue().permitVolume()).isEqualTo(8.25d);
+    assertThat(permitCaptor.getValue().numberOfPieces()).isEqualTo(4L);
+  }
+
+  @Test
   void updateScaleAttachmentShouldRejectScaleAssignedToAnotherPermit() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));

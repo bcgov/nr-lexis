@@ -570,6 +570,81 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByText('Scale detail was added to the permit.')).toBeInTheDocument()
   })
 
+  it('removes normal permit scale membership from the items tab', async () => {
+    mockedUpdatePermitScaleAttachment.mockResolvedValue({
+      success: true,
+      message: 'Scale detail was removed from the permit.',
+      errors: [],
+      warnings: [],
+    })
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        items: [
+          {
+            id: 'SCALE-1',
+            timberMark: 'TM-1',
+            species: 'Fir',
+            grade: 'A',
+            pieces: 12,
+            volume: 34.5,
+            packageNumber: 'PKG-9',
+            permitNumber: '777',
+            includedInPermit: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        items: [
+          {
+            id: 'SCALE-1',
+            timberMark: 'TM-1',
+            species: 'Fir',
+            grade: 'A',
+            pieces: 12,
+            volume: 34.5,
+            packageNumber: 'PKG-9',
+            permitNumber: '',
+            includedInPermit: false,
+          },
+        ],
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+    const includeScale = await screen.findByRole('checkbox', {
+      name: 'Include scale SCALE-1 in permit',
+    })
+    expect(includeScale).toBeChecked()
+    await userEvent.click(includeScale)
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledWith({
+        scaleId: 'SCALE-1',
+        permitNumber: '777',
+        attachInd: false,
+      })
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('Scale detail was removed from the permit.')).toBeInTheDocument()
+  })
+
   it('does not allow normal permit scale membership changes for expired permits', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
