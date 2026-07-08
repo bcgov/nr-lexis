@@ -613,22 +613,18 @@ const ProvincialPermitDetailsPage = () => {
   const canSavePermit = canPerform('savePermit')
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
   const scaleAttachmentLockedStatuses = new Set(['COM', 'EXP', 'CAN'])
-  const canOpenPermitReport =
-    canPerform('/permitReport') && permitStatusCode === 'COM'
+  const canOpenPermitReport = canPerform('/permitReport') && permitStatusCode === 'COM'
   const canEditPermitApplications =
-    canSavePermit &&
-    !!detail?.permitNumber &&
-    !detail?.blanketOic &&
-    permitStatusCode !== 'COM'
+    canSavePermit && !!detail?.permitNumber && !detail?.blanketOic && permitStatusCode !== 'COM'
   const canEditNormalPermitScaleRows =
-    canSavePermit && !detail?.blanketOic && !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
+    canSavePermit &&
+    !detail?.blanketOic &&
+    !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
   const canDisplayNormalPermitScaleMembership = !detail?.blanketOic
   const canEditBlanketOicScaleRows =
     canSavePermit && !!detail?.blanketOic && permitStatusCode !== 'COM'
   const itemTableColumnCount =
-    (canDisplayNormalPermitScaleMembership ? 1 : 0) +
-    6 +
-    (canEditBlanketOicScaleRows ? 1 : 0)
+    (canDisplayNormalPermitScaleMembership ? 1 : 0) + 6 + (canEditBlanketOicScaleRows ? 1 : 0)
   const reloadPermitTabs = useCallback(async () => {
     const resolvedPermitNumber = detail?.permitNumber
       ? String(detail.permitNumber)
@@ -2023,7 +2019,8 @@ const ProvincialPermitDetailsPage = () => {
                                         hideLabel
                                         checked={row.includedInPermit}
                                         disabled={
-                                          !canEditNormalPermitScaleRows || isUpdatingScaleId === row.id
+                                          !canEditNormalPermitScaleRows ||
+                                          isUpdatingScaleId === row.id
                                         }
                                         onChange={(_, { checked }) =>
                                           void onToggleScaleAttachment(row.id, Boolean(checked))

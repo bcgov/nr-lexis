@@ -397,9 +397,7 @@ const isExpiredApplication = (detail: ProvincialApplicationDetail | null): boole
   return statusCode === APPLICATION_STATUS_EXPIRED || statusDescription === 'EXPIRED'
 }
 
-const isEditableApplicationDetailStatus = (
-  detail: ProvincialApplicationDetail | null,
-): boolean => {
+const isEditableApplicationDetailStatus = (detail: ProvincialApplicationDetail | null): boolean => {
   const statusCode = detail?.applicationStatusCode?.trim().toUpperCase() ?? ''
   return APPLICATION_DETAIL_EDITABLE_STATUS_CODES.has(statusCode)
 }
