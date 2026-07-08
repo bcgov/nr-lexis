@@ -26,6 +26,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   private static final String FIND_SCALE_DETAIL_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
+  private static final String FIND_SCALE_DETAIL_BY_ID =
+      LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_ID(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PRM(?,?)";
   private static final String FIND_PACKAGES_BY_PERMIT =
@@ -58,6 +60,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "INSERT_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String UPDATE_PERMIT_DETAIL =
       LEXIS_GROUP_9_PACKAGE + "UPDATE_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String UPDATE_SCALE =
+      LEXIS_GROUP_9_PACKAGE + "UPDATE_SCALE(?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_SALES_INVOICE =
       LEXIS_GROUP_9_PACKAGE + "INSERT_SALES_INVOICE(?,?,?,?,?,?,?,?,?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
@@ -119,6 +123,45 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 getString(rs, "EWB"),
                 getString(rs, "FIL"),
                 getString(rs, "MF")));
+  }
+
+  public Optional<ScaleMutationRow> findScaleMutationById(String scaleDetailId) {
+    String normalizedScaleDetailId = trim(scaleDetailId);
+    if (normalizedScaleDetailId == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_SCALE_DETAIL_BY_ID,
+        cs -> cs.setString(1, normalizedScaleDetailId),
+        2,
+        this::mapScaleMutationRow);
+  }
+
+  public boolean updateScaleDetail(ScaleMutationRecord record, String updateUserId) {
+    String normalizedUpdateUserId = trim(updateUserId);
+    Long normalizedScaleDetailId = record == null ? null : parseLongOrNull(record.scaleDetailId());
+    if (record == null || normalizedScaleDetailId == null || normalizedUpdateUserId == null) {
+      return false;
+    }
+
+    Timestamp now = new Timestamp(System.currentTimeMillis());
+    return executeProcedure(
+        UPDATE_SCALE,
+        cs -> {
+          cs.setLong(1, normalizedScaleDetailId);
+          setLongOrNull(cs, 2, record.exportPermitDetailNumber());
+          cs.setString(3, trim(record.timberMark()));
+          setLongOrNull(cs, 4, record.piecesCount());
+          setDoubleOrNull(cs, 5, record.speciesGradeVolume());
+          cs.setString(6, trim(record.packageNumber()));
+          cs.setString(7, trim(record.exportSpeciesCode()));
+          cs.setString(8, trim(record.exportGradeCode()));
+          cs.setString(9, auditUserOrDefault(record.entryUserId()));
+          setTimestampOrNull(cs, 10, record.entryTimestamp());
+          cs.setString(11, auditUserOrDefault(normalizedUpdateUserId));
+          cs.setTimestamp(12, now);
+        });
   }
 
   public List<String> findPackageNumbersByPermitNumber(Long permitNumber) {
@@ -984,6 +1027,21 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
   }
 
+  private ScaleMutationRow mapScaleMutationRow(ResultSet rs) {
+    return new ScaleMutationRow(
+        getString(rs, "EXPORT_SCALE_DETAIL_ID"),
+        getString(rs, "TIMBER_MARK"),
+        getLong(rs, "PIECES_COUNT"),
+        getDouble(rs, "SPECIES_GRADE_VOLUME"),
+        getString(rs, "PACKAGE_NUMBER"),
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_GRADE_CODE"),
+        getLong(rs, "APPLICATION_NUMBER"),
+        getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+        getString(rs, "ENTRY_USERID"),
+        getTimestamp(rs, "ENTRY_TIMESTAMP"));
+  }
+
   private Timestamp getTimestamp(ResultSet rs, String column) {
     try {
       return rs.getTimestamp(column);
@@ -1017,6 +1075,27 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     cs.setDouble(index, value);
   }
 
+  private void setTimestampOrNull(java.sql.CallableStatement cs, int index, Timestamp value)
+      throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.TIMESTAMP);
+      return;
+    }
+    cs.setTimestamp(index, value);
+  }
+
+  private Long parseLongOrNull(String value) {
+    String normalized = trim(value);
+    if (normalized == null) {
+      return null;
+    }
+    try {
+      return Long.valueOf(normalized);
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
   private String safeFileName(String value) {
     if (value == null || value.isBlank()) {
       return "";
@@ -1048,6 +1127,31 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String ewb,
       String fil,
       String mf) {}
+
+  public record ScaleMutationRow(
+      String scaleDetailId,
+      String timberMark,
+      Long piecesCount,
+      Double speciesGradeVolume,
+      String packageNumber,
+      String exportSpeciesCode,
+      String exportGradeCode,
+      Long applicationNumber,
+      Long exportPermitDetailNumber,
+      String entryUserId,
+      Timestamp entryTimestamp) {}
+
+  public record ScaleMutationRecord(
+      String scaleDetailId,
+      String timberMark,
+      Long piecesCount,
+      Double speciesGradeVolume,
+      String packageNumber,
+      String exportSpeciesCode,
+      String exportGradeCode,
+      Long exportPermitDetailNumber,
+      String entryUserId,
+      Timestamp entryTimestamp) {}
 
   public record PermitPolicyContextRow(
       Long permitNumber,

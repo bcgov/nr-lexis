@@ -715,6 +715,17 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernPermitScaleAttachmentShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/update-scale-attachment")
+                .param("permitNumber", "7000123")
+                .param("scaleId", "101")
+                .param("attachInd", "true")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyPermitDetailsAddShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/permitDetails")

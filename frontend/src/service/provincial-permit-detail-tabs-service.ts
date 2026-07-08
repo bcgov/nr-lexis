@@ -1,4 +1,5 @@
 import apiService from '@/service/api-service'
+import { LEGACY_FORM_CONTENT_TYPE, toUrlEncodedParams } from '@/service/legacy-form-utils'
 import {
   DEFAULT_PAYLOAD_ARRAY_KEYS,
   parsePayloadArray,
@@ -15,6 +16,9 @@ export type ProvincialPermitItemRow = {
   grade: string
   pieces: number
   volume: number
+  packageNumber: string
+  permitNumber: string
+  includedInPermit: boolean
 }
 
 export type ProvincialPermitPackageInfoRow = {
@@ -66,6 +70,19 @@ export type ProvincialPermitDetailTabsRequest = {
   blanketOic?: boolean | null
 }
 
+export type UpdatePermitScaleAttachmentRequest = {
+  scaleId: string
+  permitNumber: string
+  attachInd: boolean
+}
+
+export type UpdatePermitScaleAttachmentResult = {
+  success: boolean
+  message: string
+  errors: string[]
+  warnings: string[]
+}
+
 const PERMIT_TAB_CACHE_TTL_MS = 30_000
 const PERMIT_TAB_ARRAY_KEYS = ['scaleList', ...DEFAULT_PAYLOAD_ARRAY_KEYS]
 
@@ -82,8 +99,34 @@ const asNumber = (value: unknown): number => {
   return payloadValueAsNumber(value, (input) => input.replace(/[$,\s]/g, ''))
 }
 
-const normalizePermitItemRow = (row: unknown, index: number): ProvincialPermitItemRow => {
+const asBoolean = (value: unknown): boolean => {
+  if (typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'number') {
+    return value !== 0
+  }
+  return ['true', 't', 'yes', 'y', '1'].includes(asString(value).toLowerCase())
+}
+
+const asStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map(asString).filter(Boolean)
+  }
+  const normalized = asString(value)
+  return normalized ? [normalized] : []
+}
+
+const normalizePermitItemRow = (
+  row: unknown,
+  index: number,
+  packageNumber: string,
+  currentPermitNumber: string,
+): ProvincialPermitItemRow => {
   const source = recordOrEmpty(row)
+  const rowPermitNumber = asString(
+    source.permit || source.permitNumber || source.exportPermitDetailNumber,
+  )
   return {
     id: asString(
       source.id ||
@@ -99,6 +142,9 @@ const normalizePermitItemRow = (row: unknown, index: number): ProvincialPermitIt
     grade: asString(source.grade || source.gradeCode || source.gradeDescription),
     pieces: asNumber(source.pieces || source.pieceCount || source.numberOfPieces),
     volume: asNumber(source.volume || source.totalVolume || source.permitVolume),
+    packageNumber,
+    permitNumber: rowPermitNumber,
+    includedInPermit: rowPermitNumber === currentPermitNumber,
   }
 }
 
@@ -319,23 +365,29 @@ const fetchScaleRows = async (
   permitNumber: string,
   packageNumber: string,
   blanketOic: boolean,
-): Promise<unknown[]> => {
-  const path = blanketOic
-    ? '/lexis/rpc/permit-details/scales-for-package'
-    : '/lexis/rpc/permit-details/scale-fees-for-package'
-  const params = blanketOic ? { packageNumber } : { packageNumber, permitNumber }
-
+): Promise<ProvincialPermitItemRow[]> => {
   try {
     const response = await apiService.getCachedResponse<unknown>(
-      path,
-      { params },
+      '/lexis/rpc/permit-details/scales-for-package',
+      {
+        params: {
+          packageNumber,
+        },
+      },
       { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
     )
     if (response.status === 204) {
       return []
     }
 
-    return parsePayloadArray(response.data, PERMIT_TAB_ARRAY_KEYS) ?? []
+    const rows = parsePayloadArray(response.data, PERMIT_TAB_ARRAY_KEYS) ?? []
+    const normalizedRows = rows.map((row, index) =>
+      normalizePermitItemRow(row, index, packageNumber, permitNumber),
+    )
+    if (blanketOic) {
+      return normalizedRows
+    }
+    return normalizedRows.filter((row) => !row.permitNumber || row.includedInPermit)
   } catch {
     return []
   }
@@ -400,22 +452,47 @@ export const fetchProvincialPermitDetailTabs = async (
     Promise.all(
       packageList.map((packageNumber) => fetchScaleRows(permitNumber, packageNumber, blanketOic)),
     ),
-    blanketOic
-      ? Promise.all(
-          packageList.map((packageNumber) => fetchScaleFeeRows(permitNumber, packageNumber)),
-        )
-      : Promise.resolve<unknown[][] | null>(null),
+    Promise.all(packageList.map((packageNumber) => fetchScaleFeeRows(permitNumber, packageNumber))),
   ])
   const scaleRows = packageScaleRows.flat()
-  const feeRows = (packageFeeRows ?? packageScaleRows).flat()
+  const feeRows = packageFeeRows.flat()
   const gbmsEvents = await fetchGbmsRows(permitNumber, receiptNumber)
 
   return {
     packages,
-    items: scaleRows.map(normalizePermitItemRow),
+    items: scaleRows,
     fees: feeRows.map(normalizeScaleFeeRow),
     gbmsEvents,
     oicItems: [],
     boicItems: [],
+  }
+}
+
+export const updatePermitScaleAttachment = async (
+  request: UpdatePermitScaleAttachmentRequest,
+): Promise<UpdatePermitScaleAttachmentResult> => {
+  const response = await apiService.getAxiosInstance().post<unknown>(
+    '/lexis/rpc/permit-details/update-scale-attachment',
+    toUrlEncodedParams({
+      scaleId: request.scaleId.trim(),
+      permitNumber: request.permitNumber.trim(),
+      attachInd: String(request.attachInd),
+    }),
+    {
+      headers: {
+        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
+      },
+    },
+  )
+  const payload = recordOrEmpty(response.data)
+  const success = asBoolean(payload.success ?? payload.valid)
+  const message = asString(payload.message)
+  return {
+    success,
+    message:
+      message ||
+      (success ? 'Permit item rows were updated.' : 'Unable to update permit item rows.'),
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
   }
 }

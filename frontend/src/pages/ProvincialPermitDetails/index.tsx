@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
+  Checkbox,
   Column,
   Grid,
   InlineLoading,
@@ -62,6 +63,7 @@ import {
 import {
   EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS,
   fetchProvincialPermitDetailTabs,
+  updatePermitScaleAttachment,
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
@@ -292,6 +294,7 @@ const ProvincialPermitDetailsPage = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [isUpdatingScaleId, setIsUpdatingScaleId] = useState<string | null>(null)
   const [invoiceDraftNumber, setInvoiceDraftNumber] = useState('')
   const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
@@ -552,6 +555,22 @@ const ProvincialPermitDetailsPage = () => {
   const canSavePermit = canPerform('savePermit')
   const canOpenPermitReport =
     canPerform('/permitReport') && detail?.permitStatusCode?.trim().toUpperCase() === 'COM'
+  const canEditNormalPermitScaleRows = canSavePermit && !detail?.blanketOic
+  const reloadPermitTabs = useCallback(async () => {
+    const resolvedPermitNumber = detail?.permitNumber
+      ? String(detail.permitNumber)
+      : (permitNumber ?? '')
+    if (!resolvedPermitNumber || !detail) {
+      return
+    }
+
+    const tabsResult = await fetchProvincialPermitDetailTabs({
+      permitNumber: resolvedPermitNumber,
+      receiptNumber: detail.receiptNumber,
+      blanketOic: detail.blanketOic,
+    })
+    setTabsData(tabsResult)
+  }, [detail, permitNumber])
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
     if (!permitForm) {
       return {}
@@ -730,6 +749,41 @@ const ProvincialPermitDetailsPage = () => {
     permitFieldErrors,
     permitForm,
   ])
+
+  const onToggleScaleAttachment = useCallback(
+    async (scaleId: string, attachInd: boolean) => {
+      const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+      if (!canEditNormalPermitScaleRows || !resolvedPermitNumber || !scaleId) {
+        return
+      }
+
+      setActionErrorMessage('')
+      setActionInfoMessage('')
+      setIsUpdatingScaleId(scaleId)
+      try {
+        const result = await updatePermitScaleAttachment({
+          scaleId,
+          permitNumber: resolvedPermitNumber,
+          attachInd,
+        })
+        if (!result.success) {
+          setActionErrorMessage(
+            result.errors[0] || result.message || 'Unable to update permit item rows.',
+          )
+          return
+        }
+
+        await reloadPermitTabs()
+        setActionInfoMessage(result.message || 'Permit item rows were updated.')
+      } catch (error) {
+        console.error(error)
+        setActionErrorMessage('Unable to update permit item rows.')
+      } finally {
+        setIsUpdatingScaleId(null)
+      }
+    },
+    [canEditNormalPermitScaleRows, detail?.permitNumber, permitNumber, reloadPermitTabs],
+  )
 
   const refreshPermitDocuments = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
@@ -1508,6 +1562,9 @@ const ProvincialPermitDetailsPage = () => {
                           <Table useZebraStyles>
                             <TableHead>
                               <TableRow>
+                                {canEditNormalPermitScaleRows && (
+                                  <TableHeader>Include in permit</TableHeader>
+                                )}
                                 <TableHeader>Item</TableHeader>
                                 <TableHeader>Timber mark</TableHeader>
                                 <TableHeader>Species</TableHeader>
@@ -1519,6 +1576,20 @@ const ProvincialPermitDetailsPage = () => {
                             <TableBody>
                               {filteredItems.map((row) => (
                                 <TableRow key={row.id}>
+                                  {canEditNormalPermitScaleRows && (
+                                    <TableCell>
+                                      <Checkbox
+                                        id={`permit-scale-${row.id}`}
+                                        labelText={`Include scale ${row.id} in permit`}
+                                        hideLabel
+                                        checked={row.includedInPermit}
+                                        disabled={isUpdatingScaleId === row.id}
+                                        onChange={(_, { checked }) =>
+                                          void onToggleScaleAttachment(row.id, Boolean(checked))
+                                        }
+                                      />
+                                    </TableCell>
+                                  )}
                                   <TableCell>{row.id}</TableCell>
                                   <TableCell>{row.timberMark || '-'}</TableCell>
                                   <TableCell>{row.species || '-'}</TableCell>
@@ -1529,7 +1600,7 @@ const ProvincialPermitDetailsPage = () => {
                               ))}
                               {filteredItems.length === 0 && (
                                 <TableRow>
-                                  <TableCell colSpan={6}>
+                                  <TableCell colSpan={canEditNormalPermitScaleRows ? 7 : 6}>
                                     No permit item rows matched the current filter.
                                   </TableCell>
                                 </TableRow>

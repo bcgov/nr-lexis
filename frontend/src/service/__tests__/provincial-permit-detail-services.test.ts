@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchProvincialPermitDetailTabs } from '@/service/provincial-permit-detail-tabs-service'
+import {
+  fetchProvincialPermitDetailTabs,
+  updatePermitScaleAttachment,
+} from '@/service/provincial-permit-detail-tabs-service'
 import {
   addPermitInvoice,
   fetchPermitInvoices,
@@ -55,6 +58,37 @@ describe('provincial permit detail services', () => {
               grade: 'A',
               pieces: 12,
               volume: '34.5',
+              permit: 'P-777',
+            },
+            {
+              id: 'SCALE-2',
+              timbermark: 'TM-2',
+              species: 'Cedar',
+              grade: 'B',
+              pieces: 4,
+              volume: '8.5',
+              permit: '',
+            },
+            {
+              id: 'SCALE-OTHER',
+              timbermark: 'TM-OTHER',
+              species: 'Spruce',
+              grade: 'C',
+              pieces: 2,
+              volume: '2.5',
+              permit: 'P-999',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          scaleList: [
+            {
+              id: 'SCALE-1',
+              timbermark: 'TM-1',
+              species: 'Fir',
+              grade: 'A',
               fil: 'FIL',
               fee: '$123.45',
             },
@@ -76,7 +110,7 @@ describe('provincial permit detail services', () => {
       receiptNumber: 'RCPT-1',
     })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(4)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(5)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       1,
       '/lexis/rpc/permit-details/package-list',
@@ -91,6 +125,12 @@ describe('provincial permit detail services', () => {
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       3,
+      '/lexis/rpc/permit-details/scales-for-package',
+      { params: { packageNumber: 'PKG-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      4,
       '/lexis/rpc/permit-details/scale-fees-for-package',
       {
         params: {
@@ -101,7 +141,7 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      4,
+      5,
       '/lexis/rpc/permit-details/gbms-invoice-history',
       {
         params: {
@@ -136,6 +176,20 @@ describe('provincial permit detail services', () => {
           grade: 'A',
           pieces: 12,
           volume: 34.5,
+          packageNumber: 'PKG-100',
+          permitNumber: 'P-777',
+          includedInPermit: true,
+        },
+        {
+          id: 'SCALE-2',
+          timberMark: 'TM-2',
+          species: 'Cedar',
+          grade: 'B',
+          pieces: 4,
+          volume: 8.5,
+          packageNumber: 'PKG-100',
+          permitNumber: '',
+          includedInPermit: false,
         },
       ],
       fees: [
@@ -282,6 +336,9 @@ describe('provincial permit detail services', () => {
         grade: 'B',
         pieces: 5,
         volume: 12.5,
+        packageNumber: 'BOIC-100',
+        permitNumber: '',
+        includedInPermit: false,
       },
     ])
     expect(result.fees).toEqual([
@@ -428,6 +485,40 @@ describe('provincial permit detail services', () => {
       errors: [],
       warnings: ['Review invoice value.'],
       source: 'api',
+    })
+  })
+
+  it('posts permit scale attachment changes as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Scale detail was added to the permit.',
+      }),
+    )
+
+    const result = await updatePermitScaleAttachment({
+      scaleId: ' 123 ',
+      permitNumber: ' 777 ',
+      attachInd: true,
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/update-scale-attachment')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('scaleId')).toBe('123')
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('attachInd')).toBe('true')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Scale detail was added to the permit.',
+      errors: [],
+      warnings: [],
     })
   })
 })

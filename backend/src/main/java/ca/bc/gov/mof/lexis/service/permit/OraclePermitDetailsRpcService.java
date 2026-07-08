@@ -50,6 +50,8 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDeta
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRecord;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.util.TextUtils;
@@ -917,6 +919,69 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public PermitPersistenceRpcResponseDto updateScaleAttachment(
+      String scaleDetailId, Long permitNumber, boolean attachInd, String userId) {
+    String normalizedUserId = trimToNull(userId);
+    String normalizedScaleDetailId = trimToNull(scaleDetailId);
+    if (normalizedUserId == null) {
+      return failurePersistenceResponse(List.of("A valid user identifier is required."), permitNumber);
+    }
+    if (permitNumber == null || permitNumber < 1) {
+      return failurePersistenceResponse(List.of("A valid permit number is required."), permitNumber);
+    }
+    if (normalizedScaleDetailId == null) {
+      return failurePersistenceResponse(List.of("A valid scale detail id is required."), permitNumber);
+    }
+
+    Optional<ScaleMutationRow> existing = repository.findScaleMutationById(normalizedScaleDetailId);
+    if (existing.isEmpty()) {
+      return failurePersistenceResponse(List.of("Scale detail not found."), permitNumber);
+    }
+
+    ScaleMutationRow scale = existing.get();
+    Long currentPermitNumber = scale.exportPermitDetailNumber();
+    Long targetPermitNumber;
+    if (attachInd) {
+      if (currentPermitNumber != null && !permitNumber.equals(currentPermitNumber)) {
+        return failurePersistenceResponse(
+            List.of("Scale detail is already assigned to another permit."), permitNumber);
+      }
+      targetPermitNumber = permitNumber;
+    } else {
+      if (currentPermitNumber == null || !permitNumber.equals(currentPermitNumber)) {
+        return failurePersistenceResponse(
+            List.of("Scale detail is not assigned to this permit."), permitNumber);
+      }
+      targetPermitNumber = null;
+    }
+
+    ScaleMutationRecord updatedScale =
+        new ScaleMutationRecord(
+            scale.scaleDetailId(),
+            scale.timberMark(),
+            scale.piecesCount(),
+            scale.speciesGradeVolume(),
+            scale.packageNumber(),
+            scale.exportSpeciesCode(),
+            scale.exportGradeCode(),
+            targetPermitNumber,
+            scale.entryUserId(),
+            scale.entryTimestamp());
+
+    if (!repository.updateScaleDetail(updatedScale, normalizedUserId)) {
+      return failurePersistenceResponse(List.of("Unable to update scale detail."), permitNumber);
+    }
+    updatePermitTotals(permitNumber, normalizedUserId);
+
+    return new PermitPersistenceRpcResponseDto(
+        true,
+        attachInd ? "Scale detail was added to the permit." : "Scale detail was removed from the permit.",
+        List.of(),
+        List.of(),
+        permitNumber);
+  }
+
+  @Override
   public PermitPersistenceRpcResponseDto addInvoice(
       Long permitNumber,
       String salesInvoiceNumber,
@@ -1524,6 +1589,69 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private PermitMutationRpcResponseDto failureMutationResponse(List<String> errors, Long permitNumber) {
     return new PermitMutationRpcResponseDto(
         false, "", errors, List.of(), permitNumber, null, null, null, null, null);
+  }
+
+  private PermitPersistenceRpcResponseDto failurePersistenceResponse(
+      List<String> errors, Long permitNumber) {
+    return new PermitPersistenceRpcResponseDto(false, "", errors, List.of(), permitNumber);
+  }
+
+  private void updatePermitTotals(Long permitNumber, String userId) {
+    Optional<PermitMutationRow> existing = repository.findPermitMutationByPermitNumber(permitNumber);
+    if (existing.isEmpty()) {
+      return;
+    }
+
+    List<PermitScaleDetailRow> permitScales = repository.findScaleDetailsByPermitNumber(permitNumber);
+    double totalVolume =
+        permitScales.stream().mapToDouble(PermitScaleDetailRow::speciesGradeVolume).sum();
+    long totalPieces = permitScales.stream().mapToLong(PermitScaleDetailRow::piecesCount).sum();
+
+    PermitMutationRow current = existing.get();
+    Double currentVolume = firstNonNull(current.permitVolume(), 0.0d);
+    Long currentPieces = firstNonNull(current.numberOfPieces(), 0L);
+    if (Double.compare(currentVolume, totalVolume) == 0 && currentPieces == totalPieces) {
+      return;
+    }
+
+    PermitMutationRow updated =
+        new PermitMutationRow(
+            current.permitNumber(),
+            current.destinationCompanyName(),
+            current.transportName(),
+            current.estimatedShippingDate(),
+            current.otherPortOfExport(),
+            current.applicationDate(),
+            current.receivedDate(),
+            current.permitIssueDate(),
+            current.receiptNumber(),
+            current.expiryDate(),
+            totalVolume,
+            totalPieces,
+            current.feeInLieuVolume(),
+            current.federalPermitNumber(),
+            current.remarks(),
+            current.entryUserId(),
+            current.entryTimestamp(),
+            current.transportTypeCode(),
+            current.scaleMethodCode(),
+            current.clientNumber(),
+            current.clientLocationCode(),
+            current.agentNumber(),
+            current.agentLocationCode(),
+            current.exemptionNumber(),
+            current.orgUnitNo(),
+            current.portOfExportCode(),
+            current.permitStatusCode(),
+            current.growthTypeCode(),
+            current.countryCode(),
+            current.overrideFee(),
+            current.overrideComment(),
+            current.oicApplicationNumber(),
+            current.oicRequestPieces(),
+            current.oicRequestVolume(),
+            current.productTypeCode());
+    repository.updatePermitDetail(updated, userId, null);
   }
 
   private boolean hasStringChanged(String stored, String formValue) {

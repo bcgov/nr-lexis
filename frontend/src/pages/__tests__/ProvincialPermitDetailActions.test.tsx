@@ -8,6 +8,7 @@ import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 import {
   fetchProvincialPermitDetailTabs,
+  updatePermitScaleAttachment,
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
@@ -46,6 +47,7 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
     boicItems: [],
   },
   fetchProvincialPermitDetailTabs: vi.fn(),
+  updatePermitScaleAttachment: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
@@ -88,6 +90,7 @@ vi.mock('@/utils/download', () => ({
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
+const mockedUpdatePermitScaleAttachment = vi.mocked(updatePermitScaleAttachment)
 const mockedAddPermitInvoice = vi.mocked(addPermitInvoice)
 const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
 const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
@@ -161,6 +164,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedUpdatePermitScaleAttachment.mockResolvedValue({
+      success: true,
+      message: 'Scale detail was added to the permit.',
+      errors: [],
+      warnings: [],
+    })
     mockedAddPermitInvoice.mockResolvedValue({
       success: true,
       message: 'Invoice saved successfully.',
@@ -414,6 +423,92 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('cell', { name: 'Second growth' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '120.5' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Unmanufactured' })).toBeInTheDocument()
+  })
+
+  it('updates normal permit scale membership from the items tab', async () => {
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        items: [
+          {
+            id: 'SCALE-1',
+            timberMark: 'TM-1',
+            species: 'Fir',
+            grade: 'A',
+            pieces: 12,
+            volume: 34.5,
+            packageNumber: 'PKG-9',
+            permitNumber: '777',
+            includedInPermit: true,
+          },
+          {
+            id: 'SCALE-2',
+            timberMark: 'TM-2',
+            species: 'Cedar',
+            grade: 'B',
+            pieces: 4,
+            volume: 8.5,
+            packageNumber: 'PKG-9',
+            permitNumber: '',
+            includedInPermit: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        items: [
+          {
+            id: 'SCALE-1',
+            timberMark: 'TM-1',
+            species: 'Fir',
+            grade: 'A',
+            pieces: 12,
+            volume: 34.5,
+            packageNumber: 'PKG-9',
+            permitNumber: '777',
+            includedInPermit: true,
+          },
+          {
+            id: 'SCALE-2',
+            timberMark: 'TM-2',
+            species: 'Cedar',
+            grade: 'B',
+            pieces: 4,
+            volume: 8.5,
+            packageNumber: 'PKG-9',
+            permitNumber: '777',
+            includedInPermit: true,
+          },
+        ],
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+    const includeScale = await screen.findByRole('checkbox', {
+      name: 'Include scale SCALE-2 in permit',
+    })
+    expect(includeScale).not.toBeChecked()
+    await userEvent.click(includeScale)
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledWith({
+        scaleId: 'SCALE-2',
+        permitNumber: '777',
+        attachInd: true,
+      })
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('Scale detail was added to the permit.')).toBeInTheDocument()
   })
 
   it('shows Blanket OIC package columns on the items tab', async () => {

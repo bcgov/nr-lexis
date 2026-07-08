@@ -120,6 +120,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("addPermit", ACTION_SAVE_PERMIT),
           Map.entry("updatePermit", ACTION_SAVE_PERMIT),
           Map.entry("updateShipping", ACTION_SAVE_PERMIT),
+          Map.entry("updateScale", ACTION_SAVE_PERMIT),
           Map.entry("getApplicationList", ACTION_PERMIT_DETAILS),
           Map.entry("getAvailableApplicationList", ACTION_PERMIT_DETAILS),
           Map.entry("getAvailablePackageList", ACTION_PERMIT_DETAILS),
@@ -479,6 +480,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/permit-details/add-permit",
               "/api/lexis/rpc/permit-details/update-permit",
               "/api/lexis/rpc/permit-details/update-shipping",
+              "/api/lexis/rpc/permit-details/update-scale-attachment",
               "/api/lexis/rpc/permit-details/add-invoice"),
           action(
               HttpMethod.POST,

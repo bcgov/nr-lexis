@@ -49,9 +49,12 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRecord;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -862,6 +865,90 @@ class OraclePermitDetailsRpcServiceTest {
     boolean changed = service.hasFormChanges(request);
 
     assertThat(changed).isTrue();
+  }
+
+  @Test
+  void updateScaleAttachmentShouldPersistScaleAndRecalculatePermitTotals() {
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findScaleMutationById("101"))
+        .thenReturn(
+            Optional.of(
+                new ScaleMutationRow(
+                    "101",
+                    "TM1",
+                    12L,
+                    34.5d,
+                    "PKG-903",
+                    "HEM",
+                    "J",
+                    1000456L,
+                    null,
+                    "entry-user",
+                    entryTimestamp)));
+    when(repository.updateScaleDetail(
+            org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 34.5d, 12L, "7000123", "PKG-903"),
+                scale("102", "TM2", "CED", "B", 8.25d, 4L, "7000123", "PKG-903")));
+
+    PermitPersistenceRpcResponseDto response =
+        service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("Scale detail was added to the permit.");
+
+    org.mockito.ArgumentCaptor<ScaleMutationRecord> scaleCaptor =
+        org.mockito.ArgumentCaptor.forClass(ScaleMutationRecord.class);
+    verify(repository)
+        .updateScaleDetail(
+            scaleCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(scaleCaptor.getValue().scaleDetailId()).isEqualTo("101");
+    assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isEqualTo(7000123L);
+    assertThat(scaleCaptor.getValue().entryUserId()).isEqualTo("entry-user");
+    assertThat(scaleCaptor.getValue().entryTimestamp()).isEqualTo(entryTimestamp);
+
+    org.mockito.ArgumentCaptor<PermitMutationRow> permitCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"), org.mockito.ArgumentMatchers.isNull());
+    assertThat(permitCaptor.getValue().permitVolume()).isEqualTo(42.75d);
+    assertThat(permitCaptor.getValue().numberOfPieces()).isEqualTo(16L);
+  }
+
+  @Test
+  void updateScaleAttachmentShouldRejectScaleAssignedToAnotherPermit() {
+    when(repository.findScaleMutationById("101"))
+        .thenReturn(
+            Optional.of(
+                new ScaleMutationRow(
+                    "101",
+                    "TM1",
+                    12L,
+                    34.5d,
+                    "PKG-903",
+                    "HEM",
+                    "J",
+                    1000456L,
+                    7000999L,
+                    "entry-user",
+                    Timestamp.valueOf("2026-01-01 10:00:00"))));
+
+    PermitPersistenceRpcResponseDto response =
+        service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Scale detail is already assigned to another permit.");
+    verify(repository, never())
+        .updateScaleDetail(
+            org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
+            org.mockito.ArgumentMatchers.any());
   }
 
   private PermitScaleDetailRow scale(

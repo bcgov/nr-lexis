@@ -388,6 +388,31 @@ public class PermitDetailsRpcController {
             authentication == null ? null : authentication.getName()));
   }
 
+  @PostMapping("/update-scale-attachment")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> updateScaleAttachment(
+      @RequestParam(name = "scaleId", required = false) String scaleId,
+      @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId,
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "attachInd", required = false) String attachInd,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for update scale attachment");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.updateScaleAttachment(
+            scaleDetailId == null || scaleDetailId.isBlank() ? scaleId : scaleDetailId,
+            permitNumber,
+            Boolean.parseBoolean(attachInd),
+            authentication == null ? null : authentication.getName()));
+  }
+
   @PostMapping("/add-invoice")
   public ResponseEntity<PermitPersistenceRpcResponseDto> addInvoice(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,

@@ -599,6 +599,24 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void updateScaleAttachmentShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "Scale detail was added to the permit.", List.of(), List.of(), 7000123L);
+    when(service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith")).thenReturn(dto);
+
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updateScaleAttachment("101", null, 7000123L, "true", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
+  }
+
+  @Test
   void conversionRateShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitConversionRateRpcResponseDto dto = new PermitConversionRateRpcResponseDto(true, "1.23");
@@ -702,6 +720,17 @@ class PermitDetailsRpcControllerTest {
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updateShipping(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void updateScaleAttachmentShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updateScaleAttachment("101", null, 7000123L, "true", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
