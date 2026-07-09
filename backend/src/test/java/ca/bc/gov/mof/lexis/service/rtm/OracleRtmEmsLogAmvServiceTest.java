@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -389,6 +390,33 @@ class OracleRtmEmsLogAmvServiceTest {
                 "create"));
 
     assertThat(result.status()).isEqualTo("accepted");
+  }
+
+  @Test
+  void shouldAcceptBlankTableValueWithoutNumericConfirmation() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate effectiveDate = LocalDate.of(2026, 7, 1);
+    when(repository.update(
+            eq("BA"),
+            eq("A"),
+            eq("O"),
+            eq(effectiveDate),
+            eq(effectiveDate),
+            isNull()))
+        .thenReturn("0");
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", "2026-07-01", null, "update"));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.rows()).singleElement().satisfies(row -> assertThat(row.newValue()).isNull());
+    verify(repository, never())
+        .hasExactValue(anyString(), anyString(), anyString(), any(LocalDate.class), any());
+    verify(repository, never())
+        .find(anyString(), anyString(), any(LocalDate.class), any(LocalDate.class));
   }
 
   @Test

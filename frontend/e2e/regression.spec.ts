@@ -1249,92 +1249,44 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Reject Application' })).toHaveCount(0)
   })
 
-  test('shows average monthly values upload-only workflow controls', async () => {
+  test('shows average monthly values editable table controls', async () => {
     const page = await authenticatedIdirPage()
 
-    await page.route('**/api/lexis/rtm/emslogamv/preview', async (route) => {
+    await page.route('**/api/lexis/rtm/emslogamv**', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback()
+        return
+      }
+
       await route.fulfill({
-        status: 422,
+        status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          status: 'validation_failed',
-          fileName: 'invalid-amv.xlsx',
-          fileSize: 12,
-          message: 'Template is missing an update date.',
-          rowCount: 0,
-          retrievalDate: null,
-          updateDate: null,
-          errors: ['The update date is required in the uploaded template.'],
-          warnings: [],
-          rows: [],
-        }),
+        body: JSON.stringify([]),
       })
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
-    await expectFsptsUploadLayout(page)
     await expect(
-      page.getByText('Update average monthly values by uploading an XLSX file.'),
+      page.getByText('Maintain average monthly values directly in the table.'),
     ).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Query rows' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Manual entry' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Search' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Save row' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Data Preview' })).toHaveCount(0)
-
-    const workflowProgress = page.getByRole('list', {
-      name: 'Average monthly values upload workflow progress',
-    })
-    await expect(workflowProgress.getByText('1. Upload')).toBeVisible()
-    await expect(workflowProgress.getByText('2. Review')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Upload' })).toBeVisible()
-    await expect(
-      page.getByText(
-        'Add your completed template to check for errors before the new values take effect.',
-      ),
-    ).toBeVisible()
-    await expect(page.getByText('Upload Excel Spreadsheet')).toBeVisible()
-
-    const templateLink = page.getByRole('link', { name: 'Download template' })
-    await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
-    await expect(templateLink).toHaveAttribute('download', 'rtm-ems-log-amv-template.xlsx')
-    await expect(page.getByText('Accepted formats: .xlsx.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Upload' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Download template' })).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
-    ).toBeVisible()
-    const reviewUploadButton = page.getByRole('button', { name: 'Review' })
-    await expect(reviewUploadButton).toBeEnabled()
-    await reviewUploadButton.click()
-    await expect(page.getByText('Please upload a file before continuing.')).toBeVisible()
+    ).toHaveCount(0)
+    await expect(page.getByLabel('Effective date')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
 
-    await page.locator('#rtm-upload-file').setInputFiles({
-      name: 'invalid-amv.xlsx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      buffer: Buffer.from('invalid average monthly values workbook'),
-    })
-
-    await expect(page.getByText('1 validation issue found')).toBeVisible()
+    const table = page.getByRole('table', { name: 'Average monthly value table' })
+    await expect(table).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Pine' })).toBeVisible()
     await expect(
-      page.getByText('Correct the issues in your spreadsheet, then replace the file to continue.'),
+      page.getByText('Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.'),
     ).toBeVisible()
-
-    const validationTable = page.getByRole('table', { name: 'Upload validation issues' })
-    await expect(validationTable).toBeVisible()
-    await expect(validationTable.getByRole('columnheader', { name: 'Issue' })).toBeVisible()
-    await expect(validationTable.getByRole('columnheader', { name: 'File location' })).toHaveCount(
-      0,
-    )
-    await expect(validationTable.getByRole('columnheader', { name: 'Detail' })).toBeVisible()
-    await expect(validationTable.getByText('Error')).toBeVisible()
-    await expect(
-      validationTable.getByText('The update date is required in the uploaded template.'),
-    ).toBeVisible()
-    await expect(reviewUploadButton).toBeEnabled()
-    await reviewUploadButton.click()
-    await expect(
-      page.getByText('Upload a spreadsheet that passes validation before reviewing it.'),
-    ).toBeVisible()
+    await expect(page.getByLabel('Balsam grade A')).toBeVisible()
   })
 
   test('rejects non-persisting average monthly value validation fixtures', async () => {

@@ -422,9 +422,6 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.add("Retrieval date is required and must be a valid date.");
     }
 
-    if (request.newValue() == null) {
-      errors.add("New value is required.");
-    }
     if (request.newValue() != null && request.newValue().signum() < 0) {
       errors.add("New value must be greater than or equal to zero.");
     }

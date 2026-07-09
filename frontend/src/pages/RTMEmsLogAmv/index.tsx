@@ -1,169 +1,92 @@
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import {
-  useRef,
-  useState,
-  type ChangeEvent,
-  type DragEvent,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react'
-import {
-  ArrowRight,
   CheckmarkFilled,
-  Close,
-  Document,
-  Download,
   ErrorFilled,
   InformationFilled,
+  Renew,
+  Save,
+  WarningAltFilled,
 } from '@carbon/icons-react'
 import {
   Button,
   Column,
   Grid,
+  InlineLoading,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableHeader,
   TableRow,
+  TextInput,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import {
-  previewRtmEmsLogAmvUpload,
-  uploadRtmEmsLogAmv,
+  saveRtmEmsLogAmv,
+  searchRtmEmsLogAmv,
   type RtmEmsLogAmvRow,
-  type RtmEmsLogAmvUploadPreview,
-  type RtmEmsLogAmvUploadResult,
+  type RtmEmsLogAmvSaveRequest,
 } from '@/service/rtm-emslogamv-service'
-import UploadWorkflowProgress from '@/components/uploads/UploadWorkflowProgress'
 
-type PendingUploadValidation = {
-  fileName: string
-  fileSize: number
-}
+type RtmGrowthIndicator = 'O' | 'S'
 
-type RtmUploadStep = 'upload' | 'review'
-
-type RtmReviewSpeciesColumn = {
+type RtmAmvSpeciesColumn = {
   key: string
   label: string
   speciesCodes: string[]
+  persistSpeciesCodes: string[]
 }
 
-type RtmReviewMatrixRow = {
-  key: string
+type RtmAmvCellBasis = {
+  currentRows: RtmEmsLogAmvRow[]
+  currentValue: string
+  hasCurrentRow: boolean
+  hasCurrentValue: boolean
+  hasMixedCurrentValues: boolean
+  hasMixedPreviousValues: boolean
+  previousRows: RtmEmsLogAmvRow[]
+  previousValue: string
+  hasPreviousRow: boolean
+  hasPreviousValue: boolean
+}
+
+type RtmAmvCell = RtmAmvCellBasis & {
+  column: RtmAmvSpeciesColumn
   grade: string
-  values: Record<string, RtmReviewCellValues>
+  key: string
+  value: string
+  dirty: boolean
+  warning: string | null
+  validationError: string | null
 }
 
-type RtmReviewCellValues = Record<string, number | null>
-
-const uploadResultStatusClass = (status: string | undefined) => {
-  if (!status) {
-    return 'queued'
-  }
-
-  if (status === 'accepted') {
-    return 'complete'
-  }
-
-  if (status === 'validation_failed') {
-    return 'invalid'
-  }
-
-  return 'failed'
+type NotificationState = {
+  kind: 'success' | 'error' | 'warning' | 'info'
+  title: string
+  subtitle: string
 }
 
-const formatMoney = (value: number | null) => {
-  if (value === null || Number.isNaN(value)) {
-    return ''
-  }
+const RTM_AMV_DESCRIPTION =
+  'Maintain average monthly values directly in the table. Each saved value is persisted for old and second growth.'
 
-  return value.toLocaleString('en-CA', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  })
-}
-
-const createResultMessage = (status: string, message: string, errors: string[]): string => {
-  return [message, ...errors].filter(Boolean).join(' ')
-}
-
-const formatUploadMonth = (dateValue: string | null | undefined): string | null => {
-  const match = /^(\d{4})-(\d{2})-\d{2}/.exec(dateValue ?? '')
-  if (!match) {
-    return null
-  }
-
-  const year = Number(match[1])
-  const monthIndex = Number(match[2]) - 1
-  if (!Number.isInteger(year) || monthIndex < 0 || monthIndex > 11) {
-    return null
-  }
-
-  return new Intl.DateTimeFormat('en-CA', {
-    month: 'long',
-    timeZone: 'UTC',
-    year: 'numeric',
-  }).format(new Date(Date.UTC(year, monthIndex, 1)))
-}
-
-const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | null): string => {
-  const monthLabel = formatUploadMonth(previewResult?.updateDate ?? previewResult?.retrievalDate)
-  return monthLabel ? `New values applied for ${monthLabel}.` : 'New values applied.'
-}
-
-const normalizeIsoDate = (dateValue: string | null | undefined): string | null => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateValue ?? '')
-  return match ? `${match[1]}-${match[2]}-${match[3]}` : null
-}
-
-const isUpdateBeforeRetrieval = (previewResult: RtmEmsLogAmvUploadPreview): boolean => {
-  const retrievalDate = normalizeIsoDate(previewResult.retrievalDate)
-  const updateDate = normalizeIsoDate(previewResult.updateDate)
-  return !!retrievalDate && !!updateDate && updateDate < retrievalDate
-}
-
-const validateAcceptedPreview = (
-  previewResult: RtmEmsLogAmvUploadPreview,
-): RtmEmsLogAmvUploadPreview => {
-  if (previewResult.status !== 'accepted' || !isUpdateBeforeRetrieval(previewResult)) {
-    return previewResult
-  }
-
-  return {
-    ...previewResult,
-    status: 'validation_failed',
-    message: 'Upload template validation failed.',
-    errors: [...previewResult.errors, 'Update date must be on or after the retrieval date.'],
-  }
-}
-
-const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
-const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
-const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
-
-const RTM_UPLOAD_ONLY_DESCRIPTION = 'Update average monthly values by uploading an XLSX file.'
-const RTM_UPLOAD_STEP_DESCRIPTION =
-  'Add your completed template to check for errors before the new values take effect.'
-const RTM_UPLOAD_FIELD_HELPER = 'Accepted formats: .xlsx.'
-
-const RTM_UPLOAD_REVIEW_STEPS = [
-  { id: 'upload', label: 'Upload' },
-  { id: 'review', label: 'Review' },
+const RTM_AMV_SPECIES_COLUMNS: RtmAmvSpeciesColumn[] = [
+  { key: 'BA', label: 'Balsam', speciesCodes: ['BA', 'BALSAM'], persistSpeciesCodes: ['BA'] },
+  { key: 'HE', label: 'Hemlock', speciesCodes: ['HE', 'HEMLOCK'], persistSpeciesCodes: ['HE'] },
+  { key: 'CE', label: 'Cedar', speciesCodes: ['CE', 'CEDAR'], persistSpeciesCodes: ['CE'] },
+  { key: 'CY', label: 'Cypress', speciesCodes: ['CY', 'CYPRESS'], persistSpeciesCodes: ['CY'] },
+  { key: 'FI', label: 'Fir', speciesCodes: ['FI', 'FIR'], persistSpeciesCodes: ['FI'] },
+  { key: 'SP', label: 'Spruce', speciesCodes: ['SP', 'SPRUCE'], persistSpeciesCodes: ['SP'] },
+  {
+    key: 'PINE',
+    label: 'Pine',
+    speciesCodes: ['P', 'PINE', 'WH', 'LO', 'YE'],
+    persistSpeciesCodes: ['WH', 'LO', 'YE'],
+  },
 ]
 
-const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
-  { key: 'BA', label: 'Balsam', speciesCodes: ['BA'] },
-  { key: 'HE', label: 'Hemlock', speciesCodes: ['HE'] },
-  { key: 'CE', label: 'Cedar', speciesCodes: ['CE'] },
-  { key: 'CY', label: 'Cypress', speciesCodes: ['CY'] },
-  { key: 'FI', label: 'Fir', speciesCodes: ['FI'] },
-  { key: 'SP', label: 'Spruce', speciesCodes: ['SP'] },
-  { key: 'PINE', label: 'Pine', speciesCodes: ['PINE', 'WH', 'LO', 'YE'] },
-]
-
-const RTM_REVIEW_GRADE_ORDER = [
+const RTM_AMV_GRADE_ORDER = [
   'A',
   'B',
   'C',
@@ -189,18 +112,77 @@ const RTM_REVIEW_GRADE_ORDER = [
   '6',
 ]
 
-const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
+const RTM_AMV_GROWTH_INDICATORS: RtmGrowthIndicator[] = ['O', 'S']
 
 const normalizeKey = (value: string | null | undefined) => (value ?? '').trim().toUpperCase()
 
-const isAcceptedUploadFile = (file: File) => {
-  return (
-    file.size > 0 &&
-    RTM_UPLOAD_ACCEPT.some(
-      (type) => file.type === type || file.name.toLowerCase().endsWith('.xlsx'),
-    )
-  )
+const padDatePart = (value: number) => String(value).padStart(2, '0')
+
+const toLocalIsoDate = (date: Date) =>
+  `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`
+
+const todayIsoDate = () => toLocalIsoDate(new Date())
+
+const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+
+const previousMonthStartDate = (dateValue: string) => {
+  const [year, month] = dateValue.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month)) {
+    return dateValue
+  }
+
+  return toLocalIsoDate(new Date(year, month - 2, 1))
 }
+
+const formatMonth = (dateValue: string) => {
+  const [year, month] = dateValue.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month)) {
+    return dateValue
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    month: 'long',
+    timeZone: 'UTC',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, 1)))
+}
+
+const formatRawNumber = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return ''
+  }
+
+  return String(value)
+}
+
+const normalizeNumericString = (value: string) => value.trim().replace(/,/g, '')
+
+const parseCellValue = (value: string): number | null | undefined => {
+  const normalized = normalizeNumericString(value)
+  if (!normalized) {
+    return null
+  }
+
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return undefined
+  }
+
+  return parsed
+}
+
+const comparableCellValue = (value: string) => {
+  const parsed = parseCellValue(value)
+  if (parsed === undefined) {
+    return normalizeNumericString(value)
+  }
+
+  return parsed === null ? '' : String(parsed)
+}
+
+const rowValue = (row: RtmEmsLogAmvRow) => row.newValue ?? row.currentValue ?? null
+
+const numericSignature = (value: number) => String(value)
 
 const resolveSpeciesColumnKey = (species: string | null | undefined) => {
   const normalizedSpecies = normalizeKey(species)
@@ -208,743 +190,537 @@ const resolveSpeciesColumnKey = (species: string | null | undefined) => {
     return ''
   }
 
-  const matchedColumn = RTM_REVIEW_SPECIES_COLUMNS.find((column) =>
+  const matchedColumn = RTM_AMV_SPECIES_COLUMNS.find((column) =>
     column.speciesCodes.includes(normalizedSpecies),
   )
 
   return matchedColumn?.key ?? normalizedSpecies
 }
 
-const buildReviewSpeciesColumns = (rows: RtmEmsLogAmvRow[]): RtmReviewSpeciesColumn[] => {
-  const knownColumnKeys = new Set(RTM_REVIEW_SPECIES_COLUMNS.map((column) => column.key))
-  const extraColumns = new Set<string>()
-
-  rows.forEach((row) => {
-    const columnKey = resolveSpeciesColumnKey(row.species)
-    if (columnKey && !knownColumnKeys.has(columnKey)) {
-      extraColumns.add(columnKey)
-    }
-  })
-
-  return [
-    ...RTM_REVIEW_SPECIES_COLUMNS,
-    ...Array.from(extraColumns)
-      .sort()
-      .map((columnKey) => ({
-        key: columnKey,
-        label: columnKey,
-        speciesCodes: [columnKey],
-      })),
-  ]
+const rowMatchesCell = (row: RtmEmsLogAmvRow, grade: string, column: RtmAmvSpeciesColumn) => {
+  const rowGrade = normalizeKey(row.grade)
+  const rowSpeciesColumnKey = resolveSpeciesColumnKey(row.species)
+  return rowGrade === grade && rowSpeciesColumnKey === column.key
 }
 
-const formatGrowthIndicator = (growthIndicator: string) => {
-  if (growthIndicator === 'O') {
-    return 'Old growth'
-  }
+const rowMatchesPersistTarget = (
+  row: RtmEmsLogAmvRow,
+  species: string,
+  grade: string,
+  growthIndicator: RtmGrowthIndicator,
+) =>
+  normalizeKey(row.species) === normalizeKey(species) &&
+  normalizeKey(row.grade) === normalizeKey(grade) &&
+  normalizeKey(row.growthIndicator) === growthIndicator
 
-  if (growthIndicator === 'S') {
-    return 'Second growth'
-  }
+const buildCellKey = (grade: string, columnKey: string) => `${grade}|${columnKey}`
 
-  return growthIndicator
-}
+const buildCellBasis = (
+  currentRows: RtmEmsLogAmvRow[],
+  previousRows: RtmEmsLogAmvRow[],
+): Record<string, RtmAmvCellBasis> => {
+  const basisByKey: Record<string, RtmAmvCellBasis> = {}
 
-const compareMatrixRows = (left: RtmReviewMatrixRow, right: RtmReviewMatrixRow) => {
-  const leftGradeIndex = RTM_REVIEW_GRADE_ORDER.indexOf(left.grade)
-  const rightGradeIndex = RTM_REVIEW_GRADE_ORDER.indexOf(right.grade)
-  const normalizedLeftGradeIndex =
-    leftGradeIndex === -1 ? RTM_REVIEW_GRADE_ORDER.length : leftGradeIndex
-  const normalizedRightGradeIndex =
-    rightGradeIndex === -1 ? RTM_REVIEW_GRADE_ORDER.length : rightGradeIndex
+  RTM_AMV_GRADE_ORDER.forEach((grade) => {
+    RTM_AMV_SPECIES_COLUMNS.forEach((column) => {
+      const currentCellRows = currentRows.filter((row) => rowMatchesCell(row, grade, column))
+      const previousCellRows = previousRows.filter((row) => rowMatchesCell(row, grade, column))
+      const currentValues = currentCellRows
+        .map(rowValue)
+        .filter((value): value is number => value !== null && value !== undefined)
+      const previousValues = previousCellRows
+        .map(rowValue)
+        .filter((value): value is number => value !== null && value !== undefined)
+      const distinctCurrentValues = new Set(currentValues.map(numericSignature))
+      const distinctPreviousValues = new Set(previousValues.map(numericSignature))
 
-  if (normalizedLeftGradeIndex !== normalizedRightGradeIndex) {
-    return normalizedLeftGradeIndex - normalizedRightGradeIndex
-  }
-
-  return left.grade.localeCompare(right.grade)
-}
-
-const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] => {
-  const matrixRows = new Map<string, RtmReviewMatrixRow>()
-
-  RTM_REVIEW_GRADE_ORDER.forEach((grade) => {
-    matrixRows.set(grade, {
-      key: grade,
-      grade,
-      values: {},
+      basisByKey[buildCellKey(grade, column.key)] = {
+        currentRows: currentCellRows,
+        currentValue: formatRawNumber(currentValues[0]),
+        hasCurrentRow: currentCellRows.length > 0,
+        hasCurrentValue: currentValues.length > 0,
+        hasMixedCurrentValues: distinctCurrentValues.size > 1,
+        hasMixedPreviousValues: distinctPreviousValues.size > 1,
+        previousRows: previousCellRows,
+        previousValue: formatRawNumber(previousValues[0]),
+        hasPreviousRow: previousCellRows.length > 0,
+        hasPreviousValue: previousValues.length > 0,
+      }
     })
   })
 
-  rows.forEach((row) => {
-    const grade = normalizeKey(row.grade)
-    const growthIndicator = normalizeKey(row.growthIndicator)
-    const speciesColumnKey = resolveSpeciesColumnKey(row.species)
+  return basisByKey
+}
 
-    if (!grade || !speciesColumnKey) {
-      return
-    }
+const buildCellWarning = (cell: {
+  column: RtmAmvSpeciesColumn
+  grade: string
+  hasCurrentValue: boolean
+  hasPreviousValue: boolean
+  value: string
+}) => {
+  const nextValue = parseCellValue(cell.value)
+  const hasNextValue = nextValue !== null && nextValue !== undefined
 
-    const matrixRowKey = grade
-    const matrixRow =
-      matrixRows.get(matrixRowKey) ??
-      ({
-        key: matrixRowKey,
+  if (cell.hasPreviousValue && !hasNextValue) {
+    return `${cell.column.label} grade ${cell.grade} had a previous month value and is blank for the selected date.`
+  }
+
+  if (!cell.hasPreviousValue && hasNextValue) {
+    return `${cell.column.label} grade ${cell.grade} is newly populated; the previous month was blank.`
+  }
+
+  return null
+}
+
+const buildCellValidationError = (cell: {
+  column: RtmAmvSpeciesColumn
+  grade: string
+  value: string
+}) => {
+  if (parseCellValue(cell.value) === undefined) {
+    return `${cell.column.label} grade ${cell.grade} must be blank or a number greater than or equal to zero.`
+  }
+
+  return null
+}
+
+const buildCells = (
+  basisByKey: Record<string, RtmAmvCellBasis>,
+  editedValues: Record<string, string>,
+): RtmAmvCell[] =>
+  RTM_AMV_GRADE_ORDER.flatMap((grade) =>
+    RTM_AMV_SPECIES_COLUMNS.map((column) => {
+      const key = buildCellKey(grade, column.key)
+      const basis = basisByKey[key]
+      const value = editedValues[key] ?? basis.currentValue
+      const cell = {
+        ...basis,
+        column,
+        dirty: comparableCellValue(value) !== comparableCellValue(basis.currentValue),
         grade,
-        values: {},
-      } satisfies RtmReviewMatrixRow)
+        key,
+        value,
+      }
 
-    const columnValues = matrixRow.values[speciesColumnKey] ?? {}
-    if (!(growthIndicator in columnValues)) {
-      columnValues[growthIndicator] = row.newValue
-    }
-    matrixRow.values[speciesColumnKey] = columnValues
-    matrixRows.set(matrixRowKey, matrixRow)
-  })
-
-  return Array.from(matrixRows.values()).sort(compareMatrixRows)
-}
-
-const growthSortIndex = (growthIndicator: string) => {
-  const index = RTM_REVIEW_GROWTH_ORDER.indexOf(growthIndicator)
-  return index === -1 ? RTM_REVIEW_GROWTH_ORDER.length : index
-}
-
-const formatReviewCell = (values: RtmReviewCellValues | undefined) => {
-  if (!values || Object.keys(values).length === 0) {
-    return ''
-  }
-
-  const entries = Object.entries(values)
-    .filter(([, value]) => formatMoney(value))
-    .sort(([leftGrowth], [rightGrowth]) => {
-      const indexComparison = growthSortIndex(leftGrowth) - growthSortIndex(rightGrowth)
-      return indexComparison === 0 ? leftGrowth.localeCompare(rightGrowth) : indexComparison
-    })
-
-  const uniqueValues = Array.from(new Set(entries.map(([, value]) => formatMoney(value))))
-  if (uniqueValues.length <= 1) {
-    return uniqueValues[0] ?? ''
-  }
-
-  return (
-    <span className="rtm-review-cell-values">
-      {entries.map(([growthIndicator, value]) => (
-        <span key={growthIndicator}>
-          <span>{formatGrowthIndicator(growthIndicator)}</span>
-          <strong>{formatMoney(value)}</strong>
-        </span>
-      ))}
-    </span>
+      return {
+        ...cell,
+        validationError: buildCellValidationError(cell),
+        warning: buildCellWarning(cell),
+      }
+    }),
   )
-}
 
-const UploadValidationMessage = ({
-  kind,
-  title,
-  children,
-}: {
-  kind: 'info' | 'success' | 'error'
-  title: string
-  children: ReactNode
-}) => {
-  const Icon =
-    kind === 'success' ? CheckmarkFilled : kind === 'error' ? ErrorFilled : InformationFilled
+const warningDeduplicate = (warnings: Array<string | null>) =>
+  Array.from(new Set(warnings.filter((warning): warning is string => Boolean(warning))))
 
-  return (
-    <div
-      className={`admin-upload-validation admin-upload-validation--${kind}`}
-      role={kind === 'error' ? 'alert' : 'status'}
-      aria-live={kind === 'error' ? 'assertive' : 'polite'}
-    >
-      <Icon size={20} className="admin-upload-validation__icon" aria-hidden="true" />
-      <div className="admin-upload-validation__content">
-        <h3>{title}</h3>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-const buildValidationIssueRows = (
-  details: string[],
-): Array<{ detail: string; key: string; severity: 'Error' }> => {
-  const occurrences = new Map<string, number>()
-
-  return details.map((detail) => {
-    const occurrence = (occurrences.get(detail) ?? 0) + 1
-    occurrences.set(detail, occurrence)
-
-    return {
-      detail,
-      key: `Error-${detail}-${occurrence}`,
-      severity: 'Error',
-    }
-  })
-}
-
-const ValidationIssuesTable = ({ errors }: { errors: string[] }) => {
-  const issues = buildValidationIssueRows(errors)
-
-  if (issues.length === 0) {
-    return null
-  }
-
-  return (
-    <div className="admin-upload-validation-table-wrap">
-      <div className="admin-upload-validation-table-header">
-        <span>Validation issues ({issues.length})</span>
-      </div>
-      <table className="admin-upload-validation-table" aria-label="Upload validation issues">
-        <thead>
-          <tr>
-            <th className="admin-upload-validation-table__issue" scope="col">
-              Issue
-            </th>
-            <th scope="col">Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {issues.map((issue) => (
-            <tr key={issue.key}>
-              <td className="admin-upload-validation-table__issue">{issue.severity}</td>
-              <td>{issue.detail}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-const UploadValidationStatus = ({
-  isPreviewing,
-  uploadError,
-  previewResult,
-  selectedUploadFile,
-}: {
-  isPreviewing: boolean
-  uploadError: string
-  previewResult: RtmEmsLogAmvUploadPreview | null
-  selectedUploadFile: File | null
-}) => {
-  if (uploadError) {
-    return (
-      <UploadValidationMessage kind="error" title="File not ready">
-        <p>{uploadError}</p>
-      </UploadValidationMessage>
-    )
-  }
-
-  if (isPreviewing) {
-    return (
-      <UploadValidationMessage kind="info" title="Validating spreadsheet">
-        <p>Checking the uploaded workbook before review.</p>
-      </UploadValidationMessage>
-    )
-  }
-
-  if (!previewResult) {
-    return null
-  }
-
-  const isAccepted = previewResult.status === 'accepted'
-  const issueCount = previewResult.errors.length
-
-  return (
-    <>
-      <UploadValidationMessage
-        kind={isAccepted ? 'success' : 'error'}
-        title={
-          isAccepted
-            ? 'Spreadsheet validated'
-            : `${issueCount} validation issue${issueCount === 1 ? '' : 's'} found`
-        }
-      >
-        <p>
-          {selectedUploadFile
-            ? `"${selectedUploadFile.name}" ${isAccepted ? 'is ready for review.' : 'needs correction before review.'}`
-            : previewResult.message}
-        </p>
-        {!isAccepted && (
-          <p>Correct the issues in your spreadsheet, then replace the file to continue.</p>
-        )}
-        {isAccepted && <p>{previewResult.message}</p>}
-      </UploadValidationMessage>
-      <ValidationIssuesTable errors={previewResult.errors} />
-    </>
-  )
-}
-
-const ReviewUploadContent = ({
-  previewResult,
-  uploadResult,
-}: {
-  previewResult: RtmEmsLogAmvUploadPreview
-  uploadResult: RtmEmsLogAmvUploadResult | null
-}) => {
-  const speciesColumns = buildReviewSpeciesColumns(previewResult.rows)
-  const matrixRows = buildReviewMatrixRows(previewResult.rows)
-
-  return (
-    <div className="admin-upload-review admin-upload-review--rtm">
-      {matrixRows.length > 0 ? (
-        <div className="admin-upload-review-table">
-          <Table aria-label="Average monthly value upload review">
-            <TableHead>
-              <TableRow>
-                <TableHeader>Grade</TableHeader>
-                {speciesColumns.map((column) => (
-                  <TableHeader key={column.key}>{column.label}</TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {matrixRows.map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell>{row.grade}</TableCell>
-                  {speciesColumns.map((column) => (
-                    <TableCell key={column.key}>
-                      {formatReviewCell(row.values[column.key])}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <p className="admin-upload-review__empty-result">No parsed AMV rows are available.</p>
-      )}
-
-      {uploadResult && (
-        <div className="admin-upload-result" role="status">
-          <span
-            className={`admin-upload-status-text admin-upload-status-text--${uploadResultStatusClass(uploadResult.status)}`}
-          >
-            {uploadResult.status}
-          </span>
-          <p>
-            {createResultMessage(uploadResult.status, uploadResult.message, uploadResult.errors)}
-          </p>
-          <p>
-            Attempted rows: {uploadResult.attemptedRowCount} | Uploaded rows:{' '}
-            {uploadResult.uploadedRowCount}
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
+const notificationMessage = (message: string, errors: string[]) =>
+  [message, ...errors].filter(Boolean).join(' ')
 
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
-  const validationRequestRef = useRef(0)
-  const uploadInputRef = useRef<HTMLInputElement>(null)
-  const [uploadStep, setUploadStep] = useState<RtmUploadStep>('upload')
-  const [isPreviewing, setIsPreviewing] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadError, setUploadError] = useState('')
-  const [notification, setNotification] = useState('')
-  const [notificationTitle, setNotificationTitle] = useState('Average monthly values')
-  const [notificationKind, setNotificationKind] = useState<
-    'success' | 'error' | 'warning' | 'info'
-  >('info')
-  const [previewResult, setPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(null)
-  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
-  const [pendingUploadValidation, setPendingUploadValidation] =
-    useState<PendingUploadValidation | null>(null)
-  const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
-  const [uploadInputKey, setUploadInputKey] = useState(0)
-  const [isDraggingUpload, setIsDraggingUpload] = useState(false)
+  const [targetDate, setTargetDate] = useState(todayIsoDate)
+  const [loadedDate, setLoadedDate] = useState(todayIsoDate)
+  const [currentRows, setCurrentRows] = useState<RtmEmsLogAmvRow[]>([])
+  const [previousRows, setPreviousRows] = useState<RtmEmsLogAmvRow[]>([])
+  const [editedValues, setEditedValues] = useState<Record<string, string>>({})
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [notification, setNotification] = useState<NotificationState | null>(null)
 
-  const validateUploadFile = async (nextFile: File | null) => {
-    const requestId = validationRequestRef.current + 1
-    validationRequestRef.current = requestId
+  const today = todayIsoDate()
+  const selectedDateIsPast = isIsoDate(targetDate) && targetDate < today
+  const selectedPreviousMonthDate = isIsoDate(targetDate) ? previousMonthStartDate(targetDate) : ''
 
-    setUploadStep('upload')
-    setSelectedUploadFile(nextFile)
-    setUploadError('')
-    setPreviewResult(null)
-    setUploadResult(null)
-    setPendingUploadValidation(null)
-
-    if (!nextFile) {
+  const loadRows = useCallback(async () => {
+    if (!isIsoDate(targetDate)) {
+      setLoadError('Enter a valid effective date.')
+      setCurrentRows([])
+      setPreviousRows([])
+      setEditedValues({})
       return
     }
 
-    if (!isAcceptedUploadFile(nextFile)) {
-      setUploadError('Upload an XLSX file before continuing.')
-      return
-    }
-
-    setIsPreviewing(true)
+    const previousDate = previousMonthStartDate(targetDate)
+    setIsLoading(true)
+    setLoadError('')
 
     try {
-      const response = await previewRtmEmsLogAmvUpload(nextFile)
+      const [currentResponse, previousResponse] = await Promise.all([
+        searchRtmEmsLogAmv({
+          species: '',
+          growthIndicator: '',
+          retrievalDate: targetDate,
+          updateDate: targetDate,
+        }),
+        searchRtmEmsLogAmv({
+          species: '',
+          growthIndicator: '',
+          retrievalDate: previousDate,
+          updateDate: previousDate,
+        }),
+      ])
 
-      if (validationRequestRef.current !== requestId) {
-        return
-      }
+      setCurrentRows(currentResponse)
+      setPreviousRows(previousResponse)
+      setLoadedDate(targetDate)
+      setEditedValues({})
+    } catch (error) {
+      console.error(error)
+      setLoadError('Unable to load average monthly values.')
+      setCurrentRows([])
+      setPreviousRows([])
+      setEditedValues({})
+    } finally {
+      setIsLoading(false)
+    }
+  }, [targetDate])
 
-      const validatedResponse = validateAcceptedPreview(response)
-      setPreviewResult(validatedResponse)
-      if (validatedResponse.status === 'accepted') {
-        setPendingUploadValidation({
-          fileName: nextFile.name,
-          fileSize: nextFile.size,
+  useEffect(() => {
+    void loadRows()
+  }, [loadRows])
+
+  const basisByKey = useMemo(
+    () => buildCellBasis(currentRows, previousRows),
+    [currentRows, previousRows],
+  )
+  const cells = useMemo(() => buildCells(basisByKey, editedValues), [basisByKey, editedValues])
+  const warnings = warningDeduplicate(cells.map((cell) => cell.warning))
+  const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))
+  const dirtyCells = cells.filter((cell) => cell.dirty)
+  const hasPendingChanges = dirtyCells.length > 0
+  const isReadOnly = !canManage || selectedDateIsPast || isLoading || isSaving
+  const saveDisabled =
+    isReadOnly || !hasPendingChanges || validationErrors.length > 0 || !isIsoDate(targetDate)
+
+  const updateCellValue = (key: string, value: string) => {
+    setEditedValues((current) => ({
+      ...current,
+      [key]: value,
+    }))
+  }
+
+  const resetChanges = () => {
+    setEditedValues({})
+  }
+
+  const buildSaveRequestsForCell = (cell: RtmAmvCell): RtmEmsLogAmvSaveRequest[] => {
+    const parsedValue = parseCellValue(cell.value)
+    const newValue = parsedValue === undefined ? null : parsedValue
+
+    return cell.column.persistSpeciesCodes.flatMap((species) =>
+      RTM_AMV_GROWTH_INDICATORS.map((growthIndicator) => {
+        const currentRow = cell.currentRows.find((row) =>
+          rowMatchesPersistTarget(row, species, cell.grade, growthIndicator),
+        )
+        const previousRow = cell.previousRows.find((row) =>
+          rowMatchesPersistTarget(row, species, cell.grade, growthIndicator),
+        )
+        const hasExistingRow = Boolean(currentRow || previousRow)
+        const retrievalDate =
+          currentRow?.retrievalDate ??
+          previousRow?.retrievalDate ??
+          (previousRow ? selectedPreviousMonthDate : targetDate)
+
+        return {
+          species,
+          grade: cell.grade,
+          growthIndicator,
+          retrievalDate: retrievalDate || targetDate,
+          updateDate: targetDate,
+          newValue,
+          saveMode: hasExistingRow ? 'update' : 'create',
+        }
+      }),
+    )
+  }
+
+  const saveChanges = async () => {
+    if (!canManage) {
+      setNotification({
+        kind: 'error',
+        title: 'Average monthly values',
+        subtitle: 'You do not have permission to update average monthly values.',
+      })
+      return
+    }
+
+    if (selectedDateIsPast) {
+      setNotification({
+        kind: 'warning',
+        title: 'Average monthly values',
+        subtitle: 'Values for past dates are read-only.',
+      })
+      return
+    }
+
+    if (validationErrors.length > 0) {
+      setNotification({
+        kind: 'error',
+        title: 'Average monthly values',
+        subtitle: validationErrors[0],
+      })
+      return
+    }
+
+    const requests = dirtyCells.flatMap(buildSaveRequestsForCell)
+    if (requests.length === 0) {
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      const results = await Promise.all(requests.map((request) => saveRtmEmsLogAmv(request)))
+      const failedResults = results.filter((result) => result.status !== 'accepted')
+
+      if (failedResults.length > 0) {
+        setNotification({
+          kind: failedResults.length === results.length ? 'error' : 'warning',
+          title: 'Average monthly values',
+          subtitle: notificationMessage(failedResults[0].message, failedResults[0].errors),
         })
-      } else {
-        setPendingUploadValidation(null)
-      }
-    } catch (error) {
-      if (validationRequestRef.current !== requestId) {
         return
       }
 
-      console.error(error)
-      setUploadError('Unable to validate this upload.')
-      setPreviewResult(null)
-      setPendingUploadValidation(null)
-    } finally {
-      if (validationRequestRef.current === requestId) {
-        setIsPreviewing(false)
-      }
-    }
-  }
-
-  const updateUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
-    void validateUploadFile(event.currentTarget.files?.[0] ?? null)
-  }
-
-  const onDropUploadFile = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setIsDraggingUpload(false)
-    if (!canManage) {
-      return
-    }
-    void validateUploadFile(event.dataTransfer.files?.[0] ?? null)
-  }
-
-  const openUploadFileDialog = () => {
-    if (!canManage) {
-      return
-    }
-
-    uploadInputRef.current?.click()
-  }
-
-  const onUploadDropZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-      return
-    }
-
-    event.preventDefault()
-    openUploadFileDialog()
-  }
-
-  const clearUploadState = () => {
-    validationRequestRef.current += 1
-    setUploadStep('upload')
-    setSelectedUploadFile(null)
-    setUploadError('')
-    setPreviewResult(null)
-    setUploadResult(null)
-    setPendingUploadValidation(null)
-    setUploadInputKey((current) => current + 1)
-    setIsDraggingUpload(false)
-    setIsPreviewing(false)
-  }
-
-  const submitUpload = async () => {
-    if (!canManage) {
-      setUploadError('You do not have permission to upload average monthly value rows.')
-      return
-    }
-
-    if (!selectedUploadFile) {
-      setUploadError('Upload an XLSX file before submitting changes.')
-      return
-    }
-
-    if (
-      !pendingUploadValidation ||
-      pendingUploadValidation.fileName !== selectedUploadFile.name ||
-      pendingUploadValidation.fileSize !== selectedUploadFile.size
-    ) {
-      setUploadError('Validate this file before submitting changes.')
-      return
-    }
-
-    setUploadError('')
-    setUploadResult(null)
-    setIsUploading(true)
-
-    try {
-      const response = await uploadRtmEmsLogAmv({
-        file: selectedUploadFile,
+      setNotification({
+        kind: warnings.length > 0 ? 'warning' : 'success',
+        title: 'Average monthly values updated',
+        subtitle:
+          warnings.length > 0
+            ? `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'} with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`
+            : `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'}.`,
       })
-
-      setUploadResult(response)
-      setNotificationKind(
-        response.status === 'accepted'
-          ? 'success'
-          : response.status === 'validation_failed'
-            ? 'warning'
-            : 'error',
-      )
-      if (response.status === 'accepted') {
-        setNotificationTitle('Average monthly values updated')
-        setNotification(createAcceptedUploadMessage(previewResult))
-        clearUploadState()
-      } else {
-        setNotificationTitle('Average monthly values')
-        setNotification(createResultMessage(response.status, response.message, response.errors))
-      }
+      await loadRows()
     } catch (error) {
       console.error(error)
-      const message = 'Unable to apply average monthly value upload.'
-      setNotificationKind('error')
-      setNotificationTitle('Average monthly values')
-      setNotification(message)
-      setUploadResult({
-        status: 'rejected',
-        message,
-        attemptedRowCount: 0,
-        uploadedRowCount: 0,
-        errors: [message],
-        warnings: [],
-        rows: [],
+      setNotification({
+        kind: 'error',
+        title: 'Average monthly values',
+        subtitle: 'Unable to save average monthly values.',
       })
     } finally {
-      setPendingUploadValidation(null)
-      setIsUploading(false)
+      setIsSaving(false)
     }
   }
-
-  const hasCurrentUploadValidation =
-    !!selectedUploadFile &&
-    selectedUploadFile.size > 0 &&
-    !!pendingUploadValidation &&
-    pendingUploadValidation.fileName === selectedUploadFile.name &&
-    pendingUploadValidation.fileSize === selectedUploadFile.size
-
-  const isReviewReady = hasCurrentUploadValidation && previewResult?.status === 'accepted'
-
-  const isReviewDisabled = isPreviewing || !canManage
-
-  const isUploadDisabled =
-    isUploading ||
-    !canManage ||
-    !selectedUploadFile ||
-    selectedUploadFile.size <= 0 ||
-    !pendingUploadValidation ||
-    pendingUploadValidation.fileName !== selectedUploadFile.name ||
-    pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-    previewResult?.status !== 'accepted'
-
-  const openReviewStep = () => {
-    if (!canManage) {
-      setUploadError('You do not have permission to upload average monthly value rows.')
-      return
-    }
-
-    if (!selectedUploadFile || selectedUploadFile.size <= 0) {
-      setUploadError('Please upload a file before continuing.')
-      return
-    }
-
-    if (!isReviewReady) {
-      setUploadError('Upload a spreadsheet that passes validation before reviewing it.')
-      return
-    }
-
-    setUploadError('')
-    setUploadStep('review')
-  }
-
-  const uploadDropZoneClassName = [
-    'admin-upload-drop-zone',
-    isDraggingUpload ? 'is-dragging' : '',
-    !canManage ? 'is-disabled' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-  const completedWorkflowSteps = uploadStep === 'review' ? ['upload'] : []
 
   return (
-    <Grid fullWidth className="default-grid admin-upload-fspts-page">
-      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header">
+    <Grid fullWidth className="default-grid admin-upload-fspts-page rtm-amv-page">
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header rtm-amv-header">
         <h1>Average Monthly Values</h1>
-        <p>{RTM_UPLOAD_ONLY_DESCRIPTION}</p>
-        <UploadWorkflowProgress
-          steps={RTM_UPLOAD_REVIEW_STEPS}
-          currentStepId={uploadStep}
-          completedStepIds={completedWorkflowSteps}
-          ariaLabel="Average monthly values upload workflow progress"
-        />
+        <p>{RTM_AMV_DESCRIPTION}</p>
       </Column>
 
-      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
-        {uploadStep === 'upload' ? (
-          <>
-            <div className="admin-upload-section-heading">
-              <h2 id="rtm-upload-title">Upload</h2>
-              <p>{RTM_UPLOAD_STEP_DESCRIPTION}</p>
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-content">
+        <section
+          className="admin-upload-panel rtm-amv-toolbar"
+          aria-labelledby="rtm-amv-table-title"
+        >
+          <div className="rtm-amv-toolbar__controls">
+            <TextInput
+              id="rtm-amv-effective-date"
+              labelText="Effective date"
+              type="date"
+              value={targetDate}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setTargetDate(event.target.value)}
+            />
+            <Button
+              kind="secondary"
+              size="md"
+              renderIcon={Renew}
+              onClick={() => {
+                void loadRows()
+              }}
+              disabled={isLoading || isSaving || !isIsoDate(targetDate)}
+            >
+              Reload
+            </Button>
+          </div>
+          <div className="rtm-amv-toolbar__status" role="status">
+            {isLoading ? (
+              <InlineLoading description="Loading values" />
+            ) : (
+              <>
+                <InformationFilled size={16} aria-hidden="true" />
+                <span>
+                  Comparing {formatMonth(loadedDate)} against{' '}
+                  {formatMonth(selectedPreviousMonthDate)}
+                </span>
+              </>
+            )}
+          </div>
+        </section>
+
+        {selectedDateIsPast && (
+          <div className="admin-upload-validation admin-upload-validation--info" role="status">
+            <InformationFilled
+              size={20}
+              className="admin-upload-validation__icon"
+              aria-hidden="true"
+            />
+            <div className="admin-upload-validation__content">
+              <h3>Past date selected</h3>
+              <p>Values before {today} are read-only.</p>
             </div>
-
-            <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
-              <div className="admin-upload-field-header">
-                <div>
-                  <span className="admin-upload-field-label">Upload Excel Spreadsheet</span>
-                  <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
-                </div>
-                <a
-                  className="admin-upload-template-card"
-                  href={RTM_TEMPLATE_DOWNLOAD_PATH}
-                  download={RTM_TEMPLATE_DOWNLOAD_NAME}
-                  aria-label="Download template"
-                >
-                  <span>
-                    <span className="admin-upload-template-card__title">Download template</span>
-                    <span className="admin-upload-template-card__meta">XLSX</span>
-                  </span>
-                  <Download size={16} aria-hidden="true" />
-                </a>
-              </div>
-
-              <input
-                ref={uploadInputRef}
-                key={uploadInputKey}
-                id="rtm-upload-file"
-                className="admin-upload-native-input"
-                type="file"
-                aria-label="Average monthly values upload spreadsheet"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                disabled={!canManage}
-                onChange={updateUploadFile}
-              />
-
-              <div
-                className={uploadDropZoneClassName}
-                role="button"
-                tabIndex={canManage ? 0 : -1}
-                aria-disabled={!canManage}
-                aria-label="Choose an average monthly values upload spreadsheet"
-                onClick={openUploadFileDialog}
-                onKeyDown={onUploadDropZoneKeyDown}
-                onDragEnter={(event) => {
-                  event.preventDefault()
-                  if (canManage) {
-                    setIsDraggingUpload(true)
-                  }
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  if (canManage) {
-                    setIsDraggingUpload(true)
-                  }
-                }}
-                onDragLeave={() => setIsDraggingUpload(false)}
-                onDrop={onDropUploadFile}
-              >
-                <div className="admin-upload-drop-zone__copy">
-                  <p>Drag and drop files here or click to upload</p>
-                </div>
-              </div>
-
-              {selectedUploadFile && (
-                <div
-                  className="admin-upload-file-chip"
-                  aria-label="Selected average monthly values upload file"
-                >
-                  <Document size={16} aria-hidden="true" />
-                  <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
-                  <span className="admin-upload-file-chip__size">
-                    {selectedUploadFile.size.toLocaleString()} bytes
-                  </span>
-                  <button
-                    type="button"
-                    className="admin-upload-file-chip__remove"
-                    aria-label="Clear selected file"
-                    onClick={clearUploadState}
-                  >
-                    <Close size={16} />
-                  </button>
-                </div>
-              )}
-
-              <UploadValidationStatus
-                isPreviewing={isPreviewing}
-                uploadError={uploadError}
-                previewResult={previewResult}
-                selectedUploadFile={selectedUploadFile}
-              />
-            </section>
-
-            <div className="admin-upload-fspts-button-row">
-              <Button
-                kind="primary"
-                size="md"
-                className="admin-upload-fspts-action-button"
-                renderIcon={ArrowRight}
-                onClick={openReviewStep}
-                disabled={isReviewDisabled}
-              >
-                Review
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="admin-upload-section-heading">
-              <h2 id="rtm-review-title">Review</h2>
-              <p>Review the details extracted from your file and submit when ready</p>
-            </div>
-
-            <section className="admin-upload-panel" aria-labelledby="rtm-review-title">
-              {uploadError && (
-                <p className="landing-page-help-text landing-page-help-text--error">
-                  {uploadError}
-                </p>
-              )}
-
-              {previewResult && (
-                <ReviewUploadContent previewResult={previewResult} uploadResult={uploadResult} />
-              )}
-            </section>
-
-            <div className="admin-upload-fspts-button-row">
-              <Button kind="ghost" size="md" onClick={() => setUploadStep('upload')}>
-                Back
-              </Button>
-              <Button
-                kind="primary"
-                size="md"
-                className="admin-upload-fspts-action-button"
-                renderIcon={ArrowRight}
-                onClick={() => {
-                  void submitUpload()
-                }}
-                disabled={isUploadDisabled}
-              >
-                Submit
-              </Button>
-            </div>
-          </>
+          </div>
         )}
+
+        {loadError && (
+          <div className="admin-upload-validation admin-upload-validation--error" role="alert">
+            <ErrorFilled size={20} className="admin-upload-validation__icon" aria-hidden="true" />
+            <div className="admin-upload-validation__content">
+              <h3>Unable to load values</h3>
+              <p>{loadError}</p>
+            </div>
+          </div>
+        )}
+
+        {warnings.length > 0 && (
+          <div className="rtm-amv-warning-panel" role="status" aria-live="polite">
+            <div className="rtm-amv-warning-panel__header">
+              <WarningAltFilled size={20} aria-hidden="true" />
+              <h2>Warnings</h2>
+              <span>{warnings.length}</span>
+            </div>
+            <ul>
+              {warnings.slice(0, 8).map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+            {warnings.length > 8 && (
+              <p>
+                {warnings.length - 8} more warning{warnings.length - 8 === 1 ? '' : 's'} in the
+                table.
+              </p>
+            )}
+          </div>
+        )}
+
+        {validationErrors.length > 0 && (
+          <div className="admin-upload-validation admin-upload-validation--error" role="alert">
+            <ErrorFilled size={20} className="admin-upload-validation__icon" aria-hidden="true" />
+            <div className="admin-upload-validation__content">
+              <h3>Invalid table value</h3>
+              <p>{validationErrors[0]}</p>
+            </div>
+          </div>
+        )}
+
+        <section className="admin-upload-panel rtm-amv-table-panel">
+          <div className="admin-upload-section-heading rtm-amv-table-heading">
+            <h2 id="rtm-amv-table-title">Average monthly values table</h2>
+            <p>Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.</p>
+          </div>
+
+          <div className="rtm-amv-table-wrap">
+            <TableContainer>
+              <Table size="lg" useZebraStyles aria-label="Average monthly value table">
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Grade</TableHeader>
+                    {RTM_AMV_SPECIES_COLUMNS.map((column) => (
+                      <TableHeader key={column.key}>{column.label}</TableHeader>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {RTM_AMV_GRADE_ORDER.map((grade) => (
+                    <TableRow key={grade}>
+                      <TableCell className="rtm-amv-grade-cell">{grade}</TableCell>
+                      {RTM_AMV_SPECIES_COLUMNS.map((column) => {
+                        const cell = cells.find(
+                          (candidate) => candidate.key === buildCellKey(grade, column.key),
+                        )
+                        if (!cell) {
+                          return <TableCell key={column.key} />
+                        }
+
+                        const cellClassName = [
+                          'rtm-amv-value-cell',
+                          cell.dirty ? 'is-dirty' : '',
+                          cell.warning ? 'has-warning' : '',
+                          cell.validationError ? 'has-error' : '',
+                          cell.hasMixedCurrentValues || cell.hasMixedPreviousValues
+                            ? 'has-mixed-values'
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')
+
+                        return (
+                          <TableCell key={column.key} className={cellClassName}>
+                            <label className="rtm-amv-cell-input-label">
+                              <span>{`${column.label} grade ${grade}`}</span>
+                              <input
+                                className="rtm-amv-cell-input"
+                                inputMode="decimal"
+                                aria-label={`${column.label} grade ${grade}`}
+                                value={cell.value}
+                                disabled={isReadOnly}
+                                onChange={(event) => updateCellValue(cell.key, event.target.value)}
+                              />
+                            </label>
+                            {cell.hasMixedCurrentValues && (
+                              <span className="rtm-amv-cell-note">Multiple values</span>
+                            )}
+                          </TableCell>
+                        )
+                      })}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </div>
+        </section>
+
+        <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split rtm-amv-actions">
+          <div className="rtm-amv-actions__summary" role="status">
+            {hasPendingChanges ? (
+              <span>
+                {dirtyCells.length} changed cell{dirtyCells.length === 1 ? '' : 's'}
+              </span>
+            ) : (
+              <span>No unsaved changes</span>
+            )}
+          </div>
+          <div>
+            <Button
+              kind="ghost"
+              size="md"
+              renderIcon={Renew}
+              onClick={resetChanges}
+              disabled={!hasPendingChanges || isSaving}
+            >
+              Reset
+            </Button>
+            <Button
+              kind="primary"
+              size="md"
+              className="admin-upload-fspts-action-button"
+              renderIcon={isSaving ? CheckmarkFilled : Save}
+              onClick={() => {
+                void saveChanges()
+              }}
+              disabled={saveDisabled}
+            >
+              {isSaving ? 'Saving' : 'Save changes'}
+            </Button>
+          </div>
+        </div>
       </Column>
 
       {notification && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
-            kind={notificationKind}
+            kind={notification.kind}
             role="status"
-            title={notificationTitle}
-            subtitle={notification}
+            title={notification.title}
+            subtitle={notification.subtitle}
             onCloseButtonClick={() => {
-              setNotification('')
+              setNotification(null)
             }}
           />
         </Column>

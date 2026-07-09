@@ -117,7 +117,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     }
 
     LocalDate effectiveDate = effectiveDateForSave(saveMode, retrievalDate, updateDate);
-    if (!hasAppliedValue(species, grade, growthIndicator, effectiveDate, request.newValue())) {
+    if (request.newValue() != null
+        && !hasAppliedValue(species, grade, growthIndicator, effectiveDate, request.newValue())) {
       return buildMutationResult(
           RETURN_FAILURE,
           "Oracle reported success but the AMV row was not applied.",
@@ -367,9 +368,6 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.add("Retrieval date is required and must be a valid date.");
     }
 
-    if (request.newValue() == null) {
-      errors.add("New value is required.");
-    }
     if (request.newValue() != null && request.newValue().signum() < 0) {
       errors.add("New value must be greater than or equal to zero.");
     }

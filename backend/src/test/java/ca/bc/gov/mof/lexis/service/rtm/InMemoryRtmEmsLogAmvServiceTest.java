@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.rtm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import java.io.IOException;
@@ -60,6 +61,19 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(result.uploadedRowCount()).isZero();
     assertThat(result.errors())
         .contains("The template header is not recognized as an RTM EMS AMV sheet.");
+  }
+
+  @Test
+  void shouldSaveBlankTableValue() {
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(FIXED_CLOCK);
+
+    var result =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", null, null, "create"));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.rows()).singleElement().satisfies(row -> assertThat(row.newValue()).isNull());
   }
 
   private MultipartFile matrixWorkbook() throws IOException {
