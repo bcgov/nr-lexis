@@ -1294,6 +1294,75 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(balsamGradeA.locator('xpath=ancestor::td')).not.toHaveClass(/has-warning/)
   })
 
+  test('uses copied AMV values as the warning baseline', async () => {
+    const page = await authenticatedIdirPage()
+    const targetDate = '2099-07-13'
+    const sourceDate = '2099-07-10'
+    const copiedRows = [
+      ['BA', 'O', 10.25],
+      ['BA', 'S', 10.25],
+      ['HE', 'O', 20.5],
+      ['HE', 'S', 20.5],
+    ].map(([species, growthIndicator, value]) => ({
+      species,
+      grade: 'A',
+      growthIndicator,
+      retrievalDate: sourceDate,
+      updateDate: sourceDate,
+      currentValue: value,
+      newValue: value,
+      returnCode: '0',
+    }))
+
+    await page.route('**/api/lexis/rtm/emslogamv**', async (route) => {
+      const request = route.request()
+      if (request.method() !== 'GET') {
+        await route.fallback()
+        return
+      }
+
+      const latestBeforeDate = new URL(request.url()).searchParams.get('latestBeforeDate')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(latestBeforeDate === targetDate ? copiedRows : []),
+      })
+    })
+
+    await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
+    const effectiveDate = page.getByLabel('Effective date')
+    await effectiveDate.fill(targetDate)
+    await effectiveDate.press('Tab')
+
+    await expect(page.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
+    await expect(page.getByText(/Prefilled from July 10, 2099/)).toBeVisible()
+
+    const balsamGradeA = page.getByLabel('Balsam grade A')
+    const cedarGradeA = page.getByLabel('Cedar grade A')
+    await expect(balsamGradeA).toHaveValue('10.25')
+    await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/is-dirty/)
+    await expect(balsamGradeA.locator('xpath=ancestor::td')).not.toHaveClass(/has-warning/)
+    await expect(page.getByRole('heading', { name: 'Warnings' })).toHaveCount(0)
+
+    await balsamGradeA.fill('')
+    await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/is-removed/)
+    await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/has-warning/)
+    await expect(
+      page.getByText(/had a value in the starting values and is now blank/),
+    ).toBeVisible()
+
+    await page.getByRole('button', { name: 'Reset' }).click()
+    await expect(balsamGradeA).toHaveValue('10.25')
+    await expect(page.getByRole('heading', { name: 'Warnings' })).toHaveCount(0)
+
+    await cedarGradeA.fill('5')
+    await expect(cedarGradeA.locator('xpath=ancestor::td')).toHaveClass(/is-added/)
+    await expect(cedarGradeA.locator('xpath=ancestor::td')).toHaveClass(/has-warning/)
+    await expect(
+      page.getByText(/was blank in the starting values and is now populated/),
+    ).toBeVisible()
+  })
+
   test('shows AMV table save validation failures without persisting values', async () => {
     const page = await authenticatedIdirPage()
     const saveRequests: Array<Record<string, unknown>> = []
