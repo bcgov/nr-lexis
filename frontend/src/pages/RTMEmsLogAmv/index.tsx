@@ -471,9 +471,11 @@ const RTMEmsLogAmvPage = () => {
     () => buildCellBasis(currentRows, previousRows),
     [currentRows, previousRows],
   )
+  const compareWithPreviousDay = selectedDateIsToday && !prefillSourceDate
   const cells = useMemo(
-    () => buildCells(basisByKey, editedValues, prefillValues, retryCellKeys, selectedDateIsToday),
-    [basisByKey, editedValues, prefillValues, retryCellKeys, selectedDateIsToday],
+    () =>
+      buildCells(basisByKey, editedValues, prefillValues, retryCellKeys, compareWithPreviousDay),
+    [basisByKey, compareWithPreviousDay, editedValues, prefillValues, retryCellKeys],
   )
   const warnings = warningDeduplicate(cells.map((cell) => cell.warning))
   const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))
@@ -769,7 +771,7 @@ const RTMEmsLogAmvPage = () => {
                     ))}
                   </TableRow>
                 </TableHead>
-                <TableBody>
+                <TableBody key={loadedDate}>
                   {RTM_AMV_GRADE_ORDER.map((grade) => (
                     <TableRow key={grade}>
                       <TableCell className="rtm-amv-grade-cell">{grade}</TableCell>

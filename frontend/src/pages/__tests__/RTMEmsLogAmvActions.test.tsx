@@ -38,6 +38,7 @@ const dateOffsetFromToday = (offset: number) => {
 const TARGET_DATE = dateOffsetFromToday(0)
 const PREVIOUS_DAY_DATE = dateOffsetFromToday(-1)
 const FUTURE_DATE = dateOffsetFromToday(1)
+const SECOND_FUTURE_DATE = dateOffsetFromToday(2)
 
 const row = (
   species: string,
@@ -366,25 +367,68 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
   })
 
+  it('warns on additions and removals when today already has saved values', async () => {
+    const user = userEvent.setup()
+    const savedTodayRows = [
+      row('BA', 'A', 'O', TARGET_DATE, 10.25),
+      row('BA', 'A', 'S', TARGET_DATE, 10.25),
+    ]
+    mockSearchRows({
+      current: savedTodayRows,
+      previous: [
+        row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
+        row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
+      ],
+    })
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate()
+
+    const balsamInput = screen.getByLabelText('Balsam grade A')
+    const cedarInput = screen.getByLabelText('Cedar grade A')
+    expect(
+      screen.queryByRole('heading', { name: 'Starting values copied' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+    expect(mockedSearchLatest).not.toHaveBeenCalledWith(TARGET_DATE)
+
+    await user.clear(balsamInput)
+    expect(balsamInput.closest('td')).toHaveClass('has-warning', 'is-removed')
+    expect(screen.getByText(/had a value yesterday and is blank for today/)).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(balsamInput).toHaveValue('10.25')
+    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+
+    await user.type(cedarInput, '5')
+    expect(cedarInput.closest('td')).toHaveClass('has-warning', 'is-added')
+    expect(screen.getByText(/is newly populated; it was blank yesterday/)).toBeVisible()
+  })
+
   it.each([
     ['today', TARGET_DATE, dateOffsetFromToday(-8)],
     ['an intervening past date', '2000-01-02', '2000-01-01'],
-  ])('prefills empty values for %s from the latest earlier entry', async (_, date, sourceDate) => {
-    mockSearchRows({ current: [], previous: [] })
-    mockedSearchLatest.mockResolvedValue([
-      row('BA', 'A', 'O', sourceDate, 10.25),
-      row('BA', 'A', 'S', sourceDate, 10.25),
-    ])
+  ])(
+    'prefills empty values for %s without warning on untouched copied values',
+    async (_, date, sourceDate) => {
+      mockSearchRows({ current: [], previous: [] })
+      mockedSearchLatest.mockResolvedValue([
+        row('BA', 'A', 'O', sourceDate, 10.25),
+        row('BA', 'A', 'S', sourceDate, 10.25),
+      ])
 
-    render(<RTMEmsLogAmvPage />)
-    await selectTargetDate(date)
+      render(<RTMEmsLogAmvPage />)
+      await selectTargetDate(date)
 
-    await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(date))
-    expect(screen.getByLabelText('Balsam grade A')).toHaveValue('10.25')
-    expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
-    expect(screen.getByText(/These values are not saved/)).toBeVisible()
-    expect(mockedSave).not.toHaveBeenCalled()
-  })
+      await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(date))
+      expect(screen.getByLabelText('Balsam grade A')).toHaveValue('10.25')
+      expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
+      expect(screen.getByText(/These values are not saved/)).toBeVisible()
+      expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Balsam grade A').closest('td')).not.toHaveClass('has-warning')
+      expect(mockedSave).not.toHaveBeenCalled()
+    },
+  )
 
   it('prefills an empty future date from the latest values without saving automatically', async () => {
     const user = userEvent.setup()
@@ -474,6 +518,34 @@ describe('RTM EMS Log AMV actions', () => {
         saveMode: 'create',
       },
     ])
+  })
+
+  it('clears warning cell state when a different date finishes loading', async () => {
+    const user = userEvent.setup()
+    const sourceDate = dateOffsetFromToday(-7)
+    mockSearchRows({ current: [], previous: [] })
+    mockedSearchLatest.mockResolvedValue([
+      row('BA', 'A', 'O', sourceDate, 10.25),
+      row('BA', 'A', 'S', sourceDate, 10.25),
+    ])
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate(FUTURE_DATE)
+
+    const warnedInput = screen.getByLabelText('Cedar grade A')
+    await user.type(warnedInput, '5')
+    expect(warnedInput.closest('td')).toHaveClass('has-warning', 'is-added')
+
+    await selectTargetDate(SECOND_FUTURE_DATE)
+    await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(SECOND_FUTURE_DATE))
+
+    const reloadedInput = screen.getByLabelText('Cedar grade A')
+    await waitFor(() => {
+      expect(reloadedInput).toHaveValue('')
+      expect(reloadedInput.closest('td')).not.toHaveClass('has-warning', 'is-added')
+      expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+    })
+    expect(reloadedInput).not.toBe(warnedInput)
   })
 
   it('blocks blank, over-precise and out-of-range table values before save', async () => {

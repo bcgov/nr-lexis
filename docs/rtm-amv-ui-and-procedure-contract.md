@@ -34,6 +34,8 @@ Consequences for the UI:
   For an empty date, that warning baseline is the copied snapshot rather than an empty persisted
   table. Untouched copied values remain pending to save but do not produce warnings. Ordinary
   value-to-value edits remain standard unsaved changes.
+- When today is empty and uses copied values, yesterday-versus-today warnings are suppressed; user
+  changes are compared with the copied snapshot instead.
 - Only a selected effective date before today requires explicit confirmation before saving.
 - When yesterday has a value and today is blank, the table warns that the value is missing.
 - When yesterday is blank and a user enters a value today, the table warns without blocking the

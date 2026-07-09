@@ -1296,8 +1296,7 @@ test.describe('TEST IDIR admin regression', () => {
 
   test('uses copied AMV values as the warning baseline', async () => {
     const page = await authenticatedIdirPage()
-    const targetDate = '2099-07-13'
-    const sourceDate = '2099-07-10'
+    const sourceDate = '2000-01-01'
     const copiedRows = [
       ['BA', 'O', 10.25],
       ['BA', 'S', 10.25],
@@ -1325,17 +1324,13 @@ test.describe('TEST IDIR admin regression', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(latestBeforeDate === targetDate ? copiedRows : []),
+        body: JSON.stringify(latestBeforeDate ? copiedRows : []),
       })
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
-    const effectiveDate = page.getByLabel('Effective date')
-    await effectiveDate.fill(targetDate)
-    await effectiveDate.press('Tab')
-
     await expect(page.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
-    await expect(page.getByText(/Prefilled from July 10, 2099/)).toBeVisible()
+    await expect(page.getByText(/These values are not saved/)).toBeVisible()
 
     const balsamGradeA = page.getByLabel('Balsam grade A')
     const cedarGradeA = page.getByLabel('Cedar grade A')
@@ -1361,6 +1356,22 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(
       page.getByText(/was blank in the starting values and is now populated/),
     ).toBeVisible()
+
+    const cedarCell = cedarGradeA.locator('xpath=ancestor::td')
+    const warningBackground = await cedarCell.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    )
+    const effectiveDate = page.getByLabel('Effective date')
+    await effectiveDate.fill('2099-07-14')
+    await effectiveDate.press('Tab')
+
+    await expect(page.getByText('Future date selected')).toBeVisible()
+    await expect(cedarGradeA).toHaveValue('')
+    await expect(cedarCell).not.toHaveClass(/has-warning/)
+    await expect(page.getByRole('heading', { name: 'Warnings' })).toHaveCount(0)
+    await expect
+      .poll(async () => cedarCell.evaluate((element) => getComputedStyle(element).backgroundColor))
+      .not.toBe(warningBackground)
   })
 
   test('shows AMV table save validation failures without persisting values', async () => {
