@@ -39,13 +39,6 @@ final class LexisApiAuthorizationRules {
   private static final String ACTION_UPLOAD_APPLICATION_SUBMISSION = "uploadApplicationSubmission";
   private static final String ACTION_UPLOAD_FEDERAL_SUBMISSION = "uploadFederalSubmission";
 
-  /*
-   * Keep both modern REST paths and legacy .do/RPC aliases here.
-   *
-   * The nr-lexis frontend uses the REST-ish /api/lexis/... routes. Legacy aliases remain because
-   * nr-lexis-main used those Struts/JSP entry points and this backend still exposes compatibility
-   * controllers for the migrated workflows.
-   */
   private static final Map<String, String> APPLICATION_DETAILS_RPC_ACTIONS =
       actionMap(
           Map.entry("getDocumentDetails", ACTION_APPLICATION_DETAILS),
