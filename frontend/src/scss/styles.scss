@@ -2697,8 +2697,17 @@ body {
   box-shadow: inset 0 -2px 0 #0f62fe;
 }
 
-.rtm-amv-value-cell.has-error .rtm-amv-cell-input {
+.rtm-amv-value-cell.has-error:not(.has-warning) .rtm-amv-cell-input {
   border-color: #da1e28;
+}
+
+.rtm-amv-value-cell.has-warning .rtm-amv-cell-input {
+  border-color: var(--cds-support-warning, #f1c21b);
+  box-shadow: inset 0 0 0 1px var(--cds-support-warning, #f1c21b);
+}
+
+.rtm-amv-value-cell.has-warning .rtm-amv-cell-input:focus {
+  outline-color: var(--cds-support-warning, #f1c21b);
 }
 
 .rtm-amv-cell-input:disabled {

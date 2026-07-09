@@ -33,6 +33,7 @@ import {
 } from '@/service/rtm-emslogamv-service'
 
 type RtmGrowthIndicator = 'O' | 'S'
+type RtmAmvChangeKind = 'added' | 'changed' | 'removed' | null
 
 type RtmAmvSpeciesColumn = {
   key: string
@@ -55,6 +56,7 @@ type RtmAmvCellBasis = {
 }
 
 type RtmAmvCell = RtmAmvCellBasis & {
+  changeKind: RtmAmvChangeKind
   column: RtmAmvSpeciesColumn
   grade: string
   key: string
@@ -272,6 +274,7 @@ const buildPrefillValues = (sourceRows: RtmEmsLogAmvRow[]) => {
 const buildCellWarning = (
   cell: {
     column: RtmAmvSpeciesColumn
+    changeKind: RtmAmvChangeKind
     grade: string
     hasCurrentValue: boolean
     hasPreviousValue: boolean
@@ -279,19 +282,23 @@ const buildCellWarning = (
   },
   showDailyWarnings: boolean,
 ) => {
-  if (!showDailyWarnings) {
-    return null
-  }
-
   const nextValue = parseCellValue(cell.value)
   const hasNextValue = nextValue !== null && nextValue !== undefined
 
-  if (cell.hasPreviousValue && !hasNextValue) {
+  if (showDailyWarnings && cell.hasPreviousValue && !hasNextValue) {
     return `${cell.column.label} grade ${cell.grade} had a value yesterday and is blank for today.`
   }
 
-  if (!cell.hasPreviousValue && hasNextValue) {
+  if (showDailyWarnings && !cell.hasPreviousValue && hasNextValue) {
     return `${cell.column.label} grade ${cell.grade} is newly populated; it was blank yesterday.`
+  }
+
+  if (cell.changeKind === 'added') {
+    return `${cell.column.label} grade ${cell.grade} is newly populated; no value is saved for the selected effective date.`
+  }
+
+  if (cell.changeKind === 'removed') {
+    return `${cell.column.label} grade ${cell.grade} has a saved value and is now blank for the selected effective date.`
   }
 
   return null
@@ -326,12 +333,22 @@ const buildCells = (
       const key = buildCellKey(grade, column.key)
       const basis = basisByKey[key]
       const value = editedValues[key] ?? basis.currentValue
+      const dirty =
+        retryCellKeys[key] === true ||
+        comparableCellValue(value) !== comparableCellValue(basis.currentValue)
+      const hasInputValue = normalizeNumericString(value) !== ''
+      const changeKind: RtmAmvChangeKind = !dirty
+        ? null
+        : !basis.hasCurrentValue && hasInputValue
+          ? 'added'
+          : basis.hasCurrentValue && !hasInputValue
+            ? 'removed'
+            : 'changed'
       const cell = {
         ...basis,
+        changeKind,
         column,
-        dirty:
-          retryCellKeys[key] === true ||
-          comparableCellValue(value) !== comparableCellValue(basis.currentValue),
+        dirty,
         grade,
         key,
         value,
@@ -763,6 +780,7 @@ const RTMEmsLogAmvPage = () => {
                         const cellClassName = [
                           'rtm-amv-value-cell',
                           cell.dirty ? 'is-dirty' : '',
+                          cell.changeKind ? `is-${cell.changeKind}` : '',
                           cell.warning ? 'has-warning' : '',
                           cell.validationError ? 'has-error' : '',
                           cell.hasMixedCurrentValues || cell.hasMixedPreviousValues

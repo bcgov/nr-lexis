@@ -29,7 +29,10 @@ Consequences for the UI:
   warning panel before a backdated change can be saved.
 - When any selected date has no rows, the UI copies values from the latest earlier populated date as
   an unsaved starting point. This applies to gaps before today as well as today and future dates.
-- Future dates are editable but do not receive daily carry-forward warnings.
+- Future dates do not receive yesterday-versus-today warnings.
+- On any date, adding a value where the selected effective date has no saved value or clearing a
+  saved value is highlighted as a warning. Ordinary value-to-value edits remain standard unsaved
+  changes.
 - When yesterday has a value and today is blank, the table warns that the value is missing.
 - When yesterday is blank and a user enters a value today, the table warns and requires an explicit
   confirmation before saving. The warning does not block the confirmed save.
