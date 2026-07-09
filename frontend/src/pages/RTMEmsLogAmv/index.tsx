@@ -294,11 +294,11 @@ const buildCellWarning = (
   }
 
   if (cell.changeKind === 'added') {
-    return `${cell.column.label} grade ${cell.grade} is newly populated; no value is saved for the selected effective date.`
+    return `${cell.column.label} grade ${cell.grade} was blank in the starting values and is now populated.`
   }
 
   if (cell.changeKind === 'removed') {
-    return `${cell.column.label} grade ${cell.grade} has a saved value and is now blank for the selected effective date.`
+    return `${cell.column.label} grade ${cell.grade} had a value in the starting values and is now blank.`
   }
 
   return null
@@ -325,6 +325,7 @@ const buildCellValidationError = (cell: {
 const buildCells = (
   basisByKey: Record<string, RtmAmvCellBasis>,
   editedValues: Record<string, string>,
+  prefillValues: Record<string, string>,
   retryCellKeys: Record<string, true>,
   showDailyWarnings: boolean,
 ): RtmAmvCell[] =>
@@ -336,12 +337,15 @@ const buildCells = (
       const dirty =
         retryCellKeys[key] === true ||
         comparableCellValue(value) !== comparableCellValue(basis.currentValue)
+      const baselineValue = prefillValues[key] ?? basis.currentValue
+      const changedFromBaseline = comparableCellValue(value) !== comparableCellValue(baselineValue)
+      const baselineHasValue = normalizeNumericString(baselineValue) !== ''
       const hasInputValue = normalizeNumericString(value) !== ''
-      const changeKind: RtmAmvChangeKind = !dirty
+      const changeKind: RtmAmvChangeKind = !changedFromBaseline
         ? null
-        : !basis.hasCurrentValue && hasInputValue
+        : !baselineHasValue && hasInputValue
           ? 'added'
-          : basis.hasCurrentValue && !hasInputValue
+          : baselineHasValue && !hasInputValue
             ? 'removed'
             : 'changed'
       const cell = {
@@ -468,8 +472,8 @@ const RTMEmsLogAmvPage = () => {
     [currentRows, previousRows],
   )
   const cells = useMemo(
-    () => buildCells(basisByKey, editedValues, retryCellKeys, selectedDateIsToday),
-    [basisByKey, editedValues, retryCellKeys, selectedDateIsToday],
+    () => buildCells(basisByKey, editedValues, prefillValues, retryCellKeys, selectedDateIsToday),
+    [basisByKey, editedValues, prefillValues, retryCellKeys, selectedDateIsToday],
   )
   const warnings = warningDeduplicate(cells.map((cell) => cell.warning))
   const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))

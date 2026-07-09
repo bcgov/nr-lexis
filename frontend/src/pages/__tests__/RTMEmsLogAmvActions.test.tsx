@@ -332,7 +332,7 @@ describe('RTM EMS Log AMV actions', () => {
     const input = screen.getByLabelText('Balsam grade A')
     await user.type(input, '11')
     expect(screen.getByRole('heading', { name: 'Warnings' })).toBeVisible()
-    expect(screen.getByText(/no value is saved for the selected effective date/)).toBeVisible()
+    expect(screen.getByText(/was blank in the starting values and is now populated/)).toBeVisible()
     expect(input.closest('td')).toHaveClass('has-warning', 'is-added')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
@@ -383,10 +383,6 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByLabelText('Balsam grade A')).toHaveValue('10.25')
     expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
     expect(screen.getByText(/These values are not saved/)).toBeVisible()
-    expect(screen.getByLabelText('Balsam grade A').closest('td')).toHaveClass(
-      'has-warning',
-      'is-added',
-    )
     expect(mockedSave).not.toHaveBeenCalled()
   })
 
@@ -405,17 +401,34 @@ describe('RTM EMS Log AMV actions', () => {
     await selectTargetDate(FUTURE_DATE)
 
     await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(FUTURE_DATE))
-    expect(screen.getByLabelText('Balsam grade A')).toHaveValue('10.25')
+    const balsamInput = screen.getByLabelText('Balsam grade A')
+    const cedarInput = screen.getByLabelText('Cedar grade A')
+    expect(balsamInput).toHaveValue('10.25')
     expect(screen.getByLabelText('Hemlock grade A')).toHaveValue('20.5')
     expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
     expect(screen.getByText(/These values are not saved/)).toBeVisible()
+    expect(balsamInput.closest('td')).toHaveClass('is-dirty')
+    expect(balsamInput.closest('td')).not.toHaveClass('has-warning')
+    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
     expect(mockedSave).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
 
-    const balsamInput = screen.getByLabelText('Balsam grade A')
+    await user.clear(balsamInput)
+    expect(balsamInput.closest('td')).toHaveClass('has-warning', 'is-removed')
+    expect(screen.getByText(/had a value in the starting values and is now blank/)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+
     await user.clear(balsamInput)
     await user.type(balsamInput, '11')
+    expect(balsamInput.closest('td')).toHaveClass('is-changed')
+    expect(balsamInput.closest('td')).not.toHaveClass('has-warning')
     await user.click(screen.getByRole('button', { name: 'Reset' }))
+
+    await user.type(cedarInput, '5')
+    expect(cedarInput.closest('td')).toHaveClass('has-warning', 'is-added')
+    expect(screen.getByText(/was blank in the starting values and is now populated/)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+
     expect(balsamInput).toHaveValue('10.25')
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
 
@@ -476,7 +489,7 @@ describe('RTM EMS Log AMV actions', () => {
     const input = screen.getByLabelText('Balsam grade A')
     await user.clear(input)
     expect(input.closest('td')).toHaveClass('has-warning', 'is-removed')
-    expect(screen.getByText(/has a saved value and is now blank/)).toBeVisible()
+    expect(screen.getByText(/had a value in the starting values and is now blank/)).toBeVisible()
     expect(screen.getByText('Balsam grade A is required.')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
 
