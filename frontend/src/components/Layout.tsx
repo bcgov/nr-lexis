@@ -27,6 +27,7 @@ import {
   hasProvincialSubmitterRole,
   hasRole,
 } from '@/context/auth/role-utils'
+import { syncAppNotificationRegionTheme } from '@/components/AppNotification'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
@@ -335,6 +336,10 @@ function Layout({ children }: LayoutProps) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isProfileOpen])
+
+  useEffect(() => {
+    syncAppNotificationRegionTheme(isDarkTheme)
+  }, [isDarkTheme])
 
   return (
     <Theme theme={isDarkTheme ? 'g100' : 'white'}>

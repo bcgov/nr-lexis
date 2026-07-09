@@ -8,7 +8,7 @@ import {
 
 const MINIMUM_SUCCESS_AUTO_DISMISS_MS = 8000
 const PERSISTENT_NOTIFICATION_KINDS = new Set(['error', 'warning', 'warning-alt'])
-const NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
+export const APP_NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
 
 export type AppNotificationProps = PropsWithChildren<
   Omit<ToastNotificationProps, 'onCloseButtonClick' | 'hideCloseButton' | 'timeout'> & {
@@ -18,22 +18,29 @@ export type AppNotificationProps = PropsWithChildren<
   }
 >
 
-const getNotificationRegion = (): HTMLElement | null => {
+export const syncAppNotificationRegionTheme = (isDarkTheme: boolean): HTMLElement | null => {
   if (typeof document === 'undefined') {
     return null
   }
 
-  const existingRegion = document.getElementById(NOTIFICATION_REGION_ID)
-  if (existingRegion) {
-    return existingRegion
+  let region = document.getElementById(APP_NOTIFICATION_REGION_ID)
+  if (!region) {
+    region = document.createElement('div')
+    region.id = APP_NOTIFICATION_REGION_ID
+    document.body.appendChild(region)
   }
 
-  const region = document.createElement('div')
-  region.id = NOTIFICATION_REGION_ID
-  region.className = 'app-notification-region'
+  region.classList.add('app-notification-region')
+  region.classList.toggle('cds--g100', isDarkTheme)
+  region.classList.toggle('cds--white', !isDarkTheme)
   region.setAttribute('aria-live', 'polite')
-  document.body.appendChild(region)
   return region
+}
+
+const getNotificationRegion = (): HTMLElement | null => {
+  const isDarkTheme =
+    typeof document !== 'undefined' && Boolean(document.querySelector('.cds--g100 .app-shell'))
+  return syncAppNotificationRegionTheme(isDarkTheme)
 }
 
 export function AppNotification({

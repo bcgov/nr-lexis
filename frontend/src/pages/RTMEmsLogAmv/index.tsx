@@ -88,6 +88,30 @@ const createResultMessage = (status: string, message: string, errors: string[]):
   return [message, ...errors].filter(Boolean).join(' ')
 }
 
+const formatUploadMonth = (dateValue: string | null | undefined): string | null => {
+  const match = /^(\d{4})-(\d{2})-\d{2}/.exec(dateValue ?? '')
+  if (!match) {
+    return null
+  }
+
+  const year = Number(match[1])
+  const monthIndex = Number(match[2]) - 1
+  if (!Number.isInteger(year) || monthIndex < 0 || monthIndex > 11) {
+    return null
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    month: 'long',
+    timeZone: 'UTC',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, monthIndex, 1)))
+}
+
+const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | null): string => {
+  const monthLabel = formatUploadMonth(previewResult?.retrievalDate ?? previewResult?.updateDate)
+  return monthLabel ? `New values applied for ${monthLabel}.` : 'New values applied.'
+}
+
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
@@ -500,6 +524,7 @@ const RTMEmsLogAmvPage = () => {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [notification, setNotification] = useState('')
+  const [notificationTitle, setNotificationTitle] = useState('Average monthly values')
   const [notificationKind, setNotificationKind] = useState<
     'success' | 'error' | 'warning' | 'info'
   >('info')
@@ -645,14 +670,19 @@ const RTMEmsLogAmvPage = () => {
             ? 'warning'
             : 'error',
       )
-      setNotification(createResultMessage(response.status, response.message, response.errors))
       if (response.status === 'accepted') {
+        setNotificationTitle('Average monthly values updated')
+        setNotification(createAcceptedUploadMessage(previewResult))
         clearUploadState()
+      } else {
+        setNotificationTitle('Average monthly values')
+        setNotification(createResultMessage(response.status, response.message, response.errors))
       }
     } catch (error) {
       console.error(error)
       const message = 'Unable to apply average monthly value upload.'
       setNotificationKind('error')
+      setNotificationTitle('Average monthly values')
       setNotification(message)
       setUploadResult({
         status: 'rejected',
@@ -881,8 +911,9 @@ const RTMEmsLogAmvPage = () => {
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={notificationKind}
+            lowContrast={notificationKind === 'success'}
             role="status"
-            title="Average monthly values"
+            title={notificationTitle}
             subtitle={notification}
             onCloseButtonClick={() => {
               setNotification('')
