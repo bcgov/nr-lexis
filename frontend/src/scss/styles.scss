@@ -2640,6 +2640,11 @@ body {
   inline-size: 5rem;
 }
 
+.rtm-amv-table-wrap .cds--data-table tbody tr:hover > td,
+.rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td {
+  background: var(--csp-layer-hover);
+}
+
 .rtm-amv-grade-cell {
   color: var(--csp-text-primary);
   font-weight: 700;
