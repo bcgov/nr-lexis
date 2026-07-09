@@ -136,10 +136,8 @@ class OracleRtmEmsLogAmvServiceTest {
   void shouldAcceptPreviewWhenTargetGrowthRowsExist() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
-    when(repository.find(eq("BA"), eq("O"), eq(updateDate), eq(updateDate)))
-        .thenReturn(List.of(row("BA", "A", "O", updateDate, "0")));
-    when(repository.find(eq("BA"), eq("S"), eq(updateDate), eq(updateDate)))
-        .thenReturn(List.of(row("BA", "A", "S", updateDate, "0")));
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(true);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     var result = service.previewUpload(singleBalsamWorkbook());
@@ -153,9 +151,8 @@ class OracleRtmEmsLogAmvServiceTest {
   void shouldRejectPreviewWhenTargetGrowthRowIsMissing() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
-    when(repository.find(eq("BA"), eq("O"), eq(updateDate), eq(updateDate)))
-        .thenReturn(List.of(row("BA", "A", "O", updateDate, "0")));
-    when(repository.find(eq("BA"), eq("S"), eq(updateDate), eq(updateDate))).thenReturn(List.of());
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(false);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     var result = service.previewUpload(singleBalsamWorkbook());
@@ -170,9 +167,8 @@ class OracleRtmEmsLogAmvServiceTest {
   void shouldRejectUploadBeforeMutationWhenTargetGrowthRowIsMissing() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
-    when(repository.find(eq("BA"), eq("O"), eq(updateDate), eq(updateDate)))
-        .thenReturn(List.of(row("BA", "A", "O", updateDate, "0")));
-    when(repository.find(eq("BA"), eq("S"), eq(updateDate), eq(updateDate))).thenReturn(List.of());
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(false);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(singleBalsamWorkbook(), null, null);
@@ -342,6 +338,20 @@ class OracleRtmEmsLogAmvServiceTest {
               String growthIndicator = invocation.getArgument(1);
               LocalDate effectiveDate = invocation.getArgument(2);
               return fixtureRows(species, growthIndicator, effectiveDate);
+            });
+    when(repository.existsExact(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class)))
+        .thenAnswer(
+            invocation -> {
+              String species = invocation.getArgument(0);
+              String grade = invocation.getArgument(1);
+              String growthIndicator = invocation.getArgument(2);
+              LocalDate effectiveDate = invocation.getArgument(3);
+              return fixtureRows(species, growthIndicator, effectiveDate).stream()
+                  .anyMatch(row -> grade.equalsIgnoreCase(row.grade()));
             });
   }
 

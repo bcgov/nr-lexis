@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -41,6 +42,51 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       return executeFind(species, growthIndicator, retrievalDate, null);
     }
     return rows;
+  }
+
+  public boolean existsExact(
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate) {
+    if (effectiveDate == null) {
+      return false;
+    }
+
+    Integer count = countExact("EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate);
+    if (count == null) {
+      count = countExact("THE.EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate);
+    }
+    if (count == null) {
+      logger.warn("RTM AMV exact row check could not verify EMS_LOG_AMV.");
+    }
+    return count != null && count > 0;
+  }
+
+  private Integer countExact(
+      String tableName,
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate) {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
+          SELECT COUNT(*)
+          FROM %s
+          WHERE SPECIES = UPPER(?)
+            AND GRADE = UPPER(?)
+            AND GROWTH_TYPE_ST = UPPER(?)
+            AND TRUNC(EFFECTIVE_DATE) = ?
+          """.formatted(tableName),
+          Integer.class,
+          trim(species),
+          trim(grade),
+          trim(growthIndicator),
+          java.sql.Date.valueOf(effectiveDate));
+    } catch (DataAccessException ignored) {
+      return null;
+    }
   }
 
   private List<RtmEmsLogAmvRowDto> executeFind(

@@ -531,13 +531,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       return false;
     }
 
-    List<RtmEmsLogAmvRowDto> appliedRows =
-        repository.find(species, growthIndicator, effectiveDate, effectiveDate);
-    if (appliedRows == null || appliedRows.isEmpty()) {
-      return false;
-    }
-
-    return appliedRows.stream().anyMatch(row -> equalsIgnoreCase(grade, row.grade()));
+    return repository.existsExact(species, grade, growthIndicator, effectiveDate);
   }
 
   private boolean isXlsx(MultipartFile file) {
