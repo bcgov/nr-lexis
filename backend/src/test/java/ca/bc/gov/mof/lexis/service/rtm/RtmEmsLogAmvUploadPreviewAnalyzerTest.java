@@ -37,7 +37,7 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
-  void shouldUseSubmissionDateForRetrievalAndWorkbookUpdateDate() throws IOException {
+  void shouldUseWorkbookUpdateDateAsUploadRetrievalDate() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
             new ByteArrayInputStream(
@@ -46,7 +46,7 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
 
     assertThat(result.headerDetected()).isTrue();
     assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 6, 1));
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 8, 14));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
     assertThat(result.dataRowCount()).isEqualTo(2);
     assertThat(result.numericCellCount()).isEqualTo(4);
     assertThat(result.errors()).isEmpty();
@@ -89,7 +89,7 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
 
     assertThat(result.headerDetected()).isTrue();
     assertThat(result.updateDate()).isNull();
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 7, 6));
+    assertThat(result.retrievalDate()).isNull();
     assertThat(result.dataRowCount()).isEqualTo(23);
     assertThat(result.numericCellCount()).isZero();
     assertThat(result.errors()).isEmpty();

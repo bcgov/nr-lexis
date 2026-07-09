@@ -417,7 +417,8 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.add("Growth indicator is required.");
     }
 
-    if (parseRetrievalDate(request.retrievalDate()) == null) {
+    LocalDate parsedRetrievalDate = parseRetrievalDate(request.retrievalDate());
+    if (parsedRetrievalDate == null) {
       errors.add("Retrieval date is required and must be a valid date.");
     }
 
@@ -433,8 +434,15 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.add("Save mode must be 'create' or 'update'.");
     }
 
-    if (SAVE_MODE_UPDATE.equals(saveMode) && parseIsoOrLegacyDate(request.updateDate()) == null) {
+    LocalDate parsedUpdateDate = parseIsoOrLegacyDate(request.updateDate());
+    if (SAVE_MODE_UPDATE.equals(saveMode) && parsedUpdateDate == null) {
       errors.add("Update date is required for update mode.");
+    }
+    if (SAVE_MODE_UPDATE.equals(saveMode)
+        && parsedRetrievalDate != null
+        && parsedUpdateDate != null
+        && parsedUpdateDate.isBefore(parsedRetrievalDate)) {
+      errors.add("Update date must be on or after the retrieval date.");
     }
 
     return errors;

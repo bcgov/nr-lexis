@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
@@ -73,6 +74,7 @@ class OracleRtmEmsLogAmvServiceTest {
             any(LocalDate.class),
             any(BigDecimal.class)))
         .thenReturn("0");
+    stubAppliedFixtureValues(repository);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook(), null, null);
@@ -109,6 +111,7 @@ class OracleRtmEmsLogAmvServiceTest {
             any(LocalDate.class),
             any(BigDecimal.class)))
         .thenReturn("0");
+    stubAppliedFixtureValues(repository);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook(), null, null);
@@ -156,11 +159,144 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(result.errors()).contains("Save returned code null");
   }
 
+  @Test
+  void shouldAcceptLegacyInsertSuccessCodeWhenSavedValueIsConfirmed() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.insert(
+            eq("BA"),
+            eq("A"),
+            eq("O"),
+            eq(LocalDate.of(2026, 1, 1)),
+            eq(new BigDecimal("10.01"))))
+        .thenReturn("-100");
+    when(repository.find(
+            eq("BA"),
+            eq("O"),
+            eq(LocalDate.of(2026, 1, 1)),
+            eq(LocalDate.of(2026, 1, 1))))
+        .thenReturn(List.of(row("BA", "A", "O", LocalDate.of(2026, 1, 1), "10.01")));
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA",
+                "A",
+                "O",
+                "2026-01-01",
+                null,
+                new BigDecimal("10.01"),
+                "create"));
+
+    assertThat(result.status()).isEqualTo("accepted");
+  }
+
+  @Test
+  void shouldRejectLegacySuccessWhenSavedValueCannotBeConfirmed() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.update(
+            eq("BA"),
+            eq("A"),
+            eq("O"),
+            eq(LocalDate.of(2026, 1, 1)),
+            eq(LocalDate.of(2026, 1, 1)),
+            eq(new BigDecimal("10.01"))))
+        .thenReturn("0");
+    when(repository.find(
+            eq("BA"),
+            eq("O"),
+            eq(LocalDate.of(2026, 1, 1)),
+            eq(LocalDate.of(2026, 1, 1))))
+        .thenReturn(List.of(row("BA", "A", "O", LocalDate.of(2026, 1, 1), "0")));
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA",
+                "A",
+                "O",
+                "2026-01-01",
+                "2026-01-01",
+                new BigDecimal("10.01"),
+                "update"));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains(
+            "Saved value could not be confirmed for species 'BA', grade 'A', growth 'O', effective date '2026-01-01'.");
+  }
+
+  @Test
+  void shouldRejectUpdateDateBeforeRetrievalDate() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA",
+                "A",
+                "O",
+                "2026-07-01",
+                "2026-06-01",
+                new BigDecimal("10.01"),
+                "update"));
+
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.errors()).contains("Update date must be on or after the retrieval date.");
+  }
+
   private MultipartFile matrixWorkbook() throws IOException {
     return new MockMultipartFile(
         "file",
         "matrix.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
+  }
+
+  private static void stubAppliedFixtureValues(OracleRtmEmsLogAmvRepository repository) {
+    when(repository.find(
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(LocalDate.class)))
+        .thenAnswer(
+            invocation -> {
+              String species = invocation.getArgument(0);
+              String growthIndicator = invocation.getArgument(1);
+              LocalDate effectiveDate = invocation.getArgument(2);
+              return fixtureRows(species, growthIndicator, effectiveDate);
+            });
+  }
+
+  private static List<RtmEmsLogAmvRowDto> fixtureRows(
+      String species, String growthIndicator, LocalDate effectiveDate) {
+    return switch (species) {
+      case "BA" ->
+          List.of(
+              row(species, "A", growthIndicator, effectiveDate, "10.25"),
+              row(species, "1", growthIndicator, effectiveDate, "1.25"));
+      case "HE" -> List.of(row(species, "A", growthIndicator, effectiveDate, "20.50"));
+      case "WH", "LO", "YE" -> List.of(row(species, "A", growthIndicator, effectiveDate, "30.75"));
+      default -> List.of();
+    };
+  }
+
+  private static RtmEmsLogAmvRowDto row(
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate,
+      String value) {
+    return new RtmEmsLogAmvRowDto(
+        species,
+        grade,
+        growthIndicator,
+        effectiveDate.toString(),
+        effectiveDate.toString(),
+        null,
+        new BigDecimal(value),
+        "0");
   }
 }
