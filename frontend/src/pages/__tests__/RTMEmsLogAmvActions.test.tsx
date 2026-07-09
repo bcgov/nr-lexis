@@ -105,7 +105,7 @@ const selectTargetDate = async (date = TARGET_DATE) => {
 }
 
 const confirmAmvSave = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByRole('button', { name: 'Save confirmed changes' }))
+  await user.click(await screen.findByRole('button', { name: 'Confirm and save' }))
 }
 
 describe('RTM EMS Log AMV actions', () => {
@@ -202,11 +202,9 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByText(/Pine grade A is newly populated/)).toBeVisible()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
-    expect(mockedSave).not.toHaveBeenCalled()
-    await confirmAmvSave(user)
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(6))
+    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
     expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
       {
         species: 'WH',
@@ -280,7 +278,6 @@ describe('RTM EMS Log AMV actions', () => {
 
     await user.type(screen.getByLabelText('Balsam grade A'), '11')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await confirmAmvSave(user)
 
     expect(await screen.findByText(/Average monthly value validation failed/)).toBeVisible()
   })
@@ -316,7 +313,6 @@ describe('RTM EMS Log AMV actions', () => {
     await user.clear(input)
     await user.type(input, '12')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await confirmAmvSave(user)
 
     expect(await screen.findByText('Second growth row could not be saved.')).toBeVisible()
     await waitFor(() => {
@@ -326,19 +322,72 @@ describe('RTM EMS Log AMV actions', () => {
     expect(mockedSave).toHaveBeenCalledTimes(2)
   })
 
-  it('does not show daily warnings or confirmation for future dates', async () => {
+  it('warns without confirmation when a future-date value is added to an empty cell', async () => {
     const user = userEvent.setup()
     mockSearchRows({ current: [], previous: [] })
 
     render(<RTMEmsLogAmvPage />)
     await selectTargetDate(FUTURE_DATE)
 
-    await user.type(screen.getByLabelText('Balsam grade A'), '11')
-    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+    const input = screen.getByLabelText('Balsam grade A')
+    await user.type(input, '11')
+    expect(screen.getByRole('heading', { name: 'Warnings' })).toBeVisible()
+    expect(screen.getByText(/no value is saved for the selected effective date/)).toBeVisible()
+    expect(input.closest('td')).toHaveClass('has-warning', 'is-added')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
     expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
+  })
+
+  it('keeps ordinary value-to-value edits as standard unsaved changes', async () => {
+    const user = userEvent.setup()
+    mockSearchRows({
+      current: [row('BA', 'A', 'O', TARGET_DATE, 10.25), row('BA', 'A', 'S', TARGET_DATE, 10.25)],
+      previous: [
+        row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
+        row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
+      ],
+    })
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate()
+
+    const input = screen.getByLabelText('Balsam grade A')
+    await user.clear(input)
+    await user.type(input, '11')
+
+    expect(input.closest('td')).toHaveClass('is-dirty', 'is-changed')
+    expect(input.closest('td')).not.toHaveClass('has-warning')
+    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['today', TARGET_DATE, dateOffsetFromToday(-8)],
+    ['an intervening past date', '2000-01-02', '2000-01-01'],
+  ])('prefills empty values for %s from the latest earlier entry', async (_, date, sourceDate) => {
+    mockSearchRows({ current: [], previous: [] })
+    mockedSearchLatest.mockResolvedValue([
+      row('BA', 'A', 'O', sourceDate, 10.25),
+      row('BA', 'A', 'S', sourceDate, 10.25),
+    ])
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate(date)
+
+    await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(date))
+    expect(screen.getByLabelText('Balsam grade A')).toHaveValue('10.25')
+    expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
+    expect(screen.getByText(/These values are not saved/)).toBeVisible()
+    expect(screen.getByLabelText('Balsam grade A').closest('td')).toHaveClass(
+      'has-warning',
+      'is-added',
+    )
+    expect(mockedSave).not.toHaveBeenCalled()
   })
 
   it('prefills an empty future date from the latest values without saving automatically', async () => {
@@ -373,6 +422,7 @@ describe('RTM EMS Log AMV actions', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(4))
+    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
     expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
       {
         species: 'BA',
@@ -411,7 +461,6 @@ describe('RTM EMS Log AMV actions', () => {
         saveMode: 'create',
       },
     ])
-    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
   })
 
   it('blocks blank, over-precise and out-of-range table values before save', async () => {
@@ -426,6 +475,8 @@ describe('RTM EMS Log AMV actions', () => {
 
     const input = screen.getByLabelText('Balsam grade A')
     await user.clear(input)
+    expect(input.closest('td')).toHaveClass('has-warning', 'is-removed')
+    expect(screen.getByText(/has a saved value and is now blank/)).toBeVisible()
     expect(screen.getByText('Balsam grade A is required.')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
 
@@ -472,6 +523,8 @@ describe('RTM EMS Log AMV actions', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(mockedSave).not.toHaveBeenCalled()
     expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
+    expect(screen.getByText('Review the following before saving 1 changed cell.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
     expect(screen.getByText(/which is in the past/)).toBeVisible()
     await confirmAmvSave(user)
 

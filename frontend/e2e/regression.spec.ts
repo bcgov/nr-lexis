@@ -1,5 +1,12 @@
 import { readFileSync } from 'node:fs'
-import { expect, type APIResponse, type BrowserContext, type Page, test } from '@playwright/test'
+import {
+  expect,
+  type APIResponse,
+  type BrowserContext,
+  type Locator,
+  type Page,
+  test,
+} from '@playwright/test'
 import {
   collectApiServerErrors,
   deleteWithCsrf,
@@ -17,6 +24,11 @@ import { E2E_BASE_URL } from './utils'
 
 const sideNavSection = (name: string) =>
   `.csp-side-nav__section:has(.csp-side-nav__category-text:text-is("${name}"))`
+
+const tableRowBackgrounds = (row: Locator): Promise<string[]> =>
+  row.evaluate((element) =>
+    Array.from(element.querySelectorAll('td'), (cell) => getComputedStyle(cell).backgroundColor),
+  )
 
 const expectFsptsUploadLayout = async (page: Page): Promise<void> => {
   const metrics = await page.evaluate(() => {
@@ -1203,8 +1215,20 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Reject Application' })).toHaveCount(0)
   })
 
-  test('shows average monthly values editable table controls', async () => {
+  test('shows AMV table controls and row highlighting', async () => {
     const page = await authenticatedIdirPage()
+    const savedRows = ['A', 'B'].flatMap((grade, gradeIndex) =>
+      ['O', 'S'].map((growthIndicator) => ({
+        species: 'BA',
+        grade,
+        growthIndicator,
+        retrievalDate: '2026-07-09',
+        updateDate: '2026-07-09',
+        currentValue: 10 + gradeIndex,
+        newValue: 10 + gradeIndex,
+        returnCode: '0',
+      })),
+    )
 
     await page.route('**/api/lexis/rtm/emslogamv**', async (route) => {
       if (route.request().method() !== 'GET') {
@@ -1215,7 +1239,7 @@ test.describe('TEST IDIR admin regression', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([]),
+        body: JSON.stringify(savedRows),
       })
     })
 
@@ -1240,7 +1264,34 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(
       page.getByText('Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.'),
     ).toBeVisible()
-    await expect(page.getByLabel('Balsam grade A')).toBeVisible()
+    const balsamGradeA = page.getByLabel('Balsam grade A')
+    const balsamGradeB = page.getByLabel('Balsam grade B')
+    await expect(balsamGradeA).toBeVisible()
+    await expect(balsamGradeB).toBeVisible()
+
+    const gradeARow = table.getByRole('row').filter({ has: balsamGradeA })
+    const gradeBRow = table.getByRole('row').filter({ has: balsamGradeB })
+    await expect(gradeARow).toHaveCount(1)
+    await expect(gradeBRow).toHaveCount(1)
+
+    const gradeABaseline = await tableRowBackgrounds(gradeARow)
+    const gradeBBaseline = await tableRowBackgrounds(gradeBRow)
+
+    await gradeARow.hover()
+    await expect.poll(async () => tableRowBackgrounds(gradeARow)).not.toEqual(gradeABaseline)
+    expect(new Set(await tableRowBackgrounds(gradeARow))).toHaveLength(1)
+
+    await gradeBRow.hover()
+    await expect.poll(async () => tableRowBackgrounds(gradeBRow)).not.toEqual(gradeBBaseline)
+    expect(new Set(await tableRowBackgrounds(gradeBRow))).toHaveLength(1)
+    await expect.poll(async () => tableRowBackgrounds(gradeARow)).toEqual(gradeABaseline)
+
+    await balsamGradeA.focus()
+    await expect.poll(async () => tableRowBackgrounds(gradeARow)).not.toEqual(gradeABaseline)
+
+    await balsamGradeA.fill('12')
+    await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/is-changed/)
+    await expect(balsamGradeA.locator('xpath=ancestor::td')).not.toHaveClass(/has-warning/)
   })
 
   test('shows AMV table save validation failures without persisting values', async () => {
@@ -1281,10 +1332,12 @@ test.describe('TEST IDIR admin regression', () => {
 
     const balsamGradeA = page.getByLabel('Balsam grade A')
     await balsamGradeA.fill('123.45')
+    await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/has-warning/)
+    expect(await balsamGradeA.evaluate((element) => getComputedStyle(element).borderColor)).toBe(
+      'rgb(241, 194, 27)',
+    )
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
     await page.getByRole('button', { name: 'Save changes' }).click()
-    await expect(page.getByText('Confirm AMV changes')).toBeVisible()
-    await page.getByRole('button', { name: 'Save confirmed changes' }).click()
 
     await expect(page.getByText(/Average monthly value validation failed/)).toBeVisible()
     await expect(page.getByText(/Balsam grade A is outside the allowed range/)).toBeVisible()

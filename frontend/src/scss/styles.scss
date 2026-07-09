@@ -2640,6 +2640,11 @@ body {
   inline-size: 5rem;
 }
 
+.rtm-amv-table-wrap .cds--data-table tbody tr:hover > td,
+.rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td {
+  background: var(--csp-layer-hover);
+}
+
 .rtm-amv-grade-cell {
   color: var(--csp-text-primary);
   font-weight: 700;
@@ -2697,8 +2702,17 @@ body {
   box-shadow: inset 0 -2px 0 #0f62fe;
 }
 
-.rtm-amv-value-cell.has-error .rtm-amv-cell-input {
+.rtm-amv-value-cell.has-error:not(.has-warning) .rtm-amv-cell-input {
   border-color: #da1e28;
+}
+
+.rtm-amv-value-cell.has-warning .rtm-amv-cell-input {
+  border-color: var(--cds-support-warning, #f1c21b);
+  box-shadow: inset 0 0 0 1px var(--cds-support-warning, #f1c21b);
+}
+
+.rtm-amv-value-cell.has-warning .rtm-amv-cell-input:focus {
+  outline-color: var(--cds-support-warning, #f1c21b);
 }
 
 .rtm-amv-cell-input:disabled {
@@ -2723,6 +2737,59 @@ body {
   margin-inline-start: 0.5rem;
   color: var(--csp-text-primary);
   font-size: 0.875rem;
+}
+
+.rtm-amv-confirm-modal .cds--modal-content {
+  padding-block-end: 1.5rem;
+}
+
+.rtm-amv-confirm-modal__body {
+  display: grid;
+  gap: 1rem;
+}
+
+.rtm-amv-confirm-modal__intro {
+  margin: 0;
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.rtm-amv-confirm-modal__warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #fff8e1;
+  border-inline-start: 3px solid #f1c21b;
+  color: #241f00;
+}
+
+.rtm-amv-confirm-modal__warning > svg {
+  margin-block-start: 0.125rem;
+}
+
+.rtm-amv-confirm-modal__warning ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-inline-start: 1.125rem;
+  line-height: 1.4;
+}
+
+.rtm-amv-confirm-modal__warning p {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+}
+
+.rtm-amv-confirm-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+  flex-wrap: wrap;
 }
 
 .admin-upload-result {
