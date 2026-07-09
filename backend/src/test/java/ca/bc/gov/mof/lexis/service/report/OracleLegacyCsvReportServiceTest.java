@@ -10,7 +10,6 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -34,9 +33,11 @@ class OracleLegacyCsvReportServiceTest {
   @Mock private DataSource dataSource;
   @Mock private Connection connection;
   @Mock private CallableStatement callableStatement;
-  @Mock private PreparedStatement preparedStatement;
+  @Mock private CallableStatement packageCallableStatement;
   @Mock private ResultSet resultSet;
+  @Mock private ResultSet packageResultSet;
   @Mock private ResultSetMetaData metaData;
+  @Mock private ResultSetMetaData packageMetaData;
   @Mock private OracleConnection oracleConnection;
   @Mock private Array bindArray;
 
@@ -457,25 +458,90 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
-  void shouldGenerateBiweeklyCsvFromAdvertisingListQuery() throws Exception {
+  void shouldGenerateBiweeklyCsvFromAdvertisingListReportProcedures() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareStatement(org.mockito.ArgumentMatchers.anyString()))
-        .thenReturn(preparedStatement);
-    when(preparedStatement.executeQuery()).thenReturn(resultSet);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_SUBREPORT_RPT(?,?,?) }"))
+        .thenReturn(packageCallableStatement);
+    when(callableStatement.getObject(5)).thenReturn(resultSet);
+    when(packageCallableStatement.getObject(3)).thenReturn(packageResultSet);
 
     when(resultSet.getMetaData()).thenReturn(metaData);
-    when(metaData.getColumnCount()).thenReturn(5);
-    when(metaData.getColumnName(1)).thenReturn("CLIENT_CONTACT_PHONE");
-    when(metaData.getColumnName(2)).thenReturn("CLIENT_CONTACT_EMAIL");
-    when(metaData.getColumnName(3)).thenReturn("AGENT_CONTACT_NAME");
-    when(metaData.getColumnName(4)).thenReturn("AGENT_CONTACT_EMAIL");
-    when(metaData.getColumnName(5)).thenReturn("PACKAGE_NUMBER");
+    List<String> reportColumns =
+        List.of(
+            "ADVERTISING_DATE",
+            "ORG_UNIT",
+            "CLIENT_NAME",
+            "ADDRESS_1",
+            "ADDRESS_2",
+            "ADDRESS_3",
+            "CITY",
+            "PROVINCE",
+            "POSTAL_CODE",
+            "OWNER_CONTACT_NAME",
+            "BUSINESS_PHONE",
+            "EMAIL_ADDRESS",
+            "EXPORT_JURISDICTION_CODE",
+            "APPLICATION_NUMBER",
+            "FED_APPLICATION_NUMBER",
+            "SPECIES_ENDUSE",
+            "PRODUCT_TYPE",
+            "PRODUCT_LOCATION",
+            "EXEMPTION_APPLICATION_VOLUME",
+            "AVERAGE_LOG_VOLUME",
+            "AGENT_CLIENT_NAME",
+            "AGENT_BUS_PHONE",
+            "AGENT_CONTACT_NAME",
+            "AGENT_EMAIL");
+    List<String> reportValues =
+        List.of(
+            "2026-05-01",
+            "Kootenay-Boundary Natural Resource Region",
+            "Owner Client",
+            "Address 1",
+            "Address 2",
+            "Address 3",
+            "Victoria",
+            "BC",
+            "V8V1X4",
+            "Owner Contact",
+            "250-555-0101",
+            "owner@example.gov.bc.ca",
+            "P",
+            "12345",
+            "",
+            "BA/PL",
+            "Harvested Timber",
+            "Landing",
+            "100",
+            "0.45",
+            "Agent Client",
+            "250-555-0102",
+            "Agent Contact",
+            "agent@example.gov.bc.ca");
+    when(metaData.getColumnCount()).thenReturn(reportColumns.size());
+    for (int index = 0; index < reportColumns.size(); index++) {
+      when(metaData.getColumnName(index + 1)).thenReturn(reportColumns.get(index));
+      when(resultSet.getString(index + 1)).thenReturn(reportValues.get(index));
+    }
     when(resultSet.next()).thenReturn(true, false);
-    when(resultSet.getString(1)).thenReturn("250-555-0101");
-    when(resultSet.getString(2)).thenReturn("owner@example.gov.bc.ca");
-    when(resultSet.getString(3)).thenReturn("Agent Contact");
-    when(resultSet.getString(4)).thenReturn("agent@example.gov.bc.ca");
-    when(resultSet.getString(5)).thenReturn("PKG-1");
+
+    when(packageResultSet.getMetaData()).thenReturn(packageMetaData);
+    List<String> packageColumns =
+        List.of(
+            "PACKAGE_NUMBER",
+            "PACKAGE_VOLUME",
+            "EXPORT_GROWTH_TYPE_CODE",
+            "AVERAGE_LENGTH",
+            "AVERAGE_DIAMETER");
+    List<String> packageValues = List.of("PKG-1", "75.5", "S", "12.5", "34.1");
+    when(packageMetaData.getColumnCount()).thenReturn(packageColumns.size());
+    for (int index = 0; index < packageColumns.size(); index++) {
+      when(packageMetaData.getColumnName(index + 1)).thenReturn(packageColumns.get(index));
+      when(packageResultSet.getString(index + 1)).thenReturn(packageValues.get(index));
+    }
+    when(packageResultSet.next()).thenReturn(true, false);
 
     OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
     LexisReportRequestDto request =
@@ -498,35 +564,29 @@ class OracleLegacyCsvReportServiceTest {
     String csv = new String(report.orElseThrow().content());
     assertThat(csv)
         .contains(
-            "\"CLIENT_CONTACT_PHONE\",\"CLIENT_CONTACT_EMAIL\",\"AGENT_CONTACT_NAME\",\"AGENT_CONTACT_EMAIL\",\"PACKAGE_NUMBER\"");
+            "\"CLIENT_CONTACT_PHONE\",\"CLIENT_CONTACT_EMAIL\",\"JURISDICTION_CODE\"");
+    assertThat(csv)
+        .contains(
+            "\"AGENT_PHONE\",\"AGENT_CONTACT_NAME\",\"AGENT_CONTACT_EMAIL\",\"PACKAGE_NUMBER\"");
+    assertThat(csv).contains("\"owner@example.gov.bc.ca\"");
+    assertThat(csv).contains("\"agent@example.gov.bc.ca\"");
+    assertThat(csv).contains("\"PKG-1\",\"75.5\",\"S\",\"12.5\",\"34.1\"");
 
-    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
-    verify(connection).prepareStatement(sqlCaptor.capture());
-    String sql = sqlCaptor.getValue();
-    assertThat(sql).contains("CL.EMAIL_ADDRESS AS CLIENT_CONTACT_EMAIL");
-    assertThat(sql).contains("ACL.EMAIL_ADDRESS AS AGENT_CONTACT_EMAIL");
-    assertThat(sql.indexOf("CL.BUSINESS_PHONE AS CLIENT_CONTACT_PHONE"))
-        .isLessThan(sql.indexOf("CL.EMAIL_ADDRESS AS CLIENT_CONTACT_EMAIL"));
-    assertThat(sql.indexOf("EEA.AGENT_CONTACT_NAME AS AGENT_CONTACT_NAME"))
-        .isLessThan(sql.indexOf("ACL.EMAIL_ADDRESS AS AGENT_CONTACT_EMAIL"));
-    assertThat(sql).contains("ES.ADVERTISING_DATE BETWEEN TO_DATE(?, 'yyyy-mm-dd')");
-
-    verify(preparedStatement).setString(1, "2026-05-01");
-    verify(preparedStatement).setString(2, "2026-05-31");
-    verify(preparedStatement).setString(3, "1904");
-    verify(preparedStatement).setString(4, "1905");
-    verify(preparedStatement).setString(5, "P");
-    verify(preparedStatement).setString(6, "F");
-    verify(preparedStatement).setString(7, "APP");
-    verify(preparedStatement).setString(8, "T");
+    verify(callableStatement).setString(1, "1904,1905");
+    verify(callableStatement).setNull(2, Types.VARCHAR);
+    verify(callableStatement).setString(3, "2026-05-01");
+    verify(callableStatement).setString(4, "2026-05-31");
+    verify(callableStatement).registerOutParameter(5, Types.REF_CURSOR);
+    verify(packageCallableStatement).setString(1, "12345");
+    verify(packageCallableStatement).setString(2, "P");
+    verify(packageCallableStatement).registerOutParameter(3, Types.REF_CURSOR);
   }
 
   @Test
-  void shouldGenerateBiweeklyCsvHeadersWhenAdvertisingListQueryFails() throws Exception {
+  void shouldGenerateBiweeklyCsvHeadersWhenAdvertisingListProcedureFails() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareStatement(org.mockito.ArgumentMatchers.anyString()))
-        .thenReturn(preparedStatement);
-    when(preparedStatement.executeQuery()).thenThrow(new SQLException("invalid identifier"));
+    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
+        .thenThrow(new SQLException("invalid identifier"));
 
     OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
     LexisReportRequestDto request =
