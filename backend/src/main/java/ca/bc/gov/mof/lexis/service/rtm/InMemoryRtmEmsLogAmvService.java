@@ -276,6 +276,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
               .toList();
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
+      LocalDate effectiveDate = parsedUpdateDate;
 
       if (uploadRows.size() < parseResult.rows().size()) {
         warnings.add("Some rows were skipped because they were missing grade/species values.");
@@ -352,7 +353,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
                 species,
                 grade,
                 normalizedGrowthIndicator,
-                parsedRetrievalDate,
+                effectiveDate,
                 parsedUpdateDate,
                 newValue);
 
@@ -468,7 +469,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       String fileName,
       long fileSize) {
     return new RtmEmsLogAmvUploadPreviewDto(
-        status, fileName, fileSize, message, rowCount, retrievalDate, updateDate, errors, warnings, rows);
+        status, fileName, fileSize, message, rowCount, retrievalDate, updateDate, errors, List.of(), rows);
   }
 
   private String normalize(String value) {
@@ -675,6 +676,6 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> warnings,
       List<RtmEmsLogAmvRowDto> rows) {
     return new RtmEmsLogAmvUploadResultDto(
-        status, fileName, fileSize, message, attemptedRowCount, uploadedRowCount, errors, warnings, rows);
+        status, fileName, fileSize, message, attemptedRowCount, uploadedRowCount, errors, List.of(), rows);
   }
 }

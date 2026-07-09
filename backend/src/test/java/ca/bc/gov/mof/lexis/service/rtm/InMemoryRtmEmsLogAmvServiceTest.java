@@ -31,6 +31,7 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(result.rows()).extracting(row -> row.growthIndicator()).contains("O", "S");
     assertThat(result.rows()).extracting(row -> row.species()).contains("WH", "LO", "YE");
     assertThat(result.errors()).isEmpty();
+    assertThat(result.warnings()).isEmpty();
   }
 
   @Test
@@ -43,9 +44,10 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(result.attemptedRowCount()).isEqualTo(12);
     assertThat(result.uploadedRowCount()).isEqualTo(12);
     assertThat(result.rows()).extracting(row -> row.growthIndicator()).contains("O", "S");
-    assertThat(result.rows()).extracting(row -> row.retrievalDate()).containsOnly("2026-06-23");
+    assertThat(result.rows()).extracting(row -> row.retrievalDate()).containsOnly("2026-06-01");
     assertThat(result.rows()).extracting(row -> row.updateDate()).containsOnly("2026-06-01");
     assertThat(result.errors()).isEmpty();
+    assertThat(result.warnings()).isEmpty();
   }
 
   @Test

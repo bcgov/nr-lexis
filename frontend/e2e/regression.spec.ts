@@ -136,6 +136,20 @@ const safeUrlForLog = (rawUrl: string): string => {
   }
 }
 
+const redirectExternalLogoutToLoginShell = async (page: Page): Promise<void> => {
+  const loginShellUrl = `${new URL(E2E_BASE_URL).origin}/`
+
+  await page.route(/https:\/\/[^/]*amazoncognito\.com\/(?:logout|error).*/i, async (route) => {
+    await route.fulfill({
+      status: 302,
+      headers: {
+        location: loginShellUrl,
+      },
+      body: '',
+    })
+  })
+}
+
 const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
   try {
     const hostname = new URL(rawUrl).hostname.toLowerCase()
@@ -268,6 +282,15 @@ const missingApplicationNumber = '999999999'
 const rtmSuccessWorkbook = readFileSync(
   new URL('../public/templates/rtm-ems-log-amv-template.xlsx', import.meta.url),
 )
+const rtmMissingUpdateDateWorkbook = readFileSync(
+  new URL('./fixtures/rtm-amv-missing-update-date.xlsx', import.meta.url),
+)
+const rtmNoNumericValuesWorkbook = readFileSync(
+  new URL('./fixtures/rtm-amv-no-numeric-values.xlsx', import.meta.url),
+)
+const rtmBadHeaderWorkbook = readFileSync(
+  new URL('./fixtures/rtm-amv-bad-header.xlsx', import.meta.url),
+)
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
@@ -279,6 +302,26 @@ const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
 const famManageUrlPattern = /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
+const rtmAmvPreviewEndpoint = '/api/lexis/rtm/emslogamv/preview'
+const xlsxMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+const rtmInvalidPreviewFixtures = [
+  {
+    name: 'rtm-amv-missing-update-date.xlsx',
+    buffer: rtmMissingUpdateDateWorkbook,
+    expectedError: 'The update date is required in the uploaded template.',
+  },
+  {
+    name: 'rtm-amv-no-numeric-values.xlsx',
+    buffer: rtmNoNumericValuesWorkbook,
+    expectedError: 'The uploaded file does not contain any numeric AMV values.',
+  },
+  {
+    name: 'rtm-amv-bad-header.xlsx',
+    buffer: rtmBadHeaderWorkbook,
+    expectedError: 'The template header is not recognized as an RTM EMS AMV sheet.',
+  },
+] as const
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -949,6 +992,7 @@ test.describe('TEST IDIR admin regression', () => {
 
     idirContext = await browser.newContext()
     idirPage = await idirContext.newPage()
+    await redirectExternalLogoutToLoginShell(idirPage)
     await loginWithIdir(idirPage)
   })
 
@@ -1222,9 +1266,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expectFsptsUploadLayout(page)
     await expect(
-      page.getByText(
-        'Generate an upload preview from XLSX files and apply validated average monthly value changes.',
-      ),
+      page.getByText('Update average monthly values by uploading an XLSX file.'),
     ).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Query rows' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Manual entry' })).toHaveCount(0)
@@ -1238,21 +1280,25 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(workflowProgress.getByText('1. Upload')).toBeVisible()
     await expect(workflowProgress.getByText('2. Review')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Upload' })).toBeVisible()
+    await expect(
+      page.getByText(
+        'Add your completed template to check for errors before the new values take effect.',
+      ),
+    ).toBeVisible()
     await expect(page.getByText('Upload Excel Spreadsheet')).toBeVisible()
 
     const templateLink = page.getByRole('link', { name: 'Download template' })
     await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
     await expect(templateLink).toHaveAttribute('download', 'rtm-ems-log-amv-template.xlsx')
-    await expect(
-      page.getByText(
-        'Supported format: .xlsx. Enter the update date and AMV values in the template; values apply to old and second growth.',
-      ),
-    ).toBeVisible()
+    await expect(page.getByText('Accepted formats: .xlsx.')).toBeVisible()
     await expect(
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Submit changes' })).toHaveCount(0)
+    const reviewUploadButton = page.getByRole('button', { name: 'Review upload' })
+    await expect(reviewUploadButton).toBeEnabled()
+    await reviewUploadButton.click()
+    await expect(page.getByText('Please upload a file before continuing.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
 
     await page.locator('#rtm-upload-file').setInputFiles({
       name: 'invalid-amv.xlsx',
@@ -1274,7 +1320,36 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(
       validationTable.getByText('The update date is required in the uploaded template.'),
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    await expect(reviewUploadButton).toBeEnabled()
+    await reviewUploadButton.click()
+    await expect(
+      page.getByText('Upload a spreadsheet that passes validation before reviewing it.'),
+    ).toBeVisible()
+  })
+
+  test('rejects non-persisting average monthly value validation fixtures', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const fixture of rtmInvalidPreviewFixtures) {
+      const response = await readJsonResponseWithStatuses<RtmUploadPreviewResponse>(
+        await postWithCsrf(page, rtmAmvPreviewEndpoint, {
+          multipart: {
+            file: {
+              name: fixture.name,
+              mimeType: xlsxMimeType,
+              buffer: fixture.buffer,
+            },
+          },
+        }),
+        [422],
+      )
+
+      expect(response.payload.status, `${fixture.name} should fail validation`).toBe(
+        'validation_failed',
+      )
+      expect(response.payload.rowCount ?? 0, `${fixture.name} should not persist rows`).toBe(0)
+      expect(asStringArray(response.payload.errors).join(' ')).toContain(fixture.expectedError)
+    }
   })
 
   test('shows selected natural resource region names across search filters', async () => {
@@ -1884,11 +1959,11 @@ test.describe('TEST IDIR admin regression', () => {
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
 
     const rtmPreviewResponse = await readJsonResponseWithStatuses<RtmUploadPreviewResponse>(
-      await postWithCsrf(page, '/api/lexis/rtm/emslogamv/preview', {
+      await postWithCsrf(page, rtmAmvPreviewEndpoint, {
         multipart: {
           file: {
             name: 'rtm-ems-log-amv-template.xlsx',
-            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            mimeType: xlsxMimeType,
             buffer: rtmSuccessWorkbook,
           },
         },
@@ -1899,6 +1974,7 @@ test.describe('TEST IDIR admin regression', () => {
       expect(rtmPreviewResponse.payload.status).toBe('accepted')
       expect(rtmPreviewResponse.payload.rowCount).toBeGreaterThan(0)
       expect(asStringArray(rtmPreviewResponse.payload.errors)).toEqual([])
+      expect(asStringArray(rtmPreviewResponse.payload.warnings)).toEqual([])
     } else {
       expect(rtmPreviewResponse.payload.status).toBe('validation_failed')
       expect(asStringArray(rtmPreviewResponse.payload.errors).join(' ')).toContain('update date')

@@ -58,6 +58,11 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
     requiredActionsMatch: 'all',
   },
   {
+    path: '/federal/application/upload',
+    requiredActions: [],
+    requiredActionsMatch: 'any',
+  },
+  {
     path: '/admin/uploads',
     requiredActions: [
       '/lexisAgentAdmin',
@@ -75,7 +80,7 @@ describe('Protected route access matrix', () => {
     'enforces expected action requirements for $path',
     ({ path, requiredActions, requiredActionsMatch, roleScope }) => {
       const route = findRoute(path)
-      expect(route.requiredActions).toEqual(requiredActions)
+      expect(route.requiredActions ?? []).toEqual(requiredActions)
       expect(route.requiredActionsMatch ?? 'any').toBe(requiredActionsMatch)
       expect(route.roleScope).toBe(roleScope)
     },
@@ -136,6 +141,18 @@ describe('Protected route access matrix', () => {
     expect((publicUnauthorizedRoute?.element as ReactElement).type).toBe(Navigate)
     expect((publicUnauthorizedRoute?.element as ReactElement).props).toMatchObject({
       to: '/',
+      replace: true,
+    })
+  })
+
+  it('redirects the retired federal upload URL to federal search', () => {
+    const route = findRoute('/federal/application/upload')
+
+    expect(route.id).toBe('Retired Federal Upload Redirect')
+    expect(isValidElement(route.element)).toBe(true)
+    expect((route.element as ReactElement).type).toBe(Navigate)
+    expect((route.element as ReactElement).props).toMatchObject({
+      to: '/federal',
       replace: true,
     })
   })

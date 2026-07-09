@@ -10,6 +10,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
@@ -77,6 +78,7 @@ class OracleRtmEmsLogAmvServiceTest {
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook(), null, null);
 
     assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.warnings()).isEmpty();
     assertThat(result.attemptedRowCount()).isEqualTo(12);
     assertThat(result.uploadedRowCount()).isEqualTo(12);
     verify(repository, times(12))
@@ -84,7 +86,7 @@ class OracleRtmEmsLogAmvServiceTest {
             anyString(),
             anyString(),
             anyString(),
-            eq(LocalDate.of(2026, 6, 23)),
+            eq(LocalDate.of(2026, 6, 1)),
             eq(LocalDate.of(2026, 6, 1)),
             any(BigDecimal.class));
     verify(repository, never())
@@ -113,17 +115,45 @@ class OracleRtmEmsLogAmvServiceTest {
 
     ArgumentCaptor<String> speciesCaptor = ArgumentCaptor.forClass(String.class);
     assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.warnings()).isEmpty();
     verify(repository, times(12))
         .update(
             speciesCaptor.capture(),
             anyString(),
             anyString(),
-            eq(LocalDate.of(2026, 6, 23)),
+            eq(LocalDate.of(2026, 6, 1)),
             eq(LocalDate.of(2026, 6, 1)),
             any(BigDecimal.class));
     assertThat(speciesCaptor.getAllValues())
         .contains("WH", "LO", "YE")
         .doesNotContain("PL", "PW", "PY");
+  }
+
+  @Test
+  void shouldRejectNullLegacyReturnCode() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.update(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(LocalDate.class),
+            any(BigDecimal.class)))
+        .thenReturn(null);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result = service.save(
+        new RtmEmsLogAmvSaveRequestDto(
+            "BA",
+            "A",
+            "O",
+            "2026-01-01",
+            "2026-01-01",
+            new BigDecimal("10.01"),
+            "update"));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Save returned code null");
   }
 
   private MultipartFile matrixWorkbook() throws IOException {

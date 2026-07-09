@@ -228,6 +228,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
               .toList();
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
+      LocalDate effectiveDate = parsedUpdateDate;
 
       if (uploadRows.size() < parseResult.rows().size()) {
         warnings.add("Some rows were skipped because they were missing grade/species values.");
@@ -307,7 +308,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                     species,
                     grade,
                     normalizedGrowthIndicator,
-                    formatDate(parsedRetrievalDate),
+                    formatDate(effectiveDate),
                     formatDate(parsedUpdateDate),
                     newValue,
                     SAVE_MODE_UPDATE));
@@ -453,7 +454,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       String fileName,
       long fileSize) {
     return new RtmEmsLogAmvUploadPreviewDto(
-        status, fileName, fileSize, message, rowCount, retrievalDate, updateDate, errors, warnings, rows);
+        status, fileName, fileSize, message, rowCount, retrievalDate, updateDate, errors, List.of(), rows);
   }
 
   private String formatDate(LocalDate date) {
@@ -462,7 +463,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   private boolean isSuccess(String returnCode) {
     String normalized = trimToNull(returnCode);
-    return normalized == null || "0".equals(normalized);
+    return "0".equals(normalized);
   }
 
   private boolean isXlsx(MultipartFile file) {
@@ -582,7 +583,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> warnings,
       List<RtmEmsLogAmvRowDto> rows) {
     return new RtmEmsLogAmvUploadResultDto(
-        status, fileName, fileSize, message, attemptedRowCount, uploadedRowCount, errors, warnings, rows);
+        status, fileName, fileSize, message, attemptedRowCount, uploadedRowCount, errors, List.of(), rows);
   }
 
   private void markRollbackOnly() {

@@ -22,7 +22,12 @@ import {
 } from '@carbon/icons-react'
 import { IconButton, SkipToContent, Theme } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
+import {
+  hasFederalSubmitterRole,
+  hasProvincialSubmitterRole,
+  hasRole,
+} from '@/context/auth/role-utils'
+import { syncAppNotificationRegionTheme } from '@/components/AppNotification'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
@@ -253,13 +258,14 @@ const canShowRoleScopedLink = (
     return true
   }
 
+  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
   const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
   const hasProvincialStaffRole =
     hasRole(roles, 'READ_ONLY') ||
     hasRole(roles, 'APPLICATION_APPROVER') ||
     hasRole(roles, 'EXEMPTION_APPROVER')
 
-  return hasProvincialSubmitter || hasProvincialStaffRole
+  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
 }
 
 function Layout({ children }: LayoutProps) {
@@ -332,6 +338,10 @@ function Layout({ children }: LayoutProps) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isProfileOpen])
+
+  useEffect(() => {
+    syncAppNotificationRegionTheme(isDarkTheme)
+  }, [isDarkTheme])
 
   return (
     <Theme theme={isDarkTheme ? 'g100' : 'white'}>

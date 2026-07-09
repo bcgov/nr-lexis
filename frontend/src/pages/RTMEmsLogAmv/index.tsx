@@ -11,6 +11,7 @@ import {
   CheckmarkFilled,
   Close,
   Document,
+  Download,
   ErrorFilled,
   InformationFilled,
 } from '@carbon/icons-react'
@@ -56,7 +57,6 @@ type RtmReviewMatrixRow = {
 }
 
 type RtmReviewCellValues = Record<string, number | null>
-type UploadValidationIssueSeverity = 'Error' | 'Warning'
 
 const uploadResultStatusClass = (status: string | undefined) => {
   if (!status) {
@@ -89,12 +89,39 @@ const createResultMessage = (status: string, message: string, errors: string[]):
   return [message, ...errors].filter(Boolean).join(' ')
 }
 
+const formatUploadMonth = (dateValue: string | null | undefined): string | null => {
+  const match = /^(\d{4})-(\d{2})-\d{2}/.exec(dateValue ?? '')
+  if (!match) {
+    return null
+  }
+
+  const year = Number(match[1])
+  const monthIndex = Number(match[2]) - 1
+  if (!Number.isInteger(year) || monthIndex < 0 || monthIndex > 11) {
+    return null
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    month: 'long',
+    timeZone: 'UTC',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, monthIndex, 1)))
+}
+
+const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | null): string => {
+  const monthLabel = formatUploadMonth(previewResult?.updateDate ?? previewResult?.retrievalDate)
+  return monthLabel ? `New values applied for ${monthLabel}.` : 'New values applied.'
+}
+
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
+const RTM_TEMPLATE_DISPLAY_SIZE = '4 KB'
 
-const RTM_UPLOAD_ONLY_DESCRIPTION =
-  'Generate an upload preview from XLSX files and apply validated average monthly value changes.'
+const RTM_UPLOAD_ONLY_DESCRIPTION = 'Update average monthly values by uploading an XLSX file.'
+const RTM_UPLOAD_STEP_DESCRIPTION =
+  'Add your completed template to check for errors before the new values take effect.'
+const RTM_UPLOAD_FIELD_HELPER = 'Accepted formats: .xlsx.'
 
 const RTM_UPLOAD_REVIEW_STEPS = [
   { id: 'upload', label: 'Upload' },
@@ -216,6 +243,14 @@ const compareMatrixRows = (left: RtmReviewMatrixRow, right: RtmReviewMatrixRow) 
 const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] => {
   const matrixRows = new Map<string, RtmReviewMatrixRow>()
 
+  RTM_REVIEW_GRADE_ORDER.forEach((grade) => {
+    matrixRows.set(grade, {
+      key: grade,
+      grade,
+      values: {},
+    })
+  })
+
   rows.forEach((row) => {
     const grade = normalizeKey(row.grade)
     const growthIndicator = normalizeKey(row.growthIndicator)
@@ -279,16 +314,6 @@ const formatReviewCell = (values: RtmReviewCellValues | undefined) => {
   )
 }
 
-const countReviewValues = (matrixRows: RtmReviewMatrixRow[]): number =>
-  matrixRows.reduce(
-    (total, row) =>
-      total +
-      Object.values(row.values).filter((values) =>
-        Object.values(values).some((value) => !!formatMoney(value)),
-      ).length,
-    0,
-  )
-
 const UploadValidationMessage = ({
   kind,
   title,
@@ -318,8 +343,7 @@ const UploadValidationMessage = ({
 
 const buildValidationIssueRows = (
   details: string[],
-  severity: UploadValidationIssueSeverity,
-): Array<{ detail: string; key: string; severity: UploadValidationIssueSeverity }> => {
+): Array<{ detail: string; key: string; severity: 'Error' }> => {
   const occurrences = new Map<string, number>()
 
   return details.map((detail) => {
@@ -328,17 +352,14 @@ const buildValidationIssueRows = (
 
     return {
       detail,
-      key: `${severity}-${detail}-${occurrence}`,
-      severity,
+      key: `Error-${detail}-${occurrence}`,
+      severity: 'Error',
     }
   })
 }
 
-const ValidationIssuesTable = ({ errors, warnings }: { errors: string[]; warnings: string[] }) => {
-  const issues = [
-    ...buildValidationIssueRows(errors, 'Error'),
-    ...buildValidationIssueRows(warnings, 'Warning'),
-  ]
+const ValidationIssuesTable = ({ errors }: { errors: string[] }) => {
+  const issues = buildValidationIssueRows(errors)
 
   if (issues.length === 0) {
     return null
@@ -406,8 +427,8 @@ const UploadValidationStatus = ({
     return null
   }
 
-  const issueCount = previewResult.errors.length + previewResult.warnings.length
   const isAccepted = previewResult.status === 'accepted'
+  const issueCount = previewResult.errors.length
 
   return (
     <>
@@ -429,7 +450,7 @@ const UploadValidationStatus = ({
         )}
         {isAccepted && <p>{previewResult.message}</p>}
       </UploadValidationMessage>
-      <ValidationIssuesTable errors={previewResult.errors} warnings={previewResult.warnings} />
+      <ValidationIssuesTable errors={previewResult.errors} />
     </>
   )
 }
@@ -443,29 +464,9 @@ const ReviewUploadContent = ({
 }) => {
   const speciesColumns = buildReviewSpeciesColumns(previewResult.rows)
   const matrixRows = buildReviewMatrixRows(previewResult.rows)
-  const reviewValueCount = countReviewValues(matrixRows)
 
   return (
     <div className="admin-upload-review admin-upload-review--rtm">
-      <dl className="admin-upload-review__meta" aria-label="Average monthly values upload summary">
-        <div>
-          <dt>File</dt>
-          <dd>{previewResult.fileName ?? 'Selected spreadsheet'}</dd>
-        </div>
-        <div>
-          <dt>Update date</dt>
-          <dd>{previewResult.updateDate ?? ''}</dd>
-        </div>
-        <div>
-          <dt>Retrieval date</dt>
-          <dd>{previewResult.retrievalDate ?? ''}</dd>
-        </div>
-        <div>
-          <dt>Values to apply</dt>
-          <dd>{reviewValueCount}</dd>
-        </div>
-      </dl>
-
       {matrixRows.length > 0 ? (
         <div className="admin-upload-review-table">
           <Table useZebraStyles aria-label="Average monthly value upload review">
@@ -509,16 +510,6 @@ const ReviewUploadContent = ({
             Attempted rows: {uploadResult.attemptedRowCount} | Uploaded rows:{' '}
             {uploadResult.uploadedRowCount}
           </p>
-          {uploadResult.warnings.length > 0 && (
-            <div className="admin-upload-review__issue-group">
-              <h3>Warnings</h3>
-              <ul>
-                {uploadResult.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -535,6 +526,7 @@ const RTMEmsLogAmvPage = () => {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [notification, setNotification] = useState('')
+  const [notificationTitle, setNotificationTitle] = useState('Average monthly values')
   const [notificationKind, setNotificationKind] = useState<
     'success' | 'error' | 'warning' | 'info'
   >('info')
@@ -680,14 +672,19 @@ const RTMEmsLogAmvPage = () => {
             ? 'warning'
             : 'error',
       )
-      setNotification(createResultMessage(response.status, response.message, response.errors))
       if (response.status === 'accepted') {
+        setNotificationTitle('Average monthly values updated')
+        setNotification(createAcceptedUploadMessage(previewResult))
         clearUploadState()
+      } else {
+        setNotificationTitle('Average monthly values')
+        setNotification(createResultMessage(response.status, response.message, response.errors))
       }
     } catch (error) {
       console.error(error)
       const message = 'Unable to apply average monthly value upload.'
       setNotificationKind('error')
+      setNotificationTitle('Average monthly values')
       setNotification(message)
       setUploadResult({
         status: 'rejected',
@@ -704,14 +701,16 @@ const RTMEmsLogAmvPage = () => {
     }
   }
 
-  const isReviewDisabled =
-    isPreviewing ||
-    !selectedUploadFile ||
-    selectedUploadFile.size <= 0 ||
-    !pendingUploadValidation ||
-    pendingUploadValidation.fileName !== selectedUploadFile.name ||
-    pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-    previewResult?.status !== 'accepted'
+  const hasCurrentUploadValidation =
+    !!selectedUploadFile &&
+    selectedUploadFile.size > 0 &&
+    !!pendingUploadValidation &&
+    pendingUploadValidation.fileName === selectedUploadFile.name &&
+    pendingUploadValidation.fileSize === selectedUploadFile.size
+
+  const isReviewReady = hasCurrentUploadValidation && previewResult?.status === 'accepted'
+
+  const isReviewDisabled = isPreviewing || !canManage
 
   const isUploadDisabled =
     isUploading ||
@@ -724,7 +723,17 @@ const RTMEmsLogAmvPage = () => {
     previewResult?.status !== 'accepted'
 
   const openReviewStep = () => {
-    if (isReviewDisabled) {
+    if (!canManage) {
+      setUploadError('You do not have permission to upload average monthly value rows.')
+      return
+    }
+
+    if (!selectedUploadFile || selectedUploadFile.size <= 0) {
+      setUploadError('Please upload a file before continuing.')
+      return
+    }
+
+    if (!isReviewReady) {
       setUploadError('Upload a spreadsheet that passes validation before reviewing it.')
       return
     }
@@ -760,24 +769,28 @@ const RTMEmsLogAmvPage = () => {
           <>
             <div className="admin-upload-section-heading">
               <h2 id="rtm-upload-title">Upload</h2>
-              <p>Select a spreadsheet to validate before reviewing average monthly values.</p>
+              <p>{RTM_UPLOAD_STEP_DESCRIPTION}</p>
             </div>
 
             <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
               <div className="admin-upload-field-header">
                 <div>
                   <span className="admin-upload-field-label">Upload Excel Spreadsheet</span>
-                  <p className="admin-upload-field-helper">
-                    Supported format: .xlsx. Enter the update date and AMV values in the template;
-                    values apply to old and second growth.
-                  </p>
+                  <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
                 </div>
                 <a
-                  className="cds--btn cds--btn--ghost"
+                  className="admin-upload-template-card"
                   href={RTM_TEMPLATE_DOWNLOAD_PATH}
                   download={RTM_TEMPLATE_DOWNLOAD_NAME}
+                  aria-label="Download template"
                 >
-                  Download template
+                  <span>
+                    <span className="admin-upload-template-card__title">Download template</span>
+                    <span className="admin-upload-template-card__meta">
+                      XLSX - {RTM_TEMPLATE_DISPLAY_SIZE}
+                    </span>
+                  </span>
+                  <Download size={16} aria-hidden="true" />
                 </a>
               </div>
 
@@ -867,7 +880,7 @@ const RTMEmsLogAmvPage = () => {
           <>
             <div className="admin-upload-section-heading">
               <h2 id="rtm-review-title">Review</h2>
-              <p>Confirm the average monthly values parsed from the spreadsheet.</p>
+              <p>Review the details extracted from your file and submit when ready</p>
             </div>
 
             <section className="admin-upload-panel" aria-labelledby="rtm-review-title">
@@ -882,26 +895,22 @@ const RTMEmsLogAmvPage = () => {
               )}
             </section>
 
-            <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split">
-              <div>
-                <Button kind="ghost" size="md" onClick={() => setUploadStep('upload')}>
-                  Back
-                </Button>
-              </div>
-              <div>
-                <Button
-                  kind="primary"
-                  size="md"
-                  className="admin-upload-fspts-action-button"
-                  renderIcon={ArrowRight}
-                  onClick={() => {
-                    void submitUpload()
-                  }}
-                  disabled={isUploadDisabled}
-                >
-                  Submit changes
-                </Button>
-              </div>
+            <div className="admin-upload-fspts-button-row">
+              <Button kind="ghost" size="md" onClick={() => setUploadStep('upload')}>
+                Back
+              </Button>
+              <Button
+                kind="primary"
+                size="md"
+                className="admin-upload-fspts-action-button"
+                renderIcon={ArrowRight}
+                onClick={() => {
+                  void submitUpload()
+                }}
+                disabled={isUploadDisabled}
+              >
+                Submit
+              </Button>
             </div>
           </>
         )}
@@ -911,8 +920,9 @@ const RTMEmsLogAmvPage = () => {
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={notificationKind}
+            lowContrast={notificationKind === 'success'}
             role="status"
-            title="Average monthly values"
+            title={notificationTitle}
             subtitle={notification}
             onCloseButtonClick={() => {
               setNotification('')
