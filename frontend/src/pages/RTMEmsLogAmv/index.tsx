@@ -109,7 +109,7 @@ const formatUploadMonth = (dateValue: string | null | undefined): string | null 
 }
 
 const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | null): string => {
-  const monthLabel = formatUploadMonth(previewResult?.retrievalDate ?? previewResult?.updateDate)
+  const monthLabel = formatUploadMonth(previewResult?.updateDate ?? previewResult?.retrievalDate)
   return monthLabel ? `New values applied for ${monthLabel}.` : 'New values applied.'
 }
 

@@ -234,7 +234,7 @@ describe('RTM EMS Log AMV actions', () => {
 
     await waitFor(() => expect(mockedUpload).toHaveBeenCalledWith({ file }))
     await waitFor(() => expect(screen.getByText('Average monthly values updated')).toBeVisible())
-    expect(screen.getByText('New values applied for July 2026.')).toBeVisible()
+    expect(screen.getByText('New values applied for June 2026.')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Upload' })).toBeVisible()
   })
 

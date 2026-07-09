@@ -276,6 +276,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
               .toList();
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
+      LocalDate effectiveDate = parsedUpdateDate;
 
       if (uploadRows.size() < parseResult.rows().size()) {
         warnings.add("Some rows were skipped because they were missing grade/species values.");
@@ -352,7 +353,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
                 species,
                 grade,
                 normalizedGrowthIndicator,
-                parsedRetrievalDate,
+                effectiveDate,
                 parsedUpdateDate,
                 newValue);
 
