@@ -98,6 +98,10 @@ vi.mock('@/utils/download', () => ({
   triggerBrowserDownload: vi.fn(),
 }))
 
+// This file renders the full provincial permit detail page; several tests exercise
+// Carbon inputs and async child panels, which can exceed Vitest's 5s default in CI.
+vi.setConfig({ testTimeout: 20000 })
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
