@@ -118,10 +118,16 @@ describe('Provincial Application Search Actions', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Select 321' })).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Select 654' })).toBeDisabled()
-    expect(screen.getByRole('link', { name: 'Upload Application Submission' })).toHaveAttribute(
+    expect(
+      screen.queryByRole('link', { name: 'Upload Application Submission' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add Application' })).toHaveAttribute(
       'href',
-      '/provincial/application/upload',
+      '/provincial/application/create',
     )
+    expect(
+      screen.getByRole('link', { name: 'Add Application' }).closest('.legacy-search-actions'),
+    ).toBeNull()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(createExemptionButton).toBeEnabled()

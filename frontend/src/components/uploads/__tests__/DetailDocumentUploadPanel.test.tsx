@@ -124,25 +124,24 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Upload type' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Document File')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Choose files for Add more documents' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('Document File')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
 
-    expect(screen.queryByRole('heading', { name: 'File review' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
     expect(
-      within(workflowProgress).getByText('1. Upload').closest('[role="listitem"]'),
+      within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
-    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
     })
     expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
@@ -289,7 +288,10 @@ describe('DetailDocumentUploadPanel', () => {
 
     expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Upload type' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Document File')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Choose files for Add more documents' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('Document File')).toBeInTheDocument()
     expect(screen.getAllByText('valid-application-upload.pdf').length).toBeGreaterThan(0)
     expect(screen.queryByText('eicar-application-upload.pdf')).not.toBeInTheDocument()
 

@@ -57,10 +57,20 @@ lexis:
   auth:
     cognito:
       userinfo-uri: ${COGNITO_USERINFO_URI:}
+    keycloak:
+      # Optional second JWT issuer for machine-to-machine clients such as NEXCOL.
+      issuer-uri: ${KEYCLOAK_ISSUER_URI:}
+      # Additional comma-separated Keycloak issuers, such as API Services Portal's shared apigw realm.
+      additional-issuer-uris: ${KEYCLOAK_ADDITIONAL_ISSUER_URIS:}
+      jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:}
     # Mirrors legacy WebADE "industry-roles" behaviour with renamed submitter roles.
-    industry-roles: "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER"
+    industry-roles: "LEXIS_PROVINCIAL_SUBMITTER"
   authz:
     # Role names match FAM roles exactly; action keys match legacy canPerformAction/grantedAction keys.
+    # OAuth scopes are for Keycloak machine-to-machine clients and do not grant interactive UI roles.
+    scope-actions:
+      "[lexis:federal-submission:submit]":
+        - "uploadFederalSubmission"
     role-actions:
       LEXIS_ADMIN: ["*"]
       LEXIS_READ_ONLY:
@@ -72,6 +82,9 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "viewFederalApplication"
       LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/applicationSearch"
@@ -84,6 +97,9 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "viewFederalApplication"
         - "/applicationReport"
         - "/offerReport"
         - "/teacReport"
@@ -106,6 +122,9 @@ lexis:
         - "/createExemption"
         - "/exemptionSearch"
         - "/exemptionDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "viewFederalApplication"
         - "approveExemption"
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
@@ -119,9 +138,11 @@ lexis:
         - "/permitDetails"
         - "createApplication"
         - "uploadApplicationSubmission"
-      LEXIS_FEDERAL_SUBMITTER:
-        - "/federalApplicationSearch"
-        - "/federalApplicationDetails"
-        - "uploadApplicationSubmission"
-        - "viewFederalApplication"
       LEXIS_DELEGATED_ADMIN: []
+  federal-submission:
+    require-request-id: false
+    require-user-reference: false
+    require-idempotency-key: false
+    require-source-system: false
+    # Retry guidance returned on dedicated federal endpoint 503 responses.
+    retry-after-seconds: 60

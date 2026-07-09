@@ -13,7 +13,7 @@ Full-stack LEXIS application for log export workflows.
 | Frontend | React 19, TypeScript, Carbon Design System |
 | Backend | Spring Boot 3.5, Java 21 |
 | Database | Oracle (shared, BC Gov-managed) |
-| Auth | AWS Cognito (FAM) |
+| Auth | AWS Cognito (FAM) for interactive users; Keycloak scopes for NEXCOL service-client submission |
 | Reports | JasperReports library |
 
 ## Local Development
@@ -42,7 +42,7 @@ These files are gitignored and stay local.
 
 #### `backend/src/main/resources/application-local.yml`
 
-Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
+Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, optional Keycloak issuer URI for service-client tokens, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
 
 For Option B, Compose overrides `TRUSTSTORE_PATH` inside Docker to `/app/src/main/resources/cert/jssecacerts`; no local edit is needed for the container path.
 
@@ -120,6 +120,16 @@ Regardless of option:
 - Open `http://localhost:3000` and complete the Cognito login round trip.
 
 If the backend starts but authenticated API calls fail, check network access, `application-local.yml` credentials, Cognito config, and the truststore path.
+
+### NEXCOL service-client auth
+
+Federal NEXCOL validation/submission calls use machine-to-machine Keycloak tokens, not Cognito/FAM user sessions. The calling client must receive the `lexis:federal-submission:submit` scope or client role, then call the federal validation/submission endpoints with a bearer token.
+
+LEXIS deploys can idempotently create the required direct Keycloak client scope in each environment when `keycloak_sa_client_id` and `keycloak_sa_client_secret` are configured for the GitHub environment. API Services Portal gateway credentials are configured through the APS gateway product/application flow.
+
+See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for the
+Keycloak setup, token request, and endpoint request shape.
+See [gateway/README.md](gateway/README.md) for the API Services Portal gateway setup.
 
 ## CI regression
 

@@ -22,11 +22,7 @@ import {
 } from '@carbon/icons-react'
 import { IconButton, SkipToContent, Theme } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import {
-  hasFederalSubmitterRole,
-  hasProvincialSubmitterRole,
-  hasRole,
-} from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
@@ -257,12 +253,13 @@ const canShowRoleScopedLink = (
     return true
   }
 
-  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
   const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
   const hasProvincialStaffRole =
-    hasRole(roles, 'APPLICATION_APPROVER') || hasRole(roles, 'EXEMPTION_APPROVER')
+    hasRole(roles, 'READ_ONLY') ||
+    hasRole(roles, 'APPLICATION_APPROVER') ||
+    hasRole(roles, 'EXEMPTION_APPROVER')
 
-  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+  return hasProvincialSubmitter || hasProvincialStaffRole
 }
 
 function Layout({ children }: LayoutProps) {

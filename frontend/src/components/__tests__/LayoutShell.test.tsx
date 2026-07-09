@@ -234,26 +234,18 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
   })
 
-  it('shows only federal search for federal submitters', () => {
+  it('shows federal search when federal read actions are granted', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
-          principal: 'bceid\\federal',
-          roles: ['FEDERAL_SUBMITTER'],
+          principal: 'idir\\federal-reader',
+          roles: ['LEXIS_ADMIN'],
           welcomeTarget: '/federal',
-          grantedActions: [
-            '/federalApplicationSearch',
-            'viewFederalApplication',
-            'uploadApplicationSubmission',
-          ],
+          grantedActions: ['/federalApplicationSearch', 'viewFederalApplication'],
         }),
         defaultRoute: '/federal',
         canPerform: (action: string) =>
-          [
-            '/federalApplicationSearch',
-            'viewFederalApplication',
-            'uploadApplicationSubmission',
-          ].includes(action),
+          ['/federalApplicationSearch', 'viewFederalApplication'].includes(action),
       }),
     )
 

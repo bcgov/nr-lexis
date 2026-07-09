@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  hasFederalSubmitterRole,
-  hasProvincialSubmitterRole,
-  hasRole,
-} from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 
 describe('auth role utilities', () => {
   it('recognizes canonical and LEXIS-prefixed roles case-insensitively', () => {
@@ -21,17 +17,8 @@ describe('auth role utilities', () => {
     expect(hasProvincialSubmitterRole(['LEXIS_INDUSTRY_00012345'])).toBe(false)
   })
 
-  it('recognizes federal submitter role aliases', () => {
-    expect(hasFederalSubmitterRole(['FEDERAL_SUBMITTER'])).toBe(true)
-    expect(hasFederalSubmitterRole(['LEXIS_FEDERAL_SUBMITTER'])).toBe(true)
-    expect(hasFederalSubmitterRole(['FEDERAL_SUBMITTER_00012345'])).toBe(true)
-    expect(hasFederalSubmitterRole(['LEXIS_FEDERAL_SUBMITTER_00012345'])).toBe(true)
-    expect(hasFederalSubmitterRole(['LEXIS_INDUSTRY_00012345'])).toBe(false)
-  })
-
   it('handles empty or missing role lists', () => {
     expect(hasRole(undefined, 'ADMIN')).toBe(false)
     expect(hasProvincialSubmitterRole(null)).toBe(false)
-    expect(hasFederalSubmitterRole([])).toBe(false)
   })
 })

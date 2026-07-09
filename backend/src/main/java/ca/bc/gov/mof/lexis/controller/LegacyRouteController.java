@@ -98,7 +98,6 @@ public class LegacyRouteController {
 
   private final LexisApplicationController applicationController;
   private final ExemptionController exemptionController;
-  private final FederalApplicationController federalApplicationController;
   private final PurchaseOfferController purchaseOfferController;
   private final PermitController permitController;
   private final ApplicationReviewController applicationReviewController;
@@ -113,7 +112,6 @@ public class LegacyRouteController {
   public LegacyRouteController(
       LexisApplicationController applicationController,
       ExemptionController exemptionController,
-      FederalApplicationController federalApplicationController,
       PurchaseOfferController purchaseOfferController,
       PermitController permitController,
       ApplicationReviewController applicationReviewController,
@@ -126,7 +124,6 @@ public class LegacyRouteController {
       LexisAuthorizationService authorizationService) {
     this.applicationController = applicationController;
     this.exemptionController = exemptionController;
-    this.federalApplicationController = federalApplicationController;
     this.purchaseOfferController = purchaseOfferController;
     this.permitController = permitController;
     this.applicationReviewController = applicationReviewController;
@@ -307,56 +304,6 @@ public class LegacyRouteController {
       return ResponseEntity.noContent().build();
     }
     return exemptionController.getByExemptionNumber(exemptionNumber, authentication);
-  }
-
-  @GetMapping({"/federalApplicationSearch", "/federalApplicationSearch.do"})
-  public ResponseEntity<?> federalApplicationSearch(
-      @RequestParam(name = "actionMapping", required = false) String actionMapping,
-      @RequestParam(name = "applicationNumber", required = false) String federalApplicationNumber,
-      @RequestParam(name = "federalApplicationNumber", required = false)
-          String federalApplicationNumberAlias,
-      @RequestParam(name = "packageNumber", required = false) String packageNumber,
-      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
-      @RequestParam(name = "applicationStatus", required = false) String applicationStatus,
-      @RequestParam(name = "receivedFromDate", required = false) String receivedFromDate,
-      @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
-      @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
-      @RequestParam(name = "listingToDate", required = false) String listingToDate,
-      @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
-      @RequestParam(name = "agentClientNumber", required = false) String agentClientNumber,
-      @RequestParam(name = "applications", required = false) String applications,
-      @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
-    if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
-      return federalApplicationController.searchOptions();
-    }
-    if (ACTION_VERIFY_APPLICATION_CLIENTS.equalsIgnoreCase(actionMapping)) {
-      return federalApplicationController.verifyClients(applications);
-    }
-    return federalApplicationController.search(
-        federalApplicationNumber,
-        federalApplicationNumberAlias,
-        packageNumber,
-        exemptionNumber,
-        applicationStatus,
-        receivedFromDate,
-        receivedToDate,
-        listingFromDate,
-        listingToDate,
-        ownerClientNumber,
-        agentClientNumber,
-        page,
-        size,
-        null);
-  }
-
-  @GetMapping({"/federalApplicationDetails", "/federalApplicationDetails.do"})
-  public ResponseEntity<?> federalApplicationDetails(
-      @RequestParam(name = "applicationNumber", required = false) @Positive Long applicationNumber) {
-    if (applicationNumber == null) {
-      return ResponseEntity.noContent().build();
-    }
-    return federalApplicationController.getByApplicationNumber(applicationNumber);
   }
 
   @GetMapping({"/offersSearch", "/offersSearch.do"})

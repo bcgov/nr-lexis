@@ -103,7 +103,7 @@ public class ApplicationDetailsRpcController {
   private static final Set<String> APPLICATION_DOCUMENT_DELETE_ROLES =
       Set.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
   private static final Set<String> APPLICATION_DOCUMENT_INDUSTRY_ROLES =
-      Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER");
+      Set.of("LEXIS_PROVINCIAL_SUBMITTER");
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
@@ -1149,8 +1149,7 @@ public class ApplicationDetailsRpcController {
             .anyMatch(
                 role ->
                     APPLICATION_DOCUMENT_INDUSTRY_ROLES.contains(role)
-                        || role.startsWith("LEXIS_PROVINCIAL_SUBMITTER_")
-                        || role.startsWith("LEXIS_FEDERAL_SUBMITTER_"));
+                        || role.startsWith("LEXIS_PROVINCIAL_SUBMITTER_"));
     return industryUser
         && (APPLICATION_STATUS_PERMITTED.equals(status) || APPLICATION_STATUS_EXPIRED.equals(status));
   }

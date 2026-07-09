@@ -1,11 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, type RouteObject } from 'react-router-dom'
 import Layout from '../components/Layout'
-import {
-  hasFederalSubmitterRole,
-  hasProvincialSubmitterRole,
-  hasRole,
-} from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
@@ -69,18 +65,18 @@ const canAccessRoleScope = (
     return true
   }
 
-  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
   const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
   const hasProvincialStaffRole =
     hasRole(roles, 'READ_ONLY') ||
     hasRole(roles, 'APPLICATION_APPROVER') ||
     hasRole(roles, 'EXEMPTION_APPROVER')
+  const hasProvincialRole = hasProvincialSubmitter || hasProvincialStaffRole
 
   if (roleScope === 'provincialApplicationSubmission') {
-    return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+    return hasProvincialRole
   }
 
-  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+  return hasProvincialRole
 }
 
 function RouteActionGuard({
@@ -334,13 +330,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
         <FederalApplicationDetailsPage />
       </Layout>
     ),
-    isNavigation: false,
-  },
-  {
-    path: '/federal/application/upload',
-    id: 'Federal Application Upload Redirect',
-    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
-    element: <Navigate to="/federal" replace />,
     isNavigation: false,
   },
   {

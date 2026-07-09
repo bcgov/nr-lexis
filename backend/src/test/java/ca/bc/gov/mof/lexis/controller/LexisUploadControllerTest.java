@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,9 +16,17 @@ import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +38,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,6 +48,7 @@ class LexisUploadControllerTest {
 
   @Mock private ObjectProvider<LexisUploadService> uploadServiceProvider;
   @Mock private ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider;
+  @Mock private ObjectProvider<MeterRegistry> meterRegistryProvider;
   @Mock private LexisUploadService uploadService;
   @Mock private ApplicationSubmissionImportService applicationSubmissionImportService;
   @Mock private ApplicationEditLockService applicationEditLockService;
@@ -363,6 +375,1843 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void federalApplicationSubmissionUploadShouldDelegateRawXmlToImportService() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("bceid\\federal-user", "n/a");
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "accepted",
+            "created",
+            9001L,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1", "federal-direct.xml", submissionData, "REQ-1", null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getHeaders().getLocation())
+        .isEqualTo(URI.create("/api/lexis/federal/applications/9001"));
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "federal-user", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldAcceptSourceSystemParameterWhenRequired() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    controller.setRequireFederalSourceSystem(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "accepted",
+            "created",
+            9001L,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            null,
+            "FEDERAL-SYSTEM",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getBody())
+        .isEqualTo(
+            withTrace(
+                payload,
+                "REQ-1",
+                "IDEMP-1",
+                submissionData,
+                "FEDERAL-SYSTEM",
+                "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "federal-user", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldPreferSourceSystemHeaderOverParameter() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "accepted",
+            "created",
+            9001L,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "FEDERAL-HEADER",
+            "FEDERAL-PARAMETER",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getBody())
+        .isEqualTo(
+            withTrace(
+                payload,
+                "REQ-1",
+                "IDEMP-1",
+                submissionData,
+                "FEDERAL-HEADER",
+                "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "federal-user", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldNotSetLocationWhenAcceptedResultHasNoApplicationNumber() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "accepted",
+            "created",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            null,
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getHeaders().getLocation()).isNull();
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldNotSetLocationWhenImportRejectsResult() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "rejected",
+            "Federal submission endpoint only accepts jurisdictionCode=F.",
+            9001L,
+            "FED-1",
+            1,
+            List.of("Federal submission endpoint only accepts jurisdictionCode=F."),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            null,
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(response.getHeaders().getLocation()).isNull();
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldReturnServiceUnavailableWhenImportServiceMissing() {
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "FEDERAL-SYSTEM",
+            null,
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal LEXIS submission service is unavailable. Try again later.");
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "dependency_unavailable")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldUseConfiguredRetryAfterForUnavailableImportService() {
+    LexisUploadController controller = controller();
+    controller.setFederalSubmissionRetryAfterSeconds(120L);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("120");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldReturnServiceUnavailableWhenImportThrows() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+        .thenThrow(new IllegalStateException("database unavailable"));
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "FEDERAL-SYSTEM",
+            null,
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("rejected");
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().requestId()).isEqualTo("REQ-1");
+    assertThat(response.getBody().idempotencyKey()).isEqualTo("IDEMP-1");
+    assertThat(response.getBody().payloadSha256()).isEqualTo(sha256Hex(submissionData));
+    assertThat(response.getBody().sourceSystem()).isEqualTo("FEDERAL-SYSTEM");
+    assertThat(response.getBody().payloadRootType()).isEqualTo("lexis-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal LEXIS submission service is unavailable. Try again later.");
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "dependency_unavailable")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldUseJwtClientIdAsEntryUserForServiceClient() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "accepted",
+            "accepted",
+            10427665L,
+            "AT-90L_01_07-03-26",
+            7,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "nexcol-service-client", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "NEXCOL",
+            null,
+            new JwtAuthenticationToken(
+                jwt(
+                    "opaque-service-subject",
+                    Map.of(
+                        "client_id",
+                        "nexcol-service-client",
+                        "scope",
+                        "lexis:federal-submission:submit"))));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getBody())
+        .isEqualTo(
+            withTrace(
+                payload,
+                "REQ-1",
+                "IDEMP-1",
+                submissionData,
+                "NEXCOL",
+                "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "nexcol-service-client", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldUseJwtAzpAsEntryUserForKeycloakServiceClient() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "accepted",
+            "accepted",
+            10427665L,
+            "AT-90L_01_07-03-26",
+            7,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "nexcol-service-client", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "NEXCOL",
+            null,
+            new JwtAuthenticationToken(
+                jwt(
+                    "service-account-nexcol-service-client",
+                    Map.of(
+                        "azp",
+                        "nexcol-service-client",
+                        "scope",
+                        "lexis:federal-submission:submit"))));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "nexcol-service-client", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldAllowApprovedJwtClientId() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "accepted",
+            "accepted",
+            null,
+            null,
+            0,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            null,
+            new JwtAuthenticationToken(
+                jwt(
+                    "opaque-service-subject",
+                    Map.of(
+                        "client_id",
+                        "nexcol-service-client",
+                        "scope",
+                        "lexis:federal-submission:submit"))));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldReturnServiceUnavailableWhenImportReturnsNull() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("rejected");
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().requestId()).isEqualTo("REQ-1");
+    assertThat(response.getBody().idempotencyKey()).isEqualTo("IDEMP-1");
+    assertThat(response.getBody().payloadSha256()).isEqualTo(sha256Hex(submissionData));
+    assertThat(response.getBody().payloadRootType()).isEqualTo("lexis-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal LEXIS submission service is unavailable. Try again later.");
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "federal-user", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectMissingIdempotencyKeyWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalCreateIdempotencyKey(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            null,
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Idempotency-Key header is required for federal create submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectOverlongIdempotencyKey() {
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "I".repeat(201),
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Idempotency-Key header must be 200 characters or fewer.");
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "invalid_metadata")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectOverlongSourceSystem() {
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "S".repeat(201),
+            null,
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().sourceSystem()).isNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("lexis-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Source-System header or sourceSystem parameter must be 200 characters or fewer.");
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "invalid_metadata")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectMissingSourceSystemWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalSourceSystem(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().sourceSystem()).isNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("lexis-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Source-System header or sourceSystem parameter is required for federal submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectMissingRequestIdWhenRequired() {
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    controller.setRequireFederalRequestId(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            null,
+            "IDEMP-1",
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Request-ID header is required for federal submissions.");
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "missing_request_id")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldRejectOverlongRequestId() {
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1", null, submissionData, "R".repeat(201), null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Request-ID header must be 200 characters or fewer.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldRejectOverlongSourceSystemParameter() {
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            null,
+            "S".repeat(201),
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().sourceSystem()).isNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("lexis-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Source-System header or sourceSystem parameter must be 200 characters or fewer.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldRejectMissingSourceSystemWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalSourceSystem(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().sourceSystem()).isNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("lexis-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Source-System header or sourceSystem parameter is required for federal submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectMissingUserReferenceWhenRequired() {
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    controller.setRequireFederalCreateUserReference(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            null,
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().errors())
+        .containsExactly("userReference is required for federal create submissions.");
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "missing_user_reference")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectOverlongUserReference() {
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "R".repeat(51),
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "FEDERAL-SYSTEM",
+            null,
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().errors())
+        .containsExactly("userReference must be 50 characters or fewer.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRecordMetrics() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "accepted",
+            "created",
+            9001L,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "FEDERAL-SYSTEM",
+            null,
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_requests_total")
+                .tag("operation", "create-raw")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_results_total")
+                .tag("operation", "create-raw")
+                .tag("status", "accepted")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_bytes_total")
+                .tag("operation", "create-raw")
+                .counter()
+                .count())
+        .isEqualTo((double) submissionData.length);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_duration_seconds")
+                .tag("operation", "create-raw")
+                .tag("status", "accepted")
+                .timer()
+                .count())
+        .isEqualTo(1L);
+    assertThat(meterRegistry.find("lexis_federal_submission_failures_total").counter()).isNull();
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRecordFailureTypeForRejectedResult() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "rejected",
+            "Package already exists.",
+            null,
+            "FED-1",
+            0,
+            List.of("Package FED-1 already exists."),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "duplicate_or_replay")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldUseDefaultFileNameForRawXml() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-submission.xml",
+            submissionData.length,
+            "validated",
+            "validated",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(
+                submissionData, "federal-submission.xml", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1", null, submissionData, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(
+            submissionData, "federal-submission.xml", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldAcceptSourceSystemParameterWhenRequired() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    controller.setRequireFederalSourceSystem(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "validated",
+            "validated",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            null,
+            "FEDERAL-SYSTEM",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", "IDEMP-1", submissionData, "FEDERAL-SYSTEM", "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldPreferSourceSystemHeaderOverParameter() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "validated",
+            "validated",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            "FEDERAL-HEADER",
+            "FEDERAL-PARAMETER",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            withTrace(
+                payload,
+                "REQ-1",
+                "IDEMP-1",
+                submissionData,
+                "FEDERAL-HEADER",
+                "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldTraceEsfSubmissionContentModes() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+
+    assertFederalValidationPayloadRootType(
+        controller,
+        esfSubmissionWithContent("<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"),
+        "esf-submission:lexis-child");
+    assertFederalValidationPayloadRootType(
+        controller,
+        esfSubmissionWithContent(
+            "<![CDATA[<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>]]>"),
+        "esf-submission:cdata-lexis");
+    assertFederalValidationPayloadRootType(
+        controller,
+        esfSubmissionWithContent(
+            "&lt;lexis:LexisSubmission xmlns:lexis=&quot;http://www.for.gov.bc.ca/schema/lexis&quot;/&gt;"),
+        "esf-submission:escaped-lexis");
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldTraceSoapEnvelopePayloads() {
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        """
+        <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+          <soapenv:Body/>
+        </soapenv:Envelope>
+        """
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1", "federal-direct.xml", submissionData, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("soap-envelope");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldDelegateFileToFederalImportService() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "submission.xml",
+            file.getSize(),
+            "accepted",
+            "created",
+            9001L,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(file, "jsmith", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1", file, null, "REQ-1", null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getHeaders().getLocation())
+        .isEqualTo(URI.create("/api/lexis/federal/applications/9001"));
+    assertThat(response.getBody()).isEqualTo(withTrace(payload, "REQ-1", null, file, "esf-submission"));
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(file, "jsmith", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldAcceptSourceSystemParameterWhenRequired() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    controller.setRequireFederalSourceSystem(true);
+    MultipartFile file = sampleXmlFile();
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "submission.xml",
+            file.getSize(),
+            "accepted",
+            "created",
+            9001L,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                file, "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            null,
+            "FEDERAL-SYSTEM",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getBody())
+        .isEqualTo(
+            withTrace(
+                payload,
+                "REQ-1",
+                "IDEMP-1",
+                file,
+                "FEDERAL-SYSTEM",
+                "esf-submission"));
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(file, "federal-user", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldPreferSourceSystemHeaderOverParameter() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "submission.xml",
+            file.getSize(),
+            "accepted",
+            "created",
+            9001L,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                file, "federal-user", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            "FEDERAL-HEADER",
+            "FEDERAL-PARAMETER",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getBody())
+        .isEqualTo(
+            withTrace(
+                payload,
+                "REQ-1",
+                "IDEMP-1",
+                file,
+                "FEDERAL-HEADER",
+                "esf-submission"));
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(file, "federal-user", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldRejectMissingIdempotencyKeyWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalCreateIdempotencyKey(true);
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            null,
+            new TestingAuthenticationToken("idir\\jsmith", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(file.getSize());
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Idempotency-Key header is required for federal create submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldRejectMissingRequestIdWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalRequestId(true);
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1",
+            file,
+            null,
+            null,
+            "IDEMP-1",
+            new TestingAuthenticationToken("idir\\jsmith", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(file.getSize());
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Request-ID header is required for federal submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldRejectMissingUserReferenceWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalCreateUserReference(true);
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            null,
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("idir\\jsmith", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(file.getSize());
+    assertThat(response.getBody().errors())
+        .containsExactly("userReference is required for federal create submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldRejectOverlongSourceSystem() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            "S".repeat(201),
+            null,
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(file.getSize());
+    assertThat(response.getBody().sourceSystem()).isNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("esf-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Source-System header or sourceSystem parameter must be 200 characters or fewer.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldRejectMissingSourceSystemWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalSourceSystem(true);
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(file.getSize());
+    assertThat(response.getBody().sourceSystem()).isNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("esf-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Source-System header or sourceSystem parameter is required for federal submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartValidationShouldDelegateFileToFederalValidationService() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "submission.xml",
+            file.getSize(),
+            "validated",
+            "validated",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(file, "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartValidation(
+            "FED-REF-1", file, null, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(withTrace(payload, "REQ-1", null, file, "esf-submission"));
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(file, "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartValidationShouldPreferSourceSystemHeaderOverParameter() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "submission.xml",
+            file.getSize(),
+            "validated",
+            "validated",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(file, "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartValidation(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            "FEDERAL-HEADER",
+            "FEDERAL-PARAMETER",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            withTrace(
+                payload,
+                "REQ-1",
+                "IDEMP-1",
+                file,
+                "FEDERAL-HEADER",
+                "esf-submission"));
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(file, "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartValidationShouldRejectOverlongSourceSystemParameter() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartValidation(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            null,
+            "S".repeat(201),
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(file.getSize());
+    assertThat(response.getBody().sourceSystem()).isNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("esf-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Source-System header or sourceSystem parameter must be 200 characters or fewer.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartValidationShouldRejectMissingSourceSystemWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalSourceSystem(true);
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartValidation(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken(
+                "bceid\\federal-user", "n/a", "SCOPE_lexis:federal-submission:submit"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(file.getSize());
+    assertThat(response.getBody().sourceSystem()).isNull();
+    assertThat(response.getBody().payloadRootType()).isEqualTo("esf-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Source-System header or sourceSystem parameter is required for federal submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldAllowMissingUserReferenceWhenCreateReferenceRequired() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    controller.setRequireFederalCreateUserReference(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-submission.xml",
+            submissionData.length,
+            "validated",
+            "validated",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(
+                submissionData, "federal-submission.xml", null))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            null, null, submissionData, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(
+            submissionData, "federal-submission.xml", null);
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldReturnServiceUnavailableWhenImportServiceMissing() {
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1", "federal-direct.xml", submissionData, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal LEXIS submission service is unavailable. Try again later.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldReturnServiceUnavailableWhenValidationThrows() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    when(
+            applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "FED-REF-1"))
+        .thenThrow(new IllegalStateException("database unavailable"));
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1", "federal-direct.xml", submissionData, "REQ-1", "IDEMP-1", null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("rejected");
+    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().requestId()).isEqualTo("REQ-1");
+    assertThat(response.getBody().idempotencyKey()).isEqualTo("IDEMP-1");
+    assertThat(response.getBody().payloadSha256()).isEqualTo(sha256Hex(submissionData));
+    assertThat(response.getBody().payloadRootType()).isEqualTo("lexis-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal LEXIS submission service is unavailable. Try again later.");
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartValidationShouldReturnServiceUnavailableWhenValidationReturnsNull()
+      throws Exception {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartValidation(
+            "FED-REF-1", file, null, "REQ-1", "IDEMP-1", null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("60");
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("rejected");
+    assertThat(response.getBody().fileName()).isEqualTo("submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(file.getSize());
+    assertThat(response.getBody().requestId()).isEqualTo("REQ-1");
+    assertThat(response.getBody().idempotencyKey()).isEqualTo("IDEMP-1");
+    assertThat(response.getBody().payloadSha256()).isEqualTo(sha256Hex(file.getBytes()));
+    assertThat(response.getBody().payloadRootType()).isEqualTo("esf-submission");
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal LEXIS submission service is unavailable. Try again later.");
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(file, "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldRejectMissingRequestIdWhenRequired() {
+    LexisUploadController controller = controller();
+    controller.setRequireFederalRequestId(true);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1", null, submissionData, null, null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-submission.xml");
+    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Request-ID header is required for federal submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectMissingRawXml() {
+    LexisUploadController controller = controller();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload("FED-REF-1", null, null, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-submission.xml");
+    assertThat(response.getBody().fileSize()).isZero();
+    assertThat(response.getBody().requestId()).isEqualTo("REQ-1");
+    assertThat(response.getBody().payloadSha256()).isNull();
+    assertThat(response.getBody().payloadRootType()).isNull();
+    assertThat(response.getBody().errors()).containsExactly("Submission data is required.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldRejectMissingRawXmlWithDefaultFileName() {
+    LexisUploadController controller = controller();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation("FED-REF-1", null, null, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-submission.xml");
+    assertThat(response.getBody().fileSize()).isZero();
+    assertThat(response.getBody().requestId()).isEqualTo("REQ-1");
+    assertThat(response.getBody().payloadSha256()).isNull();
+    assertThat(response.getBody().payloadRootType()).isNull();
+    assertThat(response.getBody().errors()).containsExactly("Submission data is required.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectNonXmlRawPayload() {
+    LexisUploadController controller = controller();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-submission.json",
+            "{\"type\":\"FeatureCollection\"}".getBytes(StandardCharsets.UTF_8),
+            "REQ-1",
+            null,
+            null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-submission.json");
+    assertThat(response.getBody().requestId()).isEqualTo("REQ-1");
+    assertThat(response.getBody().payloadSha256())
+        .isEqualTo(sha256Hex("{\"type\":\"FeatureCollection\"}".getBytes(StandardCharsets.UTF_8)));
+    assertThat(response.getBody().payloadRootType()).isNull();
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal submission endpoint only accepts XML payloads.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRecordMetricsForEarlyRawRejection() {
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    byte[] submissionData = "{\"type\":\"FeatureCollection\"}".getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-submission.json",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_requests_total")
+                .tag("operation", "create-raw")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_results_total")
+                .tag("operation", "create-raw")
+                .tag("status", "rejected")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_bytes_total")
+                .tag("operation", "create-raw")
+                .counter()
+                .count())
+        .isEqualTo((double) submissionData.length);
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "unsupported_content")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldRejectNonXmlFile() {
+    LexisUploadController controller = controller();
+    MultipartFile file =
+        new MockMultipartFile(
+            "file", "federal-submission.zip", "application/zip", new byte[] {'P', 'K', 3, 4});
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1", file, null, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-submission.zip");
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal submission endpoint only accepts XML files.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartValidationShouldRejectNonXmlFile() {
+    LexisUploadController controller = controller();
+    MultipartFile file =
+        new MockMultipartFile(
+            "file",
+            "federal-submission.geojson",
+            "application/geo+json",
+            "{\"type\":\"FeatureCollection\"}".getBytes(StandardCharsets.UTF_8));
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartValidation(
+            "FED-REF-1", file, null, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().fileName()).isEqualTo("federal-submission.geojson");
+    assertThat(response.getBody().errors())
+        .containsExactly("Federal submission endpoint only accepts XML files.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
   void applicationSubmissionUploadShouldReturnUnprocessableEntityForRejectedImport() {
     when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
     LexisUploadController controller = controller();
@@ -458,13 +2307,129 @@ class LexisUploadControllerTest {
             .getBytes(StandardCharsets.UTF_8));
   }
 
+  private String esfSubmissionWithContent(String submissionContent) {
+    return """
+        <esf:ESFSubmission xmlns:esf="http://www.for.gov.bc.ca/schema/esf">
+          <esf:submissionContent>%s</esf:submissionContent>
+        </esf:ESFSubmission>
+        """
+        .formatted(submissionContent);
+  }
+
+  private void assertFederalValidationPayloadRootType(
+      LexisUploadController controller, String payloadXml, String expectedPayloadRootType) {
+    byte[] submissionData = payloadXml.getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "validated",
+            "validated",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1", "federal-direct.xml", submissionData, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, expectedPayloadRootType));
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "FED-REF-1");
+  }
+
   private LexisUploadController controller() {
     lenient()
         .when(applicationEditLockService.snapshot(any(), any(), anyBoolean()))
         .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
-    return new LexisUploadController(
-        uploadServiceProvider,
-        applicationSubmissionImportServiceProvider,
-        applicationEditLockService);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService);
+    return controller;
+  }
+
+  private ApplicationSubmissionImportResultDto withTrace(
+      ApplicationSubmissionImportResultDto result,
+      String requestId,
+      String idempotencyKey,
+      byte[] payload,
+      String payloadRootType) {
+    return withTrace(result, requestId, idempotencyKey, payload, null, payloadRootType);
+  }
+
+  private ApplicationSubmissionImportResultDto withTrace(
+      ApplicationSubmissionImportResultDto result,
+      String requestId,
+      String idempotencyKey,
+      byte[] payload,
+      String sourceSystem,
+      String payloadRootType) {
+    return result.withTraceMetadata(
+        requestId,
+        idempotencyKey,
+        payload == null || payload.length == 0 ? null : sha256Hex(payload),
+        sourceSystem,
+        payloadRootType);
+  }
+
+  private ApplicationSubmissionImportResultDto withTrace(
+      ApplicationSubmissionImportResultDto result,
+      String requestId,
+      String idempotencyKey,
+      MultipartFile payload,
+      String payloadRootType) {
+    return withTrace(result, requestId, idempotencyKey, payload, null, payloadRootType);
+  }
+
+  private ApplicationSubmissionImportResultDto withTrace(
+      ApplicationSubmissionImportResultDto result,
+      String requestId,
+      String idempotencyKey,
+      MultipartFile payload,
+      String sourceSystem,
+      String payloadRootType) {
+    try {
+      return result.withTraceMetadata(
+          requestId,
+          idempotencyKey,
+          payload == null || payload.isEmpty() ? null : sha256Hex(payload.getBytes()),
+          sourceSystem,
+          payloadRootType);
+    } catch (java.io.IOException ex) {
+      throw new IllegalStateException(ex);
+    }
+  }
+
+  private Jwt jwt(String subject, Map<String, Object> additionalClaims) {
+    Instant issuedAt = Instant.parse("2026-07-06T19:00:00Z");
+    Map<String, Object> claims = new java.util.HashMap<>(additionalClaims);
+    claims.put("sub", subject);
+    claims.put("token_use", "access");
+    return new Jwt(
+        "token",
+        issuedAt,
+        issuedAt.plusSeconds(300),
+        Map.of("alg", "RS256"),
+        claims);
+  }
+
+  private String sha256Hex(byte[] payload) {
+    try {
+      return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(payload));
+    } catch (NoSuchAlgorithmException ex) {
+      throw new IllegalStateException(ex);
+    }
   }
 }

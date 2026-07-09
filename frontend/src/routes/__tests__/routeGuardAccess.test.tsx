@@ -133,45 +133,17 @@ describe('Protected route guard access', () => {
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
-  it('redirects the retired federal upload route to federal search', async () => {
+  it('blocks unknown roles from the provincial application submission upload route', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
           principal: 'bceid\\federal',
-          roles: ['FEDERAL_SUBMITTER'],
-          welcomeTarget: '/federal',
-          grantedActions: ['uploadApplicationSubmission', '/federalApplicationSearch'],
+          roles: ['LEXIS_UNKNOWN_ROLE'],
+          welcomeTarget: null,
+          grantedActions: [],
         }),
-        defaultRoute: '/federal',
-        canPerform: (action: string) =>
-          [
-            'uploadApplicationSubmission',
-            '/federalApplicationSearch',
-            'viewFederalApplication',
-          ].includes(action),
-      }),
-    )
-
-    renderWithPath('/federal/application/upload')
-
-    expect(
-      await screen.findByRole('heading', { name: 'Federal application search' }),
-    ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Application submission file')).not.toBeInTheDocument()
-  })
-
-  it('blocks federal-only users from the provincial application submission upload route', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        capabilities: createTestCapabilities({
-          principal: 'bceid\\federal',
-          roles: ['FEDERAL_SUBMITTER'],
-          welcomeTarget: '/federal',
-          grantedActions: ['uploadApplicationSubmission', '/federalApplicationSearch'],
-        }),
-        defaultRoute: '/federal',
-        canPerform: (action: string) =>
-          ['uploadApplicationSubmission', '/federalApplicationSearch'].includes(action),
+        defaultRoute: '/unauthorized',
+        canPerform: () => false,
       }),
     )
 
@@ -212,21 +184,6 @@ describe('Protected route guard access', () => {
       await screen.findByRole('heading', { name: 'Upload Application Submission' }),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
-  })
-
-  it('redirects admin users away from the retired federal upload route', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        canPerform: () => true,
-      }),
-    )
-
-    renderWithPath('/federal/application/upload')
-
-    expect(
-      await screen.findByRole('heading', { name: 'Federal application search' }),
-    ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Application submission file')).not.toBeInTheDocument()
   })
 
   it('blocks non-RTM protected routes when PROD RTM-only mode is enabled', async () => {
