@@ -29,6 +29,7 @@ import IsoDatePicker from '@/components/IsoDatePicker'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   saveRtmEmsLogAmv,
+  searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
   type RtmEmsLogAmvRow,
   type RtmEmsLogAmvSaveRequest,
@@ -262,6 +263,15 @@ const buildCellBasis = (
   return basisByKey
 }
 
+const buildPrefillValues = (sourceRows: RtmEmsLogAmvRow[]) => {
+  const sourceBasis = buildCellBasis(sourceRows, [])
+  return Object.fromEntries(
+    Object.entries(sourceBasis)
+      .filter(([, basis]) => basis.hasCurrentValue)
+      .map(([key, basis]) => [key, basis.currentValue]),
+  )
+}
+
 const buildCellWarning = (
   cell: {
     column: RtmAmvSpeciesColumn
@@ -352,6 +362,8 @@ const RTMEmsLogAmvPage = () => {
   const [currentRows, setCurrentRows] = useState<RtmEmsLogAmvRow[]>([])
   const [previousRows, setPreviousRows] = useState<RtmEmsLogAmvRow[]>([])
   const [editedValues, setEditedValues] = useState<Record<string, string>>({})
+  const [prefillValues, setPrefillValues] = useState<Record<string, string>>({})
+  const [prefillSourceDate, setPrefillSourceDate] = useState('')
   const [retryCellKeys, setRetryCellKeys] = useState<Record<string, true>>({})
   const [showWarningConfirmation, setShowWarningConfirmation] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -371,6 +383,8 @@ const RTMEmsLogAmvPage = () => {
       setCurrentRows([])
       setPreviousRows([])
       setEditedValues({})
+      setPrefillValues({})
+      setPrefillSourceDate('')
       setRetryCellKeys({})
       setShowWarningConfirmation(false)
       return
@@ -397,10 +411,23 @@ const RTMEmsLogAmvPage = () => {
           : Promise.resolve([]),
       ])
 
+      let nextPrefillValues: Record<string, string> = {}
+      let nextPrefillSourceDate = ''
+      if (selectedDateIsFuture && currentResponse.length === 0) {
+        const latestRows = await searchLatestRtmEmsLogAmv(targetDate)
+        nextPrefillValues = buildPrefillValues(latestRows)
+        const sourceRow = latestRows.find((row) => row.updateDate || row.retrievalDate)
+        if (Object.keys(nextPrefillValues).length > 0 && sourceRow) {
+          nextPrefillSourceDate = sourceRow.updateDate ?? sourceRow.retrievalDate ?? ''
+        }
+      }
+
       setCurrentRows(currentResponse)
       setPreviousRows(previousResponse)
       setLoadedDate(targetDate)
-      setEditedValues({})
+      setEditedValues(nextPrefillValues)
+      setPrefillValues(nextPrefillValues)
+      setPrefillSourceDate(nextPrefillSourceDate)
       setRetryCellKeys({})
       setShowWarningConfirmation(false)
     } catch (error) {
@@ -409,12 +436,14 @@ const RTMEmsLogAmvPage = () => {
       setCurrentRows([])
       setPreviousRows([])
       setEditedValues({})
+      setPrefillValues({})
+      setPrefillSourceDate('')
       setRetryCellKeys({})
       setShowWarningConfirmation(false)
     } finally {
       setIsLoading(false)
     }
-  }, [selectedPreviousDayDate, targetDate])
+  }, [selectedDateIsFuture, selectedPreviousDayDate, targetDate])
 
   useEffect(() => {
     void loadRows()
@@ -432,8 +461,14 @@ const RTMEmsLogAmvPage = () => {
   const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))
   const dirtyCells = cells.filter((cell) => cell.dirty)
   const saveWarnings = warningDeduplicate(dirtyCells.map((cell) => cell.warning))
+  const confirmationMessages = warningDeduplicate([
+    selectedDateIsPast
+      ? `You are changing values for ${formatEffectiveDate(targetDate)}, which is in the past.`
+      : null,
+    ...saveWarnings,
+  ])
   const hasPendingChanges = dirtyCells.length > 0
-  const isReadOnly = !canManage || selectedDateIsPast || isLoading || isSaving
+  const isReadOnly = !canManage || isLoading || isSaving
   const saveDisabled =
     isReadOnly || !hasPendingChanges || validationErrors.length > 0 || !isIsoDate(targetDate)
 
@@ -445,7 +480,7 @@ const RTMEmsLogAmvPage = () => {
   }
 
   const resetChanges = () => {
-    setEditedValues({})
+    setEditedValues(prefillValues)
     setRetryCellKeys({})
     setShowWarningConfirmation(false)
   }
@@ -489,15 +524,6 @@ const RTMEmsLogAmvPage = () => {
         kind: 'error',
         title: 'Average monthly values',
         subtitle: 'You do not have permission to update average monthly values.',
-      })
-      return
-    }
-
-    if (selectedDateIsPast) {
-      setNotification({
-        kind: 'warning',
-        title: 'Average monthly values',
-        subtitle: 'Values for past dates are read-only.',
       })
       return
     }
@@ -582,7 +608,7 @@ const RTMEmsLogAmvPage = () => {
   }
 
   const requestSave = () => {
-    if (saveWarnings.length > 0) {
+    if (confirmationMessages.length > 0) {
       setShowWarningConfirmation(true)
       return
     }
@@ -646,7 +672,24 @@ const RTMEmsLogAmvPage = () => {
               <WarningAltFilled size={20} aria-hidden="true" />
               <h2>Past date selected</h2>
             </div>
-            <p>Values for {formatEffectiveDate(targetDate)} are read-only.</p>
+            <p>Changes for {formatEffectiveDate(targetDate)} require confirmation before saving.</p>
+          </div>
+        )}
+
+        {prefillSourceDate && (
+          <div className="admin-upload-validation admin-upload-validation--info" role="status">
+            <InformationFilled
+              size={20}
+              className="admin-upload-validation__icon"
+              aria-hidden="true"
+            />
+            <div className="admin-upload-validation__content">
+              <h3>Starting values copied</h3>
+              <p>
+                Prefilled from {formatEffectiveDate(prefillSourceDate)}. These values are not saved
+                for {formatEffectiveDate(targetDate)} until Save changes is selected.
+              </p>
+            </div>
           </div>
         )}
 
@@ -760,38 +803,35 @@ const RTMEmsLogAmvPage = () => {
           </div>
         </section>
 
-        <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split rtm-amv-actions">
+        <div className="admin-upload-fspts-button-row rtm-amv-actions">
+          <Button
+            kind="ghost"
+            size="md"
+            renderIcon={Renew}
+            onClick={resetChanges}
+            disabled={!hasPendingChanges || isSaving}
+          >
+            Reset
+          </Button>
+          <Button
+            kind="primary"
+            size="md"
+            className="admin-upload-fspts-action-button"
+            renderIcon={isSaving ? CheckmarkFilled : Save}
+            onClick={requestSave}
+            disabled={saveDisabled}
+          >
+            {isSaving ? 'Saving' : 'Save changes'}
+          </Button>
           <div className="rtm-amv-actions__summary" role="status">
             {hasPendingChanges ? (
               <span>
-                {dirtyCells.length} changed cell{dirtyCells.length === 1 ? '' : 's'}
+                {dirtyCells.length} {prefillSourceDate ? 'carried-forward' : 'changed'} cell
+                {dirtyCells.length === 1 ? '' : 's'} ready to save
               </span>
             ) : (
               <span>No unsaved changes</span>
             )}
-          </div>
-          <div>
-            <Button
-              kind="ghost"
-              size="md"
-              renderIcon={Renew}
-              onClick={resetChanges}
-              disabled={!hasPendingChanges || isSaving}
-            >
-              Reset
-            </Button>
-            <Button
-              kind="primary"
-              size="md"
-              className="admin-upload-fspts-action-button"
-              renderIcon={isSaving ? CheckmarkFilled : Save}
-              onClick={() => {
-                requestSave()
-              }}
-              disabled={saveDisabled}
-            >
-              {isSaving ? 'Saving' : 'Save changes'}
-            </Button>
           </div>
         </div>
       </Column>
@@ -804,13 +844,13 @@ const RTMEmsLogAmvPage = () => {
         >
           <ModalHeader
             label="Average monthly values"
-            title="Confirm daily value changes"
+            title="Confirm AMV changes"
             buttonOnClick={() => setShowWarningConfirmation(false)}
           />
           <ModalBody>
-            <p>These changes differ from yesterday&apos;s values.</p>
+            <p>Review these warnings before saving.</p>
             <ul>
-              {saveWarnings.map((warning) => (
+              {confirmationMessages.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
             </ul>
@@ -826,7 +866,7 @@ const RTMEmsLogAmvPage = () => {
                 void saveChanges()
               }}
             >
-              Save warned changes
+              Save confirmed changes
             </Button>
           </ModalFooter>
         </ComposedModal>

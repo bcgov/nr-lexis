@@ -2716,15 +2716,11 @@ body {
 
 .rtm-amv-actions {
   align-items: center;
-}
-
-.rtm-amv-actions > div:last-child {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .rtm-amv-actions__summary {
+  margin-inline-start: 0.5rem;
   color: var(--csp-text-primary);
   font-size: 0.875rem;
 }
@@ -2849,10 +2845,13 @@ body {
 
   .rtm-amv-toolbar,
   .rtm-amv-toolbar__controls,
-  .rtm-amv-actions,
-  .rtm-amv-actions > div:last-child {
+  .rtm-amv-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .rtm-amv-actions__summary {
+    margin-inline-start: 0;
   }
 
   .rtm-amv-toolbar__controls .cds--form-item {

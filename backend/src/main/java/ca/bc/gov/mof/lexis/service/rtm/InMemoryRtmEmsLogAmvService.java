@@ -104,6 +104,28 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   @Override
+  public List<RtmEmsLogAmvRowDto> findLatestBefore(String effectiveDate) {
+    LocalDate parsedEffectiveDate = parseIsoOrLegacyDate(effectiveDate);
+    if (parsedEffectiveDate == null) {
+      return List.of();
+    }
+
+    LocalDate latestDate = null;
+    for (RtmEmsLogAmvRowDto row : rows) {
+      LocalDate rowDate = rowEffectiveDate(row);
+      if (rowDate != null
+          && rowDate.isBefore(parsedEffectiveDate)
+          && (latestDate == null || rowDate.isAfter(latestDate))) {
+        latestDate = rowDate;
+      }
+    }
+
+    return latestDate == null
+        ? List.of()
+        : findRowsForEffectiveDate(null, null, latestDate.toString());
+  }
+
+  @Override
   public RtmEmsLogAmvMutationResultDto save(RtmEmsLogAmvSaveRequestDto request) {
     List<String> errors = validateSaveRequest(request);
     if (!errors.isEmpty()) {
@@ -527,6 +549,11 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         .forEach(row -> rowsByTarget.put(rowKey(row), row));
 
     return sortRows(rowsByTarget.values());
+  }
+
+  private LocalDate rowEffectiveDate(RtmEmsLogAmvRowDto row) {
+    String updateDate = trimToNull(row.updateDate());
+    return parseIsoOrLegacyDate(updateDate == null ? row.retrievalDate() : updateDate);
   }
 
   private List<RtmEmsLogAmvRowDto> sortRows(Iterable<RtmEmsLogAmvRowDto> sourceRows) {

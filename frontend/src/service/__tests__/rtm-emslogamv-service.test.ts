@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   previewRtmEmsLogAmvUpload,
   saveRtmEmsLogAmv,
+  searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
   uploadRtmEmsLogAmv,
 } from '@/service/rtm-emslogamv-service'
@@ -42,6 +43,16 @@ describe('rtm-emslogamv-service', () => {
         retrievalDate: '2026-05-01',
         updateDate: '2026-06-01',
       },
+    })
+  })
+
+  it('requests the latest average monthly values before a date', async () => {
+    getMock.mockResolvedValue({ data: [] })
+
+    await searchLatestRtmEmsLogAmv(' 2026-07-10 ')
+
+    expect(getMock).toHaveBeenCalledWith('/lexis/rtm/emslogamv', {
+      params: { latestBeforeDate: '2026-07-10' },
     })
   })
 

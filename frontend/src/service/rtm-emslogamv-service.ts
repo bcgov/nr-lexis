@@ -109,6 +109,23 @@ export const searchRtmEmsLogAmv = async (
   return response.data ?? []
 }
 
+export const searchLatestRtmEmsLogAmv = async (
+  latestBeforeDate: string,
+): Promise<RtmEmsLogAmvRow[]> => {
+  const normalizedDate = trimOptional(latestBeforeDate)
+  if (!normalizedDate) {
+    return []
+  }
+
+  const response = await apiService
+    .getAxiosInstance()
+    .get<RtmEmsLogAmvRow[]>('/lexis/rtm/emslogamv', {
+      params: { latestBeforeDate: normalizedDate },
+    })
+
+  return response.data ?? []
+}
+
 export const saveRtmEmsLogAmv = async (
   request: RtmEmsLogAmvSaveRequest,
 ): Promise<RtmEmsLogAmvMutationResult> => {

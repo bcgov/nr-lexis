@@ -71,6 +71,24 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
     return rows;
   }
 
+  public List<RtmEmsLogAmvRowDto> findLatestEffectiveDateRowsBefore(LocalDate effectiveDate) {
+    if (effectiveDate == null) {
+      return List.of();
+    }
+
+    List<RtmEmsLogAmvRowDto> rows =
+        queryLatestEffectiveDateRowsBefore("EMS_LOG_AMV", effectiveDate);
+    if (rows != null) {
+      return rows;
+    }
+
+    rows = queryLatestEffectiveDateRowsBefore("THE.EMS_LOG_AMV", effectiveDate);
+    if (rows == null) {
+      logger.warn("RTM AMV latest-effective-date query could not read EMS_LOG_AMV.");
+    }
+    return rows;
+  }
+
   public boolean existsExact(
       String species,
       String grade,
@@ -217,6 +235,48 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
                   asBigDecimal(rs, 7),
                   "0"),
           parameters.toArray());
+    } catch (DataAccessException ignored) {
+      return null;
+    }
+  }
+
+  private List<RtmEmsLogAmvRowDto> queryLatestEffectiveDateRowsBefore(
+      String tableName, LocalDate effectiveDate) {
+    try {
+      String query =
+          """
+          WITH LATEST_DATE AS (
+            SELECT MAX(TRUNC(EFFECTIVE_DATE)) AS EFFECTIVE_DATE
+            FROM %s
+            WHERE EFFECTIVE_DATE < ?
+          )
+          SELECT VALUE_ROWS.SPECIES,
+                 DECODE(VALUE_ROWS.GRADE, ' ', 'BLANK', VALUE_ROWS.GRADE),
+                 VALUE_ROWS.GROWTH_TYPE_ST,
+                 VALUE_ROWS.EFFECTIVE_DATE,
+                 VALUE_ROWS.EFFECTIVE_DATE,
+                 VALUE_ROWS.AVG_MARKET_PRICE,
+                 VALUE_ROWS.AVG_MARKET_PRICE
+          FROM %s VALUE_ROWS
+          JOIN LATEST_DATE
+            ON VALUE_ROWS.EFFECTIVE_DATE >= LATEST_DATE.EFFECTIVE_DATE
+           AND VALUE_ROWS.EFFECTIVE_DATE < LATEST_DATE.EFFECTIVE_DATE + 1
+          ORDER BY VALUE_ROWS.GRADE, VALUE_ROWS.SPECIES, VALUE_ROWS.GROWTH_TYPE_ST
+          """.formatted(tableName, tableName);
+
+      return jdbcTemplate.query(
+          query,
+          (rs, rowNumber) ->
+              new RtmEmsLogAmvRowDto(
+                  getString(rs, 1),
+                  getString(rs, 2),
+                  getString(rs, 3),
+                  formatDateValue(toLocalDate(rs.getDate(4))),
+                  formatDateValue(toLocalDate(rs.getDate(5))),
+                  asBigDecimal(rs, 6),
+                  asBigDecimal(rs, 7),
+                  "0"),
+          java.sql.Date.valueOf(effectiveDate));
     } catch (DataAccessException ignored) {
       return null;
     }
