@@ -323,7 +323,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/federal/application/upload',
     id: 'Retired Federal Upload Redirect',
-    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
     element: <Navigate to="/federal" replace />,
     isNavigation: false,
   },

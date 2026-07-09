@@ -59,7 +59,7 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
   },
   {
     path: '/federal/application/upload',
-    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
+    requiredActions: [],
     requiredActionsMatch: 'any',
   },
   {
@@ -80,7 +80,7 @@ describe('Protected route access matrix', () => {
     'enforces expected action requirements for $path',
     ({ path, requiredActions, requiredActionsMatch, roleScope }) => {
       const route = findRoute(path)
-      expect(route.requiredActions).toEqual(requiredActions)
+      expect(route.requiredActions ?? []).toEqual(requiredActions)
       expect(route.requiredActionsMatch ?? 'any').toBe(requiredActionsMatch)
       expect(route.roleScope).toBe(roleScope)
     },
