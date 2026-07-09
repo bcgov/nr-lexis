@@ -173,12 +173,12 @@ describe('RTM EMS Log AMV actions', () => {
       'download',
       'rtm-ems-log-amv-template.xlsx',
     )
-    expect(screen.getByText('XLSX - 4 KB')).toBeVisible()
+    expect(screen.getByText('XLSX')).toBeVisible()
     expect(screen.getByText('Accepted formats: .xlsx.')).toBeVisible()
     expect(
       screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
-    const reviewUploadButton = screen.getByRole('button', { name: 'Review upload' })
+    const reviewUploadButton = screen.getByRole('button', { name: 'Review' })
     expect(reviewUploadButton).toBeEnabled()
     await user.click(reviewUploadButton)
     expect(screen.getByText('Please upload a file before continuing.')).toBeVisible()
@@ -199,7 +199,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(await screen.findByText('Spreadsheet validated')).toBeVisible()
     expect(screen.getByText('"rtm-ems-log-amv-template.xlsx" is ready for review.')).toBeVisible()
 
-    const reviewButton = screen.getByRole('button', { name: 'Review upload' })
+    const reviewButton = screen.getByRole('button', { name: 'Review' })
     await waitFor(() => expect(reviewButton).toBeEnabled())
     await user.click(reviewButton)
 
@@ -217,6 +217,7 @@ describe('RTM EMS Log AMV actions', () => {
     ).toHaveAttribute('aria-current', 'step')
     const reviewTable = screen.getByRole('table', { name: 'Average monthly value upload review' })
     expect(reviewTable).toBeVisible()
+    expect(reviewTable).not.toHaveClass('cds--data-table--zebra')
     expect(within(reviewTable).getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
     expect(within(reviewTable).getByRole('columnheader', { name: 'Pine' })).toBeVisible()
     expect(
@@ -261,7 +262,7 @@ describe('RTM EMS Log AMV actions', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByText(warning)).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Review upload' }))
+    await user.click(screen.getByRole('button', { name: 'Review' }))
 
     expect(screen.getByRole('heading', { name: 'Review' })).toBeVisible()
     expect(screen.queryByText(warning)).not.toBeInTheDocument()
@@ -293,14 +294,14 @@ describe('RTM EMS Log AMV actions', () => {
     expect(validationTable).toBeVisible()
     expect(within(validationTable).getByRole('columnheader', { name: 'Issue' })).toBeVisible()
     expect(
-      within(validationTable).getByRole('columnheader', { name: 'File location' }),
-    ).toBeVisible()
+      within(validationTable).queryByRole('columnheader', { name: 'File location' }),
+    ).not.toBeInTheDocument()
     expect(within(validationTable).getByRole('columnheader', { name: 'Detail' })).toBeVisible()
     expect(within(validationTable).getByText('Error')).toBeVisible()
     expect(
       within(validationTable).getByText('The update date is required in the uploaded template.'),
     ).toBeVisible()
-    const reviewButton = screen.getByRole('button', { name: 'Review upload' })
+    const reviewButton = screen.getByRole('button', { name: 'Review' })
     expect(reviewButton).toBeEnabled()
     await user.click(reviewButton)
     expect(
@@ -334,7 +335,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(await screen.findByText('1 validation issue found')).toBeVisible()
     expect(screen.getByText('Update date must be on or after the retrieval date.')).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: 'Review upload' }))
+    await user.click(screen.getByRole('button', { name: 'Review' }))
 
     expect(
       screen.getByText('Upload a spreadsheet that passes validation before reviewing it.'),

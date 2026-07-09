@@ -148,6 +148,22 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldSkipPreviewRowsWhenOptionalSpeciesGradeTargetIsMissing() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate updateDate = LocalDate.of(2026, 6, 1);
+    when(repository.existsExact(eq("CE"), eq("C"), eq("O"), eq(updateDate))).thenReturn(false);
+    when(repository.existsExact(eq("CE"), eq("C"), eq("S"), eq(updateDate))).thenReturn(false);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result = service.previewUpload(optionalCedarGradeWorkbook());
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rowCount()).isZero();
+    assertThat(result.rows()).isEmpty();
+  }
+
+  @Test
   void shouldRejectPreviewWhenTargetGrowthRowIsMissing() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
@@ -191,6 +207,30 @@ class OracleRtmEmsLogAmvServiceTest {
             anyString(),
             anyString(),
             anyString(),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+  }
+
+  @Test
+  void shouldSkipUploadRowsWhenOptionalSpeciesGradeTargetIsMissing() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate updateDate = LocalDate.of(2026, 6, 1);
+    when(repository.existsExact(eq("CE"), eq("C"), eq("O"), eq(updateDate))).thenReturn(false);
+    when(repository.existsExact(eq("CE"), eq("C"), eq("S"), eq(updateDate))).thenReturn(false);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(optionalCedarGradeWorkbook(), null, null);
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.attemptedRowCount()).isZero();
+    assertThat(result.uploadedRowCount()).isZero();
+    assertThat(result.errors()).isEmpty();
+    verify(repository, never())
+        .update(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
             any(LocalDate.class),
             any(BigDecimal.class));
   }
@@ -324,6 +364,14 @@ class OracleRtmEmsLogAmvServiceTest {
         "single-balsam.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         RtmEmsLogAmvWorkbookTestFixtures.singleBalsamWorkbook());
+  }
+
+  private MultipartFile optionalCedarGradeWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "optional-cedar-grade.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.optionalCedarGradeWorkbook());
   }
 
   private static void stubAppliedFixtureValues(OracleRtmEmsLogAmvRepository repository) {
