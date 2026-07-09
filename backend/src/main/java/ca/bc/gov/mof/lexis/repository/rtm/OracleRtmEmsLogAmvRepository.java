@@ -44,6 +44,33 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
     return rows;
   }
 
+  /**
+   * Loads the current table state when the caller has not supplied both of the legacy procedure
+   * filters. RTM_EMS_LOG_AMV_SELECT requires exact species and growth-code values, so passing
+   * null for either filter cannot produce a usable matrix.
+   *
+   * <p>A {@code null} result means neither the public synonym nor the THE schema table was
+   * readable. An empty list is a successful query with no values for the requested date.
+   */
+  public List<RtmEmsLogAmvRowDto> findEffectiveDateRows(
+      String species, String growthIndicator, LocalDate effectiveDate) {
+    if (effectiveDate == null) {
+      return List.of();
+    }
+
+    List<RtmEmsLogAmvRowDto> rows =
+        queryEffectiveDateRows("EMS_LOG_AMV", species, growthIndicator, effectiveDate);
+    if (rows != null) {
+      return rows;
+    }
+
+    rows = queryEffectiveDateRows("THE.EMS_LOG_AMV", species, growthIndicator, effectiveDate);
+    if (rows == null) {
+      logger.warn("RTM AMV effective-date query could not read EMS_LOG_AMV.");
+    }
+    return rows;
+  }
+
   public boolean existsExact(
       String species,
       String grade,
@@ -61,6 +88,29 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       logger.warn("RTM AMV exact row check could not verify EMS_LOG_AMV.");
     }
     return count != null && count > 0;
+  }
+
+  public boolean hasExactValue(
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate,
+      BigDecimal expectedValue) {
+    if (effectiveDate == null || expectedValue == null) {
+      return false;
+    }
+
+    Boolean found =
+        hasExactValue("EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate, expectedValue);
+    if (found == null) {
+      found =
+          hasExactValue(
+              "THE.EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate, expectedValue);
+    }
+    if (found == null) {
+      logger.warn("RTM AMV exact value check could not verify EMS_LOG_AMV.");
+    }
+    return Boolean.TRUE.equals(found);
   }
 
   private Integer countExact(
@@ -84,6 +134,89 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
           trim(grade),
           trim(growthIndicator),
           java.sql.Date.valueOf(effectiveDate));
+    } catch (DataAccessException ignored) {
+      return null;
+    }
+  }
+
+  private Boolean hasExactValue(
+      String tableName,
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate,
+      BigDecimal expectedValue) {
+    try {
+      List<BigDecimal> values =
+          jdbcTemplate.queryForList(
+              """
+              SELECT AVG_MARKET_PRICE
+              FROM %s
+              WHERE SPECIES = UPPER(?)
+                AND GRADE = UPPER(?)
+                AND GROWTH_TYPE_ST = UPPER(?)
+                AND TRUNC(EFFECTIVE_DATE) = ?
+              """.formatted(tableName),
+              BigDecimal.class,
+              trim(species),
+              trim(grade),
+              trim(growthIndicator),
+              java.sql.Date.valueOf(effectiveDate));
+      return values.stream()
+          .filter(value -> value != null)
+          .anyMatch(value -> value.compareTo(expectedValue) == 0);
+    } catch (DataAccessException ignored) {
+      return null;
+    }
+  }
+
+  private List<RtmEmsLogAmvRowDto> queryEffectiveDateRows(
+      String tableName, String species, String growthIndicator, LocalDate effectiveDate) {
+    try {
+      StringBuilder query =
+          new StringBuilder(
+              """
+              SELECT SPECIES,
+                     DECODE(GRADE, ' ', 'BLANK', GRADE),
+                     GROWTH_TYPE_ST,
+                     EFFECTIVE_DATE,
+                     EFFECTIVE_DATE,
+                     AVG_MARKET_PRICE,
+                     AVG_MARKET_PRICE
+              FROM %s
+              WHERE EFFECTIVE_DATE >= ?
+                AND EFFECTIVE_DATE < ?
+              """.formatted(tableName));
+      List<Object> parameters = new ArrayList<>();
+      parameters.add(java.sql.Date.valueOf(effectiveDate));
+      parameters.add(java.sql.Date.valueOf(effectiveDate.plusDays(1)));
+
+      String normalizedSpecies = trim(species);
+      if (normalizedSpecies != null) {
+        query.append(" AND SPECIES = UPPER(?)");
+        parameters.add(normalizedSpecies);
+      }
+
+      String normalizedGrowthIndicator = trim(growthIndicator);
+      if (normalizedGrowthIndicator != null) {
+        query.append(" AND GROWTH_TYPE_ST = UPPER(?)");
+        parameters.add(normalizedGrowthIndicator);
+      }
+
+      query.append(" ORDER BY GRADE, SPECIES, GROWTH_TYPE_ST");
+      return jdbcTemplate.query(
+          query.toString(),
+          (rs, rowNumber) ->
+              new RtmEmsLogAmvRowDto(
+                  getString(rs, 1),
+                  getString(rs, 2),
+                  getString(rs, 3),
+                  formatDateValue(toLocalDate(rs.getDate(4))),
+                  formatDateValue(toLocalDate(rs.getDate(5))),
+                  asBigDecimal(rs, 6),
+                  asBigDecimal(rs, 7),
+                  "0"),
+          parameters.toArray());
     } catch (DataAccessException ignored) {
       return null;
     }

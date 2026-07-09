@@ -2,12 +2,15 @@ package ca.bc.gov.mof.lexis.service.rtm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
+import java.math.BigDecimal;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
@@ -60,6 +63,53 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(result.uploadedRowCount()).isZero();
     assertThat(result.errors())
         .contains("The template header is not recognized as an RTM EMS AMV sheet.");
+  }
+
+  @Test
+  void shouldRejectValuesOutsideTheAmvColumnContract() {
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(FIXED_CLOCK);
+
+    var blankResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", null, null, "create"));
+    var precisionResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", null, new BigDecimal("10.123"), "create"));
+    var rangeResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", null, new BigDecimal("10000.00"), "create"));
+
+    assertThat(blankResult.status()).isEqualTo("validation_failed");
+    assertThat(blankResult.errors()).contains("New value is required.");
+    assertThat(precisionResult.status()).isEqualTo("validation_failed");
+    assertThat(precisionResult.errors()).contains("New value must have no more than 2 decimal places.");
+    assertThat(rangeResult.status()).isEqualTo("validation_failed");
+    assertThat(rangeResult.errors()).contains("New value must not exceed 9999.99.");
+  }
+
+  @Test
+  void shouldFindTableRowsForEffectiveDateAfterCreateAndUpdate() {
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(FIXED_CLOCK);
+
+    var createResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", "2026-07-01", new BigDecimal("10.25"), "create"));
+    var updateResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BALSAM", "B", "S", "2026-01-01", "2026-07-01", new BigDecimal("11.50"), "update"));
+
+    assertThat(createResult.status()).isEqualTo("accepted");
+    assertThat(updateResult.status()).isEqualTo("accepted");
+    assertThat(service.find("", "", "2026-07-01", "2026-07-01"))
+        .extracting(row -> List.of(row.species(), row.grade(), row.growthIndicator(), row.newValue()))
+        .contains(
+            List.of("BA", "A", "O", new BigDecimal("10.25")),
+            List.of("BALSAM", "B", "S", new BigDecimal("11.50")));
   }
 
   private MultipartFile matrixWorkbook() throws IOException {

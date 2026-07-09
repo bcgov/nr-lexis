@@ -76,9 +76,22 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       parsedUpdateDate = parsedRetrievalDate;
     }
 
+    String normalizedSpecies = trimToNull(species);
+    String normalizedGrowthIndicator = trimToNull(growthIndicator);
+    if (parsedRetrievalDate != null
+        && parsedRetrievalDate.equals(parsedUpdateDate)
+        && (normalizedSpecies == null || normalizedGrowthIndicator == null)) {
+      List<RtmEmsLogAmvRowDto> rows =
+          repository.findEffectiveDateRows(
+              normalizedSpecies, normalizedGrowthIndicator, parsedRetrievalDate);
+      if (rows != null) {
+        return rows;
+      }
+    }
+
     return repository.find(
-        trimToNull(species),
-        trimToNull(growthIndicator),
+        normalizedSpecies,
+        normalizedGrowthIndicator,
         parsedRetrievalDate,
         parsedUpdateDate);
   }
@@ -183,10 +196,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       validateUploadDateOrder(parseResult.retrievalDate(), parseResult.updateDate(), errors);
       rowsToPreview =
           filterUploadTargetsForExistingRows(
-              rowsToPreview,
-              parseResult.retrievalDate(),
-              parseResult.updateDate(),
-              errors);
+              rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate());
       List<RtmEmsLogAmvRowDto> previewRows =
           buildPreviewRows(rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate());
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
@@ -244,7 +254,6 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> errors = new ArrayList<>(parseResult.errors());
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
-      LocalDate effectiveDate = parsedUpdateDate;
       List<UploadTarget> rowsToUpload = buildUploadTargets(parseResult.rows(), warnings);
 
       if (parseResult.dataRowCount() == 0) {
@@ -261,8 +270,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       }
       validateUploadDateOrder(parsedRetrievalDate, parsedUpdateDate, errors);
       rowsToUpload =
-          filterUploadTargetsForExistingRows(
-              rowsToUpload, parsedRetrievalDate, parsedUpdateDate, errors);
+          filterUploadTargetsForExistingRows(rowsToUpload, parsedRetrievalDate, parsedUpdateDate);
 
       if (!errors.isEmpty()) {
         return buildUploadResult(
@@ -291,7 +299,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                     species,
                     grade,
                     normalizedGrowthIndicator,
-                    formatDate(effectiveDate),
+                    formatDate(parsedRetrievalDate),
                     formatDate(parsedUpdateDate),
                     newValue,
                     SAVE_MODE_UPDATE));
@@ -372,12 +380,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.add("Retrieval date is required and must be a valid date.");
     }
 
-    if (request.newValue() == null) {
-      errors.add("New value is required.");
-    }
-    if (request.newValue() != null && request.newValue().signum() < 0) {
-      errors.add("New value must be greater than or equal to zero.");
-    }
+    errors.addAll(RtmEmsLogAmvValueValidator.validate(request.newValue()));
 
     String saveMode = request.effectiveSaveMode();
     if (!SAVE_MODE_CREATE.equals(saveMode) && !SAVE_MODE_UPDATE.equals(saveMode)) {
@@ -476,6 +479,10 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       BigDecimal expectedValue) {
     if (effectiveDate == null || expectedValue == null) {
       return false;
+    }
+
+    if (repository.hasExactValue(species, grade, growthIndicator, effectiveDate, expectedValue)) {
+      return true;
     }
 
     List<RtmEmsLogAmvRowDto> appliedRows =
@@ -585,14 +592,11 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   private List<UploadTarget> filterUploadTargetsForExistingRows(
-      List<UploadTarget> uploadTargets,
-      LocalDate retrievalDate,
-      LocalDate updateDate,
-      List<String> errors) {
+      List<UploadTarget> uploadTargets, LocalDate retrievalDate, LocalDate updateDate) {
     if (uploadTargets == null || uploadTargets.isEmpty()) {
       return List.of();
     }
-    if (retrievalDate == null || updateDate == null || !updateDate.equals(retrievalDate)) {
+    if (retrievalDate == null || updateDate == null) {
       return uploadTargets;
     }
 
@@ -611,30 +615,11 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     List<UploadTarget> retainedTargets = new ArrayList<>();
     for (List<UploadTarget> targets : targetsBySpeciesGrade.values()) {
-      List<UploadTarget> existingTargets = new ArrayList<>();
-      List<UploadTarget> missingTargets = new ArrayList<>();
       for (UploadTarget target : targets) {
         if (hasExistingValue(
-            target.species(), target.grade(), target.growthIndicator(), updateDate)) {
-          existingTargets.add(target);
-        } else {
-          missingTargets.add(target);
+            target.species(), target.grade(), target.growthIndicator(), retrievalDate)) {
+          retainedTargets.add(target);
         }
-      }
-
-      if (existingTargets.isEmpty()) {
-        continue;
-      }
-
-      retainedTargets.addAll(existingTargets);
-      for (UploadTarget target : missingTargets) {
-        errors.add(
-            "No existing AMV row found for species '%s', grade '%s', growth '%s', effective date '%s'."
-                .formatted(
-                    target.species(),
-                    target.grade(),
-                    target.growthIndicator(),
-                    formatDate(updateDate)));
       }
     }
     return retainedTargets;

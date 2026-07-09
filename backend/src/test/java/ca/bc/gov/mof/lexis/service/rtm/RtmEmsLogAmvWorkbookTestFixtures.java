@@ -38,6 +38,14 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
             row(4, text("A4", "A"), number("B4", "10.25"))));
   }
 
+  static byte[] futureSingleBalsamWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date"), text("B1", "2026-08-01")),
+            row(3, text("A3", "GRADE"), text("B3", "BA")),
+            row(4, text("A4", "A"), number("B4", "10.25"))));
+  }
+
   static byte[] optionalCedarGradeWorkbook() throws IOException {
     return workbook(
         List.of(

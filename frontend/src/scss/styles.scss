@@ -2529,6 +2529,206 @@ body {
   font-size: 0.75rem;
 }
 
+.rtm-amv-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.rtm-amv-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rtm-amv-toolbar__controls {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.rtm-amv-toolbar__controls .cds--form-item {
+  inline-size: 14rem;
+}
+
+.rtm-amv-toolbar__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: 2.5rem;
+  color: var(--csp-text-primary);
+  font-size: 0.875rem;
+}
+
+.rtm-amv-warning-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #fff8e1;
+  border: 1px solid #f1c21b;
+  border-inline-start: 4px solid #f1c21b;
+  border-radius: 4px;
+  color: #241f00;
+}
+
+.rtm-amv-warning-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rtm-amv-warning-panel__header h2 {
+  margin: 0;
+  color: #241f00;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.rtm-amv-warning-panel__header span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 1.5rem;
+  min-block-size: 1.5rem;
+  padding-inline: 0.35rem;
+  background: #f1c21b;
+  border-radius: 1rem;
+  color: #161616;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.rtm-amv-warning-panel ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.rtm-amv-warning-panel p {
+  margin: 0;
+  color: #241f00;
+}
+
+.rtm-amv-table-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.rtm-amv-table-heading {
+  padding: 1rem 1rem 0;
+}
+
+.rtm-amv-table-wrap {
+  overflow-x: auto;
+  border-block-start: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+}
+
+.rtm-amv-table-wrap .cds--data-table {
+  min-inline-size: 76rem;
+  table-layout: fixed;
+}
+
+.rtm-amv-table-wrap .cds--data-table th,
+.rtm-amv-table-wrap .cds--data-table td {
+  inline-size: 9.25rem;
+  vertical-align: top;
+}
+
+.rtm-amv-table-wrap .cds--data-table th:first-child,
+.rtm-amv-table-wrap .cds--data-table td:first-child {
+  inline-size: 5rem;
+}
+
+.rtm-amv-grade-cell {
+  color: var(--csp-text-primary);
+  font-weight: 700;
+}
+
+.rtm-amv-value-cell {
+  position: relative;
+}
+
+.rtm-amv-value-cell.has-warning {
+  background: #fff8e1;
+  box-shadow: inset 3px 0 0 #f1c21b;
+}
+
+.rtm-amv-value-cell.has-error {
+  background: #fff1f1;
+  box-shadow: inset 3px 0 0 #da1e28;
+}
+
+.rtm-amv-cell-input-label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.rtm-amv-cell-input-label > span {
+  position: absolute;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  inline-size: 1px;
+  block-size: 1px;
+  white-space: nowrap;
+}
+
+.rtm-amv-cell-input {
+  inline-size: 100%;
+  min-inline-size: 6rem;
+  block-size: 2.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--fds-layer-01, var(--cds-layer));
+  border: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  border-radius: 2px;
+  color: var(--csp-text-primary);
+  font: inherit;
+  text-align: right;
+}
+
+.rtm-amv-cell-input:focus {
+  border-color: var(--cds-focus);
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+.rtm-amv-value-cell.is-dirty .rtm-amv-cell-input {
+  border-color: #0f62fe;
+  box-shadow: inset 0 -2px 0 #0f62fe;
+}
+
+.rtm-amv-value-cell.has-error .rtm-amv-cell-input {
+  border-color: #da1e28;
+}
+
+.rtm-amv-cell-input:disabled {
+  background: var(--cds-layer-disabled);
+  color: var(--cds-text-disabled);
+  cursor: not-allowed;
+}
+
+.rtm-amv-cell-note {
+  display: block;
+  margin-block-start: 0.25rem;
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+}
+
+.rtm-amv-actions {
+  align-items: center;
+}
+
+.rtm-amv-actions > div:last-child {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.rtm-amv-actions__summary {
+  color: var(--csp-text-primary);
+  font-size: 0.875rem;
+}
+
 .admin-upload-result {
   display: grid;
   gap: 0.5rem;
@@ -2645,6 +2845,22 @@ body {
   .admin-upload-fspts-page .admin-upload-validation,
   .admin-upload-fspts-page .admin-upload-validation-table-wrap {
     max-inline-size: 100%;
+  }
+
+  .rtm-amv-toolbar,
+  .rtm-amv-toolbar__controls,
+  .rtm-amv-actions,
+  .rtm-amv-actions > div:last-child {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rtm-amv-toolbar__controls .cds--form-item {
+    inline-size: 100%;
+  }
+
+  .rtm-amv-table-wrap .cds--data-table {
+    min-inline-size: 58rem;
   }
 }
 

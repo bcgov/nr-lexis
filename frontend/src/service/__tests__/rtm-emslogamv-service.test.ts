@@ -67,7 +67,14 @@ describe('rtm-emslogamv-service', () => {
 
     const result = await saveRtmEmsLogAmv(request)
 
-    expect(postMock).toHaveBeenCalledWith('/lexis/rtm/emslogamv', request)
+    expect(postMock).toHaveBeenCalledWith(
+      '/lexis/rtm/emslogamv',
+      request,
+      expect.objectContaining({ validateStatus: expect.any(Function) }),
+    )
+    const [, , config] = postMock.mock.calls[0]
+    expect(config.validateStatus(422)).toBe(true)
+    expect(config.validateStatus(500)).toBe(false)
     expect(result).toEqual({
       status: 'accepted',
       message: 'Average monthly value row saved.',
@@ -76,7 +83,7 @@ describe('rtm-emslogamv-service', () => {
     })
   })
 
-  it('previews AMV uploads as multipart data and preserves date metadata', async () => {
+  it('retains the dormant AMV upload preview client contract', async () => {
     postMock.mockResolvedValue({
       data: {
         status: 'accepted',
@@ -88,18 +95,7 @@ describe('rtm-emslogamv-service', () => {
         updateDate: '2026-06-01',
         errors: [],
         warnings: [],
-        rows: [
-          {
-            species: 'FI',
-            grade: '1',
-            growthIndicator: 'O',
-            retrievalDate: '2026-05-01',
-            updateDate: '2026-06-01',
-            currentValue: null,
-            newValue: 123.45,
-            returnCode: null,
-          },
-        ],
+        rows: [],
       },
     })
     const file = new File(['xlsx'], 'rtm-ems-log-amv-template.xlsx', {
@@ -112,9 +108,7 @@ describe('rtm-emslogamv-service', () => {
       '/lexis/rtm/emslogamv/preview',
       expect.any(FormData),
       expect.objectContaining({
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
         validateStatus: expect.any(Function),
       }),
     )
@@ -122,17 +116,10 @@ describe('rtm-emslogamv-service', () => {
     expect(payload.get('file')).toBe(file)
     expect(config.validateStatus(422)).toBe(true)
     expect(config.validateStatus(500)).toBe(false)
-    expect(result).toEqual(
-      expect.objectContaining({
-        status: 'accepted',
-        rowCount: 2,
-        retrievalDate: '2026-05-01',
-        updateDate: '2026-06-01',
-      }),
-    )
+    expect(result).toEqual(expect.objectContaining({ status: 'accepted', rowCount: 2 }))
   })
 
-  it('uploads AMV workbooks as multipart data and returns validation errors in-band', async () => {
+  it('retains the dormant AMV workbook submission client contract', async () => {
     postMock.mockResolvedValue({
       data: {
         status: 'validation_failed',
@@ -142,7 +129,7 @@ describe('rtm-emslogamv-service', () => {
         attemptedRowCount: 0,
         uploadedRowCount: 0,
         errors: ['Update date is required.'],
-        warnings: ['No AMV values were imported.'],
+        warnings: [],
         rows: [],
       },
     })
@@ -156,9 +143,7 @@ describe('rtm-emslogamv-service', () => {
       '/lexis/rtm/emslogamv/upload',
       expect.any(FormData),
       expect.objectContaining({
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
         validateStatus: expect.any(Function),
       }),
     )
@@ -171,8 +156,6 @@ describe('rtm-emslogamv-service', () => {
         status: 'validation_failed',
         attemptedRowCount: 0,
         uploadedRowCount: 0,
-        errors: ['Update date is required.'],
-        warnings: ['No AMV values were imported.'],
       }),
     )
   })

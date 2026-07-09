@@ -24,7 +24,7 @@ export type RtmEmsLogAmvSaveRequest = {
   growthIndicator: string
   retrievalDate: string
   updateDate: string
-  newValue: number | null
+  newValue: number
   saveMode: 'create' | 'update'
 }
 
@@ -35,6 +35,10 @@ export type RtmEmsLogAmvMutationResult = {
   rows: RtmEmsLogAmvRow[]
 }
 
+/**
+ * Dormant workbook upload contracts retained for the legacy AMV upload screen.
+ * The active AMV route uses the editable table instead.
+ */
 export type RtmEmsLogAmvUploadPreview = {
   status: string
   fileName?: string
@@ -110,11 +114,16 @@ export const saveRtmEmsLogAmv = async (
 ): Promise<RtmEmsLogAmvMutationResult> => {
   const response = await apiService
     .getAxiosInstance()
-    .post<RtmEmsLogAmvMutationResult>('/lexis/rtm/emslogamv', request)
+    .post<RtmEmsLogAmvMutationResult>('/lexis/rtm/emslogamv', request, {
+      validateStatus: (status) => status < 500,
+    })
 
   return response.data ?? { status: 'failed', message: '', errors: [], rows: [] }
 }
 
+/**
+ * Dormant until the server-side AMV upload feature is deliberately re-enabled.
+ */
 export const previewRtmEmsLogAmvUpload = async (file: File): Promise<RtmEmsLogAmvUploadPreview> => {
   const payload = new FormData()
   payload.append('file', file)
@@ -142,6 +151,9 @@ export const previewRtmEmsLogAmvUpload = async (file: File): Promise<RtmEmsLogAm
   )
 }
 
+/**
+ * Dormant until the server-side AMV upload feature is deliberately re-enabled.
+ */
 export const uploadRtmEmsLogAmv = async (
   request: RtmEmsLogAmvUploadRequest,
 ): Promise<RtmEmsLogAmvUploadResult> => {

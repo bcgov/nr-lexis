@@ -227,12 +227,6 @@ type DeleteResponse = {
   success?: boolean
 }
 
-type RtmUploadPreviewResponse = {
-  status?: string
-  rowCount?: number
-  errors?: unknown
-}
-
 type ApplicationReviewSearchOptionsResponse = {
   productTypes?: unknown
   regions?: unknown
@@ -279,21 +273,6 @@ type JsonWithStatus<T> = {
 }
 
 const missingApplicationNumber = '999999999'
-const rtmSuccessWorkbook = readFileSync(
-  new URL('../public/templates/rtm-ems-log-amv-template.xlsx', import.meta.url),
-)
-const rtmMissingUpdateDateWorkbook = readFileSync(
-  new URL('./fixtures/rtm-amv-missing-update-date.xlsx', import.meta.url),
-)
-const rtmNoNumericValuesWorkbook = readFileSync(
-  new URL('./fixtures/rtm-amv-no-numeric-values.xlsx', import.meta.url),
-)
-const rtmBadHeaderWorkbook = readFileSync(
-  new URL('./fixtures/rtm-amv-bad-header.xlsx', import.meta.url),
-)
-const rtmMissingTargetDateWorkbook = readFileSync(
-  new URL('./fixtures/rtm-amv-missing-target-date.xlsx', import.meta.url),
-)
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
@@ -305,31 +284,6 @@ const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
 const famManageUrlPattern = /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
-const rtmAmvPreviewEndpoint = '/api/lexis/rtm/emslogamv/preview'
-const xlsxMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-
-const rtmInvalidPreviewFixtures = [
-  {
-    name: 'rtm-amv-missing-update-date.xlsx',
-    buffer: rtmMissingUpdateDateWorkbook,
-    expectedError: 'The update date is required in the uploaded template.',
-  },
-  {
-    name: 'rtm-amv-no-numeric-values.xlsx',
-    buffer: rtmNoNumericValuesWorkbook,
-    expectedError: 'The uploaded file does not contain any numeric AMV values.',
-  },
-  {
-    name: 'rtm-amv-bad-header.xlsx',
-    buffer: rtmBadHeaderWorkbook,
-    expectedError: 'The template header is not recognized as an RTM EMS AMV sheet.',
-  },
-  {
-    name: 'rtm-amv-missing-target-date.xlsx',
-    buffer: rtmMissingTargetDateWorkbook,
-    expectedError: 'Update date must be on or after the retrieval date.',
-  },
-] as const
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -1249,117 +1203,110 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Reject Application' })).toHaveCount(0)
   })
 
-  test('shows average monthly values upload-only workflow controls', async () => {
+  test('shows average monthly values editable table controls', async () => {
     const page = await authenticatedIdirPage()
 
-    await page.route('**/api/lexis/rtm/emslogamv/preview', async (route) => {
+    await page.route('**/api/lexis/rtm/emslogamv**', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback()
+        return
+      }
+
       await route.fulfill({
-        status: 422,
+        status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          status: 'validation_failed',
-          fileName: 'invalid-amv.xlsx',
-          fileSize: 12,
-          message: 'Template is missing an update date.',
-          rowCount: 0,
-          retrievalDate: null,
-          updateDate: null,
-          errors: ['The update date is required in the uploaded template.'],
-          warnings: [],
-          rows: [],
-        }),
+        body: JSON.stringify([]),
       })
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
-    await expectFsptsUploadLayout(page)
     await expect(
-      page.getByText('Update average monthly values by uploading an XLSX file.'),
+      page.getByText('Maintain average monthly values directly in the table.'),
     ).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Query rows' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Manual entry' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Search' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Save row' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Data Preview' })).toHaveCount(0)
-
-    const workflowProgress = page.getByRole('list', {
-      name: 'Average monthly values upload workflow progress',
-    })
-    await expect(workflowProgress.getByText('1. Upload')).toBeVisible()
-    await expect(workflowProgress.getByText('2. Review')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Upload' })).toBeVisible()
-    await expect(
-      page.getByText(
-        'Add your completed template to check for errors before the new values take effect.',
-      ),
-    ).toBeVisible()
-    await expect(page.getByText('Upload Excel Spreadsheet')).toBeVisible()
-
-    const templateLink = page.getByRole('link', { name: 'Download template' })
-    await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
-    await expect(templateLink).toHaveAttribute('download', 'rtm-ems-log-amv-template.xlsx')
-    await expect(page.getByText('Accepted formats: .xlsx.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Upload' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Download template' })).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
-    ).toBeVisible()
-    const reviewUploadButton = page.getByRole('button', { name: 'Review' })
-    await expect(reviewUploadButton).toBeEnabled()
-    await reviewUploadButton.click()
-    await expect(page.getByText('Please upload a file before continuing.')).toBeVisible()
+    ).toHaveCount(0)
+    await expect(page.getByLabel('Effective date')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
 
-    await page.locator('#rtm-upload-file').setInputFiles({
-      name: 'invalid-amv.xlsx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      buffer: Buffer.from('invalid average monthly values workbook'),
-    })
-
-    await expect(page.getByText('1 validation issue found')).toBeVisible()
+    const table = page.getByRole('table', { name: 'Average monthly value table' })
+    await expect(table).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Pine' })).toBeVisible()
     await expect(
-      page.getByText('Correct the issues in your spreadsheet, then replace the file to continue.'),
+      page.getByText('Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.'),
     ).toBeVisible()
-
-    const validationTable = page.getByRole('table', { name: 'Upload validation issues' })
-    await expect(validationTable).toBeVisible()
-    await expect(validationTable.getByRole('columnheader', { name: 'Issue' })).toBeVisible()
-    await expect(validationTable.getByRole('columnheader', { name: 'File location' })).toHaveCount(
-      0,
-    )
-    await expect(validationTable.getByRole('columnheader', { name: 'Detail' })).toBeVisible()
-    await expect(validationTable.getByText('Error')).toBeVisible()
-    await expect(
-      validationTable.getByText('The update date is required in the uploaded template.'),
-    ).toBeVisible()
-    await expect(reviewUploadButton).toBeEnabled()
-    await reviewUploadButton.click()
-    await expect(
-      page.getByText('Upload a spreadsheet that passes validation before reviewing it.'),
-    ).toBeVisible()
+    await expect(page.getByLabel('Balsam grade A')).toBeVisible()
   })
 
-  test('rejects non-persisting average monthly value validation fixtures', async () => {
+  test('shows AMV table save validation failures without persisting values', async () => {
     const page = await authenticatedIdirPage()
+    const saveRequests: Array<Record<string, unknown>> = []
 
-    for (const fixture of rtmInvalidPreviewFixtures) {
-      const response = await readJsonResponseWithStatuses<RtmUploadPreviewResponse>(
-        await postWithCsrf(page, rtmAmvPreviewEndpoint, {
-          multipart: {
-            file: {
-              name: fixture.name,
-              mimeType: xlsxMimeType,
-              buffer: fixture.buffer,
-            },
-          },
+    await page.route('**/api/lexis/rtm/emslogamv**', async (route) => {
+      const request = route.request()
+
+      if (request.method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([]),
+        })
+        return
+      }
+
+      if (request.method() === 'POST') {
+        saveRequests.push(request.postDataJSON() as Record<string, unknown>)
+        await route.fulfill({
+          status: 422,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'validation_failed',
+            message: 'Average monthly value validation failed.',
+            errors: ['Balsam grade A is outside the allowed range.'],
+            rows: [],
+          }),
+        })
+        return
+      }
+
+      await route.fallback()
+    })
+
+    await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
+
+    const balsamGradeA = page.getByLabel('Balsam grade A')
+    await balsamGradeA.fill('123.45')
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.getByText('Confirm daily value changes')).toBeVisible()
+    await page.getByRole('button', { name: 'Save warned changes' }).click()
+
+    await expect(page.getByText(/Average monthly value validation failed/)).toBeVisible()
+    await expect(page.getByText(/Balsam grade A is outside the allowed range/)).toBeVisible()
+    await expect(balsamGradeA).toHaveValue('123.45')
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    await expect.poll(() => saveRequests.length).toBe(2)
+    expect(saveRequests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          species: 'BA',
+          grade: 'A',
+          growthIndicator: 'O',
+          newValue: 123.45,
         }),
-        [422],
-      )
-
-      expect(response.payload.status, `${fixture.name} should fail validation`).toBe(
-        'validation_failed',
-      )
-      expect(response.payload.rowCount ?? 0, `${fixture.name} should not persist rows`).toBe(0)
-      expect(asStringArray(response.payload.errors).join(' ')).toContain(fixture.expectedError)
-    }
+        expect.objectContaining({
+          species: 'BA',
+          grade: 'A',
+          growthIndicator: 'S',
+          newValue: 123.45,
+        }),
+      ]),
+    )
   })
 
   test('shows selected natural resource region names across search filters', async () => {
@@ -1968,27 +1915,6 @@ test.describe('TEST IDIR admin regression', () => {
     expect(rtmSearchResponse.status(), redactedTextSnippet(rtmSearchText)).toBe(200)
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
 
-    const rtmPreviewResponse = await readJsonResponseWithStatuses<RtmUploadPreviewResponse>(
-      await postWithCsrf(page, rtmAmvPreviewEndpoint, {
-        multipart: {
-          file: {
-            name: 'rtm-ems-log-amv-template.xlsx',
-            mimeType: xlsxMimeType,
-            buffer: rtmSuccessWorkbook,
-          },
-        },
-      }),
-      [200, 422],
-    )
-    if (rtmPreviewResponse.status === 200) {
-      expect(rtmPreviewResponse.payload.status).toBe('accepted')
-      expect(rtmPreviewResponse.payload.rowCount).toBeGreaterThan(0)
-      expect(asStringArray(rtmPreviewResponse.payload.errors)).toEqual([])
-      expect(asStringArray(rtmPreviewResponse.payload.warnings)).toEqual([])
-    } else {
-      expect(rtmPreviewResponse.payload.status).toBe('validation_failed')
-      expect(asStringArray(rtmPreviewResponse.payload.errors).join(' ')).toContain('update date')
-    }
   })
 
   test('rejects ClamAV test payloads on application document and submission uploads', async () => {

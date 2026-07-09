@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
@@ -61,6 +63,24 @@ class OracleRtmEmsLogAmvServiceTest {
 
     verify(repository)
         .find("HE", "O", LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 1));
+  }
+
+  @Test
+  void shouldLoadEffectiveDateRowsWhenTableLookupOmitsLegacyProcedureFilters() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate effectiveDate = LocalDate.of(2026, 6, 1);
+    List<RtmEmsLogAmvRowDto> expectedRows =
+        List.of(row("BA", "A", "O", effectiveDate, "10.25"));
+    when(repository.findEffectiveDateRows(isNull(), isNull(), eq(effectiveDate)))
+        .thenReturn(expectedRows);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    List<RtmEmsLogAmvRowDto> result = service.find("", "", "2026-06-01", "2026-06-01");
+
+    assertThat(result).isEqualTo(expectedRows);
+    verify(repository).findEffectiveDateRows(null, null, effectiveDate);
+    verify(repository, never())
+        .find(anyString(), anyString(), any(LocalDate.class), any(LocalDate.class));
   }
 
   @Test
@@ -164,7 +184,7 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldRejectPreviewWhenTargetGrowthRowIsMissing() throws IOException {
+  void shouldPreviewOnlyExistingTargetGrowthRows() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
     when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
@@ -173,32 +193,69 @@ class OracleRtmEmsLogAmvServiceTest {
 
     var result = service.previewUpload(singleBalsamWorkbook());
 
-    assertThat(result.status()).isEqualTo("validation_failed");
-    assertThat(result.errors())
-        .contains(
-            "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-06-01'.");
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rowCount()).isEqualTo(1);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvRowDto::growthIndicator).containsExactly("O");
   }
 
   @Test
-  void shouldRejectUploadBeforeMutationWhenTargetGrowthRowIsMissing() throws IOException {
+  void shouldPreviewFutureUploadOnlyForGrowthRowsExistingInRetrievalMonth() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate retrievalDate = LocalDate.of(2026, 6, 1);
+    LocalDate updateDate = LocalDate.of(2026, 8, 1);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(retrievalDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(retrievalDate))).thenReturn(false);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result = service.previewUpload(futureSingleBalsamWorkbook());
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.retrievalDate()).isEqualTo("2026-06-01");
+    assertThat(result.updateDate()).isEqualTo("2026-08-01");
+    assertThat(result.rowCount()).isEqualTo(1);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvRowDto::growthIndicator).containsExactly("O");
+    verify(repository, never()).existsExact(eq("BA"), eq("A"), anyString(), eq(updateDate));
+  }
+
+  @Test
+  void shouldUploadOnlyExistingTargetGrowthRows() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
     when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
     when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(false);
+    when(repository.update(
+            eq("BA"),
+            eq("A"),
+            eq("O"),
+            eq(updateDate),
+            eq(updateDate),
+            eq(new BigDecimal("10.25"))))
+        .thenReturn("0");
+    when(repository.find(eq("BA"), eq("O"), eq(updateDate), eq(updateDate)))
+        .thenReturn(List.of(row("BA", "A", "O", updateDate, "10.25")));
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(singleBalsamWorkbook(), null, null);
 
-    assertThat(result.status()).isEqualTo("validation_failed");
-    assertThat(result.uploadedRowCount()).isZero();
-    assertThat(result.errors())
-        .contains(
-            "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-06-01'.");
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.attemptedRowCount()).isEqualTo(1);
+    assertThat(result.uploadedRowCount()).isEqualTo(1);
+    verify(repository)
+        .update(
+            eq("BA"),
+            eq("A"),
+            eq("O"),
+            eq(updateDate),
+            eq(updateDate),
+            eq(new BigDecimal("10.25")));
     verify(repository, never())
         .update(
-            anyString(),
-            anyString(),
-            anyString(),
+            eq("BA"),
+            eq("A"),
+            eq("S"),
             any(LocalDate.class),
             any(LocalDate.class),
             any(BigDecimal.class));
@@ -209,6 +266,66 @@ class OracleRtmEmsLogAmvServiceTest {
             anyString(),
             any(LocalDate.class),
             any(BigDecimal.class));
+  }
+
+  @Test
+  void shouldUploadFutureUploadOnlyForGrowthRowsExistingInRetrievalMonth() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate retrievalDate = LocalDate.of(2026, 6, 1);
+    LocalDate updateDate = LocalDate.of(2026, 8, 1);
+    BigDecimal newValue = new BigDecimal("10.25");
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(retrievalDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(retrievalDate))).thenReturn(false);
+    when(repository.update(eq("BA"), eq("A"), eq("O"), eq(retrievalDate), eq(updateDate), eq(newValue)))
+        .thenReturn("0");
+    when(repository.hasExactValue(eq("BA"), eq("A"), eq("O"), eq(updateDate), eq(newValue)))
+        .thenReturn(true);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(futureSingleBalsamWorkbook(), null, null);
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.attemptedRowCount()).isEqualTo(1);
+    assertThat(result.uploadedRowCount()).isEqualTo(1);
+    verify(repository)
+        .update(eq("BA"), eq("A"), eq("O"), eq(retrievalDate), eq(updateDate), eq(newValue));
+    verify(repository, never())
+        .update(
+            eq("BA"),
+            eq("A"),
+            eq("S"),
+            any(LocalDate.class),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+  }
+
+  @Test
+  void shouldUploadFutureGrowthRowsUsingRetrievalAndUpdateDates() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate retrievalDate = LocalDate.of(2026, 6, 1);
+    LocalDate updateDate = LocalDate.of(2026, 8, 1);
+    BigDecimal newValue = new BigDecimal("10.25");
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(retrievalDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(retrievalDate))).thenReturn(true);
+    when(repository.update(anyString(), anyString(), anyString(), eq(retrievalDate), eq(updateDate), eq(newValue)))
+        .thenReturn("0");
+    when(repository.hasExactValue(anyString(), anyString(), anyString(), eq(updateDate), eq(newValue)))
+        .thenReturn(true);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(futureSingleBalsamWorkbook(), null, null);
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.attemptedRowCount()).isEqualTo(2);
+    assertThat(result.uploadedRowCount()).isEqualTo(2);
+    verify(repository)
+        .update(eq("BA"), eq("A"), eq("O"), eq(retrievalDate), eq(updateDate), eq(newValue));
+    verify(repository)
+        .update(eq("BA"), eq("A"), eq("S"), eq(retrievalDate), eq(updateDate), eq(newValue));
+    verify(repository, never())
+        .update(anyString(), anyString(), anyString(), eq(updateDate), eq(updateDate), any(BigDecimal.class));
   }
 
   @Test
@@ -295,6 +412,45 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldRejectValuesOutsideTheAmvColumnContract() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var blankResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", "2026-07-01", null, "update"));
+    var precisionResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA",
+                "A",
+                "O",
+                "2026-07-01",
+                "2026-07-01",
+                new BigDecimal("10.123"),
+                "update"));
+    var rangeResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA",
+                "A",
+                "O",
+                "2026-07-01",
+                "2026-07-01",
+                new BigDecimal("10000.00"),
+                "update"));
+
+    assertThat(blankResult.status()).isEqualTo("validation_failed");
+    assertThat(blankResult.errors()).contains("New value is required.");
+    assertThat(precisionResult.status()).isEqualTo("validation_failed");
+    assertThat(precisionResult.errors()).contains("New value must have no more than 2 decimal places.");
+    assertThat(rangeResult.status()).isEqualTo("validation_failed");
+    assertThat(rangeResult.errors()).contains("New value must not exceed 9999.99.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void shouldRejectLegacySuccessWhenSavedValueCannotBeConfirmed() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.update(
@@ -331,6 +487,33 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldConfirmSaveWithExactTableValueWhenLegacySelectOmitsRow() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate effectiveDate = LocalDate.of(2026, 7, 1);
+    BigDecimal newValue = new BigDecimal("0.12");
+    when(repository.update(
+            eq("HE"),
+            eq("B"),
+            eq("O"),
+            eq(effectiveDate),
+            eq(effectiveDate),
+            eq(newValue)))
+        .thenReturn("0");
+    when(repository.hasExactValue(eq("HE"), eq("B"), eq("O"), eq(effectiveDate), eq(newValue)))
+        .thenReturn(true);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "HE", "B", "O", "2026-07-01", "2026-07-01", newValue, "update"));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    verify(repository, never())
+        .find(anyString(), anyString(), any(LocalDate.class), any(LocalDate.class));
+  }
+
+  @Test
   void shouldRejectUpdateDateBeforeRetrievalDate() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
@@ -364,6 +547,14 @@ class OracleRtmEmsLogAmvServiceTest {
         "single-balsam.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         RtmEmsLogAmvWorkbookTestFixtures.singleBalsamWorkbook());
+  }
+
+  private MultipartFile futureSingleBalsamWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "future-single-balsam.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.futureSingleBalsamWorkbook());
   }
 
   private MultipartFile optionalCedarGradeWorkbook() throws IOException {
