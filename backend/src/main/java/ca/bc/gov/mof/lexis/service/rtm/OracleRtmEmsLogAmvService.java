@@ -167,6 +167,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<RtmEmsLogAmvRowDto> previewRows = buildPreviewRows(parseResult);
+      List<UploadTarget> rowsToPreview = buildUploadTargets(parseResult.rows(), warnings);
 
       if (parseResult.dataRowCount() == 0) {
         errors.add("The uploaded file contains no data rows.");
@@ -181,6 +182,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The update date is required in the uploaded template.");
       }
       validateUploadDateOrder(parseResult.retrievalDate(), parseResult.updateDate(), errors);
+      validateUploadTargetRowsExist(rowsToPreview, parseResult.updateDate(), errors);
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
       }
@@ -234,48 +236,10 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
-      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
-          parseResult.rows().stream()
-              .filter(row -> isUploadableRow(row.species(), row.grade()))
-              .toList();
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
       LocalDate effectiveDate = parsedUpdateDate;
-
-      if (uploadRows.size() < parseResult.rows().size()) {
-        warnings.add("Some rows were skipped because they were missing grade/species values.");
-      }
-
-      Map<String, UploadTarget> rowsBySpeciesGradeAndGrowth =
-          uploadRows.stream()
-              .flatMap(row -> toUploadTargets(row).stream())
-              .collect(
-                  LinkedHashMap::new,
-                  (map, target) -> {
-                    String species = trimToNull(target.species());
-                    String grade = trimToNull(target.grade());
-                    String growth = trimToNull(target.growthIndicator());
-                    if (species == null || grade == null || growth == null) {
-                      return;
-                    }
-                    String key =
-                        species.toUpperCase() + "|" + grade.toUpperCase() + "|" + growth.toUpperCase();
-                    if (map.containsKey(key)) {
-                      UploadTarget previous = map.get(key);
-                      warnings.add(
-                          "Duplicate upload row in source row %d for species '%s', grade '%s' and growth '%s' replaced previous source row %d."
-                              .formatted(
-                                  target.sourceRow(),
-                                  species,
-                                  grade,
-                                  growth,
-                                  previous.sourceRow()));
-                    }
-                    map.put(key, target);
-                  },
-                  Map::putAll);
-      ArrayList<UploadTarget> rowsToUpload =
-          new ArrayList<>(rowsBySpeciesGradeAndGrowth.values());
+      List<UploadTarget> rowsToUpload = buildUploadTargets(parseResult.rows(), warnings);
 
       if (rowsToUpload.isEmpty()) {
         errors.add("No valid AMV rows were found to upload.");
@@ -293,6 +257,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The update date is required in the uploaded template.");
       }
       validateUploadDateOrder(parsedRetrievalDate, parsedUpdateDate, errors);
+      validateUploadTargetRowsExist(rowsToUpload, parsedUpdateDate, errors);
 
       if (!errors.isEmpty()) {
         return buildUploadResult(
@@ -540,6 +505,41 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     }
   }
 
+  private void validateUploadTargetRowsExist(
+      List<UploadTarget> uploadTargets, LocalDate effectiveDate, List<String> errors) {
+    if (effectiveDate == null || uploadTargets == null || uploadTargets.isEmpty()) {
+      return;
+    }
+
+    for (UploadTarget target : uploadTargets) {
+      if (!hasExistingValue(
+          target.species(), target.grade(), target.growthIndicator(), effectiveDate)) {
+        errors.add(
+            "No existing AMV row found for species '%s', grade '%s', growth '%s', effective date '%s'."
+                .formatted(
+                    target.species(),
+                    target.grade(),
+                    target.growthIndicator(),
+                    formatDate(effectiveDate)));
+      }
+    }
+  }
+
+  private boolean hasExistingValue(
+      String species, String grade, String growthIndicator, LocalDate effectiveDate) {
+    if (effectiveDate == null) {
+      return false;
+    }
+
+    List<RtmEmsLogAmvRowDto> appliedRows =
+        repository.find(species, growthIndicator, effectiveDate, effectiveDate);
+    if (appliedRows == null || appliedRows.isEmpty()) {
+      return false;
+    }
+
+    return appliedRows.stream().anyMatch(row -> equalsIgnoreCase(grade, row.grade()));
+  }
+
   private boolean isXlsx(MultipartFile file) {
     String normalizedType = trimToNull(file.getContentType());
     if (normalizedType != null && normalizedType.startsWith("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) {
@@ -605,6 +605,49 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       }
     }
     return previewRows;
+  }
+
+  private List<UploadTarget> buildUploadTargets(
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> parsedRows, List<String> warnings) {
+    List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
+        parsedRows.stream()
+            .filter(row -> isUploadableRow(row.species(), row.grade()))
+            .toList();
+
+    if (uploadRows.size() < parsedRows.size()) {
+      warnings.add("Some rows were skipped because they were missing grade/species values.");
+    }
+
+    Map<String, UploadTarget> rowsBySpeciesGradeAndGrowth =
+        uploadRows.stream()
+            .flatMap(row -> toUploadTargets(row).stream())
+            .collect(
+                LinkedHashMap::new,
+                (map, target) -> {
+                  String species = trimToNull(target.species());
+                  String grade = trimToNull(target.grade());
+                  String growth = trimToNull(target.growthIndicator());
+                  if (species == null || grade == null || growth == null) {
+                    return;
+                  }
+                  String key =
+                      species.toUpperCase() + "|" + grade.toUpperCase() + "|" + growth.toUpperCase();
+                  if (map.containsKey(key)) {
+                    UploadTarget previous = map.get(key);
+                    warnings.add(
+                        "Duplicate upload row in source row %d for species '%s', grade '%s' and growth '%s' replaced previous source row %d."
+                            .formatted(
+                                target.sourceRow(),
+                                species,
+                                grade,
+                                growth,
+                                previous.sourceRow()));
+                  }
+                  map.put(key, target);
+                },
+                Map::putAll);
+
+    return new ArrayList<>(rowsBySpeciesGradeAndGrowth.values());
   }
 
   private List<UploadTarget> toUploadTargets(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow row) {

@@ -133,6 +133,73 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldAcceptPreviewWhenTargetGrowthRowsExist() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate updateDate = LocalDate.of(2026, 6, 1);
+    when(repository.find(eq("BA"), eq("O"), eq(updateDate), eq(updateDate)))
+        .thenReturn(List.of(row("BA", "A", "O", updateDate, "0")));
+    when(repository.find(eq("BA"), eq("S"), eq(updateDate), eq(updateDate)))
+        .thenReturn(List.of(row("BA", "A", "S", updateDate, "0")));
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result = service.previewUpload(singleBalsamWorkbook());
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rowCount()).isEqualTo(2);
+  }
+
+  @Test
+  void shouldRejectPreviewWhenTargetGrowthRowIsMissing() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate updateDate = LocalDate.of(2026, 6, 1);
+    when(repository.find(eq("BA"), eq("O"), eq(updateDate), eq(updateDate)))
+        .thenReturn(List.of(row("BA", "A", "O", updateDate, "0")));
+    when(repository.find(eq("BA"), eq("S"), eq(updateDate), eq(updateDate))).thenReturn(List.of());
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result = service.previewUpload(singleBalsamWorkbook());
+
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.errors())
+        .contains(
+            "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-06-01'.");
+  }
+
+  @Test
+  void shouldRejectUploadBeforeMutationWhenTargetGrowthRowIsMissing() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate updateDate = LocalDate.of(2026, 6, 1);
+    when(repository.find(eq("BA"), eq("O"), eq(updateDate), eq(updateDate)))
+        .thenReturn(List.of(row("BA", "A", "O", updateDate, "0")));
+    when(repository.find(eq("BA"), eq("S"), eq(updateDate), eq(updateDate))).thenReturn(List.of());
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(singleBalsamWorkbook(), null, null);
+
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.uploadedRowCount()).isZero();
+    assertThat(result.errors())
+        .contains(
+            "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-06-01'.");
+    verify(repository, never())
+        .update(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+    verify(repository, never())
+        .insert(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+  }
+
+  @Test
   void shouldRejectNullLegacyReturnCode() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.update(
@@ -253,6 +320,14 @@ class OracleRtmEmsLogAmvServiceTest {
         "matrix.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
+  }
+
+  private MultipartFile singleBalsamWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "single-balsam.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.singleBalsamWorkbook());
   }
 
   private static void stubAppliedFixtureValues(OracleRtmEmsLogAmvRepository repository) {
