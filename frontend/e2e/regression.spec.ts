@@ -1243,6 +1243,70 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByLabel('Balsam grade A')).toBeVisible()
   })
 
+  test('shows AMV table save validation failures without persisting values', async () => {
+    const page = await authenticatedIdirPage()
+    const saveRequests: Array<Record<string, unknown>> = []
+
+    await page.route('**/api/lexis/rtm/emslogamv**', async (route) => {
+      const request = route.request()
+
+      if (request.method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([]),
+        })
+        return
+      }
+
+      if (request.method() === 'POST') {
+        saveRequests.push(request.postDataJSON() as Record<string, unknown>)
+        await route.fulfill({
+          status: 422,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'validation_failed',
+            message: 'Average monthly value validation failed.',
+            errors: ['Balsam grade A is outside the allowed range.'],
+            rows: [],
+          }),
+        })
+        return
+      }
+
+      await route.fallback()
+    })
+
+    await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
+
+    const balsamGradeA = page.getByLabel('Balsam grade A')
+    await balsamGradeA.fill('123.45')
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Save changes' }).click()
+
+    await expect(page.getByText(/Average monthly value validation failed/)).toBeVisible()
+    await expect(page.getByText(/Balsam grade A is outside the allowed range/)).toBeVisible()
+    await expect(balsamGradeA).toHaveValue('123.45')
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    await expect.poll(() => saveRequests.length).toBe(2)
+    expect(saveRequests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          species: 'BA',
+          grade: 'A',
+          growthIndicator: 'O',
+          newValue: 123.45,
+        }),
+        expect.objectContaining({
+          species: 'BA',
+          grade: 'A',
+          growthIndicator: 'S',
+          newValue: 123.45,
+        }),
+      ]),
+    )
+  })
+
   test('shows selected natural resource region names across search filters', async () => {
     const page = await authenticatedIdirPage()
 
