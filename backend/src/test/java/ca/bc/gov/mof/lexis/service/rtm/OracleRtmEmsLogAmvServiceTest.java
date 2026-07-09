@@ -133,6 +133,69 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldAcceptPreviewWhenTargetGrowthRowsExist() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate updateDate = LocalDate.of(2026, 6, 1);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(true);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result = service.previewUpload(singleBalsamWorkbook());
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rowCount()).isEqualTo(2);
+  }
+
+  @Test
+  void shouldRejectPreviewWhenTargetGrowthRowIsMissing() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate updateDate = LocalDate.of(2026, 6, 1);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(false);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result = service.previewUpload(singleBalsamWorkbook());
+
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.errors())
+        .contains(
+            "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-06-01'.");
+  }
+
+  @Test
+  void shouldRejectUploadBeforeMutationWhenTargetGrowthRowIsMissing() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate updateDate = LocalDate.of(2026, 6, 1);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(false);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(singleBalsamWorkbook(), null, null);
+
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.uploadedRowCount()).isZero();
+    assertThat(result.errors())
+        .contains(
+            "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-06-01'.");
+    verify(repository, never())
+        .update(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+    verify(repository, never())
+        .insert(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+  }
+
+  @Test
   void shouldRejectNullLegacyReturnCode() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.update(
@@ -255,6 +318,14 @@ class OracleRtmEmsLogAmvServiceTest {
         RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
   }
 
+  private MultipartFile singleBalsamWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "single-balsam.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.singleBalsamWorkbook());
+  }
+
   private static void stubAppliedFixtureValues(OracleRtmEmsLogAmvRepository repository) {
     when(repository.find(
             anyString(),
@@ -267,6 +338,20 @@ class OracleRtmEmsLogAmvServiceTest {
               String growthIndicator = invocation.getArgument(1);
               LocalDate effectiveDate = invocation.getArgument(2);
               return fixtureRows(species, growthIndicator, effectiveDate);
+            });
+    when(repository.existsExact(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class)))
+        .thenAnswer(
+            invocation -> {
+              String species = invocation.getArgument(0);
+              String grade = invocation.getArgument(1);
+              String growthIndicator = invocation.getArgument(2);
+              LocalDate effectiveDate = invocation.getArgument(3);
+              return fixtureRows(species, growthIndicator, effectiveDate).stream()
+                  .anyMatch(row -> grade.equalsIgnoreCase(row.grade()));
             });
   }
 
