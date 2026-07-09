@@ -94,8 +94,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # DEV deployments are ephemeral PR previews; gateway scope provisioning is TEST/PROD-only.
       - name: Ensure Keycloak client scopes
-        if: ${{ env.KC_SA_CLIENT_ID != '' }}
+        if: ${{ inputs.environment != 'dev' && env.KC_SA_CLIENT_ID != '' }}
         env:
           KEYCLOAK_ISSUER_URI: ${{ vars.KEYCLOAK_ISSUER_URI }}
           KC_SA_CLIENT_SECRET: ${{ secrets.keycloak_sa_client_secret }}
