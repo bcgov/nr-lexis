@@ -65,6 +65,24 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldLoadEffectiveDateRowsWhenTableLookupOmitsLegacyProcedureFilters() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate effectiveDate = LocalDate.of(2026, 6, 1);
+    List<RtmEmsLogAmvRowDto> expectedRows =
+        List.of(row("BA", "A", "O", effectiveDate, "10.25"));
+    when(repository.findEffectiveDateRows(isNull(), isNull(), eq(effectiveDate)))
+        .thenReturn(expectedRows);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    List<RtmEmsLogAmvRowDto> result = service.find("", "", "2026-06-01", "2026-06-01");
+
+    assertThat(result).isEqualTo(expectedRows);
+    verify(repository).findEffectiveDateRows(null, null, effectiveDate);
+    verify(repository, never())
+        .find(anyString(), anyString(), any(LocalDate.class), any(LocalDate.class));
+  }
+
+  @Test
   void shouldUploadMatrixWorkbookWithLegacyUpdateProcedure() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.update(

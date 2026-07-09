@@ -76,9 +76,22 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       parsedUpdateDate = parsedRetrievalDate;
     }
 
+    String normalizedSpecies = trimToNull(species);
+    String normalizedGrowthIndicator = trimToNull(growthIndicator);
+    if (parsedRetrievalDate != null
+        && parsedRetrievalDate.equals(parsedUpdateDate)
+        && (normalizedSpecies == null || normalizedGrowthIndicator == null)) {
+      List<RtmEmsLogAmvRowDto> rows =
+          repository.findEffectiveDateRows(
+              normalizedSpecies, normalizedGrowthIndicator, parsedRetrievalDate);
+      if (rows != null) {
+        return rows;
+      }
+    }
+
     return repository.find(
-        trimToNull(species),
-        trimToNull(growthIndicator),
+        normalizedSpecies,
+        normalizedGrowthIndicator,
         parsedRetrievalDate,
         parsedUpdateDate);
   }
