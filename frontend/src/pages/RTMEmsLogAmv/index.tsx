@@ -113,6 +113,7 @@ const RTM_AMV_GRADE_ORDER = [
 ]
 
 const RTM_AMV_GROWTH_INDICATORS: RtmGrowthIndicator[] = ['O', 'S']
+const MAX_AMV_VALUE = 9999.99
 
 const normalizeKey = (value: string | null | undefined) => (value ?? '').trim().toUpperCase()
 
@@ -163,8 +164,12 @@ const parseCellValue = (value: string): number | null | undefined => {
     return null
   }
 
+  if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(normalized)) {
+    return undefined
+  }
+
   const parsed = Number(normalized)
-  if (!Number.isFinite(parsed) || parsed < 0) {
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > MAX_AMV_VALUE) {
     return undefined
   }
 
@@ -275,11 +280,17 @@ const buildCellWarning = (cell: {
 
 const buildCellValidationError = (cell: {
   column: RtmAmvSpeciesColumn
+  dirty: boolean
   grade: string
   value: string
 }) => {
-  if (parseCellValue(cell.value) === undefined) {
-    return `${cell.column.label} grade ${cell.grade} must be blank or a number greater than or equal to zero.`
+  const parsedValue = parseCellValue(cell.value)
+  if (parsedValue === null && cell.dirty) {
+    return `${cell.column.label} grade ${cell.grade} is required.`
+  }
+
+  if (parsedValue === undefined) {
+    return `${cell.column.label} grade ${cell.grade} must be a number from 0 to 9999.99 with no more than two decimal places.`
   }
 
   return null
@@ -408,7 +419,9 @@ const RTMEmsLogAmvPage = () => {
 
   const buildSaveRequestsForCell = (cell: RtmAmvCell): RtmEmsLogAmvSaveRequest[] => {
     const parsedValue = parseCellValue(cell.value)
-    const newValue = parsedValue === undefined ? null : parsedValue
+    if (typeof parsedValue !== 'number') {
+      return []
+    }
 
     return cell.column.persistSpeciesCodes.flatMap((species) =>
       RTM_AMV_GROWTH_INDICATORS.map((growthIndicator) => {
@@ -430,7 +443,7 @@ const RTMEmsLogAmvPage = () => {
           growthIndicator,
           retrievalDate: retrievalDate || targetDate,
           updateDate: targetDate,
-          newValue,
+          newValue: parsedValue,
           saveMode: hasExistingRow ? 'update' : 'create',
         }
       }),

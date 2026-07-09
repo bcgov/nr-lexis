@@ -260,6 +260,40 @@ describe('RTM EMS Log AMV actions', () => {
     expect(await screen.findByText(/Past effective dates are read-only/)).toBeVisible()
   })
 
+  it('blocks blank, over-precise and out-of-range table values before save', async () => {
+    const user = userEvent.setup()
+    mockSearchRows({
+      current: [row('BA', 'A', 'O', TARGET_DATE, 10.25), row('BA', 'A', 'S', TARGET_DATE, 10.25)],
+      previous: [],
+    })
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate()
+
+    const input = screen.getByLabelText('Balsam grade A')
+    await user.clear(input)
+    expect(screen.getByText('Balsam grade A is required.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+
+    await user.type(input, '10.123')
+    expect(
+      screen.getByText(
+        'Balsam grade A must be a number from 0 to 9999.99 with no more than two decimal places.',
+      ),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+
+    await user.clear(input)
+    await user.type(input, '10000')
+    expect(
+      screen.getByText(
+        'Balsam grade A must be a number from 0 to 9999.99 with no more than two decimal places.',
+      ),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    expect(mockedSave).not.toHaveBeenCalled()
+  })
+
   it('locks table inputs for past effective dates', async () => {
     const user = userEvent.setup()
     render(<RTMEmsLogAmvPage />)

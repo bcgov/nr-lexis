@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
@@ -411,30 +412,42 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldAcceptBlankTableValueWithoutNumericConfirmation() {
+  void shouldRejectValuesOutsideTheAmvColumnContract() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
-    LocalDate effectiveDate = LocalDate.of(2026, 7, 1);
-    when(repository.update(
-            eq("BA"),
-            eq("A"),
-            eq("O"),
-            eq(effectiveDate),
-            eq(effectiveDate),
-            isNull()))
-        .thenReturn("0");
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
-    var result =
+    var blankResult =
         service.save(
             new RtmEmsLogAmvSaveRequestDto(
                 "BA", "A", "O", "2026-07-01", "2026-07-01", null, "update"));
+    var precisionResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA",
+                "A",
+                "O",
+                "2026-07-01",
+                "2026-07-01",
+                new BigDecimal("10.123"),
+                "update"));
+    var rangeResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA",
+                "A",
+                "O",
+                "2026-07-01",
+                "2026-07-01",
+                new BigDecimal("10000.00"),
+                "update"));
 
-    assertThat(result.status()).isEqualTo("accepted");
-    assertThat(result.rows()).singleElement().satisfies(row -> assertThat(row.newValue()).isNull());
-    verify(repository, never())
-        .hasExactValue(anyString(), anyString(), anyString(), any(LocalDate.class), any());
-    verify(repository, never())
-        .find(anyString(), anyString(), any(LocalDate.class), any(LocalDate.class));
+    assertThat(blankResult.status()).isEqualTo("validation_failed");
+    assertThat(blankResult.errors()).contains("New value is required.");
+    assertThat(precisionResult.status()).isEqualTo("validation_failed");
+    assertThat(precisionResult.errors()).contains("New value must have no more than 2 decimal places.");
+    assertThat(rangeResult.status()).isEqualTo("validation_failed");
+    assertThat(rangeResult.errors()).contains("New value must not exceed 9999.99.");
+    verifyNoInteractions(repository);
   }
 
   @Test
@@ -477,7 +490,7 @@ class OracleRtmEmsLogAmvServiceTest {
   void shouldConfirmSaveWithExactTableValueWhenLegacySelectOmitsRow() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate effectiveDate = LocalDate.of(2026, 7, 1);
-    BigDecimal newValue = new BigDecimal("0.1234");
+    BigDecimal newValue = new BigDecimal("0.12");
     when(repository.update(
             eq("HE"),
             eq("B"),

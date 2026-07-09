@@ -66,16 +66,28 @@ class InMemoryRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldSaveBlankTableValue() {
+  void shouldRejectValuesOutsideTheAmvColumnContract() {
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(FIXED_CLOCK);
 
-    var result =
+    var blankResult =
         service.save(
             new RtmEmsLogAmvSaveRequestDto(
                 "BA", "A", "O", "2026-07-01", null, null, "create"));
+    var precisionResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", null, new BigDecimal("10.123"), "create"));
+    var rangeResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", null, new BigDecimal("10000.00"), "create"));
 
-    assertThat(result.status()).isEqualTo("accepted");
-    assertThat(result.rows()).singleElement().satisfies(row -> assertThat(row.newValue()).isNull());
+    assertThat(blankResult.status()).isEqualTo("validation_failed");
+    assertThat(blankResult.errors()).contains("New value is required.");
+    assertThat(precisionResult.status()).isEqualTo("validation_failed");
+    assertThat(precisionResult.errors()).contains("New value must have no more than 2 decimal places.");
+    assertThat(rangeResult.status()).isEqualTo("validation_failed");
+    assertThat(rangeResult.errors()).contains("New value must not exceed 9999.99.");
   }
 
   @Test

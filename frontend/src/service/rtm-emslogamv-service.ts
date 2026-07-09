@@ -24,7 +24,7 @@ export type RtmEmsLogAmvSaveRequest = {
   growthIndicator: string
   retrievalDate: string
   updateDate: string
-  newValue: number | null
+  newValue: number
   saveMode: 'create' | 'update'
 }
 
