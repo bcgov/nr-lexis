@@ -413,7 +413,7 @@ const RTMEmsLogAmvPage = () => {
 
       let nextPrefillValues: Record<string, string> = {}
       let nextPrefillSourceDate = ''
-      if (selectedDateIsFuture && currentResponse.length === 0) {
+      if (currentResponse.length === 0) {
         const latestRows = await searchLatestRtmEmsLogAmv(targetDate)
         nextPrefillValues = buildPrefillValues(latestRows)
         const sourceRow = latestRows.find((row) => row.updateDate || row.retrievalDate)
@@ -443,7 +443,7 @@ const RTMEmsLogAmvPage = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedDateIsFuture, selectedPreviousDayDate, targetDate])
+  }, [selectedPreviousDayDate, targetDate])
 
   useEffect(() => {
     void loadRows()

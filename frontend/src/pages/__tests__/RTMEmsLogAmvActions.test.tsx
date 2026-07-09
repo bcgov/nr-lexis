@@ -341,6 +341,26 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
   })
 
+  it.each([
+    ['today', TARGET_DATE, dateOffsetFromToday(-8)],
+    ['an intervening past date', '2000-01-02', '2000-01-01'],
+  ])('prefills empty values for %s from the latest earlier entry', async (_, date, sourceDate) => {
+    mockSearchRows({ current: [], previous: [] })
+    mockedSearchLatest.mockResolvedValue([
+      row('BA', 'A', 'O', sourceDate, 10.25),
+      row('BA', 'A', 'S', sourceDate, 10.25),
+    ])
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate(date)
+
+    await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(date))
+    expect(screen.getByLabelText('Balsam grade A')).toHaveValue('10.25')
+    expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
+    expect(screen.getByText(/These values are not saved/)).toBeVisible()
+    expect(mockedSave).not.toHaveBeenCalled()
+  })
+
   it('prefills an empty future date from the latest values without saving automatically', async () => {
     const user = userEvent.setup()
     const sourceDate = dateOffsetFromToday(-7)

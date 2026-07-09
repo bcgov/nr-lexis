@@ -27,8 +27,9 @@ Consequences for the UI:
 - Today is editable and is compared with yesterday.
 - Yesterday and all earlier dates are editable after an explicit confirmation. The table shows a
   warning panel before a backdated change can be saved.
-- Future dates are editable but do not receive daily carry-forward warnings. When a future date has
-  no rows, the UI copies values from the latest earlier populated date as an unsaved starting point.
+- When any selected date has no rows, the UI copies values from the latest earlier populated date as
+  an unsaved starting point. This applies to gaps before today as well as today and future dates.
+- Future dates are editable but do not receive daily carry-forward warnings.
 - When yesterday has a value and today is blank, the table warns that the value is missing.
 - When yesterday is blank and a user enters a value today, the table warns and requires an explicit
   confirmation before saving. The warning does not block the confirmed save.
