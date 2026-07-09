@@ -771,7 +771,7 @@ const RTMEmsLogAmvPage = () => {
                     ))}
                   </TableRow>
                 </TableHead>
-                <TableBody>
+                <TableBody key={loadedDate}>
                   {RTM_AMV_GRADE_ORDER.map((grade) => (
                     <TableRow key={grade}>
                       <TableCell className="rtm-amv-grade-cell">{grade}</TableCell>

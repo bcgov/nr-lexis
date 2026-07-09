@@ -1356,6 +1356,22 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(
       page.getByText(/was blank in the starting values and is now populated/),
     ).toBeVisible()
+
+    const cedarCell = cedarGradeA.locator('xpath=ancestor::td')
+    const warningBackground = await cedarCell.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    )
+    const effectiveDate = page.getByLabel('Effective date')
+    await effectiveDate.fill('2099-07-14')
+    await effectiveDate.press('Tab')
+
+    await expect(page.getByText('Future date selected')).toBeVisible()
+    await expect(cedarGradeA).toHaveValue('')
+    await expect(cedarCell).not.toHaveClass(/has-warning/)
+    await expect(page.getByRole('heading', { name: 'Warnings' })).toHaveCount(0)
+    await expect
+      .poll(async () => cedarCell.evaluate((element) => getComputedStyle(element).backgroundColor))
+      .not.toBe(warningBackground)
   })
 
   test('shows AMV table save validation failures without persisting values', async () => {
