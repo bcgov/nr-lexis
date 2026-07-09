@@ -32,10 +32,11 @@ Consequences for the UI:
 - Future dates do not receive yesterday-versus-today warnings.
 - On any date, adding a value where the selected effective date has no saved value or clearing a
   saved value is highlighted as a warning. Ordinary value-to-value edits remain standard unsaved
-  changes.
+  changes. These cell warnings are advisory and do not open the confirmation dialog.
+- Only a selected effective date before today requires explicit confirmation before saving.
 - When yesterday has a value and today is blank, the table warns that the value is missing.
-- When yesterday is blank and a user enters a value today, the table warns and requires an explicit
-  confirmation before saving. The warning does not block the confirmed save.
+- When yesterday is blank and a user enters a value today, the table warns without blocking the
+  save.
 
 Warnings are deliberately advisory. They do not change the effective date or fabricate an AMV
 value.

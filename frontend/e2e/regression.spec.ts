@@ -1283,8 +1283,6 @@ test.describe('TEST IDIR admin regression', () => {
     await balsamGradeA.fill('123.45')
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
     await page.getByRole('button', { name: 'Save changes' }).click()
-    await expect(page.getByText('Confirm AMV changes')).toBeVisible()
-    await page.getByRole('button', { name: 'Confirm and save' }).click()
 
     await expect(page.getByText(/Average monthly value validation failed/)).toBeVisible()
     await expect(page.getByText(/Balsam grade A is outside the allowed range/)).toBeVisible()

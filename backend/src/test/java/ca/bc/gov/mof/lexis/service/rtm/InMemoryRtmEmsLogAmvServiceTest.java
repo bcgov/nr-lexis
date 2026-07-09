@@ -117,11 +117,17 @@ class InMemoryRtmEmsLogAmvServiceTest {
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(FIXED_CLOCK);
     service.save(
         new RtmEmsLogAmvSaveRequestDto(
-            "BA", "A", "O", "2026-07-08", null, new BigDecimal("10.25"), "create"));
+            "BA", "A", "O", "2026-07-01", null, new BigDecimal("10.25"), "create"));
+    service.save(
+        new RtmEmsLogAmvSaveRequestDto(
+            "BA", "A", "O", "2026-07-10", null, new BigDecimal("20.50"), "create"));
 
-    assertThat(service.findLatestBefore("2026-07-10"))
+    assertThat(service.findLatestBefore("2026-07-02"))
         .extracting(row -> List.of(row.species(), row.retrievalDate(), row.newValue()))
-        .containsExactly(List.of("BA", "2026-07-08", new BigDecimal("10.25")));
+        .containsExactly(List.of("BA", "2026-07-01", new BigDecimal("10.25")));
+    assertThat(service.findLatestBefore("2026-07-12"))
+        .extracting(row -> List.of(row.species(), row.retrievalDate(), row.newValue()))
+        .containsExactly(List.of("BA", "2026-07-10", new BigDecimal("20.50")));
   }
 
   private MultipartFile matrixWorkbook() throws IOException {

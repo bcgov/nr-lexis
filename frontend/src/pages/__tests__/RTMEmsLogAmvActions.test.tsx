@@ -169,7 +169,6 @@ describe('RTM EMS Log AMV actions', () => {
     await user.type(screen.getByLabelText('Balsam grade A'), '11')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await confirmAmvSave(user)
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
     expect(mockedSave).toHaveBeenNthCalledWith(1, {
@@ -203,13 +202,9 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByText(/Pine grade A is newly populated/)).toBeVisible()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
-    expect(screen.getByText('Review the following before saving 1 changed cell.')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
-    expect(mockedSave).not.toHaveBeenCalled()
-    await confirmAmvSave(user)
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(6))
+    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
     expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
       {
         species: 'WH',
@@ -283,7 +278,6 @@ describe('RTM EMS Log AMV actions', () => {
 
     await user.type(screen.getByLabelText('Balsam grade A'), '11')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await confirmAmvSave(user)
 
     expect(await screen.findByText(/Average monthly value validation failed/)).toBeVisible()
   })
@@ -319,7 +313,6 @@ describe('RTM EMS Log AMV actions', () => {
     await user.clear(input)
     await user.type(input, '12')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await confirmAmvSave(user)
 
     expect(await screen.findByText('Second growth row could not be saved.')).toBeVisible()
     await waitFor(() => {
@@ -329,7 +322,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(mockedSave).toHaveBeenCalledTimes(2)
   })
 
-  it('warns and confirms when a future-date value is added to an empty cell', async () => {
+  it('warns without confirmation when a future-date value is added to an empty cell', async () => {
     const user = userEvent.setup()
     mockSearchRows({ current: [], previous: [] })
 
@@ -343,10 +336,8 @@ describe('RTM EMS Log AMV actions', () => {
     expect(input.closest('td')).toHaveClass('has-warning', 'is-added')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
-    expect(mockedSave).not.toHaveBeenCalled()
-    await confirmAmvSave(user)
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
   })
 
   it('keeps ordinary value-to-value edits as standard unsaved changes', async () => {
@@ -430,9 +421,8 @@ describe('RTM EMS Log AMV actions', () => {
 
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
-    await confirmAmvSave(user)
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(4))
+    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
     expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
       {
         species: 'BA',
@@ -533,6 +523,8 @@ describe('RTM EMS Log AMV actions', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(mockedSave).not.toHaveBeenCalled()
     expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
+    expect(screen.getByText('Review the following before saving 1 changed cell.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
     expect(screen.getByText(/which is in the past/)).toBeVisible()
     await confirmAmvSave(user)
 
