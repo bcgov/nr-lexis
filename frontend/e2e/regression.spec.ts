@@ -291,6 +291,9 @@ const rtmNoNumericValuesWorkbook = readFileSync(
 const rtmBadHeaderWorkbook = readFileSync(
   new URL('./fixtures/rtm-amv-bad-header.xlsx', import.meta.url),
 )
+const rtmMissingTargetDateWorkbook = readFileSync(
+  new URL('./fixtures/rtm-amv-missing-target-date.xlsx', import.meta.url),
+)
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
@@ -320,6 +323,12 @@ const rtmInvalidPreviewFixtures = [
     name: 'rtm-amv-bad-header.xlsx',
     buffer: rtmBadHeaderWorkbook,
     expectedError: 'The template header is not recognized as an RTM EMS AMV sheet.',
+  },
+  {
+    name: 'rtm-amv-missing-target-date.xlsx',
+    buffer: rtmMissingTargetDateWorkbook,
+    expectedError:
+      "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-01-01'.",
   },
 ] as const
 
