@@ -11,6 +11,7 @@ const authMocks = vi.hoisted(() => ({
   signInWithRedirect: vi.fn(),
   signOut: vi.fn(),
 }))
+const configuredSignOutUrl = vi.hoisted(() => 'https://auth.example.test/logout')
 
 vi.mock('aws-amplify/auth', () => authMocks)
 
@@ -18,8 +19,7 @@ vi.mock('@/config/fam/config', () => ({
   businessBceidProviderName: 'DEV-BCEIDBUSINESS',
   idirProviderName: 'DEV-IDIR',
   isCognitoConfigured: true,
-  redirectSignOut:
-    'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.gold.devops.gov.bc.ca%2F',
+  redirectSignOut: configuredSignOutUrl,
 }))
 
 vi.mock('@/service/session-service', () => ({
@@ -31,8 +31,7 @@ let consoleWarnSpy: ReturnType<typeof vi.spyOn>
 const expectedCognitoSignOutInput = {
   global: false,
   oauth: {
-    redirectUrl:
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.gold.devops.gov.bc.ca%2F',
+    redirectUrl: configuredSignOutUrl,
   },
 }
 

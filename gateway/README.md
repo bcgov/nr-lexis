@@ -36,7 +36,7 @@ gwa gateway create
 gwa config set gateway <gateway-id>
 ```
 
-Generate the official protected template for reference:
+Generate the official protected template:
 
 ```bash
 gwa generate-config \
@@ -45,11 +45,9 @@ gwa generate-config \
   --upstream https://nr-lexis-api-test.apps.gold.devops.gov.bc.ca
 ```
 
-Then adapt `nr-lexis-nexcol.gateway.template.yaml` by replacing:
-
-```text
-__GATEWAY_ID__ Gateway ID from `gwa gateway create`, for example gw-abc12.
-```
+Use the generated file as the source of truth. Do not commit the filled gateway config unless the
+team decides the gateway ID, hosts, audiences, and product publication settings are stable
+repo-owned infrastructure.
 
 ## Environment Values
 
@@ -61,30 +59,10 @@ Typical API Services Portal and LEXIS host values:
 | test | `nr-lexis-nexcol.test.api.gov.bc.ca` | `nr-lexis-api-test.apps.gold.devops.gov.bc.ca` | `https://test.loginproxy.gov.bc.ca/auth/realms/apigw` | `ap-<gateway-id>-default-test` |
 | prod | `nr-lexis-nexcol.api.gov.bc.ca` | `nr-lexis-api-prod.apps.gold.devops.gov.bc.ca` | `https://loginproxy.gov.bc.ca/auth/realms/apigw` | `ap-<gateway-id>-default-prod` |
 
-Template placeholders:
-
-```text
-__LEXIS_DEV_BACKEND_ROUTE_HOST__   LEXIS host only, no scheme.
-__LEXIS_TEST_BACKEND_ROUTE_HOST__  LEXIS host only, no scheme.
-__LEXIS_PROD_BACKEND_ROUTE_HOST__  LEXIS host only, no scheme.
-__DEV_GATEWAY_HOST__               APS dev gateway host only.
-__TEST_GATEWAY_HOST__              APS test gateway host only.
-__PROD_GATEWAY_HOST__              APS prod gateway host only.
-__DEV_APIGW_ISSUER_URI__           APS dev apigw issuer.
-__TEST_APIGW_ISSUER_URI__          APS test apigw issuer.
-__PROD_APIGW_ISSUER_URI__          APS prod apigw issuer.
-__DEV_APIGW_ALLOWED_AUD__          Usually ap-<gateway-id>-default-dev.
-__TEST_APIGW_ALLOWED_AUD__         Usually ap-<gateway-id>-default-test.
-__PROD_APIGW_ALLOWED_AUD__         Usually ap-<gateway-id>-default-prod.
-```
-
-The template keeps all Product environments `active: false` by default, matching the official
-`gwa` template. Set `active: true` for environments that should be published.
-
 Apply:
 
 ```bash
-gwa apply --input nr-lexis-nexcol.gateway.yaml
+gwa apply --input <generated-gateway-config>.yaml
 gwa status --hosts
 ```
 
@@ -116,7 +94,7 @@ If a gateway environment points at a different LEXIS environment, the upstream L
 must trust the issuer from the calling gateway environment. Otherwise keep issuer trust aligned
 one-to-one by environment.
 
-The gateway template grants and enforces the client role:
+The gateway config should grant and enforce the client role:
 
 ```text
 lexis:federal-submission:submit
