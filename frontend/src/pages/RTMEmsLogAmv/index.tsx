@@ -471,9 +471,11 @@ const RTMEmsLogAmvPage = () => {
     () => buildCellBasis(currentRows, previousRows),
     [currentRows, previousRows],
   )
+  const compareWithPreviousDay = selectedDateIsToday && !prefillSourceDate
   const cells = useMemo(
-    () => buildCells(basisByKey, editedValues, prefillValues, retryCellKeys, selectedDateIsToday),
-    [basisByKey, editedValues, prefillValues, retryCellKeys, selectedDateIsToday],
+    () =>
+      buildCells(basisByKey, editedValues, prefillValues, retryCellKeys, compareWithPreviousDay),
+    [basisByKey, compareWithPreviousDay, editedValues, prefillValues, retryCellKeys],
   )
   const warnings = warningDeduplicate(cells.map((cell) => cell.warning))
   const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))

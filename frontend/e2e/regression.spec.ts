@@ -1296,8 +1296,7 @@ test.describe('TEST IDIR admin regression', () => {
 
   test('uses copied AMV values as the warning baseline', async () => {
     const page = await authenticatedIdirPage()
-    const targetDate = '2099-07-13'
-    const sourceDate = '2099-07-10'
+    const sourceDate = '2000-01-01'
     const copiedRows = [
       ['BA', 'O', 10.25],
       ['BA', 'S', 10.25],
@@ -1325,17 +1324,13 @@ test.describe('TEST IDIR admin regression', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(latestBeforeDate === targetDate ? copiedRows : []),
+        body: JSON.stringify(latestBeforeDate ? copiedRows : []),
       })
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
-    const effectiveDate = page.getByLabel('Effective date')
-    await effectiveDate.fill(targetDate)
-    await effectiveDate.press('Tab')
-
     await expect(page.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
-    await expect(page.getByText(/Prefilled from July 10, 2099/)).toBeVisible()
+    await expect(page.getByText(/These values are not saved/)).toBeVisible()
 
     const balsamGradeA = page.getByLabel('Balsam grade A')
     const cedarGradeA = page.getByLabel('Cedar grade A')
