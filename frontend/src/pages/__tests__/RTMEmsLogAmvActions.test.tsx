@@ -173,6 +173,7 @@ describe('RTM EMS Log AMV actions', () => {
       'download',
       'rtm-ems-log-amv-template.xlsx',
     )
+    expect(screen.getByText('XLSX - 4 KB')).toBeVisible()
     expect(screen.getByText('Accepted formats: .xlsx.')).toBeVisible()
     expect(
       screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),

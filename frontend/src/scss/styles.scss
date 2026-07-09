@@ -1521,6 +1521,47 @@ body {
   line-height: 1rem;
 }
 
+.admin-upload-template-card {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  min-inline-size: 13.5rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  border-inline-start: 3px solid var(--fds-interactive, var(--cds-link-primary));
+  border-radius: 4px;
+  background: var(--fds-layer-01, var(--cds-layer));
+  color: var(--fds-interactive, var(--cds-link-primary));
+  gap: 1.5rem;
+  line-height: 1.25rem;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+.admin-upload-template-card:hover {
+  background: var(--fds-interactive-light, var(--cds-layer-hover));
+  text-decoration: none;
+}
+
+.admin-upload-template-card:focus-visible {
+  outline: 2px solid var(--fds-interactive, var(--cds-focus));
+  outline-offset: 2px;
+}
+
+.admin-upload-template-card__title {
+  display: block;
+  color: var(--fds-interactive, var(--cds-link-primary));
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.admin-upload-template-card__meta {
+  display: block;
+  color: var(--fds-text-secondary, var(--cds-text-secondary));
+  font-size: 0.75rem;
+}
+
 .admin-upload-fspts-button-row {
   display: flex;
   align-items: center;
@@ -2572,6 +2613,10 @@ body {
 
   .admin-upload-field-header {
     display: grid;
+  }
+
+  .admin-upload-template-card {
+    inline-size: 100%;
   }
 
   .admin-upload-fspts-page .admin-upload-drop-zone,

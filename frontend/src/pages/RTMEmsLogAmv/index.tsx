@@ -11,6 +11,7 @@ import {
   CheckmarkFilled,
   Close,
   Document,
+  Download,
   ErrorFilled,
   InformationFilled,
 } from '@carbon/icons-react'
@@ -115,6 +116,7 @@ const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | 
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
+const RTM_TEMPLATE_DISPLAY_SIZE = '4 KB'
 
 const RTM_UPLOAD_ONLY_DESCRIPTION = 'Update average monthly values by uploading an XLSX file.'
 const RTM_UPLOAD_STEP_DESCRIPTION =
@@ -777,11 +779,18 @@ const RTMEmsLogAmvPage = () => {
                   <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
                 </div>
                 <a
-                  className="cds--btn cds--btn--ghost"
+                  className="admin-upload-template-card"
                   href={RTM_TEMPLATE_DOWNLOAD_PATH}
                   download={RTM_TEMPLATE_DOWNLOAD_NAME}
+                  aria-label="Download template"
                 >
-                  Download template
+                  <span>
+                    <span className="admin-upload-template-card__title">Download template</span>
+                    <span className="admin-upload-template-card__meta">
+                      XLSX - {RTM_TEMPLATE_DISPLAY_SIZE}
+                    </span>
+                  </span>
+                  <Download size={16} aria-hidden="true" />
                 </a>
               </div>
 
