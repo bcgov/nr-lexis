@@ -116,6 +116,17 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           List.of());
     }
 
+    LocalDate effectiveDate = effectiveDateForSave(saveMode, retrievalDate, updateDate);
+    if (!hasAppliedValue(species, grade, growthIndicator, effectiveDate, request.newValue())) {
+      return buildMutationResult(
+          RETURN_FAILURE,
+          "Oracle reported success but the AMV row was not applied.",
+          List.of(
+              "Saved value could not be confirmed for species '%s', grade '%s', growth '%s', effective date '%s'."
+                  .formatted(species, grade, growthIndicator, formatDate(effectiveDate))),
+          List.of());
+    }
+
     return buildMutationResult(
         RETURN_SUCCESS,
         "Save completed. " + (SAVE_MODE_UPDATE.equals(saveMode) ? "Updated" : "Created") + " value.",
@@ -169,6 +180,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       if (parseResult.updateDate() == null || parseResult.retrievalDate() == null) {
         errors.add("The update date is required in the uploaded template.");
       }
+      validateUploadDateOrder(parseResult.retrievalDate(), parseResult.updateDate(), errors);
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
       }
@@ -280,6 +292,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       if (parsedUpdateDate == null || parsedRetrievalDate == null) {
         errors.add("The update date is required in the uploaded template.");
       }
+      validateUploadDateOrder(parsedRetrievalDate, parsedUpdateDate, errors);
 
       if (!errors.isEmpty()) {
         return buildUploadResult(
@@ -384,7 +397,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.add("Growth indicator is required.");
     }
 
-    if (parseRetrievalDate(request.retrievalDate()) == null) {
+    LocalDate parsedRetrievalDate = parseRetrievalDate(request.retrievalDate());
+    if (parsedRetrievalDate == null) {
       errors.add("Retrieval date is required and must be a valid date.");
     }
 
@@ -400,8 +414,15 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.add("Save mode must be 'create' or 'update'.");
     }
 
-    if (SAVE_MODE_UPDATE.equals(saveMode) && parseIsoOrLegacyDate(request.updateDate()) == null) {
+    LocalDate parsedUpdateDate = parseIsoOrLegacyDate(request.updateDate());
+    if (SAVE_MODE_UPDATE.equals(saveMode) && parsedUpdateDate == null) {
       errors.add("Update date is required for update mode.");
+    }
+    if (SAVE_MODE_UPDATE.equals(saveMode)
+        && parsedRetrievalDate != null
+        && parsedUpdateDate != null
+        && parsedUpdateDate.isBefore(parsedRetrievalDate)) {
+      errors.add("Update date must be on or after the retrieval date.");
     }
 
     return errors;
@@ -463,7 +484,60 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   private boolean isSuccess(String returnCode) {
     String normalized = trimToNull(returnCode);
-    return "0".equals(normalized);
+    return "0".equals(normalized) || "-100".equals(normalized);
+  }
+
+  private LocalDate effectiveDateForSave(
+      String saveMode, LocalDate retrievalDate, LocalDate updateDate) {
+    if (SAVE_MODE_UPDATE.equals(saveMode)
+        && retrievalDate != null
+        && updateDate != null
+        && updateDate.isAfter(retrievalDate)) {
+      return updateDate;
+    }
+    return retrievalDate;
+  }
+
+  private boolean hasAppliedValue(
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate,
+      BigDecimal expectedValue) {
+    if (effectiveDate == null || expectedValue == null) {
+      return false;
+    }
+
+    List<RtmEmsLogAmvRowDto> appliedRows =
+        repository.find(species, growthIndicator, effectiveDate, effectiveDate);
+    if (appliedRows == null || appliedRows.isEmpty()) {
+      return false;
+    }
+
+    return appliedRows.stream()
+        .anyMatch(
+            row ->
+                equalsIgnoreCase(grade, row.grade())
+                    && numericEquals(expectedValue, row.newValue()));
+  }
+
+  private boolean equalsIgnoreCase(String expected, String candidate) {
+    String normalizedExpected = trimToNull(expected);
+    String normalizedCandidate = trimToNull(candidate);
+    return normalizedExpected != null
+        && normalizedCandidate != null
+        && normalizedExpected.equalsIgnoreCase(normalizedCandidate);
+  }
+
+  private boolean numericEquals(BigDecimal expected, BigDecimal candidate) {
+    return expected != null && candidate != null && expected.compareTo(candidate) == 0;
+  }
+
+  private void validateUploadDateOrder(
+      LocalDate retrievalDate, LocalDate updateDate, List<String> errors) {
+    if (retrievalDate != null && updateDate != null && updateDate.isBefore(retrievalDate)) {
+      errors.add("Update date must be on or after the retrieval date.");
+    }
   }
 
   private boolean isXlsx(MultipartFile file) {

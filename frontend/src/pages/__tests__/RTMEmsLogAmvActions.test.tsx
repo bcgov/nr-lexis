@@ -30,7 +30,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
   fileSize: 12,
   message: 'Preview generated.',
   rowCount: 8,
-  retrievalDate: '2026-07-06',
+  retrievalDate: '2026-06-01',
   updateDate: '2026-06-01',
   errors: [],
   warnings: [],
@@ -39,7 +39,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
       species: 'BA',
       grade: 'A',
       growthIndicator: 'O',
-      retrievalDate: '2026-07-06',
+      retrievalDate: '2026-06-01',
       updateDate: '2026-06-01',
       currentValue: null,
       newValue: 10.25,
@@ -49,7 +49,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
       species: 'HE',
       grade: 'A',
       growthIndicator: 'O',
-      retrievalDate: '2026-07-06',
+      retrievalDate: '2026-06-01',
       updateDate: '2026-06-01',
       currentValue: null,
       newValue: 20.5,
@@ -59,7 +59,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
       species: 'WH',
       grade: 'A',
       growthIndicator: 'O',
-      retrievalDate: '2026-07-06',
+      retrievalDate: '2026-06-01',
       updateDate: '2026-06-01',
       currentValue: null,
       newValue: 30.75,
@@ -69,7 +69,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
       species: 'LO',
       grade: 'A',
       growthIndicator: 'O',
-      retrievalDate: '2026-07-06',
+      retrievalDate: '2026-06-01',
       updateDate: '2026-06-01',
       currentValue: null,
       newValue: 30.75,
@@ -79,7 +79,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
       species: 'YE',
       grade: 'A',
       growthIndicator: 'O',
-      retrievalDate: '2026-07-06',
+      retrievalDate: '2026-06-01',
       updateDate: '2026-06-01',
       currentValue: null,
       newValue: 30.75,
@@ -89,7 +89,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
       species: 'BA',
       grade: 'A',
       growthIndicator: 'S',
-      retrievalDate: '2026-07-06',
+      retrievalDate: '2026-06-01',
       updateDate: '2026-06-01',
       currentValue: null,
       newValue: 10.25,
@@ -99,7 +99,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
       species: 'HE',
       grade: 'A',
       growthIndicator: 'S',
-      retrievalDate: '2026-07-06',
+      retrievalDate: '2026-06-01',
       updateDate: '2026-06-01',
       currentValue: null,
       newValue: 20.5,
@@ -109,7 +109,7 @@ const acceptedPreview: RtmEmsLogAmvUploadPreview = {
       species: 'WH',
       grade: 'A',
       growthIndicator: 'S',
-      retrievalDate: '2026-07-06',
+      retrievalDate: '2026-06-01',
       updateDate: '2026-06-01',
       currentValue: null,
       newValue: 30.75,
@@ -307,5 +307,39 @@ describe('RTM EMS Log AMV actions', () => {
       screen.getByText('Upload a spreadsheet that passes validation before reviewing it.'),
     ).toBeVisible()
     expect(screen.queryByRole('heading', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
+  it('rejects an accepted preview when the update date is before the retrieval date', async () => {
+    const user = userEvent.setup()
+    mockedPreviewUpload.mockResolvedValue({
+      ...acceptedPreview,
+      retrievalDate: '2026-07-01',
+      updateDate: '2026-06-01',
+      rows: acceptedPreview.rows.map((row) => ({
+        ...row,
+        retrievalDate: '2026-07-01',
+        updateDate: '2026-06-01',
+      })),
+    })
+
+    render(<RTMEmsLogAmvPage />)
+
+    await user.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      new File(['excel bytes'], 'bad-date-order.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    )
+
+    expect(await screen.findByText('1 validation issue found')).toBeVisible()
+    expect(screen.getByText('Update date must be on or after the retrieval date.')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Review upload' }))
+
+    expect(
+      screen.getByText('Upload a spreadsheet that passes validation before reviewing it.'),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Review' })).not.toBeInTheDocument()
+    expect(mockedUpload).not.toHaveBeenCalled()
   })
 })

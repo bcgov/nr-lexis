@@ -113,6 +113,32 @@ const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | 
   return monthLabel ? `New values applied for ${monthLabel}.` : 'New values applied.'
 }
 
+const normalizeIsoDate = (dateValue: string | null | undefined): string | null => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateValue ?? '')
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null
+}
+
+const isUpdateBeforeRetrieval = (previewResult: RtmEmsLogAmvUploadPreview): boolean => {
+  const retrievalDate = normalizeIsoDate(previewResult.retrievalDate)
+  const updateDate = normalizeIsoDate(previewResult.updateDate)
+  return !!retrievalDate && !!updateDate && updateDate < retrievalDate
+}
+
+const validateAcceptedPreview = (
+  previewResult: RtmEmsLogAmvUploadPreview,
+): RtmEmsLogAmvUploadPreview => {
+  if (previewResult.status !== 'accepted' || !isUpdateBeforeRetrieval(previewResult)) {
+    return previewResult
+  }
+
+  return {
+    ...previewResult,
+    status: 'validation_failed',
+    message: 'Upload template validation failed.',
+    errors: [...previewResult.errors, 'Update date must be on or after the retrieval date.'],
+  }
+}
+
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
@@ -567,8 +593,9 @@ const RTMEmsLogAmvPage = () => {
         return
       }
 
-      setPreviewResult(response)
-      if (response.status === 'accepted') {
+      const validatedResponse = validateAcceptedPreview(response)
+      setPreviewResult(validatedResponse)
+      if (validatedResponse.status === 'accepted') {
         setPendingUploadValidation({
           fileName: nextFile.name,
           fileSize: nextFile.size,
@@ -920,7 +947,6 @@ const RTMEmsLogAmvPage = () => {
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={notificationKind}
-            lowContrast={notificationKind === 'success'}
             role="status"
             title={notificationTitle}
             subtitle={notification}

@@ -81,13 +81,13 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
   static UploadParseResult parseForUpload(InputStream inputStream) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return parseUploadSheet(parsedWorkbook.rows(), LocalDate.now());
+    return parseUploadSheet(parsedWorkbook.rows());
   }
 
   static UploadParseResult parseForUpload(
       InputStream inputStream, LocalDate submissionDate) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return parseUploadSheet(parsedWorkbook.rows(), submissionDate);
+    return parseUploadSheet(parsedWorkbook.rows());
   }
 
   private static ParsedWorkbook readWorkbook(InputStream inputStream) throws IOException {
@@ -113,15 +113,14 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return new ParsedWorkbook(rows);
   }
 
-  private static UploadParseResult parseUploadSheet(
-      List<ParsedRow> rows, LocalDate submissionDate) {
+  private static UploadParseResult parseUploadSheet(List<ParsedRow> rows) {
     int dataRows = 0;
     int numericCells = 0;
     boolean headerDetected = false;
     int headerRow = -1;
     UploadDateMetadata dateMetadata = parseUploadDateMetadata(rows);
     LocalDate updateDate = dateMetadata.updateDate();
-    LocalDate retrievalDate = submissionDate;
+    LocalDate retrievalDate = updateDate;
     Map<String, List<String>> speciesHeaderAliases = speciesHeaderAliases();
     Map<Integer, List<String>> speciesByColumn = new HashMap<>();
     List<String> errors = new ArrayList<>();
