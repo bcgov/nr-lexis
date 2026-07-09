@@ -136,6 +136,20 @@ const safeUrlForLog = (rawUrl: string): string => {
   }
 }
 
+const redirectExternalLogoutToLoginShell = async (page: Page): Promise<void> => {
+  const loginShellUrl = `${new URL(E2E_BASE_URL).origin}/`
+
+  await page.route(/https:\/\/[^/]*amazoncognito\.com\/logout.*/i, async (route) => {
+    await route.fulfill({
+      status: 302,
+      headers: {
+        location: loginShellUrl,
+      },
+      body: '',
+    })
+  })
+}
+
 const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
   try {
     const hostname = new URL(rawUrl).hostname.toLowerCase()
@@ -978,6 +992,7 @@ test.describe('TEST IDIR admin regression', () => {
 
     idirContext = await browser.newContext()
     idirPage = await idirContext.newPage()
+    await redirectExternalLogoutToLoginShell(idirPage)
     await loginWithIdir(idirPage)
   })
 
