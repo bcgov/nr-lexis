@@ -67,13 +67,13 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
         .perform(
             post("/api/lexis/rtm/emslogamv/preview")
                 .with(jwt().authorities(admin)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
 
     mockMvc
         .perform(
             post("/api/lexis/rtm/emslogamv/upload")
                 .with(jwt().authorities(admin)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
 
     mockMvc
         .perform(
