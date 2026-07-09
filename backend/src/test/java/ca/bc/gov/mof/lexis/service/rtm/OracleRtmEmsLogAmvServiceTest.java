@@ -84,6 +84,21 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldLoadLatestEffectiveDateRowsBeforeTargetDate() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate targetDate = LocalDate.of(2026, 7, 10);
+    List<RtmEmsLogAmvRowDto> expectedRows =
+        List.of(row("BA", "A", "O", LocalDate.of(2026, 7, 8), "10.25"));
+    when(repository.findLatestEffectiveDateRowsBefore(targetDate)).thenReturn(expectedRows);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    List<RtmEmsLogAmvRowDto> result = service.findLatestBefore("2026-07-10");
+
+    assertThat(result).isEqualTo(expectedRows);
+    verify(repository).findLatestEffectiveDateRowsBefore(targetDate);
+  }
+
+  @Test
   void shouldUploadMatrixWorkbookWithLegacyUpdateProcedure() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.update(

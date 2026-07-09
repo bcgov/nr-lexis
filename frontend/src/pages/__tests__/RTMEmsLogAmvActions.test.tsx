@@ -5,6 +5,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import RTMEmsLogAmvPage from '@/pages/RTMEmsLogAmv'
 import {
   saveRtmEmsLogAmv,
+  searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
   type RtmEmsLogAmvRow,
 } from '@/service/rtm-emslogamv-service'
@@ -16,10 +17,12 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/rtm-emslogamv-service', () => ({
   saveRtmEmsLogAmv: vi.fn(),
+  searchLatestRtmEmsLogAmv: vi.fn(),
   searchRtmEmsLogAmv: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedSearchLatest = vi.mocked(searchLatestRtmEmsLogAmv)
 const mockedSearch = vi.mocked(searchRtmEmsLogAmv)
 const mockedSave = vi.mocked(saveRtmEmsLogAmv)
 
@@ -101,8 +104,8 @@ const selectTargetDate = async (date = TARGET_DATE) => {
   )
 }
 
-const confirmDailyWarningSave = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByRole('button', { name: 'Save warned changes' }))
+const confirmAmvSave = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(await screen.findByRole('button', { name: 'Save confirmed changes' }))
 }
 
 describe('RTM EMS Log AMV actions', () => {
@@ -116,6 +119,7 @@ describe('RTM EMS Log AMV actions', () => {
       errors: [],
       rows: [],
     })
+    mockedSearchLatest.mockResolvedValue([])
     mockSearchRows()
   })
 
@@ -198,9 +202,9 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByText(/Pine grade A is newly populated/)).toBeVisible()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('Confirm daily value changes')).toBeVisible()
+    expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
     expect(mockedSave).not.toHaveBeenCalled()
-    await confirmDailyWarningSave(user)
+    await confirmAmvSave(user)
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(6))
     expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
@@ -266,8 +270,8 @@ describe('RTM EMS Log AMV actions', () => {
     mockSearchRows({ current: [], previous: [] })
     mockedSave.mockResolvedValue({
       status: 'validation_failed',
-      message: 'Past effective dates are read-only.',
-      errors: ['Past effective dates are read-only.'],
+      message: 'Average monthly value validation failed.',
+      errors: ['Average monthly value validation failed.'],
       rows: [],
     })
 
@@ -276,9 +280,9 @@ describe('RTM EMS Log AMV actions', () => {
 
     await user.type(screen.getByLabelText('Balsam grade A'), '11')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await confirmDailyWarningSave(user)
+    await confirmAmvSave(user)
 
-    expect(await screen.findByText(/Past effective dates are read-only/)).toBeVisible()
+    expect(await screen.findByText(/Average monthly value validation failed/)).toBeVisible()
   })
 
   it('reloads partial saves and keeps failed cells ready to retry', async () => {
@@ -312,7 +316,7 @@ describe('RTM EMS Log AMV actions', () => {
     await user.clear(input)
     await user.type(input, '12')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await confirmDailyWarningSave(user)
+    await confirmAmvSave(user)
 
     expect(await screen.findByText('Second growth row could not be saved.')).toBeVisible()
     await waitFor(() => {
@@ -334,7 +338,80 @@ describe('RTM EMS Log AMV actions', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
-    expect(screen.queryByText('Confirm daily value changes')).not.toBeInTheDocument()
+    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
+  })
+
+  it('prefills an empty future date from the latest values without saving automatically', async () => {
+    const user = userEvent.setup()
+    const sourceDate = dateOffsetFromToday(-7)
+    mockSearchRows({ current: [], previous: [] })
+    mockedSearchLatest.mockResolvedValue([
+      row('BA', 'A', 'O', sourceDate, 10.25),
+      row('BA', 'A', 'S', sourceDate, 10.25),
+      row('HE', 'A', 'O', sourceDate, 20.5),
+      row('HE', 'A', 'S', sourceDate, 20.5),
+    ])
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate(FUTURE_DATE)
+
+    await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(FUTURE_DATE))
+    expect(screen.getByLabelText('Balsam grade A')).toHaveValue('10.25')
+    expect(screen.getByLabelText('Hemlock grade A')).toHaveValue('20.5')
+    expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
+    expect(screen.getByText(/These values are not saved/)).toBeVisible()
+    expect(mockedSave).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+
+    const balsamInput = screen.getByLabelText('Balsam grade A')
+    await user.clear(balsamInput)
+    await user.type(balsamInput, '11')
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(balsamInput).toHaveValue('10.25')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(4))
+    expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
+      {
+        species: 'BA',
+        grade: 'A',
+        growthIndicator: 'O',
+        retrievalDate: FUTURE_DATE,
+        updateDate: FUTURE_DATE,
+        newValue: 10.25,
+        saveMode: 'create',
+      },
+      {
+        species: 'BA',
+        grade: 'A',
+        growthIndicator: 'S',
+        retrievalDate: FUTURE_DATE,
+        updateDate: FUTURE_DATE,
+        newValue: 10.25,
+        saveMode: 'create',
+      },
+      {
+        species: 'HE',
+        grade: 'A',
+        growthIndicator: 'O',
+        retrievalDate: FUTURE_DATE,
+        updateDate: FUTURE_DATE,
+        newValue: 20.5,
+        saveMode: 'create',
+      },
+      {
+        species: 'HE',
+        grade: 'A',
+        growthIndicator: 'S',
+        retrievalDate: FUTURE_DATE,
+        updateDate: FUTURE_DATE,
+        newValue: 20.5,
+        saveMode: 'create',
+      },
+    ])
+    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
   })
 
   it('blocks blank, over-precise and out-of-range table values before save', async () => {
@@ -371,8 +448,9 @@ describe('RTM EMS Log AMV actions', () => {
     expect(mockedSave).not.toHaveBeenCalled()
   })
 
-  it('locks table inputs for past effective dates', async () => {
+  it('allows past-date edits after explicit confirmation', async () => {
     const user = userEvent.setup()
+    mockSearchRows({ current: [], previous: [] })
     render(<RTMEmsLogAmvPage />)
 
     fireEvent.change(await screen.findByLabelText('Effective date'), {
@@ -389,8 +467,34 @@ describe('RTM EMS Log AMV actions', () => {
     )
     expect(screen.getByRole('heading', { name: 'Past date selected' })).toBeVisible()
     const input = screen.getByLabelText('Balsam grade A')
-    expect(input).toBeDisabled()
+    expect(input).toBeEnabled()
+    await user.type(input, '11')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(mockedSave).not.toHaveBeenCalled()
+    expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
+    expect(screen.getByText(/which is in the past/)).toBeVisible()
+    await confirmAmvSave(user)
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
+    expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
+      {
+        species: 'BA',
+        grade: 'A',
+        growthIndicator: 'O',
+        retrievalDate: '2000-01-01',
+        updateDate: '2000-01-01',
+        newValue: 11,
+        saveMode: 'create',
+      },
+      {
+        species: 'BA',
+        grade: 'A',
+        growthIndicator: 'S',
+        retrievalDate: '2000-01-01',
+        updateDate: '2000-01-01',
+        newValue: 11,
+        saveMode: 'create',
+      },
+    ])
   })
 })

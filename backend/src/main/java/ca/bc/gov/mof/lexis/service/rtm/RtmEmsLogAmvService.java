@@ -16,6 +16,8 @@ public interface RtmEmsLogAmvService {
       String retrievalDate,
       String updateDate);
 
+  List<RtmEmsLogAmvRowDto> findLatestBefore(String effectiveDate);
+
   RtmEmsLogAmvMutationResultDto save(RtmEmsLogAmvSaveRequestDto request);
 
   RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file);

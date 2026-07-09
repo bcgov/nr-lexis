@@ -97,6 +97,17 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   @Override
+  public List<RtmEmsLogAmvRowDto> findLatestBefore(String effectiveDate) {
+    LocalDate parsedEffectiveDate = parseIsoOrLegacyDate(effectiveDate);
+    if (parsedEffectiveDate == null) {
+      return List.of();
+    }
+
+    List<RtmEmsLogAmvRowDto> rows = repository.findLatestEffectiveDateRowsBefore(parsedEffectiveDate);
+    return rows == null ? List.of() : rows;
+  }
+
+  @Override
   public RtmEmsLogAmvMutationResultDto save(RtmEmsLogAmvSaveRequestDto request) {
     List<String> errors = validateSaveRequest(request);
     if (!errors.isEmpty()) {

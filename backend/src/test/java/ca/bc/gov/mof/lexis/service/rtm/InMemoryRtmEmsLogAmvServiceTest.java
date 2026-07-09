@@ -112,6 +112,18 @@ class InMemoryRtmEmsLogAmvServiceTest {
             List.of("BALSAM", "B", "S", new BigDecimal("11.50")));
   }
 
+  @Test
+  void shouldFindLatestEffectiveDateRowsBeforeTargetDate() {
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(FIXED_CLOCK);
+    service.save(
+        new RtmEmsLogAmvSaveRequestDto(
+            "BA", "A", "O", "2026-07-08", null, new BigDecimal("10.25"), "create"));
+
+    assertThat(service.findLatestBefore("2026-07-10"))
+        .extracting(row -> List.of(row.species(), row.retrievalDate(), row.newValue()))
+        .containsExactly(List.of("BA", "2026-07-08", new BigDecimal("10.25")));
+  }
+
   private MultipartFile matrixWorkbook() throws IOException {
     return workbook("matrix.xlsx", RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
   }
