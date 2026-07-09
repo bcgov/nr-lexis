@@ -164,7 +164,7 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldRejectPreviewWhenTargetGrowthRowIsMissing() throws IOException {
+  void shouldPreviewOnlyExistingTargetGrowthRows() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
     when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
@@ -173,32 +173,49 @@ class OracleRtmEmsLogAmvServiceTest {
 
     var result = service.previewUpload(singleBalsamWorkbook());
 
-    assertThat(result.status()).isEqualTo("validation_failed");
-    assertThat(result.errors())
-        .contains(
-            "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-06-01'.");
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rowCount()).isEqualTo(1);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvRowDto::growthIndicator).containsExactly("O");
   }
 
   @Test
-  void shouldRejectUploadBeforeMutationWhenTargetGrowthRowIsMissing() throws IOException {
+  void shouldUploadOnlyExistingTargetGrowthRows() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
     when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
     when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(false);
+    when(repository.update(
+            eq("BA"),
+            eq("A"),
+            eq("O"),
+            eq(updateDate),
+            eq(updateDate),
+            eq(new BigDecimal("10.25"))))
+        .thenReturn("0");
+    when(repository.find(eq("BA"), eq("O"), eq(updateDate), eq(updateDate)))
+        .thenReturn(List.of(row("BA", "A", "O", updateDate, "10.25")));
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(singleBalsamWorkbook(), null, null);
 
-    assertThat(result.status()).isEqualTo("validation_failed");
-    assertThat(result.uploadedRowCount()).isZero();
-    assertThat(result.errors())
-        .contains(
-            "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-06-01'.");
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.attemptedRowCount()).isEqualTo(1);
+    assertThat(result.uploadedRowCount()).isEqualTo(1);
+    verify(repository)
+        .update(
+            eq("BA"),
+            eq("A"),
+            eq("O"),
+            eq(updateDate),
+            eq(updateDate),
+            eq(new BigDecimal("10.25")));
     verify(repository, never())
         .update(
-            anyString(),
-            anyString(),
-            anyString(),
+            eq("BA"),
+            eq("A"),
+            eq("S"),
             any(LocalDate.class),
             any(LocalDate.class),
             any(BigDecimal.class));

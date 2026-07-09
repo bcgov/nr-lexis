@@ -183,10 +183,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       validateUploadDateOrder(parseResult.retrievalDate(), parseResult.updateDate(), errors);
       rowsToPreview =
           filterUploadTargetsForExistingRows(
-              rowsToPreview,
-              parseResult.retrievalDate(),
-              parseResult.updateDate(),
-              errors);
+              rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate());
       List<RtmEmsLogAmvRowDto> previewRows =
           buildPreviewRows(rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate());
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
@@ -261,8 +258,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       }
       validateUploadDateOrder(parsedRetrievalDate, parsedUpdateDate, errors);
       rowsToUpload =
-          filterUploadTargetsForExistingRows(
-              rowsToUpload, parsedRetrievalDate, parsedUpdateDate, errors);
+          filterUploadTargetsForExistingRows(rowsToUpload, parsedRetrievalDate, parsedUpdateDate);
 
       if (!errors.isEmpty()) {
         return buildUploadResult(
@@ -585,10 +581,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   private List<UploadTarget> filterUploadTargetsForExistingRows(
-      List<UploadTarget> uploadTargets,
-      LocalDate retrievalDate,
-      LocalDate updateDate,
-      List<String> errors) {
+      List<UploadTarget> uploadTargets, LocalDate retrievalDate, LocalDate updateDate) {
     if (uploadTargets == null || uploadTargets.isEmpty()) {
       return List.of();
     }
@@ -611,30 +604,11 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     List<UploadTarget> retainedTargets = new ArrayList<>();
     for (List<UploadTarget> targets : targetsBySpeciesGrade.values()) {
-      List<UploadTarget> existingTargets = new ArrayList<>();
-      List<UploadTarget> missingTargets = new ArrayList<>();
       for (UploadTarget target : targets) {
         if (hasExistingValue(
             target.species(), target.grade(), target.growthIndicator(), updateDate)) {
-          existingTargets.add(target);
-        } else {
-          missingTargets.add(target);
+          retainedTargets.add(target);
         }
-      }
-
-      if (existingTargets.isEmpty()) {
-        continue;
-      }
-
-      retainedTargets.addAll(existingTargets);
-      for (UploadTarget target : missingTargets) {
-        errors.add(
-            "No existing AMV row found for species '%s', grade '%s', growth '%s', effective date '%s'."
-                .formatted(
-                    target.species(),
-                    target.grade(),
-                    target.growthIndicator(),
-                    formatDate(updateDate)));
       }
     }
     return retainedTargets;
