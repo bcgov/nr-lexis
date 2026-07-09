@@ -10,8 +10,12 @@ import {
 import {
   Button,
   Column,
+  ComposedModal,
   Grid,
   InlineLoading,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   Table,
   TableBody,
   TableCell,
@@ -126,26 +130,27 @@ const todayIsoDate = () => toLocalIsoDate(new Date())
 
 const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
 
-const previousMonthStartDate = (dateValue: string) => {
-  const [year, month] = dateValue.split('-').map(Number)
-  if (!Number.isInteger(year) || !Number.isInteger(month)) {
+const previousDayDate = (dateValue: string) => {
+  const [year, month, day] = dateValue.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
     return dateValue
   }
 
-  return toLocalIsoDate(new Date(year, month - 2, 1))
+  return toLocalIsoDate(new Date(year, month - 1, day - 1))
 }
 
-const formatMonth = (dateValue: string) => {
-  const [year, month] = dateValue.split('-').map(Number)
-  if (!Number.isInteger(year) || !Number.isInteger(month)) {
+const formatEffectiveDate = (dateValue: string) => {
+  const [year, month, day] = dateValue.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
     return dateValue
   }
 
   return new Intl.DateTimeFormat('en-CA', {
+    day: 'numeric',
     month: 'long',
     timeZone: 'UTC',
     year: 'numeric',
-  }).format(new Date(Date.UTC(year, month - 1, 1)))
+  }).format(new Date(Date.UTC(year, month - 1, day)))
 }
 
 const formatRawNumber = (value: number | null | undefined) => {
@@ -257,22 +262,29 @@ const buildCellBasis = (
   return basisByKey
 }
 
-const buildCellWarning = (cell: {
-  column: RtmAmvSpeciesColumn
-  grade: string
-  hasCurrentValue: boolean
-  hasPreviousValue: boolean
-  value: string
-}) => {
+const buildCellWarning = (
+  cell: {
+    column: RtmAmvSpeciesColumn
+    grade: string
+    hasCurrentValue: boolean
+    hasPreviousValue: boolean
+    value: string
+  },
+  showDailyWarnings: boolean,
+) => {
+  if (!showDailyWarnings) {
+    return null
+  }
+
   const nextValue = parseCellValue(cell.value)
   const hasNextValue = nextValue !== null && nextValue !== undefined
 
   if (cell.hasPreviousValue && !hasNextValue) {
-    return `${cell.column.label} grade ${cell.grade} had a previous month value and is blank for the selected date.`
+    return `${cell.column.label} grade ${cell.grade} had a value yesterday and is blank for today.`
   }
 
   if (!cell.hasPreviousValue && hasNextValue) {
-    return `${cell.column.label} grade ${cell.grade} is newly populated; the previous month was blank.`
+    return `${cell.column.label} grade ${cell.grade} is newly populated; it was blank yesterday.`
   }
 
   return null
@@ -300,6 +312,7 @@ const buildCells = (
   basisByKey: Record<string, RtmAmvCellBasis>,
   editedValues: Record<string, string>,
   retryCellKeys: Record<string, true>,
+  showDailyWarnings: boolean,
 ): RtmAmvCell[] =>
   RTM_AMV_GRADE_ORDER.flatMap((grade) =>
     RTM_AMV_SPECIES_COLUMNS.map((column) => {
@@ -320,7 +333,7 @@ const buildCells = (
       return {
         ...cell,
         validationError: buildCellValidationError(cell),
-        warning: buildCellWarning(cell),
+        warning: buildCellWarning(cell, showDailyWarnings),
       }
     }),
   )
@@ -340,6 +353,7 @@ const RTMEmsLogAmvPage = () => {
   const [previousRows, setPreviousRows] = useState<RtmEmsLogAmvRow[]>([])
   const [editedValues, setEditedValues] = useState<Record<string, string>>({})
   const [retryCellKeys, setRetryCellKeys] = useState<Record<string, true>>({})
+  const [showWarningConfirmation, setShowWarningConfirmation] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -347,7 +361,9 @@ const RTMEmsLogAmvPage = () => {
 
   const today = todayIsoDate()
   const selectedDateIsPast = isIsoDate(targetDate) && targetDate < today
-  const selectedPreviousMonthDate = isIsoDate(targetDate) ? previousMonthStartDate(targetDate) : ''
+  const selectedDateIsToday = isIsoDate(targetDate) && targetDate === today
+  const selectedDateIsFuture = isIsoDate(targetDate) && targetDate > today
+  const selectedPreviousDayDate = selectedDateIsToday ? previousDayDate(targetDate) : ''
 
   const loadRows = useCallback(async () => {
     if (!isIsoDate(targetDate)) {
@@ -356,10 +372,10 @@ const RTMEmsLogAmvPage = () => {
       setPreviousRows([])
       setEditedValues({})
       setRetryCellKeys({})
+      setShowWarningConfirmation(false)
       return
     }
 
-    const previousDate = previousMonthStartDate(targetDate)
     setIsLoading(true)
     setLoadError('')
 
@@ -371,12 +387,14 @@ const RTMEmsLogAmvPage = () => {
           retrievalDate: targetDate,
           updateDate: targetDate,
         }),
-        searchRtmEmsLogAmv({
-          species: '',
-          growthIndicator: '',
-          retrievalDate: previousDate,
-          updateDate: previousDate,
-        }),
+        selectedPreviousDayDate
+          ? searchRtmEmsLogAmv({
+              species: '',
+              growthIndicator: '',
+              retrievalDate: selectedPreviousDayDate,
+              updateDate: selectedPreviousDayDate,
+            })
+          : Promise.resolve([]),
       ])
 
       setCurrentRows(currentResponse)
@@ -384,6 +402,7 @@ const RTMEmsLogAmvPage = () => {
       setLoadedDate(targetDate)
       setEditedValues({})
       setRetryCellKeys({})
+      setShowWarningConfirmation(false)
     } catch (error) {
       console.error(error)
       setLoadError('Unable to load average monthly values.')
@@ -391,10 +410,11 @@ const RTMEmsLogAmvPage = () => {
       setPreviousRows([])
       setEditedValues({})
       setRetryCellKeys({})
+      setShowWarningConfirmation(false)
     } finally {
       setIsLoading(false)
     }
-  }, [targetDate])
+  }, [selectedPreviousDayDate, targetDate])
 
   useEffect(() => {
     void loadRows()
@@ -405,12 +425,13 @@ const RTMEmsLogAmvPage = () => {
     [currentRows, previousRows],
   )
   const cells = useMemo(
-    () => buildCells(basisByKey, editedValues, retryCellKeys),
-    [basisByKey, editedValues, retryCellKeys],
+    () => buildCells(basisByKey, editedValues, retryCellKeys, selectedDateIsToday),
+    [basisByKey, editedValues, retryCellKeys, selectedDateIsToday],
   )
   const warnings = warningDeduplicate(cells.map((cell) => cell.warning))
   const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))
   const dirtyCells = cells.filter((cell) => cell.dirty)
+  const saveWarnings = warningDeduplicate(dirtyCells.map((cell) => cell.warning))
   const hasPendingChanges = dirtyCells.length > 0
   const isReadOnly = !canManage || selectedDateIsPast || isLoading || isSaving
   const saveDisabled =
@@ -426,6 +447,7 @@ const RTMEmsLogAmvPage = () => {
   const resetChanges = () => {
     setEditedValues({})
     setRetryCellKeys({})
+    setShowWarningConfirmation(false)
   }
 
   const buildSaveRequestsForCell = (cell: RtmAmvCell): RtmEmsLogAmvSaveRequest[] => {
@@ -446,7 +468,7 @@ const RTMEmsLogAmvPage = () => {
         const retrievalDate =
           currentRow?.retrievalDate ??
           previousRow?.retrievalDate ??
-          (previousRow ? selectedPreviousMonthDate : targetDate)
+          (previousRow ? selectedPreviousDayDate : targetDate)
 
         return {
           species,
@@ -539,11 +561,11 @@ const RTMEmsLogAmvPage = () => {
       }
 
       setNotification({
-        kind: warnings.length > 0 ? 'warning' : 'success',
+        kind: saveWarnings.length > 0 ? 'warning' : 'success',
         title: 'Average monthly values updated',
         subtitle:
-          warnings.length > 0
-            ? `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'} with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`
+          saveWarnings.length > 0
+            ? `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'} with ${saveWarnings.length} warning${saveWarnings.length === 1 ? '' : 's'}.`
             : `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'}.`,
       })
       await loadRows()
@@ -557,6 +579,15 @@ const RTMEmsLogAmvPage = () => {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const requestSave = () => {
+    if (saveWarnings.length > 0) {
+      setShowWarningConfirmation(true)
+      return
+    }
+
+    void saveChanges()
   }
 
   return (
@@ -598,8 +629,11 @@ const RTMEmsLogAmvPage = () => {
               <>
                 <InformationFilled size={16} aria-hidden="true" />
                 <span>
-                  Comparing {formatMonth(loadedDate)} against{' '}
-                  {formatMonth(selectedPreviousMonthDate)}
+                  {selectedDateIsToday
+                    ? `Comparing ${formatEffectiveDate(loadedDate)} against ${formatEffectiveDate(selectedPreviousDayDate)}`
+                    : selectedDateIsFuture
+                      ? 'Future date selected'
+                      : 'Past date selected'}
                 </span>
               </>
             )}
@@ -607,16 +641,12 @@ const RTMEmsLogAmvPage = () => {
         </section>
 
         {selectedDateIsPast && (
-          <div className="admin-upload-validation admin-upload-validation--info" role="status">
-            <InformationFilled
-              size={20}
-              className="admin-upload-validation__icon"
-              aria-hidden="true"
-            />
-            <div className="admin-upload-validation__content">
-              <h3>Past date selected</h3>
-              <p>Values before {today} are read-only.</p>
+          <div className="rtm-amv-warning-panel" role="status">
+            <div className="rtm-amv-warning-panel__header">
+              <WarningAltFilled size={20} aria-hidden="true" />
+              <h2>Past date selected</h2>
             </div>
+            <p>Values for {formatEffectiveDate(targetDate)} are read-only.</p>
           </div>
         )}
 
@@ -710,6 +740,7 @@ const RTMEmsLogAmvPage = () => {
                                 className="rtm-amv-cell-input"
                                 inputMode="decimal"
                                 aria-label={`${column.label} grade ${grade}`}
+                                placeholder={cell.hasCurrentValue ? undefined : '-'}
                                 value={cell.value}
                                 disabled={isReadOnly}
                                 onChange={(event) => updateCellValue(cell.key, event.target.value)}
@@ -755,7 +786,7 @@ const RTMEmsLogAmvPage = () => {
               className="admin-upload-fspts-action-button"
               renderIcon={isSaving ? CheckmarkFilled : Save}
               onClick={() => {
-                void saveChanges()
+                requestSave()
               }}
               disabled={saveDisabled}
             >
@@ -764,6 +795,42 @@ const RTMEmsLogAmvPage = () => {
           </div>
         </div>
       </Column>
+
+      {showWarningConfirmation && (
+        <ComposedModal
+          open
+          preventCloseOnClickOutside
+          onClose={() => setShowWarningConfirmation(false)}
+        >
+          <ModalHeader
+            label="Average monthly values"
+            title="Confirm daily value changes"
+            buttonOnClick={() => setShowWarningConfirmation(false)}
+          />
+          <ModalBody>
+            <p>These changes differ from yesterday&apos;s values.</p>
+            <ul>
+              {saveWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </ModalBody>
+          <ModalFooter>
+            <Button kind="secondary" onClick={() => setShowWarningConfirmation(false)}>
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              onClick={() => {
+                setShowWarningConfirmation(false)
+                void saveChanges()
+              }}
+            >
+              Save warned changes
+            </Button>
+          </ModalFooter>
+        </ComposedModal>
+      )}
 
       {notification && (
         <Column sm={4} md={8} lg={16}>

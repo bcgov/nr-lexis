@@ -23,8 +23,18 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearch = vi.mocked(searchRtmEmsLogAmv)
 const mockedSave = vi.mocked(saveRtmEmsLogAmv)
 
-const TARGET_DATE = '2099-07-09'
-const PREVIOUS_MONTH_DATE = '2099-06-01'
+const toLocalIsoDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+const dateOffsetFromToday = (offset: number) => {
+  const date = new Date()
+  date.setDate(date.getDate() + offset)
+  return toLocalIsoDate(date)
+}
+
+const TARGET_DATE = dateOffsetFromToday(0)
+const PREVIOUS_DAY_DATE = dateOffsetFromToday(-1)
+const FUTURE_DATE = dateOffsetFromToday(1)
 
 const row = (
   species: string,
@@ -44,14 +54,14 @@ const row = (
 })
 
 const previousRows: RtmEmsLogAmvRow[] = [
-  row('BA', 'A', 'O', PREVIOUS_MONTH_DATE, 10.25),
-  row('BA', 'A', 'S', PREVIOUS_MONTH_DATE, 10.25),
-  row('WH', 'A', 'O', PREVIOUS_MONTH_DATE, 30.75),
-  row('LO', 'A', 'O', PREVIOUS_MONTH_DATE, 30.75),
-  row('YE', 'A', 'O', PREVIOUS_MONTH_DATE, 30.75),
-  row('WH', 'A', 'S', PREVIOUS_MONTH_DATE, 30.75),
-  row('LO', 'A', 'S', PREVIOUS_MONTH_DATE, 30.75),
-  row('YE', 'A', 'S', PREVIOUS_MONTH_DATE, 30.75),
+  row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
+  row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
+  row('WH', 'A', 'O', PREVIOUS_DAY_DATE, 30.75),
+  row('LO', 'A', 'O', PREVIOUS_DAY_DATE, 30.75),
+  row('YE', 'A', 'O', PREVIOUS_DAY_DATE, 30.75),
+  row('WH', 'A', 'S', PREVIOUS_DAY_DATE, 30.75),
+  row('LO', 'A', 'S', PREVIOUS_DAY_DATE, 30.75),
+  row('YE', 'A', 'S', PREVIOUS_DAY_DATE, 30.75),
 ]
 
 const currentRows: RtmEmsLogAmvRow[] = [
@@ -70,25 +80,29 @@ const mockSearchRows = ({
     if (filters.retrievalDate === TARGET_DATE) {
       return current
     }
-    if (filters.retrievalDate === PREVIOUS_MONTH_DATE) {
+    if (filters.retrievalDate === PREVIOUS_DAY_DATE) {
       return previous
     }
     return []
   })
 }
 
-const selectTargetDate = async () => {
+const selectTargetDate = async (date = TARGET_DATE) => {
   fireEvent.change(await screen.findByLabelText('Effective date'), {
-    target: { value: TARGET_DATE },
+    target: { value: date },
   })
   await waitFor(() =>
     expect(mockedSearch).toHaveBeenCalledWith(
       expect.objectContaining({
-        retrievalDate: TARGET_DATE,
-        updateDate: TARGET_DATE,
+        retrievalDate: date,
+        updateDate: date,
       }),
     ),
   )
+}
+
+const confirmDailyWarningSave = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(await screen.findByRole('button', { name: 'Save warned changes' }))
 }
 
 describe('RTM EMS Log AMV actions', () => {
@@ -127,18 +141,21 @@ describe('RTM EMS Log AMV actions', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(24)
     expect(screen.getByLabelText('Hemlock grade A')).toHaveValue('20.5')
     expect(screen.getByLabelText('Balsam grade A')).toHaveValue('')
-    expect(screen.getByText(/Balsam grade A had a previous month value/)).toBeVisible()
-    expect(screen.getByText(/Hemlock grade A is newly populated/)).toBeVisible()
+    expect(screen.getByLabelText('Balsam grade A')).toHaveAttribute('placeholder', '-')
+    expect(screen.getByText(/Balsam grade A had a value yesterday/)).toBeVisible()
+    expect(
+      screen.getByText(/Hemlock grade A is newly populated; it was blank yesterday/),
+    ).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
-  it('saves edited cells for both growth types using the previous month row when available', async () => {
+  it("saves daily cells for both growth types using yesterday's row when available", async () => {
     const user = userEvent.setup()
     mockSearchRows({
       current: [],
       previous: [
-        row('BA', 'A', 'O', PREVIOUS_MONTH_DATE, 10.25),
-        row('BA', 'A', 'S', PREVIOUS_MONTH_DATE, 10.25),
+        row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
+        row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
       ],
     })
 
@@ -154,7 +171,7 @@ describe('RTM EMS Log AMV actions', () => {
       species: 'BA',
       grade: 'A',
       growthIndicator: 'O',
-      retrievalDate: PREVIOUS_MONTH_DATE,
+      retrievalDate: PREVIOUS_DAY_DATE,
       updateDate: TARGET_DATE,
       newValue: 11,
       saveMode: 'update',
@@ -163,7 +180,7 @@ describe('RTM EMS Log AMV actions', () => {
       species: 'BA',
       grade: 'A',
       growthIndicator: 'S',
-      retrievalDate: PREVIOUS_MONTH_DATE,
+      retrievalDate: PREVIOUS_DAY_DATE,
       updateDate: TARGET_DATE,
       newValue: 11,
       saveMode: 'update',
@@ -181,6 +198,9 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByText(/Pine grade A is newly populated/)).toBeVisible()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Confirm daily value changes')).toBeVisible()
+    expect(mockedSave).not.toHaveBeenCalled()
+    await confirmDailyWarningSave(user)
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(6))
     expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
@@ -256,6 +276,7 @@ describe('RTM EMS Log AMV actions', () => {
 
     await user.type(screen.getByLabelText('Balsam grade A'), '11')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await confirmDailyWarningSave(user)
 
     expect(await screen.findByText(/Past effective dates are read-only/)).toBeVisible()
   })
@@ -291,6 +312,7 @@ describe('RTM EMS Log AMV actions', () => {
     await user.clear(input)
     await user.type(input, '12')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await confirmDailyWarningSave(user)
 
     expect(await screen.findByText('Second growth row could not be saved.')).toBeVisible()
     await waitFor(() => {
@@ -298,6 +320,21 @@ describe('RTM EMS Log AMV actions', () => {
       expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
     })
     expect(mockedSave).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not show daily warnings or confirmation for future dates', async () => {
+    const user = userEvent.setup()
+    mockSearchRows({ current: [], previous: [] })
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate(FUTURE_DATE)
+
+    await user.type(screen.getByLabelText('Balsam grade A'), '11')
+    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Confirm daily value changes')).not.toBeInTheDocument()
   })
 
   it('blocks blank, over-precise and out-of-range table values before save', async () => {
@@ -350,7 +387,7 @@ describe('RTM EMS Log AMV actions', () => {
         }),
       ),
     )
-    expect(screen.getByText('Past date selected')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Past date selected' })).toBeVisible()
     const input = screen.getByLabelText('Balsam grade A')
     expect(input).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
