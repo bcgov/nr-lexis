@@ -10,6 +10,9 @@ parameters:
   - name: ZONE
     description: PR number, 'test', or 'prod'
     required: true
+  - name: SLOT
+    description: Route hostname slot — PR % 50 for previews, or test/prod
+    required: true
   - name: IMAGE_TAG
     description: Container image tag (PR number, 'test', or 'prod')
     value: latest
@@ -42,6 +45,12 @@ parameters:
     required: true
   - name: COGNITO_USERINFO_URI
     required: true
+  - name: KEYCLOAK_ISSUER_URI
+    description: Optional Keycloak realm issuer URI for machine-to-machine service clients
+    value: ""
+  - name: KEYCLOAK_ADDITIONAL_ISSUER_URIS
+    description: Optional comma-separated additional Keycloak issuer URIs, such as API Services Portal apigw
+    value: ""
   - name: IDENTITY_LOOKUP_BASE_URL
     required: true
   - name: DATABASE_HOST
@@ -67,6 +76,9 @@ parameters:
   - name: CLAMAV_DEFINITION_MIRROR
     description: Freshclam definition mirror
     value: https://clamav-mirror.apps.silver.devops.gov.bc.ca
+  - name: DOMAIN
+    description: Cluster apps domain (no leading dot)
+    value: apps.gold.devops.gov.bc.ca
 
 objects:
   - apiVersion: apps/v1
@@ -143,6 +155,10 @@ objects:
                   value: ${AWS_COGNITO_ISSUER_URI}
                 - name: COGNITO_USERINFO_URI
                   value: ${COGNITO_USERINFO_URI}
+                - name: KEYCLOAK_ISSUER_URI
+                  value: ${KEYCLOAK_ISSUER_URI}
+                - name: KEYCLOAK_ADDITIONAL_ISSUER_URIS
+                  value: ${KEYCLOAK_ADDITIONAL_ISSUER_URIS}
                 - name: IDENTITY_LOOKUP_BASE_URL
                   value: ${IDENTITY_LOOKUP_BASE_URL}
                 - name: DATABASE_HOST
@@ -259,6 +275,24 @@ objects:
         - name: 8080-tcp
           port: 8080
           protocol: TCP
+
+  - apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      name: ${NAME}-backend-api-${ZONE}
+      labels:
+        app: ${NAME}-backend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    spec:
+      host: ${NAME}-api-${SLOT}.${DOMAIN}
+      to:
+        kind: Service
+        name: ${NAME}-backend-${ZONE}
+      port:
+        targetPort: 8080-tcp
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
 
   - apiVersion: autoscaling/v2
     kind: HorizontalPodAutoscaler
@@ -484,6 +518,9 @@ objects:
             - podSelector:
                 matchLabels:
                   app: ${NAME}-frontend-${ZONE}
+            - namespaceSelector:
+                matchLabels:
+                  network.openshift.io/policy-group: ingress
             - namespaceSelector:
                 matchLabels:
                   network.openshift.io/policy-group: monitoring

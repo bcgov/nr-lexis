@@ -1252,6 +1252,12 @@ body {
   margin-top: 0.75rem;
 }
 
+.provincial-application-create-link {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
 .legacy-form-fieldset {
   min-inline-size: 0;
   margin: 0 0 1rem;
@@ -2127,6 +2133,10 @@ body {
   gap: 0.5rem;
 }
 
+.admin-upload-review-supplement {
+  margin-block-end: 1rem;
+}
+
 .admin-upload-preview-footer-actions {
   padding-block-end: 0;
 }
@@ -2543,14 +2553,17 @@ body {
 }
 
 .detail-document-upload .admin-upload-panel .cds--text-area__wrapper {
-  inline-size: auto;
-  max-inline-size: none;
+  display: block;
+  inline-size: min(100%, 50rem);
+  max-inline-size: 50rem;
   margin: 1rem 0 0;
 }
 
 .detail-document-upload .admin-upload-panel .cds--text-area {
+  block-size: 4rem;
   inline-size: 100%;
   max-inline-size: 100%;
+  min-block-size: 4rem;
 }
 
 .detail-document-upload__invoice-fields {

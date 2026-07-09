@@ -261,7 +261,9 @@ const canShowRoleScopedLink = (
   const hasFederalSubmitter = hasFederalSubmitterRole(roles)
   const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
   const hasProvincialStaffRole =
-    hasRole(roles, 'APPLICATION_APPROVER') || hasRole(roles, 'EXEMPTION_APPROVER')
+    hasRole(roles, 'READ_ONLY') ||
+    hasRole(roles, 'APPLICATION_APPROVER') ||
+    hasRole(roles, 'EXEMPTION_APPROVER')
 
   return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
 }

@@ -351,8 +351,6 @@ const APPLICATION_DOCUMENT_DELETE_ROLES = new Set([
 const APPLICATION_DOCUMENT_INDUSTRY_ROLES = new Set([
   'PROVINCIAL_SUBMITTER',
   'LEXIS_PROVINCIAL_SUBMITTER',
-  'FEDERAL_SUBMITTER',
-  'LEXIS_FEDERAL_SUBMITTER',
 ])
 
 const isIndustryApplicationRole = (role: string): boolean => {
@@ -360,9 +358,7 @@ const isIndustryApplicationRole = (role: string): boolean => {
   return (
     APPLICATION_DOCUMENT_INDUSTRY_ROLES.has(normalizedRole) ||
     normalizedRole.startsWith('PROVINCIAL_SUBMITTER_') ||
-    normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_') ||
-    normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
-    normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
+    normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_')
   )
 }
 

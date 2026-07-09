@@ -31,6 +31,8 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_PACKAGES_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
   private static final String FIND_FEDERAL_PERMIT_BY_APP =
       LEXIS_GROUP_3_PACKAGE + "FIND_F_PERM_DET_BY_APP(?,?)";
 
@@ -178,6 +180,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
+    List<String> packages = findPackageNumbersByApplicationNumber(applicationNumber);
     Optional<FederalApplicationPermitDto> permit = findPermitByApplicationNumber(applicationNumber);
     FederalApplicationDetailDto dto = detail.get();
     return Optional.of(
@@ -196,7 +199,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
             dto.receivedDate(),
             dto.listingDate(),
             dto.readOnly(),
-            dto.packages(),
+            packages,
             dto.remarks(),
             dto.offers(),
             permit.orElse(null),
@@ -216,6 +219,21 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
             dto.applicationVolume(),
             dto.endUse(),
             dto.author()));
+  }
+
+  public List<String> findPackageNumbersByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+            FIND_PACKAGES_BY_APPLICATION,
+            cs -> cs.setString(1, applicationNumber.toString()),
+            2,
+            rs -> getString(rs, "PACKAGE_NUMBER"))
+        .stream()
+        .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
+        .toList();
   }
 
   public Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber) {

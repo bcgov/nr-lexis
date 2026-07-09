@@ -150,6 +150,25 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  @Transactional(readOnly = true)
+  public SubmissionImportValidationResult validateApplicationSubmissionImport(
+      CreateApplicationRequest applicationRequest,
+      PackageMutationRequest packageRequest,
+      List<ScaleMutationRequest> scaleRequests) {
+    CreateApplicationRequest application = normalizeCreateApplicationRequest(applicationRequest);
+    PackageMutationRequest packageMutation = normalizePackageMutationRequest(packageRequest);
+    List<ScaleMutationRequest> scales =
+        scaleRequests == null
+            ? List.of()
+            : scaleRequests.stream().map(this::normalizeScaleMutationRequest).toList();
+
+    List<String> errors = new ArrayList<>(validateCreateApplication(application));
+    errors.addAll(validatePackageImportPreflight(packageMutation, application));
+    errors.addAll(validateScaleImportPreflight(scales, packageMutation, application));
+    return new SubmissionImportValidationResult(errors.isEmpty(), errors, List.of());
+  }
+
+  @Override
   @Transactional
   public CreateApplicationResult addApplication(CreateApplicationRequest request, String userId) {
     CreateApplicationRequest normalized = normalizeCreateApplicationRequest(request);
@@ -741,7 +760,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private PackageMutationRequest normalizePackageMutationRequest(PackageMutationRequest request) {
     if (request == null) {
       return new PackageMutationRequest(
-          null, null, null, null, null, null, null, null, null, null, null, null, List.of());
+          null, null, null, null, null, null, null, null, null, null, null, null, null, null, List.of());
     }
     return new PackageMutationRequest(
         trimToNull(request.packageNumber()),
@@ -752,6 +771,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.averageDiameter(),
         trimToNull(request.status()),
         request.comments() == null ? "" : request.comments(),
+        request.federalPermitNumber(),
+        request.reservePermitNumber(),
         trimToNull(request.reprocessed()),
         trimToNull(request.ageClass()),
         trimToNull(request.productType()),
@@ -892,6 +913,81 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
   }
 
+  private List<String> validatePackageImportPreflight(
+      PackageMutationRequest packageRequest, CreateApplicationRequest applicationRequest) {
+    List<String> errors = validatePackageMutation(packageRequest, false, null);
+    if (packageRequest.volume() != null && applicationRequest.applicationVolume() != null) {
+      BigDecimal requestedPackageVolume = roundOneDecimal(packageRequest.volume());
+      BigDecimal applicationVolume = roundOneDecimal(applicationRequest.applicationVolume());
+      if (requestedPackageVolume.compareTo(applicationVolume) > 0) {
+        errors.add(
+            "The total package volume must not exceed the application volume ("
+                + applicationVolume.toPlainString()
+                + ").");
+      }
+    }
+    return errors;
+  }
+
+  private List<String> validateScaleImportPreflight(
+      List<ScaleMutationRequest> scaleRequests,
+      PackageMutationRequest packageRequest,
+      CreateApplicationRequest applicationRequest) {
+    List<String> errors = new ArrayList<>();
+    BigDecimal scaleVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    for (ScaleMutationRequest scaleRequest : scaleRequests) {
+      validateScaleImportPreflight(scaleRequest, applicationRequest, errors);
+      if (scaleRequest.volume() != null) {
+        scaleVolume =
+            scaleVolume.add(roundOneDecimal(scaleRequest.volume())).setScale(1, RoundingMode.HALF_UP);
+      }
+    }
+
+    if (packageRequest.volume() != null && scaleVolume.compareTo(roundOneDecimal(packageRequest.volume())) > 0) {
+      errors.add(
+          "The scale volume total must not exceed the package volume ("
+              + roundOneDecimal(packageRequest.volume()).toPlainString()
+              + ").");
+    }
+    return errors;
+  }
+
+  private void validateScaleImportPreflight(
+      ScaleMutationRequest request, CreateApplicationRequest applicationRequest, List<String> errors) {
+    if (trimToNull(request.packageNumber()) == null) {
+      errors.add(required("scale package number"));
+    }
+    String timberMark = trimToNull(request.timberMark());
+    if (timberMark == null) {
+      errors.add(required("timber mark"));
+    } else {
+      validateTimberMarkForContext(
+          timberMark,
+          applicationRequest.orgUnitNumber(),
+          applicationRequest.productTypeCode(),
+          applicationRequest.jurisdictionCode(),
+          errors);
+    }
+    if (trimToNull(request.gradeCode()) == null) {
+      errors.add(required("grade code"));
+    }
+    if (trimToNull(request.speciesCode()) == null) {
+      errors.add(required("species code"));
+    }
+
+    if (request.pieces() == null || request.pieces() < 0) {
+      errors.add("The scale pieces must be greater than or equal to 0.");
+    } else if (request.pieces() > 999_999_999L) {
+      errors.add("The scale pieces must be less than 999999999.");
+    }
+
+    if (request.volume() == null || request.volume() < 0.0d) {
+      errors.add("The scale volume must be greater than or equal to 0.");
+    } else if (request.volume() > 99_999.9d) {
+      errors.add("The scale volume must be less than 99999.9.");
+    }
+  }
+
   private boolean hasAtMostOneDecimal(Double value) {
     if (value == null) {
       return false;
@@ -944,8 +1040,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.averageDiameter() == null && existing != null ? existing.averageDiameter() : request.averageDiameter(),
         request.comments(),
         existing == null ? null : existing.packageFee(),
-        existing == null ? null : existing.federalPermitNumber(),
-        existing == null ? null : existing.reservePermitNumber(),
+        request.federalPermitNumber() == null && existing != null
+            ? existing.federalPermitNumber()
+            : request.federalPermitNumber(),
+        request.reservePermitNumber() == null && existing != null
+            ? existing.reservePermitNumber()
+            : request.reservePermitNumber(),
         firstNonBlank(request.status(), existing == null ? null : existing.packageStatusCode()),
         firstNonBlank(request.ageClass(), existing == null ? null : existing.growthTypeCode()),
         firstNonBlank(request.productType(), existing == null ? null : existing.productTypeCode()),
@@ -1120,18 +1220,29 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return;
     }
 
-    Optional<ApplicationDetailsRpcRepository.TimberMarkRow> baseMark =
-        repository.findTimberMark(timberMark);
     Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
         request.applicationNumber() == null
             ? Optional.empty()
             : repository.findApplicationUpdateRecord(request.applicationNumber());
 
-    if (application
-        .map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productTypeCode)
-        .map(TextUtils::trimToNull)
-        .map(EXPORT_PRODUCT_TYPE_UNMANUFACTURED::equals)
-        .orElse(false)
+    validateTimberMarkForContext(
+        timberMark,
+        application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::orgUnitNumber).orElse(null),
+        application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productTypeCode).orElse(null),
+        application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::jurisdictionCode).orElse(null),
+        errors);
+  }
+
+  private void validateTimberMarkForContext(
+      String timberMark,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      List<String> errors) {
+    Optional<ApplicationDetailsRpcRepository.TimberMarkRow> baseMark =
+        repository.findTimberMark(timberMark);
+
+    if (EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(trimToNull(productTypeCode))
         && UNMANUFACTURED_TIMBER_MARK.equalsIgnoreCase(timberMark)) {
       return;
     }
@@ -1142,10 +1253,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     ApplicationDetailsRpcRepository.TimberMarkRow mark = baseMark.get();
-    if (application.isPresent()) {
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord app = application.get();
+    if (orgUnitNumber != null) {
       Optional<ApplicationDetailsRpcRepository.TimberMarkRow> regionalMark =
-          repository.findTimberMarkByOrgUnit(timberMark, app.orgUnitNumber());
+          repository.findTimberMarkByOrgUnit(timberMark, orgUnitNumber);
       if (regionalMark.isEmpty()) {
         errors.add("Timber mark " + timberMark + " is not valid for this region.");
         return;
@@ -1153,13 +1263,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       mark = regionalMark.get();
 
       String fileTypeCode = trimToNull(mark.fileTypeCode());
-      String jurisdictionCode = trimToNull(app.jurisdictionCode());
-      if (JURISDICTION_PROVINCIAL.equals(jurisdictionCode)
+      String normalizedJurisdictionCode = trimToNull(jurisdictionCode);
+      if (JURISDICTION_PROVINCIAL.equals(normalizedJurisdictionCode)
           && ("B08".equals(fileTypeCode) || "B14".equals(fileTypeCode))) {
         errors.add("Timber mark " + timberMark + " is not valid for provincial applications.");
         return;
       }
-      if (JURISDICTION_FEDERAL.equals(jurisdictionCode) && !"B08".equals(fileTypeCode)) {
+      if (JURISDICTION_FEDERAL.equals(normalizedJurisdictionCode) && !"B08".equals(fileTypeCode)) {
         errors.add("Timber mark " + timberMark + " is not valid for federal applications.");
         return;
       }
@@ -1374,6 +1484,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return normalized == null ? DESCRIPTION_NOT_ON_FILE : normalized;
   }
 
+  private String normalizeCreateApplicationStatus(String applicationStatusCode) {
+    String normalized = trimToNull(applicationStatusCode);
+    return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+  }
+
   private String truncateRemarkForDisplay(String remark) {
     String normalized = remark == null ? "" : remark;
     String value =
@@ -1422,6 +1537,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         trimToNull(input.ownerClientLocationCode()),
         trimToNull(input.exemptionNumber()),
         trimToNull(input.exemptionReasonCode()),
+        normalizeCreateApplicationStatus(input.applicationStatusCode()),
         applicantTypeCode,
         input.orgUnitNumber(),
         trimToNull(input.productTypeCode()),
@@ -1512,6 +1628,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application exemption reason code"));
     } else if (exemptionReasonCode.length() > 1) {
       errors.add(maxLength("application exemption reason code", 1));
+    }
+
+    String applicationStatusCode = trimToNull(request.applicationStatusCode());
+    if (applicationStatusCode != null && !isEditableApplicationDetailStatus(applicationStatusCode)) {
+      errors.add("The application status code must be NEW or APP.");
     }
 
     String ownerClientLocationCode = trimToNull(request.ownerClientLocationCode());
@@ -1734,7 +1855,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.ownerClientLocationCode(),
         request.exemptionNumber(),
         request.exemptionReasonCode(),
-        APPLICATION_STATUS_NEW,
+        firstNonBlank(request.applicationStatusCode(), APPLICATION_STATUS_NEW),
         request.applicantTypeCode(),
         request.orgUnitNumber(),
         request.productTypeCode(),

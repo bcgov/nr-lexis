@@ -69,11 +69,11 @@ describe('Auth Provider Role Matrix', () => {
     window.config = {}
   })
 
-  it('normalizes modern submitter roles without routing to retired summary', async () => {
+  it('does not normalize unknown submitter roles', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\tester',
-      roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345', 'LEXIS_FEDERAL_SUBMITTER'],
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345', 'LEXIS_UNKNOWN_SUBMITTER'],
       welcomeTarget: null,
       legacyPath: null,
       grantedActions: ['/summary'],
@@ -83,7 +83,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent(
-      'PROVINCIAL_SUBMITTER_00012345,FEDERAL_SUBMITTER',
+      'PROVINCIAL_SUBMITTER_00012345,LEXIS_UNKNOWN_SUBMITTER',
     )
     expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
@@ -382,19 +382,14 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('routes federal submitters to federal search instead of application submission upload', async () => {
+  it('does not route unknown roles to federal search', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'bceid\\federal',
-      roles: ['LEXIS_FEDERAL_SUBMITTER'],
+      roles: ['LEXIS_UNKNOWN_ROLE'],
       welcomeTarget: null,
       legacyPath: null,
-      grantedActions: [
-        '/federalApplicationSearch',
-        '/federalApplicationDetails',
-        'uploadApplicationSubmission',
-        'viewFederalApplication',
-      ],
+      grantedActions: [],
     })
 
     renderProbe([
@@ -405,10 +400,10 @@ describe('Auth Provider Role Matrix', () => {
     ])
     await waitForAuthLoad()
 
-    expect(screen.getByTestId('roles')).toHaveTextContent('FEDERAL_SUBMITTER')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal')
-    expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
+    expect(screen.getByTestId('roles')).toHaveTextContent('LEXIS_UNKNOWN_ROLE')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('false')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
   })

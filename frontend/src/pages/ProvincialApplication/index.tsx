@@ -162,7 +162,6 @@ const ProvincialApplicationPage = () => {
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
-  const canUploadApplicationSubmission = canPerform('uploadApplicationSubmission')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -588,17 +587,14 @@ const ProvincialApplicationPage = () => {
               >
                 Create exemption for Selected Applications
               </Button>
-              {canCreateApplication && (
+            </div>
+            {canCreateApplication && (
+              <div className="provincial-application-create-link">
                 <Link className="cds--link" to="/provincial/application/create">
                   Add Application
                 </Link>
-              )}
-              {canUploadApplicationSubmission && (
-                <Link className="cds--link" to="/provincial/application/upload">
-                  Upload Application Submission
-                </Link>
-              )}
-            </div>
+              </div>
+            )}
             {exemptionStatus && (
               <AppNotification
                 className="legacy-inline-notification"

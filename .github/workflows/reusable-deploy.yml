@@ -59,6 +59,12 @@ on:
       lexis_prod_rtm_only:
         description: Enables PROD RTM-only feature restriction when set to true
         required: false
+      keycloak_sa_client_id:
+        description: Keycloak service-account client id used to sync LEXIS client scopes
+        required: false
+      keycloak_sa_client_secret:
+        description: Keycloak service-account client secret used to sync LEXIS client scopes
+        required: false
 
     outputs:
       triggered:
@@ -78,9 +84,23 @@ jobs:
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
     env:
+      DATABASE_HOST: ${{ secrets.database_host }}
+      DATABASE_SERVICE_NAME: ${{ secrets.database_service_name }}
+      DATABASE_USER: ${{ secrets.database_user }}
       DATABASE_PASSWORD: ${{ secrets.database_password }}
       KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
+      KC_SA_CLIENT_ID: ${{ secrets.keycloak_sa_client_id }}
+      LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
     steps:
+      - uses: actions/checkout@v6
+
+      - name: Ensure Keycloak client scopes
+        if: ${{ env.KC_SA_CLIENT_ID != '' }}
+        env:
+          KEYCLOAK_ISSUER_URI: ${{ vars.KEYCLOAK_ISSUER_URI }}
+          KC_SA_CLIENT_SECRET: ${{ secrets.keycloak_sa_client_secret }}
+        run: ./.github/scripts/ensure-keycloak-scopes.sh
+
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
         with:
@@ -92,21 +112,24 @@ jobs:
           overwrite: true
           parameters:
             -p ZONE="${{ inputs.target }}"
+            -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p MIN_REPLICAS="${{ inputs.backend_replicas }}"
             -p MAX_REPLICAS="${{ inputs.backend_replicas }}"
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
             -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
+            -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
+            -p KEYCLOAK_ADDITIONAL_ISSUER_URIS="${{ vars.KEYCLOAK_ADDITIONAL_ISSUER_URIS }}"
             -p IDENTITY_LOOKUP_BASE_URL="${{ vars.IDENTITY_LOOKUP_BASE_URL }}"
-            -p DATABASE_HOST="${{ secrets.database_host }}"
-            -p DATABASE_SERVICE_NAME="${{ secrets.database_service_name }}"
-            -p DATABASE_USER="${{ secrets.database_user }}"
+            -p DATABASE_HOST="$DATABASE_HOST"
+            -p DATABASE_SERVICE_NAME="$DATABASE_SERVICE_NAME"
+            -p DATABASE_USER="$DATABASE_USER"
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
             -p CLAMAV_REGISTRY="ghcr.io/${{ github.repository }}/clamav"
             -p CLAMAV_IMAGE_TAG="${{ inputs.tag }}"
-            -p LEXIS_PROD_RTM_ONLY="${{ secrets.lexis_prod_rtm_only || 'false' }}"
+            -p LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
           triggers: ${{ inputs.triggers }}
 
   frontend:
@@ -119,6 +142,8 @@ jobs:
       contents: read
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
+    env:
+      LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
     steps:
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
@@ -143,7 +168,7 @@ jobs:
             -p VITE_REDIRECT_SIGN_OUT="${{ vars.VITE_REDIRECT_SIGN_OUT }}"
             -p VITE_COGNITO_SCOPES="${{ vars.VITE_COGNITO_SCOPES }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
-            -p VITE_LEXIS_PROD_RTM_ONLY="${{ secrets.lexis_prod_rtm_only || 'false' }}"
+            -p VITE_LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
             -p VITE_FAM_MANAGE_URL="${{ vars.VITE_FAM_MANAGE_URL }}"
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"

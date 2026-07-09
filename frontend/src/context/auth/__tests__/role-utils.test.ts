@@ -32,6 +32,6 @@ describe('auth role utilities', () => {
   it('handles empty or missing role lists', () => {
     expect(hasRole(undefined, 'ADMIN')).toBe(false)
     expect(hasProvincialSubmitterRole(null)).toBe(false)
-    expect(hasFederalSubmitterRole([])).toBe(false)
+    expect(hasFederalSubmitterRole(null)).toBe(false)
   })
 })

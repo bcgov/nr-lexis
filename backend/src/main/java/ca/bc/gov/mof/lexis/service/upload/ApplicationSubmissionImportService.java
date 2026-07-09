@@ -2,9 +2,13 @@ package ca.bc.gov.mof.lexis.service.upload;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionSummaryDto;
+import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository;
+import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository.FederalPermitDetailRecord;
+import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository.FederalPermitDetailRow;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationResult;
@@ -13,15 +17,20 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Pack
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageValidityItem;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.SubmissionImportValidationResult;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -42,6 +51,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,6 +71,8 @@ public class ApplicationSubmissionImportService {
 
   private static final String ESF_NAMESPACE = "http://www.for.gov.bc.ca/schema/esf";
   private static final String LEXIS_NAMESPACE = "http://www.for.gov.bc.ca/schema/lexis";
+  private static final String SOAP_11_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/";
+  private static final String SOAP_12_NAMESPACE = "http://www.w3.org/2003/05/soap-envelope";
   private static final String XML_SCHEMA_INSTANCE_NAMESPACE = XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI;
   private static final String EXPECTED_ESF_SCHEMA_LOCATION =
       "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd";
@@ -85,6 +97,8 @@ public class ApplicationSubmissionImportService {
   private static final String PROVINCIAL_JURISDICTION = "P";
   private static final String FEDERAL_JURISDICTION = "F";
   private static final String APPLICATION_STATUS_ACTIVE = "A";
+  private static final String APPLICATION_STATUS_APPROVED = "APP";
+  private static final String APPLICATION_STATUS_NEW = "NEW";
   private static final String EXEMPTION_REASON_SURPLUS = "S";
   private static final String APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICANT_TYPE_AGENT = "A";
@@ -94,6 +108,35 @@ public class ApplicationSubmissionImportService {
   private static final String AGE_CLASS_SECOND_GROWTH = "S";
   private static final int MAX_USER_REFERENCE_LENGTH = 50;
   private static final String DEFAULT_IMPORT_REMARK = "Created from LEXIS application submission.";
+  private static final String FEDERAL_ESF_ONLY_ERROR =
+      "ESF legacy LEXIS submissions must be federal. Provincial applications must be uploaded in modern LEXIS.";
+  private static final String FEDERAL_ENDPOINT_ONLY_ERROR =
+      "Federal submission endpoint only accepts jurisdictionCode=F. Provincial applications must use the modern provincial upload path.";
+  private static final String OTHER_PORT_OF_EXPORT_CODE = "OT";
+  private static final FederalPermitField FEDERAL_PERMIT_ISSUE_DATE_FIELD =
+      new FederalPermitField("permit issue date", List.of("permitIssueDate", "exportPermitIssueDate"));
+  private static final FederalPermitField FEDERAL_PERMIT_COUNTRY_FIELD =
+      new FederalPermitField("destination country", List.of("destinationCountry", "exportCountryCode"));
+  private static final FederalPermitField FEDERAL_PERMIT_TRANSPORT_TYPE_FIELD =
+      new FederalPermitField(
+          "transport type", List.of("transportType", "transportTypeCode", "exportTransportTypeCode"));
+  private static final FederalPermitField FEDERAL_PERMIT_TRANSPORT_NAME_FIELD =
+      new FederalPermitField("transport name", List.of("transportName"));
+  private static final FederalPermitField FEDERAL_PERMIT_ESTIMATED_SHIPPING_DATE_FIELD =
+      new FederalPermitField("estimated shipping date", List.of("estimatedShippingDate", "shippingDate"));
+  private static final FederalPermitField FEDERAL_PERMIT_PORT_OF_EXPORT_FIELD =
+      new FederalPermitField("port of export", List.of("portOfExport", "exportPortOfExportCode"));
+  private static final FederalPermitField FEDERAL_PERMIT_OTHER_PORT_OF_EXPORT_FIELD =
+      new FederalPermitField("other port of export", List.of("otherPortOfExport"));
+  private static final List<FederalPermitField> FEDERAL_PERMIT_FIELDS =
+      List.of(
+          FEDERAL_PERMIT_ISSUE_DATE_FIELD,
+          FEDERAL_PERMIT_COUNTRY_FIELD,
+          FEDERAL_PERMIT_TRANSPORT_TYPE_FIELD,
+          FEDERAL_PERMIT_TRANSPORT_NAME_FIELD,
+          FEDERAL_PERMIT_ESTIMATED_SHIPPING_DATE_FIELD,
+          FEDERAL_PERMIT_PORT_OF_EXPORT_FIELD,
+          FEDERAL_PERMIT_OTHER_PORT_OF_EXPORT_FIELD);
   private static final Pattern UNTERMINATED_XML_TAG_PATTERN =
       Pattern.compile("The element type \"([^\"]+)\" must be terminated by the matching end-tag \"</([^\"]+)>\"\\.");
   private static final Pattern INCOMPLETE_XML_TAG_PATTERN =
@@ -116,6 +159,7 @@ public class ApplicationSubmissionImportService {
           Map.entry("RWC", 1910L));
 
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
+  private final ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider;
   private final Clock clock;
   private final ObjectMapper objectMapper;
   private final VirusScanService virusScanService;
@@ -124,24 +168,39 @@ public class ApplicationSubmissionImportService {
   public ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ObjectMapper objectMapper,
-      VirusScanService virusScanService) {
+      VirusScanService virusScanService,
+      ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider) {
     this(
         applicationDetailsServiceProvider,
         Clock.systemDefaultZone(),
         objectMapper,
-        virusScanService);
+        virusScanService,
+        federalPermitDetailRepositoryProvider);
   }
 
   ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider, Clock clock) {
-    this(applicationDetailsServiceProvider, clock, new ObjectMapper(), VirusScanService.NO_OP);
+    this(applicationDetailsServiceProvider, clock, new ObjectMapper(), VirusScanService.NO_OP, null);
   }
 
   ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       Clock clock,
       ObjectMapper objectMapper) {
-    this(applicationDetailsServiceProvider, clock, objectMapper, VirusScanService.NO_OP);
+    this(applicationDetailsServiceProvider, clock, objectMapper, VirusScanService.NO_OP, null);
+  }
+
+  ApplicationSubmissionImportService(
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
+      Clock clock,
+      ObjectMapper objectMapper,
+      ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider) {
+    this(
+        applicationDetailsServiceProvider,
+        clock,
+        objectMapper,
+        VirusScanService.NO_OP,
+        federalPermitDetailRepositoryProvider);
   }
 
   ApplicationSubmissionImportService(
@@ -149,10 +208,20 @@ public class ApplicationSubmissionImportService {
       Clock clock,
       ObjectMapper objectMapper,
       VirusScanService virusScanService) {
+    this(applicationDetailsServiceProvider, clock, objectMapper, virusScanService, null);
+  }
+
+  ApplicationSubmissionImportService(
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
+      Clock clock,
+      ObjectMapper objectMapper,
+      VirusScanService virusScanService,
+      ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider) {
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
+    this.federalPermitDetailRepositoryProvider = federalPermitDetailRepositoryProvider;
     this.clock = clock;
     this.objectMapper = objectMapper;
-    this.virusScanService = virusScanService;
+    this.virusScanService = virusScanService == null ? VirusScanService.NO_OP : virusScanService;
   }
 
   public ApplicationSubmissionImportResultDto validateApplicationSubmission(MultipartFile file) {
@@ -160,6 +229,16 @@ public class ApplicationSubmissionImportService {
   }
 
   public ApplicationSubmissionImportResultDto validateApplicationSubmission(MultipartFile file, String userReference) {
+    return validateApplicationSubmission(file, userReference, false);
+  }
+
+  private ApplicationSubmissionImportResultDto validateApplicationSubmission(
+      MultipartFile file, String userReference, boolean federalOnly) {
+    return validateApplicationSubmission(file, userReference, federalOnly, FEDERAL_ESF_ONLY_ERROR);
+  }
+
+  private ApplicationSubmissionImportResultDto validateApplicationSubmission(
+      MultipartFile file, String userReference, boolean federalOnly, String federalOnlyError) {
     String fileName = resolveFileName(file);
     long fileSize = file == null ? 0L : file.getSize();
     String normalizedUserReference = normalizeUserReference(userReference);
@@ -179,8 +258,22 @@ public class ApplicationSubmissionImportService {
     }
 
     ParsedSubmission submission = parsedUpload.submission();
-    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
+    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission, true);
     ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
+    ApplicationSubmissionImportResultDto federalOnlyRejection =
+        federalOnlyRejection(
+            fileName,
+            fileSize,
+            submission,
+            warnings,
+            submissionSummary,
+            normalizedUserReference,
+            federalOnly,
+            federalOnlyError);
+    if (federalOnlyRejection != null) {
+      return federalOnlyRejection;
+    }
+
     ApplicationDetailsRpcService applicationDetailsService =
         applicationDetailsServiceProvider.getIfAvailable();
     if (applicationDetailsService == null) {
@@ -195,6 +288,15 @@ public class ApplicationSubmissionImportService {
 
     ApplicationDetailsRpcService.PackageValidityItem packageValidity =
         applicationDetailsService.isPackageValid(submission.packageNumber());
+    if (packageValidity == null) {
+      return rejected(
+          fileName,
+          fileSize,
+          List.of("Package validation is unavailable for LEXIS application submission."),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
+    }
     if (!packageValidity.valid()) {
       return rejected(
           fileName,
@@ -208,9 +310,10 @@ public class ApplicationSubmissionImportService {
           normalizedUserReference);
     }
 
+    CreateApplicationRequest applicationRequest =
+        toCreateApplicationRequest(submission, LocalDate.now(clock), normalizedUserReference);
     CreateApplicationResult applicationValidation =
-        applicationDetailsService.validateApplication(
-            toCreateApplicationRequest(submission, LocalDate.now(clock), normalizedUserReference));
+        applicationDetailsService.validateApplication(applicationRequest);
     if (!applicationValidation.valid()) {
       return rejected(
           fileName,
@@ -219,6 +322,24 @@ public class ApplicationSubmissionImportService {
           warnings,
           submissionSummary,
           normalizedUserReference);
+    }
+
+    SubmissionImportValidationResult importValidation =
+        applicationDetailsService.validateApplicationSubmissionImport(
+            applicationRequest,
+            toPackageMutationRequest(submission, null, normalizedUserReference),
+            toScaleMutationRequests(submission, null));
+    if (importValidation != null) {
+      warnings = mergeWarnings(warnings, importValidation.warnings());
+      if (!importValidation.valid()) {
+        return rejected(
+            fileName,
+            fileSize,
+            resultErrors(importValidation.errors(), "The LEXIS application submission could not be validated."),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
     }
 
     return new ApplicationSubmissionImportResultDto(
@@ -240,6 +361,37 @@ public class ApplicationSubmissionImportService {
         submissionSummary);
   }
 
+  public ApplicationSubmissionImportResultDto validateApplicationSubmission(
+      byte[] submissionData, String originalFileName, String userReference) {
+    return validateApplicationSubmission(
+        new InMemoryMultipartFile(submissionData, originalFileName), userReference);
+  }
+
+  public ApplicationSubmissionImportResultDto validateFederalApplicationSubmission(
+      byte[] submissionData, String originalFileName, String userReference) {
+    return validateApplicationSubmission(
+        new InMemoryMultipartFile(submissionData, originalFileName), userReference, true);
+  }
+
+  public ApplicationSubmissionImportResultDto validateDedicatedFederalApplicationSubmission(
+      byte[] submissionData, String originalFileName, String userReference) {
+    return validateApplicationSubmission(
+        new InMemoryMultipartFile(submissionData, originalFileName),
+        userReference,
+        true,
+        FEDERAL_ENDPOINT_ONLY_ERROR);
+  }
+
+  public ApplicationSubmissionImportResultDto validateFederalApplicationSubmission(
+      MultipartFile file, String userReference) {
+    return validateApplicationSubmission(file, userReference, true);
+  }
+
+  public ApplicationSubmissionImportResultDto validateDedicatedFederalApplicationSubmission(
+      MultipartFile file, String userReference) {
+    return validateApplicationSubmission(file, userReference, true, FEDERAL_ENDPOINT_ONLY_ERROR);
+  }
+
   @Transactional
   public ApplicationSubmissionImportResultDto importApplicationSubmission(MultipartFile file, String userId) {
     return importApplicationSubmission(file, userId, null);
@@ -247,6 +399,16 @@ public class ApplicationSubmissionImportService {
 
   @Transactional
   public ApplicationSubmissionImportResultDto importApplicationSubmission(MultipartFile file, String userId, String userReference) {
+    return importApplicationSubmission(file, userId, userReference, false);
+  }
+
+  private ApplicationSubmissionImportResultDto importApplicationSubmission(
+      MultipartFile file, String userId, String userReference, boolean federalOnly) {
+    return importApplicationSubmission(file, userId, userReference, federalOnly, FEDERAL_ESF_ONLY_ERROR);
+  }
+
+  private ApplicationSubmissionImportResultDto importApplicationSubmission(
+      MultipartFile file, String userId, String userReference, boolean federalOnly, String federalOnlyError) {
     String fileName = resolveFileName(file);
     long fileSize = file == null ? 0L : file.getSize();
     String normalizedUserReference = normalizeUserReference(userReference);
@@ -266,8 +428,21 @@ public class ApplicationSubmissionImportService {
     }
 
     ParsedSubmission submission = parsedUpload.submission();
-    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
+    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission, false);
     ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
+    ApplicationSubmissionImportResultDto federalOnlyRejection =
+        federalOnlyRejection(
+            fileName,
+            fileSize,
+            submission,
+            warnings,
+            submissionSummary,
+            normalizedUserReference,
+            federalOnly,
+            federalOnlyError);
+    if (federalOnlyRejection != null) {
+      return federalOnlyRejection;
+    }
 
     ApplicationDetailsRpcService applicationDetailsService =
         applicationDetailsServiceProvider.getIfAvailable();
@@ -283,7 +458,16 @@ public class ApplicationSubmissionImportService {
 
     ApplicationDetailsRpcService.PackageValidityItem packageValidity =
         applicationDetailsService.isPackageValid(submission.packageNumber());
-    if (packageValidity != null && !packageValidity.valid()) {
+    if (packageValidity == null) {
+      return rejected(
+          fileName,
+          fileSize,
+          List.of("Package validation is unavailable for LEXIS application submission."),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
+    }
+    if (!packageValidity.valid()) {
       return rejected(
           fileName,
           fileSize,
@@ -297,6 +481,19 @@ public class ApplicationSubmissionImportService {
     }
 
     LocalDate importDate = LocalDate.now(clock);
+    FederalPermitDetailRepository federalPermitDetailRepository = null;
+    if (submission.federalPermitDetail().present()) {
+      federalPermitDetailRepository = federalPermitDetailRepository();
+      if (federalPermitDetailRepository == null) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of("Federal permit detail persistence is unavailable for this LEXIS submission."),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
+    }
 
     CreateApplicationResult applicationResult =
         applicationDetailsService.addApplication(
@@ -313,9 +510,29 @@ public class ApplicationSubmissionImportService {
     }
 
     Long applicationNumber = applicationResult.applicationNumber();
+    Long federalPermitNumber = null;
+    if (submission.federalPermitDetail().present()) {
+      Optional<FederalPermitDetailRow> federalPermitResult =
+          federalPermitDetailRepository.insertFederalPermitDetail(
+              toFederalPermitDetailRecord(submission, importDate, userId));
+      federalPermitNumber = federalPermitResult.map(FederalPermitDetailRow::permitNumber).orElse(null);
+      if (federalPermitNumber == null || federalPermitNumber < 1) {
+        markRollbackOnly();
+        return rejected(
+            fileName,
+            fileSize,
+            List.of("Federal permit detail could not be saved."),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
+    }
+
     PackagePersistenceResult packageResult =
         applicationDetailsService.addPackage(
-            toPackageMutationRequest(submission, applicationNumber, normalizedUserReference), userId);
+            toPackageMutationRequest(
+                submission, applicationNumber, federalPermitNumber, normalizedUserReference),
+            userId);
     if (!packageResult.valid()) {
       markRollbackOnly();
       return rejected(
@@ -328,18 +545,9 @@ public class ApplicationSubmissionImportService {
     }
 
     int importedScales = 0;
-    for (ScaleLine scale : submission.scaleLines()) {
+    for (ScaleMutationRequest scaleRequest : toScaleMutationRequests(submission, applicationNumber)) {
       ScalePersistenceResult scaleResult =
-          applicationDetailsService.addScaleToPackage(
-              new ScaleMutationRequest(
-                  scale.timberMark(),
-                  submission.packageNumber(),
-                  scale.gradeCode(),
-                  scale.speciesCode(),
-                  applicationNumber,
-                  scale.pieces(),
-                  scale.volume()),
-              userId);
+          applicationDetailsService.addScaleToPackage(scaleRequest, userId);
       if (!scaleResult.valid()) {
         markRollbackOnly();
         return rejected(
@@ -354,24 +562,62 @@ public class ApplicationSubmissionImportService {
     }
 
     return new ApplicationSubmissionImportResultDto(
-        UPLOAD_TYPE,
-        fileName,
-        fileSize,
-        ACCEPTED,
-        "LEXIS application submission created application "
-            + applicationNumber
-            + " with package "
-            + submission.packageNumber()
-            + " and "
-            + importedScales
-            + " scale rows.",
-        applicationNumber,
-        submission.packageNumber(),
-        importedScales,
-        List.of(),
-        warnings,
-        normalizedUserReference,
-        submissionSummary);
+            UPLOAD_TYPE,
+            fileName,
+            fileSize,
+            ACCEPTED,
+            "LEXIS application submission created application "
+                + applicationNumber
+                + " with package "
+                + submission.packageNumber()
+                + " and "
+                + importedScales
+                + " scale rows.",
+            applicationNumber,
+            submission.packageNumber(),
+            importedScales,
+            List.of(),
+            warnings,
+            normalizedUserReference,
+            submissionSummary)
+        .withFederalPermitNumber(federalPermitNumber);
+  }
+
+  @Transactional
+  public ApplicationSubmissionImportResultDto importApplicationSubmission(
+      byte[] submissionData, String originalFileName, String userId, String userReference) {
+    return importApplicationSubmission(
+        new InMemoryMultipartFile(submissionData, originalFileName), userId, userReference);
+  }
+
+  @Transactional
+  public ApplicationSubmissionImportResultDto importFederalApplicationSubmission(
+      byte[] submissionData, String originalFileName, String userId, String userReference) {
+    return importApplicationSubmission(
+        new InMemoryMultipartFile(submissionData, originalFileName), userId, userReference, true);
+  }
+
+  @Transactional
+  public ApplicationSubmissionImportResultDto importDedicatedFederalApplicationSubmission(
+      byte[] submissionData, String originalFileName, String userId, String userReference) {
+    return importApplicationSubmission(
+        new InMemoryMultipartFile(submissionData, originalFileName),
+        userId,
+        userReference,
+        true,
+        FEDERAL_ENDPOINT_ONLY_ERROR);
+  }
+
+  @Transactional
+  public ApplicationSubmissionImportResultDto importFederalApplicationSubmission(
+      MultipartFile file, String userId, String userReference) {
+    return importApplicationSubmission(file, userId, userReference, true);
+  }
+
+  @Transactional
+  public ApplicationSubmissionImportResultDto importDedicatedFederalApplicationSubmission(
+      MultipartFile file, String userId, String userReference) {
+    return importApplicationSubmission(file, userId, userReference, true, FEDERAL_ENDPOINT_ONLY_ERROR);
   }
 
   private ParsedUpload parseUploadedLexisSubmission(MultipartFile file, String fileName, long fileSize) {
@@ -406,13 +652,25 @@ public class ApplicationSubmissionImportService {
   }
 
   private List<String> buildImportWarnings(
-      UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission) {
+      UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission, boolean validationOnly) {
     List<String> warnings = new ArrayList<>(uploadedSubmission.warnings());
     if (submission.applicationStatusCode() != null) {
+      if (FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())) {
+        warnings.add(
+            "Source application status "
+                + submission.applicationStatusCode()
+                + " will be applied to the imported federal application.");
+      } else {
+        warnings.add(
+            "Source application status "
+                + submission.applicationStatusCode()
+                + " was ignored; application submissions create new applications.");
+      }
+    }
+    if (validationOnly && submission.federalPermitDetail().present()) {
       warnings.add(
-          "Source application status "
-              + submission.applicationStatusCode()
-              + " was ignored; application submissions create new applications.");
+          "Federal payload includes permit/shipping fields; validation does not persist them. "
+              + "Create import will persist a federal permit detail row and link the returned permit number to the package.");
     }
     return warnings;
   }
@@ -583,6 +841,7 @@ public class ApplicationSubmissionImportService {
     } catch (SAXParseException ex) {
       throw new ApplicationSubmissionImportException(List.of(formatXmlParseError(ex)));
     }
+
     return parseDocument(document);
   }
 
@@ -687,6 +946,8 @@ public class ApplicationSubmissionImportService {
     }
     if (applicationStatusCode == null) {
       errors.add("Application status code is required.");
+    } else if (FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
+      validateFederalApplicationStatusCode(jurisdictionCode, applicationStatusCode, errors);
     } else if (!APPLICATION_STATUS_ACTIVE.equals(applicationStatusCode)) {
       errors.add("Application status code must be A for electronic LEXIS submissions.");
     }
@@ -721,6 +982,10 @@ public class ApplicationSubmissionImportService {
 
     ParsedSpeciesEndUseSort parsedSpeciesEndUseSort =
         parseSpeciesEndUseSort(speciesEndUseSort, errors);
+    FederalPermitDetail federalPermitDetail =
+        FEDERAL_JURISDICTION.equals(jurisdictionCode)
+            ? federalPermitDetail(lexisSubmission, errors)
+            : FederalPermitDetail.empty();
 
     if (!errors.isEmpty()) {
       throw new ApplicationSubmissionImportException(errors);
@@ -749,7 +1014,151 @@ public class ApplicationSubmissionImportService {
         product.averageLogVolume(),
         parsedSpeciesEndUseSort.endUseCode(),
         parsedSpeciesEndUseSort.speciesCodes(),
-        product.scaleLines());
+        product.scaleLines(),
+        federalPermitDetail);
+  }
+
+  private void validateFederalApplicationStatusCode(
+      String jurisdictionCode, String applicationStatusCode, List<String> errors) {
+    if (!FEDERAL_JURISDICTION.equals(jurisdictionCode) || applicationStatusCode == null) {
+      return;
+    }
+    if (toFederalCreateApplicationStatusCode(applicationStatusCode) == null) {
+      errors.add("Federal application status code must be A, APP, N, or NEW.");
+    }
+  }
+
+  private String toFederalCreateApplicationStatusCode(String applicationStatusCode) {
+    if (applicationStatusCode == null) {
+      return null;
+    }
+    return switch (applicationStatusCode) {
+      case "A", APPLICATION_STATUS_APPROVED -> APPLICATION_STATUS_APPROVED;
+      case "N", APPLICATION_STATUS_NEW -> APPLICATION_STATUS_NEW;
+      default -> null;
+    };
+  }
+
+  private FederalPermitDetail federalPermitDetail(Element lexisSubmission, List<String> errors) {
+    Map<FederalPermitField, String> values = new LinkedHashMap<>();
+    boolean present = false;
+    for (FederalPermitField field : FEDERAL_PERMIT_FIELDS) {
+      String value = federalPermitText(lexisSubmission, field, errors);
+      if (value != null) {
+        present = true;
+        values.put(field, value);
+      }
+    }
+    if (!present) {
+      return FederalPermitDetail.empty();
+    }
+
+    LocalDate permitIssueDate =
+        requiredFederalPermitDate(values.get(FEDERAL_PERMIT_ISSUE_DATE_FIELD), "permit issue date", errors);
+    LocalDate estimatedShippingDate =
+        requiredFederalPermitDate(
+            values.get(FEDERAL_PERMIT_ESTIMATED_SHIPPING_DATE_FIELD), "estimated shipping date", errors);
+    String countryCode =
+        requiredFederalPermitText(values.get(FEDERAL_PERMIT_COUNTRY_FIELD), "destination country", errors);
+    String transportTypeCode =
+        requiredFederalPermitText(values.get(FEDERAL_PERMIT_TRANSPORT_TYPE_FIELD), "transport type", errors);
+    String transportName =
+        requiredFederalPermitText(values.get(FEDERAL_PERMIT_TRANSPORT_NAME_FIELD), "transport name", errors);
+    String portOfExportCode =
+        requiredFederalPermitText(values.get(FEDERAL_PERMIT_PORT_OF_EXPORT_FIELD), "port of export", errors);
+    String otherPortOfExport = trimToNull(values.get(FEDERAL_PERMIT_OTHER_PORT_OF_EXPORT_FIELD));
+    if (OTHER_PORT_OF_EXPORT_CODE.equalsIgnoreCase(nullToEmpty(portOfExportCode)) && otherPortOfExport == null) {
+      errors.add("Federal permit other port of export is required when port of export is OT.");
+    }
+    return new FederalPermitDetail(
+        true,
+        permitIssueDate,
+        estimatedShippingDate,
+        otherPortOfExport,
+        transportName,
+        transportTypeCode,
+        countryCode,
+        portOfExportCode);
+  }
+
+  private String federalPermitText(Element root, FederalPermitField field, List<String> errors) {
+    List<String> values = new ArrayList<>();
+    for (String localName : field.localNames()) {
+      List<Element> matches = descendants(root, localName);
+      if (matches.size() > 1) {
+        errors.add("Federal permit " + field.label() + " field " + localName + " must appear only once.");
+      }
+      for (Element match : matches) {
+        String value = normalizeFederalPermitAliasValue(field, match.getTextContent());
+        if (value != null) {
+          values.add(value);
+        }
+      }
+    }
+    if (values.isEmpty()) {
+      return null;
+    }
+    String first = values.get(0);
+    if (values.stream().distinct().count() > 1L) {
+      errors.add("Federal permit " + field.label() + " aliases must not contain conflicting values.");
+    }
+    return first;
+  }
+
+  private String normalizeFederalPermitAliasValue(FederalPermitField field, String value) {
+    String normalized = trimToNull(value);
+    if (normalized == null) {
+      return null;
+    }
+    if (field == FEDERAL_PERMIT_ISSUE_DATE_FIELD || field == FEDERAL_PERMIT_ESTIMATED_SHIPPING_DATE_FIELD) {
+      LocalDate parsed = parseIsoOrLegacyDate(normalized);
+      return parsed == null ? normalized : parsed.toString();
+    }
+    if (field == FEDERAL_PERMIT_COUNTRY_FIELD
+        || field == FEDERAL_PERMIT_TRANSPORT_TYPE_FIELD
+        || field == FEDERAL_PERMIT_PORT_OF_EXPORT_FIELD) {
+      return normalized.toUpperCase(Locale.ROOT);
+    }
+    return normalized;
+  }
+
+  private List<Element> descendants(Element root, String localName) {
+    if (root == null) {
+      return List.of();
+    }
+    List<Element> matches = new ArrayList<>();
+    var nodes = root.getElementsByTagNameNS("*", localName);
+    for (int index = 0; index < nodes.getLength(); index++) {
+      if (nodes.item(index) instanceof Element element) {
+        matches.add(element);
+      }
+    }
+    return matches;
+  }
+
+  private LocalDate requiredFederalPermitDate(String value, String label, List<String> errors) {
+    String normalized = trimToNull(value);
+    if (normalized == null) {
+      errors.add("Federal permit " + label + " is required.");
+      return null;
+    }
+    LocalDate parsed = parseIsoOrLegacyDate(normalized);
+    if (parsed == null) {
+      errors.add("A valid federal permit " + label + " is required.");
+    }
+    return parsed;
+  }
+
+  private String requiredFederalPermitText(String value, String label, List<String> errors) {
+    String normalized = trimToNull(value);
+    if (normalized == null) {
+      errors.add("Federal permit " + label + " is required.");
+    }
+    return normalized;
+  }
+
+  private String nullToEmpty(String value) {
+    return value == null ? "" : value;
   }
 
   private ParsedSubmission parseGeoJson(byte[] geoJsonBytes) throws ApplicationSubmissionImportException {
@@ -826,7 +1235,7 @@ public class ApplicationSubmissionImportService {
           applicantElement,
           "applicantDetails",
           applicantDetails,
-          List.of("clientNumber", "clientLocnCode", "name"));
+          List.of("clientNumber", "clientLocnCode", "clientLocationCode", "name"));
     }
 
     JsonNode applicantContact =
@@ -991,7 +1400,7 @@ public class ApplicationSubmissionImportService {
 
   private Element resolveLexisSubmissionPayload(Element root, List<String> errors) {
     if (root == null) {
-      errors.add("The XML root must be a LEXIS submission payload or ESF submission envelope.");
+      errors.add("The XML root must be a LEXIS submission payload, ESF submission envelope, or SOAP envelope.");
       return null;
     }
     if ("LexisSubmission".equals(root.getLocalName()) && LEXIS_NAMESPACE.equals(root.getNamespaceURI())) {
@@ -1008,17 +1417,230 @@ public class ApplicationSubmissionImportService {
               "The XML file must include ESF submission content.",
               "The XML file must include only one ESF submission content section.",
               errors);
-      return submissionContent == null
-          ? null
-          : requiredChild(
-              submissionContent,
-              LEXIS_NAMESPACE,
-              "LexisSubmission",
-              "The XML file must include a LEXIS submission payload.",
-              "The XML file must include only one LEXIS submission payload.",
-              errors);
+      return submissionContent == null ? null : lexisPayloadFromSubmissionContent(submissionContent, errors);
     }
-    errors.add("The XML root must be a LEXIS submission payload or ESF submission envelope.");
+    if ("Envelope".equals(root.getLocalName()) && isSoapNamespace(root.getNamespaceURI())) {
+      return lexisPayloadFromSoapEnvelope(root, errors);
+    }
+    errors.add("The XML root must be a LEXIS submission payload, ESF submission envelope, or SOAP envelope.");
+    return null;
+  }
+
+  private Element lexisPayloadFromSoapEnvelope(Element envelope, List<String> errors) {
+    Element body = soapBody(envelope);
+    if (body == null) {
+      errors.add("SOAP envelope must include a Body.");
+      return null;
+    }
+
+    Element esfPayload =
+        singlePayloadDescendant(
+            body,
+            ESF_NAMESPACE,
+            "ESFSubmission",
+            "SOAP envelope must include only one ESF submission envelope.",
+            errors);
+    if (esfPayload != null) {
+      return resolveLexisSubmissionPayload(esfPayload, errors);
+    }
+
+    Element lexisPayload =
+        singlePayloadDescendant(
+            body,
+            LEXIS_NAMESPACE,
+            "LexisSubmission",
+            "SOAP envelope must include only one LEXIS submission payload.",
+            errors);
+    if (lexisPayload != null) {
+      return resolveLexisSubmissionPayload(lexisPayload, errors);
+    }
+
+    List<Element> submissionDataElements = descendants(body, "submissionData");
+    if (submissionDataElements.size() > 1) {
+      errors.add("SOAP envelope must include only one submissionData element.");
+    }
+    if (!submissionDataElements.isEmpty()) {
+      int errorCount = errors.size();
+      Element submissionDataPayload = lexisPayloadFromSoapCarrier(submissionDataElements.get(0), errors);
+      if (submissionDataPayload != null) {
+        return submissionDataPayload;
+      }
+      if (errors.size() == errorCount) {
+        errors.add("SOAP submissionData must contain a LEXIS submission payload.");
+      }
+      return null;
+    }
+
+    List<String> firstCandidateErrors = new ArrayList<>();
+    for (Element candidate : elementDescendants(body)) {
+      List<String> candidateErrors = new ArrayList<>();
+      Element payload = lexisPayloadFromSoapCarrier(candidate, candidateErrors);
+      if (payload != null) {
+        return payload;
+      }
+      if (firstCandidateErrors.isEmpty() && !candidateErrors.isEmpty()) {
+        firstCandidateErrors.addAll(candidateErrors);
+      }
+    }
+
+    if (firstCandidateErrors.isEmpty()) {
+      errors.add("SOAP envelope must include a LEXIS submission payload.");
+    } else {
+      errors.addAll(firstCandidateErrors);
+    }
+    return null;
+  }
+
+  private Element lexisPayloadFromSoapCarrier(Element carrier, List<String> errors) {
+    Element resolvedCarrier = soapReferencedElement(carrier);
+    if (resolvedCarrier != null) {
+      carrier = resolvedCarrier;
+    }
+
+    Element esfPayload =
+        singlePayloadDescendant(
+            carrier,
+            ESF_NAMESPACE,
+            "ESFSubmission",
+            "SOAP payload carrier must include only one ESF submission envelope.",
+            errors);
+    if (esfPayload != null) {
+      return resolveLexisSubmissionPayload(esfPayload, errors);
+    }
+
+    Element lexisPayload =
+        singlePayloadDescendant(
+            carrier,
+            LEXIS_NAMESPACE,
+            "LexisSubmission",
+            "SOAP payload carrier must include only one LEXIS submission payload.",
+            errors);
+    if (lexisPayload != null) {
+      return resolveLexisSubmissionPayload(lexisPayload, errors);
+    }
+
+    String xmlText = trimToNull(carrier.getTextContent());
+    if (xmlText == null || !xmlText.startsWith("<")) {
+      return null;
+    }
+    return lexisPayloadFromXmlText(xmlText, "SOAP payload XML text", errors);
+  }
+
+  private Element lexisPayloadFromSubmissionContent(Element submissionContent, List<String> errors) {
+    List<Element> lexisSubmissions = children(submissionContent, LEXIS_NAMESPACE, "LexisSubmission");
+    if (lexisSubmissions.size() > 1) {
+      errors.add("The XML file must include only one LEXIS submission payload.");
+    }
+    if (!lexisSubmissions.isEmpty()) {
+      return lexisSubmissions.get(0);
+    }
+
+    int errorCount = errors.size();
+    Element escapedPayload = lexisPayloadFromEscapedSubmissionContent(submissionContent, errors);
+    if (escapedPayload != null) {
+      return escapedPayload;
+    }
+
+    if (errors.size() == errorCount) {
+      errors.add("The XML file must include a LEXIS submission payload.");
+    }
+    return null;
+  }
+
+  private Element lexisPayloadFromEscapedSubmissionContent(Element submissionContent, List<String> errors) {
+    String escapedXml = trimToNull(submissionContent.getTextContent());
+    if (escapedXml == null || !escapedXml.startsWith("<")) {
+      return null;
+    }
+    return lexisPayloadFromXmlText(escapedXml, "ESF submission content text", errors);
+  }
+
+  private Element lexisPayloadFromXmlText(String xmlText, String label, List<String> errors) {
+    Document document;
+    try (InputStream inputStream = new ByteArrayInputStream(xmlText.getBytes(StandardCharsets.UTF_8))) {
+      var builder = secureDocumentBuilderFactory().newDocumentBuilder();
+      builder.setErrorHandler(new QuietXmlErrorHandler());
+      document = builder.parse(inputStream);
+    } catch (SAXParseException ex) {
+      errors.add("The " + label + " is not well-formed XML. " + formatXmlParseError(ex));
+      return null;
+    } catch (Exception ex) {
+      LOGGER.warn("LEXIS {} failed while parsing: {}", label, ex.getMessage());
+      errors.add("The " + label + " could not be parsed as XML.");
+      return null;
+    }
+
+    Element root = document.getDocumentElement();
+    return resolveLexisSubmissionPayload(root, errors);
+  }
+
+  private Element soapBody(Element envelope) {
+    for (Node child = envelope.getFirstChild(); child != null; child = child.getNextSibling()) {
+      if (child instanceof Element element
+          && "Body".equals(element.getLocalName())
+          && isSoapNamespace(element.getNamespaceURI())) {
+        return element;
+      }
+    }
+    return null;
+  }
+
+  private boolean isSoapNamespace(String namespace) {
+    return SOAP_11_NAMESPACE.equals(namespace) || SOAP_12_NAMESPACE.equals(namespace);
+  }
+
+  private Element singlePayloadDescendant(
+      Element root, String namespace, String localName, String duplicateMessage, List<String> errors) {
+    if (root == null) {
+      return null;
+    }
+    var nodes = root.getElementsByTagNameNS(namespace, localName);
+    if (nodes.getLength() > 1) {
+      errors.add(duplicateMessage);
+    }
+    return nodes.getLength() == 0 || !(nodes.item(0) instanceof Element element) ? null : element;
+  }
+
+  private Element firstDescendant(Element root, String namespace, String localName) {
+    if (root == null) {
+      return null;
+    }
+    var nodes = root.getElementsByTagNameNS(namespace, localName);
+    return nodes.getLength() == 0 || !(nodes.item(0) instanceof Element element) ? null : element;
+  }
+
+  private List<Element> elementDescendants(Element root) {
+    if (root == null) {
+      return List.of();
+    }
+    List<Element> elements = new ArrayList<>();
+    collectElementDescendants(root, elements);
+    return elements;
+  }
+
+  private void collectElementDescendants(Element root, List<Element> elements) {
+    for (Node child = root.getFirstChild(); child != null; child = child.getNextSibling()) {
+      if (child instanceof Element element) {
+        elements.add(element);
+        collectElementDescendants(element, elements);
+      }
+    }
+  }
+
+  private Element soapReferencedElement(Element element) {
+    if (element == null || element.getOwnerDocument() == null) {
+      return null;
+    }
+    String href = trimToNull(element.getAttribute("href"));
+    if (href == null || !href.startsWith("#") || href.length() == 1) {
+      return null;
+    }
+    String id = href.substring(1);
+    for (Element candidate : elementDescendants(element.getOwnerDocument().getDocumentElement())) {
+      if (id.equals(candidate.getAttribute("id")) || id.equals(candidate.getAttribute("xml:id"))) {
+        return candidate;
+      }
+    }
     return null;
   }
 
@@ -1085,9 +1707,11 @@ public class ApplicationSubmissionImportService {
     factory.setNamespaceAware(true);
     factory.setXIncludeAware(false);
     factory.setExpandEntityReferences(false);
+    factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
     factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
     factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
     factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+    factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
     factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
     factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
     return factory;
@@ -1202,9 +1826,7 @@ public class ApplicationSubmissionImportService {
       Element partyDetails, Element partyContact, String label, List<String> errors) {
     String clientNumber =
         normalizeClientNumber(text(partyDetails, "clientNumber", label + " client number", errors));
-    String clientLocationCode =
-        normalizeClientLocation(
-            text(partyDetails, "clientLocnCode", label + " client location", errors));
+    String clientLocationCode = clientLocationCode(partyDetails, label, errors);
     String partyName = text(partyDetails, "name", label + " name", errors);
     String contactName = contactName(partyContact, partyName, label, errors);
 
@@ -1272,7 +1894,7 @@ public class ApplicationSubmissionImportService {
 
   private ParsedProduct parseHarvestedSummaryProduct(
       Element productDetail, List<String> errors) {
-    String packageNumber = text(productDetail, "boomNumber", "Boom/package number", errors);
+    String packageNumber = packageNumber(productDetail, errors);
     validatePackageNumber(packageNumber, "Boom/package number", errors);
     List<ScaleLine> scaleLines = parseScaleLines(productDetail, errors);
     if (scaleLines.isEmpty() && errors.isEmpty()) {
@@ -1291,7 +1913,7 @@ public class ApplicationSubmissionImportService {
       List<Element> timberRows,
       String label,
       List<String> errors) {
-    String packageNumber = text(productDetail, "boomNumber", "Boom/package number", errors);
+    String packageNumber = packageNumber(productDetail, errors);
     List<String> timberMarks = parseTimberMarks(timberRows, label, errors);
     if (packageNumber == null && !timberMarks.isEmpty()) {
       packageNumber = timberMarks.get(0);
@@ -1385,6 +2007,10 @@ public class ApplicationSubmissionImportService {
 
   private CreateApplicationRequest toCreateApplicationRequest(
       ParsedSubmission submission, LocalDate importDate, String userReference) {
+    String applicationStatusCode =
+        FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())
+            ? toFederalCreateApplicationStatusCode(submission.applicationStatusCode())
+            : null;
     return new CreateApplicationRequest(
         submission.federalApplicationNumber(),
         importDate,
@@ -1400,6 +2026,7 @@ public class ApplicationSubmissionImportService {
         submission.ownerClientLocationCode(),
         null,
         submission.exemptionReasonCode(),
+        applicationStatusCode,
         submission.applicantTypeCode(),
         submission.orgUnitNumber(),
         submission.productTypeCode(),
@@ -1416,6 +2043,14 @@ public class ApplicationSubmissionImportService {
 
   private PackageMutationRequest toPackageMutationRequest(
       ParsedSubmission submission, Long applicationNumber, String userReference) {
+    return toPackageMutationRequest(submission, applicationNumber, null, userReference);
+  }
+
+  private PackageMutationRequest toPackageMutationRequest(
+      ParsedSubmission submission,
+      Long applicationNumber,
+      Long federalPermitNumber,
+      String userReference) {
     return new PackageMutationRequest(
         submission.packageNumber(),
         null,
@@ -1425,11 +2060,53 @@ public class ApplicationSubmissionImportService {
         submission.averageDiameter(),
         DEFAULT_PACKAGE_STATUS,
         importRemark(userReference),
+        federalPermitNumber,
+        null,
         DEFAULT_REPROCESSED_INDICATOR,
         submission.ageClass(),
         submission.productTypeCode(),
         submission.endUseCode(),
         submission.speciesCodes());
+  }
+
+  private List<ScaleMutationRequest> toScaleMutationRequests(
+      ParsedSubmission submission, Long applicationNumber) {
+    return submission.scaleLines().stream()
+        .map(
+            scale ->
+                new ScaleMutationRequest(
+                    scale.timberMark(),
+                    submission.packageNumber(),
+                    scale.gradeCode(),
+                    scale.speciesCode(),
+                    applicationNumber,
+                    scale.pieces(),
+                    scale.volume()))
+        .toList();
+  }
+
+  private FederalPermitDetailRecord toFederalPermitDetailRecord(
+      ParsedSubmission submission, LocalDate importDate, String userId) {
+    FederalPermitDetail detail = submission.federalPermitDetail();
+    return new FederalPermitDetailRecord(
+        detail.permitIssueDate(),
+        detail.estimatedShippingDate(),
+        detail.otherPortOfExport(),
+        detail.transportName(),
+        userId,
+        detail.transportTypeCode(),
+        detail.countryCode(),
+        detail.portOfExportCode(),
+        importDate,
+        submission.orgUnitNumber(),
+        submission.ownerClientLocationCode(),
+        submission.ownerClientNumber());
+  }
+
+  private FederalPermitDetailRepository federalPermitDetailRepository() {
+    return federalPermitDetailRepositoryProvider == null
+        ? null
+        : federalPermitDetailRepositoryProvider.getIfAvailable();
   }
 
   private ApplicationSubmissionSummaryDto toSubmissionSummary(ParsedSubmission submission) {
@@ -1535,15 +2212,26 @@ public class ApplicationSubmissionImportService {
     }
 
     for (String fieldName : List.of("federalApplicationNumber", "fedApplicationNumber", "applicationNumber")) {
-      String value = text(applicationDetail, fieldName, "Federal application number", errors);
-      if (value != null && values.stream().noneMatch(value::equals)) {
-        values.add(value);
+      List<Element> matches = children(applicationDetail, fieldName);
+      if (matches.size() > 1) {
+        errors.add("Federal application number field " + fieldName + " must appear only once.");
+      }
+      for (Element match : matches) {
+        String value = trimToNull(match.getTextContent());
+        if (value != null) {
+          values.add(value);
+        }
       }
     }
-    if (values.size() > 1) {
-      errors.add("Federal application number must not be supplied with conflicting values.");
+    if (values.isEmpty()) {
+      return null;
     }
-    return values.isEmpty() ? null : values.get(0);
+    String first = values.get(0);
+    boolean conflicting = values.stream().distinct().count() > 1L;
+    if (conflicting) {
+      errors.add("Federal application number aliases must not contain conflicting values.");
+    }
+    return first;
   }
 
   private String textAny(
@@ -1561,6 +2249,56 @@ public class ApplicationSubmissionImportService {
       }
     }
     return selected;
+  }
+
+  private String packageNumber(Element productDetail, List<String> errors) {
+    List<String> values = new ArrayList<>();
+    for (String fieldName : List.of("boomNumber", "packageNumber")) {
+      List<Element> matches = children(productDetail, fieldName);
+      if (matches.size() > 1) {
+        errors.add("Boom/package number field " + fieldName + " must appear only once.");
+      }
+      for (Element match : matches) {
+        String value = trimToNull(match.getTextContent());
+        if (value != null) {
+          values.add(value);
+        }
+      }
+    }
+    if (values.isEmpty()) {
+      return null;
+    }
+    String first = values.get(0);
+    boolean conflicting = values.stream().distinct().count() > 1L;
+    if (conflicting) {
+      errors.add("Boom/package number aliases must not contain conflicting values.");
+    }
+    return first;
+  }
+
+  private String clientLocationCode(Element partyDetails, String label, List<String> errors) {
+    List<String> values = new ArrayList<>();
+    for (String fieldName : List.of("clientLocnCode", "clientLocationCode")) {
+      List<Element> matches = children(partyDetails, fieldName);
+      if (matches.size() > 1) {
+        errors.add(label + " client location field " + fieldName + " must appear only once.");
+      }
+      for (Element match : matches) {
+        String value = normalizeClientLocation(match.getTextContent());
+        if (value != null) {
+          values.add(value);
+        }
+      }
+    }
+    if (values.isEmpty()) {
+      return null;
+    }
+    String first = values.get(0);
+    boolean conflicting = values.stream().distinct().count() > 1L;
+    if (conflicting) {
+      errors.add(label + " client location aliases must not contain conflicting values.");
+    }
+    return first;
   }
 
   private Long resolveOrgUnitNumber(String regionCode) {
@@ -1733,6 +2471,15 @@ public class ApplicationSubmissionImportService {
             : normalizedMessage);
   }
 
+  private List<String> mergeWarnings(List<String> left, List<String> right) {
+    if (right == null || right.isEmpty()) {
+      return left == null ? List.of() : left;
+    }
+    List<String> warnings = new ArrayList<>(left == null ? List.of() : left);
+    warnings.addAll(right);
+    return warnings;
+  }
+
   private List<String> packagePersistenceErrors(
       ApplicationDetailsRpcService applicationDetailsService,
       String packageNumber,
@@ -1846,6 +2593,27 @@ public class ApplicationSubmissionImportService {
     }
   }
 
+  private ApplicationSubmissionImportResultDto federalOnlyRejection(
+      String fileName,
+      long fileSize,
+      ParsedSubmission submission,
+      List<String> warnings,
+      ApplicationSubmissionSummaryDto submissionSummary,
+      String userReference,
+      boolean federalOnly,
+      String federalOnlyError) {
+    if (!federalOnly || FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())) {
+      return null;
+    }
+    return rejected(
+        fileName,
+        fileSize,
+        List.of(federalOnlyError),
+        warnings,
+        submissionSummary,
+        userReference);
+  }
+
   private String resolveFileName(MultipartFile file) {
     if (file == null || file.getOriginalFilename() == null || file.getOriginalFilename().isBlank()) {
       return "lexis-submission.xml";
@@ -1889,7 +2657,25 @@ public class ApplicationSubmissionImportService {
       Double averageLogVolume,
       String endUseCode,
       List<String> speciesCodes,
-      List<ScaleLine> scaleLines) {}
+      List<ScaleLine> scaleLines,
+      FederalPermitDetail federalPermitDetail) {}
+
+  private record FederalPermitField(String label, List<String> localNames) {}
+
+  private record FederalPermitDetail(
+      boolean present,
+      LocalDate permitIssueDate,
+      LocalDate estimatedShippingDate,
+      String otherPortOfExport,
+      String transportName,
+      String transportTypeCode,
+      String countryCode,
+      String portOfExportCode) {
+
+    static FederalPermitDetail empty() {
+      return new FederalPermitDetail(false, null, null, null, null, null, null, null);
+    }
+  }
 
   private record ParsedParties(
       String agentClientNumber,
@@ -1919,6 +2705,61 @@ public class ApplicationSubmissionImportService {
 
   private record ScaleLine(
       String timberMark, Long pieces, String speciesCode, String gradeCode, Double volume) {}
+
+  private static final class InMemoryMultipartFile implements MultipartFile {
+
+    private static final String DEFAULT_ORIGINAL_FILE_NAME = "esf-submission.xml";
+
+    private final byte[] bytes;
+    private final String originalFileName;
+
+    private InMemoryMultipartFile(byte[] bytes, String originalFileName) {
+      this.bytes = bytes == null ? new byte[0] : bytes.clone();
+      String normalizedFileName = trimToNull(originalFileName);
+      this.originalFileName =
+          normalizedFileName == null ? DEFAULT_ORIGINAL_FILE_NAME : normalizedFileName;
+    }
+
+    @Override
+    public String getName() {
+      return "submissionData";
+    }
+
+    @Override
+    public String getOriginalFilename() {
+      return originalFileName;
+    }
+
+    @Override
+    public String getContentType() {
+      return MediaType.APPLICATION_XML_VALUE;
+    }
+
+    @Override
+    public boolean isEmpty() {
+      return bytes.length == 0;
+    }
+
+    @Override
+    public long getSize() {
+      return bytes.length;
+    }
+
+    @Override
+    public byte[] getBytes() {
+      return bytes.clone();
+    }
+
+    @Override
+    public InputStream getInputStream() {
+      return new ByteArrayInputStream(bytes);
+    }
+
+    @Override
+    public void transferTo(File dest) throws IOException {
+      Files.write(dest.toPath(), bytes);
+    }
+  }
 
   private static class QuietXmlErrorHandler implements ErrorHandler {
 

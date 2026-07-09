@@ -45,6 +45,7 @@ export type UploadQueuePreviewProps = {
   showReviewAccordionHeader?: boolean
   canReview?: boolean
   reviewItems?: UploadQueueItem[]
+  reviewSupplementalContent?: ReactNode
 }
 
 const formatFileType = (file: File): string => {
@@ -94,6 +95,7 @@ function UploadQueuePreview({
   showReviewAccordionHeader = true,
   canReview,
   reviewItems,
+  reviewSupplementalContent,
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
@@ -270,6 +272,9 @@ function UploadQueuePreview({
         </div>
       ) : (
         <>
+          {isReviewStep && reviewSupplementalContent && (
+            <div className="admin-upload-review-supplement">{reviewSupplementalContent}</div>
+          )}
           {isReviewStep && showReviewQueueTable && (
             <div className="admin-upload-preview-filter">
               <TextInput
