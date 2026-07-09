@@ -56,7 +56,6 @@ type RtmReviewMatrixRow = {
 }
 
 type RtmReviewCellValues = Record<string, number | null>
-type UploadValidationIssueSeverity = 'Error' | 'Warning'
 
 const uploadResultStatusClass = (status: string | undefined) => {
   if (!status) {
@@ -310,8 +309,7 @@ const UploadValidationMessage = ({
 
 const buildValidationIssueRows = (
   details: string[],
-  severity: UploadValidationIssueSeverity,
-): Array<{ detail: string; key: string; severity: UploadValidationIssueSeverity }> => {
+): Array<{ detail: string; key: string; severity: 'Error' }> => {
   const occurrences = new Map<string, number>()
 
   return details.map((detail) => {
@@ -320,17 +318,14 @@ const buildValidationIssueRows = (
 
     return {
       detail,
-      key: `${severity}-${detail}-${occurrence}`,
-      severity,
+      key: `Error-${detail}-${occurrence}`,
+      severity: 'Error',
     }
   })
 }
 
-const ValidationIssuesTable = ({ errors, warnings }: { errors: string[]; warnings: string[] }) => {
-  const issues = [
-    ...buildValidationIssueRows(errors, 'Error'),
-    ...buildValidationIssueRows(warnings, 'Warning'),
-  ]
+const ValidationIssuesTable = ({ errors }: { errors: string[] }) => {
+  const issues = buildValidationIssueRows(errors)
 
   if (issues.length === 0) {
     return null
@@ -399,8 +394,7 @@ const UploadValidationStatus = ({
   }
 
   const isAccepted = previewResult.status === 'accepted'
-  const visibleWarnings = isAccepted ? [] : previewResult.warnings
-  const issueCount = previewResult.errors.length + visibleWarnings.length
+  const issueCount = previewResult.errors.length
 
   return (
     <>
@@ -422,7 +416,7 @@ const UploadValidationStatus = ({
         )}
         {isAccepted && <p>{previewResult.message}</p>}
       </UploadValidationMessage>
-      <ValidationIssuesTable errors={previewResult.errors} warnings={visibleWarnings} />
+      <ValidationIssuesTable errors={previewResult.errors} />
     </>
   )
 }
@@ -501,16 +495,6 @@ const ReviewUploadContent = ({
             Attempted rows: {uploadResult.attemptedRowCount} | Uploaded rows:{' '}
             {uploadResult.uploadedRowCount}
           </p>
-          {uploadResult.warnings.length > 0 && (
-            <div className="admin-upload-review__issue-group">
-              <h3>Warnings</h3>
-              <ul>
-                {uploadResult.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
     </div>

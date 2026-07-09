@@ -77,6 +77,7 @@ class OracleRtmEmsLogAmvServiceTest {
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook(), null, null);
 
     assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.warnings()).isEmpty();
     assertThat(result.attemptedRowCount()).isEqualTo(12);
     assertThat(result.uploadedRowCount()).isEqualTo(12);
     verify(repository, times(12))
@@ -113,6 +114,7 @@ class OracleRtmEmsLogAmvServiceTest {
 
     ArgumentCaptor<String> speciesCaptor = ArgumentCaptor.forClass(String.class);
     assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.warnings()).isEmpty();
     verify(repository, times(12))
         .update(
             speciesCaptor.capture(),

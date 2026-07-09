@@ -468,7 +468,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       String fileName,
       long fileSize) {
     return new RtmEmsLogAmvUploadPreviewDto(
-        status, fileName, fileSize, message, rowCount, retrievalDate, updateDate, errors, warnings, rows);
+        status, fileName, fileSize, message, rowCount, retrievalDate, updateDate, errors, List.of(), rows);
   }
 
   private String normalize(String value) {
@@ -675,6 +675,6 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> warnings,
       List<RtmEmsLogAmvRowDto> rows) {
     return new RtmEmsLogAmvUploadResultDto(
-        status, fileName, fileSize, message, attemptedRowCount, uploadedRowCount, errors, warnings, rows);
+        status, fileName, fileSize, message, attemptedRowCount, uploadedRowCount, errors, List.of(), rows);
   }
 }
