@@ -367,6 +367,44 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
   })
 
+  it('warns on additions and removals when today already has saved values', async () => {
+    const user = userEvent.setup()
+    const savedTodayRows = [
+      row('BA', 'A', 'O', TARGET_DATE, 10.25),
+      row('BA', 'A', 'S', TARGET_DATE, 10.25),
+    ]
+    mockSearchRows({
+      current: savedTodayRows,
+      previous: [
+        row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
+        row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
+      ],
+    })
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate()
+
+    const balsamInput = screen.getByLabelText('Balsam grade A')
+    const cedarInput = screen.getByLabelText('Cedar grade A')
+    expect(
+      screen.queryByRole('heading', { name: 'Starting values copied' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+    expect(mockedSearchLatest).not.toHaveBeenCalledWith(TARGET_DATE)
+
+    await user.clear(balsamInput)
+    expect(balsamInput.closest('td')).toHaveClass('has-warning', 'is-removed')
+    expect(screen.getByText(/had a value yesterday and is blank for today/)).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(balsamInput).toHaveValue('10.25')
+    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
+
+    await user.type(cedarInput, '5')
+    expect(cedarInput.closest('td')).toHaveClass('has-warning', 'is-added')
+    expect(screen.getByText(/is newly populated; it was blank yesterday/)).toBeVisible()
+  })
+
   it.each([
     ['today', TARGET_DATE, dateOffsetFromToday(-8)],
     ['an intervening past date', '2000-01-02', '2000-01-01'],
