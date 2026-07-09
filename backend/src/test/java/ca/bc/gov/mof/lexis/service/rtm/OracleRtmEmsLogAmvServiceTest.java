@@ -256,7 +256,7 @@ class OracleRtmEmsLogAmvServiceTest {
     BigDecimal newValue = new BigDecimal("10.25");
     when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(retrievalDate))).thenReturn(true);
     when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(retrievalDate))).thenReturn(false);
-    when(repository.update(eq("BA"), eq("A"), eq("O"), eq(updateDate), eq(updateDate), eq(newValue)))
+    when(repository.update(eq("BA"), eq("A"), eq("O"), eq(retrievalDate), eq(updateDate), eq(newValue)))
         .thenReturn("0");
     when(repository.hasExactValue(eq("BA"), eq("A"), eq("O"), eq(updateDate), eq(newValue)))
         .thenReturn(true);
@@ -269,7 +269,7 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(result.attemptedRowCount()).isEqualTo(1);
     assertThat(result.uploadedRowCount()).isEqualTo(1);
     verify(repository)
-        .update(eq("BA"), eq("A"), eq("O"), eq(updateDate), eq(updateDate), eq(newValue));
+        .update(eq("BA"), eq("A"), eq("O"), eq(retrievalDate), eq(updateDate), eq(newValue));
     verify(repository, never())
         .update(
             eq("BA"),
@@ -278,6 +278,34 @@ class OracleRtmEmsLogAmvServiceTest {
             any(LocalDate.class),
             any(LocalDate.class),
             any(BigDecimal.class));
+  }
+
+  @Test
+  void shouldUploadFutureGrowthRowsUsingRetrievalAndUpdateDates() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate retrievalDate = LocalDate.of(2026, 6, 1);
+    LocalDate updateDate = LocalDate.of(2026, 8, 1);
+    BigDecimal newValue = new BigDecimal("10.25");
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(retrievalDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(retrievalDate))).thenReturn(true);
+    when(repository.update(anyString(), anyString(), anyString(), eq(retrievalDate), eq(updateDate), eq(newValue)))
+        .thenReturn("0");
+    when(repository.hasExactValue(anyString(), anyString(), anyString(), eq(updateDate), eq(newValue)))
+        .thenReturn(true);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(futureSingleBalsamWorkbook(), null, null);
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.attemptedRowCount()).isEqualTo(2);
+    assertThat(result.uploadedRowCount()).isEqualTo(2);
+    verify(repository)
+        .update(eq("BA"), eq("A"), eq("O"), eq(retrievalDate), eq(updateDate), eq(newValue));
+    verify(repository)
+        .update(eq("BA"), eq("A"), eq("S"), eq(retrievalDate), eq(updateDate), eq(newValue));
+    verify(repository, never())
+        .update(anyString(), anyString(), anyString(), eq(updateDate), eq(updateDate), any(BigDecimal.class));
   }
 
   @Test

@@ -241,7 +241,6 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> errors = new ArrayList<>(parseResult.errors());
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
-      LocalDate effectiveDate = parsedUpdateDate;
       List<UploadTarget> rowsToUpload = buildUploadTargets(parseResult.rows(), warnings);
 
       if (parseResult.dataRowCount() == 0) {
@@ -287,7 +286,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                     species,
                     grade,
                     normalizedGrowthIndicator,
-                    formatDate(effectiveDate),
+                    formatDate(parsedRetrievalDate),
                     formatDate(parsedUpdateDate),
                     newValue,
                     SAVE_MODE_UPDATE));
