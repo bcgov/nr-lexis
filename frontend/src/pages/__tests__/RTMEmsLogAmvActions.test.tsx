@@ -173,7 +173,7 @@ describe('RTM EMS Log AMV actions', () => {
       'download',
       'rtm-ems-log-amv-template.xlsx',
     )
-    expect(screen.getByText('XLSX - 4 KB')).toBeVisible()
+    expect(screen.getByText('XLSX')).toBeVisible()
     expect(screen.getByText('Accepted formats: .xlsx.')).toBeVisible()
     expect(
       screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
@@ -293,8 +293,8 @@ describe('RTM EMS Log AMV actions', () => {
     expect(validationTable).toBeVisible()
     expect(within(validationTable).getByRole('columnheader', { name: 'Issue' })).toBeVisible()
     expect(
-      within(validationTable).getByRole('columnheader', { name: 'File location' }),
-    ).toBeVisible()
+      within(validationTable).queryByRole('columnheader', { name: 'File location' }),
+    ).not.toBeInTheDocument()
     expect(within(validationTable).getByRole('columnheader', { name: 'Detail' })).toBeVisible()
     expect(within(validationTable).getByText('Error')).toBeVisible()
     expect(

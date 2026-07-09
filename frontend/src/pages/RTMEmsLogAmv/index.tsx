@@ -142,7 +142,6 @@ const validateAcceptedPreview = (
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
-const RTM_TEMPLATE_DISPLAY_SIZE = '4 KB'
 
 const RTM_UPLOAD_ONLY_DESCRIPTION = 'Update average monthly values by uploading an XLSX file.'
 const RTM_UPLOAD_STEP_DESCRIPTION =
@@ -402,9 +401,6 @@ const ValidationIssuesTable = ({ errors }: { errors: string[] }) => {
             <th className="admin-upload-validation-table__issue" scope="col">
               Issue
             </th>
-            <th className="admin-upload-validation-table__location" scope="col">
-              File location
-            </th>
             <th scope="col">Detail</th>
           </tr>
         </thead>
@@ -412,7 +408,6 @@ const ValidationIssuesTable = ({ errors }: { errors: string[] }) => {
           {issues.map((issue) => (
             <tr key={issue.key}>
               <td className="admin-upload-validation-table__issue">{issue.severity}</td>
-              <td className="admin-upload-validation-table__location">-</td>
               <td>{issue.detail}</td>
             </tr>
           ))}
@@ -813,9 +808,7 @@ const RTMEmsLogAmvPage = () => {
                 >
                   <span>
                     <span className="admin-upload-template-card__title">Download template</span>
-                    <span className="admin-upload-template-card__meta">
-                      XLSX - {RTM_TEMPLATE_DISPLAY_SIZE}
-                    </span>
+                    <span className="admin-upload-template-card__meta">XLSX</span>
                   </span>
                   <Download size={16} aria-hidden="true" />
                 </a>

@@ -1323,7 +1323,9 @@ test.describe('TEST IDIR admin regression', () => {
     const validationTable = page.getByRole('table', { name: 'Upload validation issues' })
     await expect(validationTable).toBeVisible()
     await expect(validationTable.getByRole('columnheader', { name: 'Issue' })).toBeVisible()
-    await expect(validationTable.getByRole('columnheader', { name: 'File location' })).toBeVisible()
+    await expect(validationTable.getByRole('columnheader', { name: 'File location' })).toHaveCount(
+      0,
+    )
     await expect(validationTable.getByRole('columnheader', { name: 'Detail' })).toBeVisible()
     await expect(validationTable.getByText('Error')).toBeVisible()
     await expect(
