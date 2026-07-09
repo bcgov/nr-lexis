@@ -260,6 +260,46 @@ describe('RTM EMS Log AMV actions', () => {
     expect(await screen.findByText(/Past effective dates are read-only/)).toBeVisible()
   })
 
+  it('reloads partial saves and keeps failed cells ready to retry', async () => {
+    const user = userEvent.setup()
+    let savedCurrentRows = [row('BA', 'A', 'O', TARGET_DATE, 11)]
+    mockedSearch.mockImplementation(async (filters) =>
+      filters.retrievalDate === TARGET_DATE ? savedCurrentRows : [],
+    )
+    mockedSave
+      .mockImplementationOnce(async () => {
+        savedCurrentRows = [row('BA', 'A', 'O', TARGET_DATE, 12)]
+        return {
+          status: 'accepted',
+          message: 'Average monthly value row saved.',
+          errors: [],
+          rows: [],
+        }
+      })
+      .mockResolvedValueOnce({
+        status: 'validation_failed',
+        message: 'Second growth row could not be saved.',
+        errors: ['Second growth row could not be saved.'],
+        rows: [],
+      })
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate()
+
+    const input = screen.getByLabelText('Balsam grade A')
+    expect(input).toHaveValue('11')
+    await user.clear(input)
+    await user.type(input, '12')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText('Second growth row could not be saved.')).toBeVisible()
+    await waitFor(() => {
+      expect(input).toHaveValue('12')
+      expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    })
+    expect(mockedSave).toHaveBeenCalledTimes(2)
+  })
+
   it('blocks blank, over-precise and out-of-range table values before save', async () => {
     const user = userEvent.setup()
     mockSearchRows({

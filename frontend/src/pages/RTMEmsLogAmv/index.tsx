@@ -299,6 +299,7 @@ const buildCellValidationError = (cell: {
 const buildCells = (
   basisByKey: Record<string, RtmAmvCellBasis>,
   editedValues: Record<string, string>,
+  retryCellKeys: Record<string, true>,
 ): RtmAmvCell[] =>
   RTM_AMV_GRADE_ORDER.flatMap((grade) =>
     RTM_AMV_SPECIES_COLUMNS.map((column) => {
@@ -308,7 +309,9 @@ const buildCells = (
       const cell = {
         ...basis,
         column,
-        dirty: comparableCellValue(value) !== comparableCellValue(basis.currentValue),
+        dirty:
+          retryCellKeys[key] === true ||
+          comparableCellValue(value) !== comparableCellValue(basis.currentValue),
         grade,
         key,
         value,
@@ -336,6 +339,7 @@ const RTMEmsLogAmvPage = () => {
   const [currentRows, setCurrentRows] = useState<RtmEmsLogAmvRow[]>([])
   const [previousRows, setPreviousRows] = useState<RtmEmsLogAmvRow[]>([])
   const [editedValues, setEditedValues] = useState<Record<string, string>>({})
+  const [retryCellKeys, setRetryCellKeys] = useState<Record<string, true>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -351,6 +355,7 @@ const RTMEmsLogAmvPage = () => {
       setCurrentRows([])
       setPreviousRows([])
       setEditedValues({})
+      setRetryCellKeys({})
       return
     }
 
@@ -378,12 +383,14 @@ const RTMEmsLogAmvPage = () => {
       setPreviousRows(previousResponse)
       setLoadedDate(targetDate)
       setEditedValues({})
+      setRetryCellKeys({})
     } catch (error) {
       console.error(error)
       setLoadError('Unable to load average monthly values.')
       setCurrentRows([])
       setPreviousRows([])
       setEditedValues({})
+      setRetryCellKeys({})
     } finally {
       setIsLoading(false)
     }
@@ -397,7 +404,10 @@ const RTMEmsLogAmvPage = () => {
     () => buildCellBasis(currentRows, previousRows),
     [currentRows, previousRows],
   )
-  const cells = useMemo(() => buildCells(basisByKey, editedValues), [basisByKey, editedValues])
+  const cells = useMemo(
+    () => buildCells(basisByKey, editedValues, retryCellKeys),
+    [basisByKey, editedValues, retryCellKeys],
+  )
   const warnings = warningDeduplicate(cells.map((cell) => cell.warning))
   const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))
   const dirtyCells = cells.filter((cell) => cell.dirty)
@@ -415,6 +425,7 @@ const RTMEmsLogAmvPage = () => {
 
   const resetChanges = () => {
     setEditedValues({})
+    setRetryCellKeys({})
   }
 
   const buildSaveRequestsForCell = (cell: RtmAmvCell): RtmEmsLogAmvSaveRequest[] => {
@@ -478,22 +489,51 @@ const RTMEmsLogAmvPage = () => {
       return
     }
 
-    const requests = dirtyCells.flatMap(buildSaveRequestsForCell)
-    if (requests.length === 0) {
+    const saveAttempts = dirtyCells.flatMap((cell) =>
+      buildSaveRequestsForCell(cell).map((request) => ({ cellKey: cell.key, request })),
+    )
+    if (saveAttempts.length === 0) {
       return
     }
 
     setIsSaving(true)
 
     try {
-      const results = await Promise.all(requests.map((request) => saveRtmEmsLogAmv(request)))
-      const failedResults = results.filter((result) => result.status !== 'accepted')
+      const results = await Promise.all(
+        saveAttempts.map(async (attempt) => {
+          try {
+            return { ...attempt, result: await saveRtmEmsLogAmv(attempt.request) }
+          } catch (error) {
+            console.error(error)
+            return { ...attempt, result: null }
+          }
+        }),
+      )
+      const failedResults = results.filter((attempt) => attempt.result?.status !== 'accepted')
 
       if (failedResults.length > 0) {
+        const failedCellKeys = new Set(failedResults.map((attempt) => attempt.cellKey))
+        const failedValues = Object.fromEntries(
+          dirtyCells
+            .filter((cell) => failedCellKeys.has(cell.key))
+            .map((cell) => [cell.key, cell.value]),
+        )
+        const firstFailedResult = failedResults[0].result
+
+        if (failedResults.length < results.length) {
+          await loadRows()
+          setEditedValues(failedValues)
+          setRetryCellKeys(
+            Object.fromEntries(Array.from(failedCellKeys, (key) => [key, true as const])),
+          )
+        }
+
         setNotification({
           kind: failedResults.length === results.length ? 'error' : 'warning',
           title: 'Average monthly values',
-          subtitle: notificationMessage(failedResults[0].message, failedResults[0].errors),
+          subtitle: firstFailedResult
+            ? notificationMessage(firstFailedResult.message, firstFailedResult.errors)
+            : 'Unable to save average monthly values.',
         })
         return
       }
