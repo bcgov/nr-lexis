@@ -10,12 +10,9 @@ import {
 import {
   Button,
   Column,
-  ComposedModal,
   Grid,
   InlineLoading,
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
+  Modal,
   Table,
   TableBody,
   TableCell,
@@ -837,39 +834,61 @@ const RTMEmsLogAmvPage = () => {
       </Column>
 
       {showWarningConfirmation && (
-        <ComposedModal
+        <Modal
           open
+          passiveModal
+          size="sm"
+          modalHeading="Confirm AMV changes"
+          aria-label="Confirm AMV changes"
+          className="rtm-amv-confirm-modal"
           preventCloseOnClickOutside
-          onClose={() => setShowWarningConfirmation(false)}
+          selectorPrimaryFocus="#rtm-amv-confirm-cancel"
+          onRequestClose={() => setShowWarningConfirmation(false)}
         >
-          <ModalHeader
-            label="Average monthly values"
-            title="Confirm AMV changes"
-            buttonOnClick={() => setShowWarningConfirmation(false)}
-          />
-          <ModalBody>
-            <p>Review these warnings before saving.</p>
-            <ul>
-              {confirmationMessages.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          </ModalBody>
-          <ModalFooter>
-            <Button kind="secondary" onClick={() => setShowWarningConfirmation(false)}>
+          <div className="rtm-amv-confirm-modal__body">
+            <p className="rtm-amv-confirm-modal__intro">
+              Review the following before saving {dirtyCells.length} changed cell
+              {dirtyCells.length === 1 ? '' : 's'}.
+            </p>
+            <div className="rtm-amv-confirm-modal__warning">
+              <WarningAltFilled size={20} aria-hidden="true" />
+              <div>
+                <ul>
+                  {confirmationMessages.slice(0, 8).map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+                {confirmationMessages.length > 8 && (
+                  <p>
+                    {confirmationMessages.length - 8} more warning
+                    {confirmationMessages.length - 8 === 1 ? '' : 's'} apply to this save.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="rtm-amv-confirm-modal__actions">
+            <Button
+              id="rtm-amv-confirm-cancel"
+              kind="secondary"
+              size="md"
+              onClick={() => setShowWarningConfirmation(false)}
+            >
               Cancel
             </Button>
             <Button
               kind="primary"
+              size="md"
+              renderIcon={Save}
               onClick={() => {
                 setShowWarningConfirmation(false)
                 void saveChanges()
               }}
             >
-              Save confirmed changes
+              Confirm and save
             </Button>
-          </ModalFooter>
-        </ComposedModal>
+          </div>
+        </Modal>
       )}
 
       {notification && (

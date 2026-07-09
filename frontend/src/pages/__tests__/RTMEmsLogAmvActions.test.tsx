@@ -105,7 +105,7 @@ const selectTargetDate = async (date = TARGET_DATE) => {
 }
 
 const confirmAmvSave = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByRole('button', { name: 'Save confirmed changes' }))
+  await user.click(await screen.findByRole('button', { name: 'Confirm and save' }))
 }
 
 describe('RTM EMS Log AMV actions', () => {
@@ -203,6 +203,8 @@ describe('RTM EMS Log AMV actions', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
+    expect(screen.getByText('Review the following before saving 1 changed cell.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
     expect(mockedSave).not.toHaveBeenCalled()
     await confirmAmvSave(user)
 
