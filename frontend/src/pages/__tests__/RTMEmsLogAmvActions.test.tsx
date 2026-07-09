@@ -217,6 +217,7 @@ describe('RTM EMS Log AMV actions', () => {
     ).toHaveAttribute('aria-current', 'step')
     const reviewTable = screen.getByRole('table', { name: 'Average monthly value upload review' })
     expect(reviewTable).toBeVisible()
+    expect(reviewTable).not.toHaveClass('cds--data-table--zebra')
     expect(within(reviewTable).getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
     expect(within(reviewTable).getByRole('columnheader', { name: 'Pine' })).toBeVisible()
     expect(

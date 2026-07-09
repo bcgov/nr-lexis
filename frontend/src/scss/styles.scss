@@ -2493,6 +2493,13 @@ body {
   min-inline-size: 56rem;
 }
 
+.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr,
+.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr:hover,
+.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr:hover td,
+.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody td {
+  background: var(--fds-layer-01, var(--cds-layer));
+}
+
 .admin-upload-review-table .cds--data-table tbody td {
   border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
 }
