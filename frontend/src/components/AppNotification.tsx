@@ -52,6 +52,7 @@ export function AppNotification({
   subtitle,
   title,
   className,
+  lowContrast = true,
   ...notificationProps
 }: AppNotificationProps) {
   const [notificationRegion] = useState<HTMLElement | null>(() => getNotificationRegion())
@@ -127,6 +128,7 @@ export function AppNotification({
         className={['app-notification__toast', className].filter(Boolean).join(' ')}
         hideCloseButton={false}
         kind={kind}
+        lowContrast={lowContrast}
         onCloseButtonClick={onCloseButtonClick}
         subtitle={resolvedSubtitle}
         timeout={0}

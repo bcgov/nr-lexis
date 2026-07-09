@@ -26,6 +26,29 @@ describe('AppNotification', () => {
     expect(notificationRegion).toContainElement(screen.getByText('Upload error'))
   })
 
+  it('uses low-contrast toast styling by default', () => {
+    render(<AppNotification kind="error" title="Upload error" subtitle="Upload failed." />)
+
+    expect(document.querySelector('.cds--toast-notification')).toHaveClass(
+      'cds--toast-notification--low-contrast',
+    )
+  })
+
+  it('allows high-contrast toast styling when explicitly requested', () => {
+    render(
+      <AppNotification
+        kind="error"
+        lowContrast={false}
+        title="Upload error"
+        subtitle="Upload failed."
+      />,
+    )
+
+    expect(document.querySelector('.cds--toast-notification')).not.toHaveClass(
+      'cds--toast-notification--low-contrast',
+    )
+  })
+
   it('syncs the toast notification region to the selected app theme', () => {
     const lightRegion = syncAppNotificationRegionTheme(false)!
 
