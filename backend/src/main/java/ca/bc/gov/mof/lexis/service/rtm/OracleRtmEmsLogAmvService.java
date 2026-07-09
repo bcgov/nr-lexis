@@ -589,7 +589,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (uploadTargets == null || uploadTargets.isEmpty()) {
       return List.of();
     }
-    if (retrievalDate == null || updateDate == null || !updateDate.equals(retrievalDate)) {
+    if (retrievalDate == null || updateDate == null) {
       return uploadTargets;
     }
 
@@ -610,7 +610,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     for (List<UploadTarget> targets : targetsBySpeciesGrade.values()) {
       for (UploadTarget target : targets) {
         if (hasExistingValue(
-            target.species(), target.grade(), target.growthIndicator(), updateDate)) {
+            target.species(), target.grade(), target.growthIndicator(), retrievalDate)) {
           retainedTargets.add(target);
         }
       }

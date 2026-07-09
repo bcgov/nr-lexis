@@ -180,6 +180,26 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldPreviewFutureUploadOnlyForGrowthRowsExistingInRetrievalMonth() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate retrievalDate = LocalDate.of(2026, 6, 1);
+    LocalDate updateDate = LocalDate.of(2026, 8, 1);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(retrievalDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(retrievalDate))).thenReturn(false);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result = service.previewUpload(futureSingleBalsamWorkbook());
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.retrievalDate()).isEqualTo("2026-06-01");
+    assertThat(result.updateDate()).isEqualTo("2026-08-01");
+    assertThat(result.rowCount()).isEqualTo(1);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvRowDto::growthIndicator).containsExactly("O");
+    verify(repository, never()).existsExact(eq("BA"), eq("A"), anyString(), eq(updateDate));
+  }
+
+  @Test
   void shouldUploadOnlyExistingTargetGrowthRows() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
@@ -224,6 +244,38 @@ class OracleRtmEmsLogAmvServiceTest {
             anyString(),
             anyString(),
             anyString(),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+  }
+
+  @Test
+  void shouldUploadFutureUploadOnlyForGrowthRowsExistingInRetrievalMonth() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate retrievalDate = LocalDate.of(2026, 6, 1);
+    LocalDate updateDate = LocalDate.of(2026, 8, 1);
+    BigDecimal newValue = new BigDecimal("10.25");
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(retrievalDate))).thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(retrievalDate))).thenReturn(false);
+    when(repository.update(eq("BA"), eq("A"), eq("O"), eq(updateDate), eq(updateDate), eq(newValue)))
+        .thenReturn("0");
+    when(repository.hasExactValue(eq("BA"), eq("A"), eq("O"), eq(updateDate), eq(newValue)))
+        .thenReturn(true);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(futureSingleBalsamWorkbook(), null, null);
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.attemptedRowCount()).isEqualTo(1);
+    assertThat(result.uploadedRowCount()).isEqualTo(1);
+    verify(repository)
+        .update(eq("BA"), eq("A"), eq("O"), eq(updateDate), eq(updateDate), eq(newValue));
+    verify(repository, never())
+        .update(
+            eq("BA"),
+            eq("A"),
+            eq("S"),
+            any(LocalDate.class),
             any(LocalDate.class),
             any(BigDecimal.class));
   }
@@ -408,6 +460,14 @@ class OracleRtmEmsLogAmvServiceTest {
         "single-balsam.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         RtmEmsLogAmvWorkbookTestFixtures.singleBalsamWorkbook());
+  }
+
+  private MultipartFile futureSingleBalsamWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "future-single-balsam.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.futureSingleBalsamWorkbook());
   }
 
   private MultipartFile optionalCedarGradeWorkbook() throws IOException {
