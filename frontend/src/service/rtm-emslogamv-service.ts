@@ -35,35 +35,6 @@ export type RtmEmsLogAmvMutationResult = {
   rows: RtmEmsLogAmvRow[]
 }
 
-export type RtmEmsLogAmvUploadPreview = {
-  status: string
-  fileName?: string
-  fileSize?: number
-  message: string
-  rowCount: number
-  retrievalDate?: string | null
-  updateDate?: string | null
-  errors: string[]
-  warnings: string[]
-  rows: RtmEmsLogAmvRow[]
-}
-
-export type RtmEmsLogAmvUploadRequest = {
-  file: File
-}
-
-export type RtmEmsLogAmvUploadResult = {
-  status: string
-  fileName?: string
-  fileSize?: number
-  message: string
-  attemptedRowCount: number
-  uploadedRowCount: number
-  errors: string[]
-  warnings: string[]
-  rows: RtmEmsLogAmvRow[]
-}
-
 const trimOptional = (value: string): string | undefined => {
   const normalized = value.trim()
   return normalized.length > 0 ? normalized : undefined
@@ -110,62 +81,9 @@ export const saveRtmEmsLogAmv = async (
 ): Promise<RtmEmsLogAmvMutationResult> => {
   const response = await apiService
     .getAxiosInstance()
-    .post<RtmEmsLogAmvMutationResult>('/lexis/rtm/emslogamv', request)
+    .post<RtmEmsLogAmvMutationResult>('/lexis/rtm/emslogamv', request, {
+      validateStatus: (status) => status < 500,
+    })
 
   return response.data ?? { status: 'failed', message: '', errors: [], rows: [] }
-}
-
-export const previewRtmEmsLogAmvUpload = async (file: File): Promise<RtmEmsLogAmvUploadPreview> => {
-  const payload = new FormData()
-  payload.append('file', file)
-
-  const response = await apiService
-    .getAxiosInstance()
-    .post<RtmEmsLogAmvUploadPreview>('/lexis/rtm/emslogamv/preview', payload, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      validateStatus: (status) => status < 500,
-    })
-
-  return (
-    response.data ?? {
-      status: 'failed',
-      message: '',
-      rowCount: 0,
-      retrievalDate: null,
-      updateDate: null,
-      errors: ['No preview response was returned.'],
-      warnings: [],
-      rows: [],
-    }
-  )
-}
-
-export const uploadRtmEmsLogAmv = async (
-  request: RtmEmsLogAmvUploadRequest,
-): Promise<RtmEmsLogAmvUploadResult> => {
-  const payload = new FormData()
-  payload.append('file', request.file)
-
-  const response = await apiService
-    .getAxiosInstance()
-    .post<RtmEmsLogAmvUploadResult>('/lexis/rtm/emslogamv/upload', payload, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      validateStatus: (status) => status < 500,
-    })
-
-  return (
-    response.data ?? {
-      status: 'failed',
-      message: '',
-      attemptedRowCount: 0,
-      uploadedRowCount: 0,
-      errors: ['No upload response was returned.'],
-      warnings: [],
-      rows: [],
-    }
-  )
 }

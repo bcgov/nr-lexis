@@ -227,12 +227,6 @@ type DeleteResponse = {
   success?: boolean
 }
 
-type RtmUploadPreviewResponse = {
-  status?: string
-  rowCount?: number
-  errors?: unknown
-}
-
 type ApplicationReviewSearchOptionsResponse = {
   productTypes?: unknown
   regions?: unknown
@@ -279,21 +273,6 @@ type JsonWithStatus<T> = {
 }
 
 const missingApplicationNumber = '999999999'
-const rtmSuccessWorkbook = readFileSync(
-  new URL('../public/templates/rtm-ems-log-amv-template.xlsx', import.meta.url),
-)
-const rtmMissingUpdateDateWorkbook = readFileSync(
-  new URL('./fixtures/rtm-amv-missing-update-date.xlsx', import.meta.url),
-)
-const rtmNoNumericValuesWorkbook = readFileSync(
-  new URL('./fixtures/rtm-amv-no-numeric-values.xlsx', import.meta.url),
-)
-const rtmBadHeaderWorkbook = readFileSync(
-  new URL('./fixtures/rtm-amv-bad-header.xlsx', import.meta.url),
-)
-const rtmMissingTargetDateWorkbook = readFileSync(
-  new URL('./fixtures/rtm-amv-missing-target-date.xlsx', import.meta.url),
-)
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
@@ -305,31 +284,6 @@ const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
 const famManageUrlPattern = /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
-const rtmAmvPreviewEndpoint = '/api/lexis/rtm/emslogamv/preview'
-const xlsxMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-
-const rtmInvalidPreviewFixtures = [
-  {
-    name: 'rtm-amv-missing-update-date.xlsx',
-    buffer: rtmMissingUpdateDateWorkbook,
-    expectedError: 'The update date is required in the uploaded template.',
-  },
-  {
-    name: 'rtm-amv-no-numeric-values.xlsx',
-    buffer: rtmNoNumericValuesWorkbook,
-    expectedError: 'The uploaded file does not contain any numeric AMV values.',
-  },
-  {
-    name: 'rtm-amv-bad-header.xlsx',
-    buffer: rtmBadHeaderWorkbook,
-    expectedError: 'The template header is not recognized as an RTM EMS AMV sheet.',
-  },
-  {
-    name: 'rtm-amv-missing-target-date.xlsx',
-    buffer: rtmMissingTargetDateWorkbook,
-    expectedError: 'Update date must be on or after the retrieval date.',
-  },
-] as const
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -1289,31 +1243,6 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByLabel('Balsam grade A')).toBeVisible()
   })
 
-  test('rejects non-persisting average monthly value validation fixtures', async () => {
-    const page = await authenticatedIdirPage()
-
-    for (const fixture of rtmInvalidPreviewFixtures) {
-      const response = await readJsonResponseWithStatuses<RtmUploadPreviewResponse>(
-        await postWithCsrf(page, rtmAmvPreviewEndpoint, {
-          multipart: {
-            file: {
-              name: fixture.name,
-              mimeType: xlsxMimeType,
-              buffer: fixture.buffer,
-            },
-          },
-        }),
-        [422],
-      )
-
-      expect(response.payload.status, `${fixture.name} should fail validation`).toBe(
-        'validation_failed',
-      )
-      expect(response.payload.rowCount ?? 0, `${fixture.name} should not persist rows`).toBe(0)
-      expect(asStringArray(response.payload.errors).join(' ')).toContain(fixture.expectedError)
-    }
-  })
-
   test('shows selected natural resource region names across search filters', async () => {
     const page = await authenticatedIdirPage()
 
@@ -1920,27 +1849,6 @@ test.describe('TEST IDIR admin regression', () => {
     expect(rtmSearchResponse.status(), redactedTextSnippet(rtmSearchText)).toBe(200)
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
 
-    const rtmPreviewResponse = await readJsonResponseWithStatuses<RtmUploadPreviewResponse>(
-      await postWithCsrf(page, rtmAmvPreviewEndpoint, {
-        multipart: {
-          file: {
-            name: 'rtm-ems-log-amv-template.xlsx',
-            mimeType: xlsxMimeType,
-            buffer: rtmSuccessWorkbook,
-          },
-        },
-      }),
-      [200, 422],
-    )
-    if (rtmPreviewResponse.status === 200) {
-      expect(rtmPreviewResponse.payload.status).toBe('accepted')
-      expect(rtmPreviewResponse.payload.rowCount).toBeGreaterThan(0)
-      expect(asStringArray(rtmPreviewResponse.payload.errors)).toEqual([])
-      expect(asStringArray(rtmPreviewResponse.payload.warnings)).toEqual([])
-    } else {
-      expect(rtmPreviewResponse.payload.status).toBe('validation_failed')
-      expect(asStringArray(rtmPreviewResponse.payload.errors).join(' ')).toContain('update date')
-    }
   })
 
   test('rejects ClamAV test payloads on application document and submission uploads', async () => {

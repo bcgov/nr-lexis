@@ -241,6 +241,25 @@ describe('RTM EMS Log AMV actions', () => {
     ])
   })
 
+  it('shows save failures in the table notification', async () => {
+    const user = userEvent.setup()
+    mockSearchRows({ current: [], previous: [] })
+    mockedSave.mockResolvedValue({
+      status: 'validation_failed',
+      message: 'Past effective dates are read-only.',
+      errors: ['Past effective dates are read-only.'],
+      rows: [],
+    })
+
+    render(<RTMEmsLogAmvPage />)
+    await selectTargetDate()
+
+    await user.type(screen.getByLabelText('Balsam grade A'), '11')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText(/Past effective dates are read-only/)).toBeVisible()
+  })
+
   it('locks table inputs for past effective dates', async () => {
     const user = userEvent.setup()
     render(<RTMEmsLogAmvPage />)

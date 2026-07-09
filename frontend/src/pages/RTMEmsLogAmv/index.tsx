@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   CheckmarkFilled,
   ErrorFilled,
@@ -19,9 +19,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TextInput,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   saveRtmEmsLogAmv,
@@ -315,7 +315,7 @@ const warningDeduplicate = (warnings: Array<string | null>) =>
   Array.from(new Set(warnings.filter((warning): warning is string => Boolean(warning))))
 
 const notificationMessage = (message: string, errors: string[]) =>
-  [message, ...errors].filter(Boolean).join(' ')
+  Array.from(new Set([message, ...errors].filter(Boolean))).join(' ')
 
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
@@ -519,12 +519,12 @@ const RTMEmsLogAmvPage = () => {
           aria-labelledby="rtm-amv-table-title"
         >
           <div className="rtm-amv-toolbar__controls">
-            <TextInput
+            <IsoDatePicker
               id="rtm-amv-effective-date"
               labelText="Effective date"
-              type="date"
               value={targetDate}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => setTargetDate(event.target.value)}
+              onChange={setTargetDate}
+              disabled={isLoading || isSaving}
             />
             <Button
               kind="secondary"

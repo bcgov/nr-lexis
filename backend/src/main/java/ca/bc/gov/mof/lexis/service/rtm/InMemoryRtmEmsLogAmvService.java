@@ -96,20 +96,11 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     String retrievalDateFilter = normalize(retrievalDate);
     String updateDateFilter = normalize(updateDate);
 
-    return rows.stream()
-        .filter(
-            row -> matchesFilter(speciesFilter, row.species()) &&
-                matchesFilter(growthIndicatorFilter, row.growthIndicator()) &&
-                matchesDateFilter(retrievalDateFilter, row.retrievalDate()) &&
-                matchesDateFilter(updateDateFilter, row.updateDate()))
-        .sorted(
-            Comparator.comparing(
-                    (RtmEmsLogAmvRowDto row) -> normalize(row.species()),
-                    Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER))
-                .thenComparing(
-                    (RtmEmsLogAmvRowDto row) -> normalize(row.grade()),
-                    Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER)))
-        .toList();
+    if (retrievalDateFilter != null && retrievalDateFilter.equals(updateDateFilter)) {
+      return findRowsForEffectiveDate(speciesFilter, growthIndicatorFilter, retrievalDateFilter);
+    }
+
+    return findRows(speciesFilter, growthIndicatorFilter, retrievalDateFilter, updateDateFilter);
   }
 
   @Override
@@ -497,6 +488,68 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       return true;
     }
     return expected.equals(trimToNull(candidate));
+  }
+
+  private List<RtmEmsLogAmvRowDto> findRows(
+      String speciesFilter,
+      String growthIndicatorFilter,
+      String retrievalDateFilter,
+      String updateDateFilter) {
+    return sortRows(
+        rows.stream()
+            .filter(
+                row ->
+                    matchesFilter(speciesFilter, row.species())
+                        && matchesFilter(growthIndicatorFilter, row.growthIndicator())
+                        && matchesDateFilter(retrievalDateFilter, row.retrievalDate())
+                        && matchesDateFilter(updateDateFilter, row.updateDate()))
+            .toList());
+  }
+
+  private List<RtmEmsLogAmvRowDto> findRowsForEffectiveDate(
+      String speciesFilter, String growthIndicatorFilter, String effectiveDate) {
+    Map<String, RtmEmsLogAmvRowDto> rowsByTarget = new LinkedHashMap<>();
+
+    rows.stream()
+        .filter(
+            row ->
+                matchesFilter(speciesFilter, row.species())
+                    && matchesFilter(growthIndicatorFilter, row.growthIndicator())
+                    && effectiveDate.equals(trimToNull(row.retrievalDate()))
+                    && (trimToNull(row.updateDate()) == null
+                        || effectiveDate.equals(trimToNull(row.updateDate()))))
+        .forEach(row -> rowsByTarget.put(rowKey(row), row));
+
+    rows.stream()
+        .filter(
+            row ->
+                matchesFilter(speciesFilter, row.species())
+                    && matchesFilter(growthIndicatorFilter, row.growthIndicator())
+                    && effectiveDate.equals(trimToNull(row.updateDate())))
+        .forEach(row -> rowsByTarget.put(rowKey(row), row));
+
+    return sortRows(rowsByTarget.values());
+  }
+
+  private List<RtmEmsLogAmvRowDto> sortRows(Iterable<RtmEmsLogAmvRowDto> sourceRows) {
+    List<RtmEmsLogAmvRowDto> sortedRows = new ArrayList<>();
+    sourceRows.forEach(sortedRows::add);
+    sortedRows.sort(
+        Comparator.comparing(
+                (RtmEmsLogAmvRowDto row) -> normalize(row.species()),
+                Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER))
+            .thenComparing(
+                (RtmEmsLogAmvRowDto row) -> normalize(row.grade()),
+                Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER)));
+    return sortedRows;
+  }
+
+  private String rowKey(RtmEmsLogAmvRowDto row) {
+    return String.join(
+        "|",
+        normalize(row.species()),
+        normalize(row.grade()),
+        normalize(row.growthIndicator()));
   }
 
   private int findMatchingRowIndex(

@@ -32,11 +32,11 @@ public class LexisApiAuthorizationCustomizer
     "/api/lexis/errorPage.do"
   };
   private static final String[] PROD_RTM_ONLY_GET_PATTERNS = {
-    "/api/lexis/rpc/application-details/species-codes"
+    "/api/lexis/rpc/application-details/species-codes",
+    "/api/lexis/rtm/emslogamv"
   };
   private static final String[] PROD_RTM_ONLY_POST_PATTERNS = {
-    "/api/lexis/rtm/emslogamv/preview",
-    "/api/lexis/rtm/emslogamv/upload"
+    "/api/lexis/rtm/emslogamv"
   };
 
   private final LexisAuthorizationService authorizationService;

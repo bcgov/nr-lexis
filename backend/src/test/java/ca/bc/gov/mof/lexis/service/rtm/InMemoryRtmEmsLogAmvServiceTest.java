@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
+import java.math.BigDecimal;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
@@ -74,6 +76,28 @@ class InMemoryRtmEmsLogAmvServiceTest {
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.rows()).singleElement().satisfies(row -> assertThat(row.newValue()).isNull());
+  }
+
+  @Test
+  void shouldFindTableRowsForEffectiveDateAfterCreateAndUpdate() {
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(FIXED_CLOCK);
+
+    var createResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BA", "A", "O", "2026-07-01", "2026-07-01", new BigDecimal("10.25"), "create"));
+    var updateResult =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "BALSAM", "B", "S", "2026-01-01", "2026-07-01", new BigDecimal("11.50"), "update"));
+
+    assertThat(createResult.status()).isEqualTo("accepted");
+    assertThat(updateResult.status()).isEqualTo("accepted");
+    assertThat(service.find("", "", "2026-07-01", "2026-07-01"))
+        .extracting(row -> List.of(row.species(), row.grade(), row.growthIndicator(), row.newValue()))
+        .contains(
+            List.of("BA", "A", "O", new BigDecimal("10.25")),
+            List.of("BALSAM", "B", "S", new BigDecimal("11.50")));
   }
 
   private MultipartFile matrixWorkbook() throws IOException {
