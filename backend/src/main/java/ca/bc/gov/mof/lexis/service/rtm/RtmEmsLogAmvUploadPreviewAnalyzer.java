@@ -87,7 +87,23 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   static UploadParseResult parseForUpload(
       InputStream inputStream, LocalDate submissionDate) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return parseUploadSheet(parsedWorkbook.rows());
+    return parseUploadSheet(parsedWorkbook.rows(), submissionDate);
+  }
+
+  private static UploadParseResult parseUploadSheet(
+      List<ParsedRow> rows, LocalDate submissionDate) {
+    UploadParseResult result = parseUploadSheet(rows);
+    LocalDate normalizedSubmissionDate =
+        submissionDate == null ? result.retrievalDate() : submissionDate.withDayOfMonth(1);
+    return new UploadParseResult(
+        result.dataRowCount(),
+        result.numericCellCount(),
+        result.headerDetected(),
+        normalizedSubmissionDate,
+        result.updateDate(),
+        result.errors(),
+        result.warnings(),
+        result.rows());
   }
 
   private static ParsedWorkbook readWorkbook(InputStream inputStream) throws IOException {

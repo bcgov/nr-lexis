@@ -892,7 +892,7 @@ const RTMEmsLogAmvPage = () => {
                 onClick={openReviewStep}
                 disabled={isReviewDisabled}
               >
-                Review upload
+                Review
               </Button>
             </div>
           </>

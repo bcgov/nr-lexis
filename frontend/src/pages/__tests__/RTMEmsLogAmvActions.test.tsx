@@ -178,7 +178,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(
       screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
-    const reviewUploadButton = screen.getByRole('button', { name: 'Review upload' })
+    const reviewUploadButton = screen.getByRole('button', { name: 'Review' })
     expect(reviewUploadButton).toBeEnabled()
     await user.click(reviewUploadButton)
     expect(screen.getByText('Please upload a file before continuing.')).toBeVisible()
@@ -199,7 +199,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(await screen.findByText('Spreadsheet validated')).toBeVisible()
     expect(screen.getByText('"rtm-ems-log-amv-template.xlsx" is ready for review.')).toBeVisible()
 
-    const reviewButton = screen.getByRole('button', { name: 'Review upload' })
+    const reviewButton = screen.getByRole('button', { name: 'Review' })
     await waitFor(() => expect(reviewButton).toBeEnabled())
     await user.click(reviewButton)
 
@@ -261,7 +261,7 @@ describe('RTM EMS Log AMV actions', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByText(warning)).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Review upload' }))
+    await user.click(screen.getByRole('button', { name: 'Review' }))
 
     expect(screen.getByRole('heading', { name: 'Review' })).toBeVisible()
     expect(screen.queryByText(warning)).not.toBeInTheDocument()
@@ -300,7 +300,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(
       within(validationTable).getByText('The update date is required in the uploaded template.'),
     ).toBeVisible()
-    const reviewButton = screen.getByRole('button', { name: 'Review upload' })
+    const reviewButton = screen.getByRole('button', { name: 'Review' })
     expect(reviewButton).toBeEnabled()
     await user.click(reviewButton)
     expect(
@@ -334,7 +334,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(await screen.findByText('1 validation issue found')).toBeVisible()
     expect(screen.getByText('Update date must be on or after the retrieval date.')).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: 'Review upload' }))
+    await user.click(screen.getByRole('button', { name: 'Review' }))
 
     expect(
       screen.getByText('Upload a spreadsheet that passes validation before reviewing it.'),

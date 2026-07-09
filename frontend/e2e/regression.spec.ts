@@ -327,8 +327,7 @@ const rtmInvalidPreviewFixtures = [
   {
     name: 'rtm-amv-missing-target-date.xlsx',
     buffer: rtmMissingTargetDateWorkbook,
-    expectedError:
-      "No existing AMV row found for species 'BA', grade 'A', growth 'S', effective date '2026-01-01'.",
+    expectedError: 'Update date must be on or after the retrieval date.',
   },
 ] as const
 
@@ -1303,7 +1302,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toBeVisible()
-    const reviewUploadButton = page.getByRole('button', { name: 'Review upload' })
+    const reviewUploadButton = page.getByRole('button', { name: 'Review' })
     await expect(reviewUploadButton).toBeEnabled()
     await reviewUploadButton.click()
     await expect(page.getByText('Please upload a file before continuing.')).toBeVisible()
