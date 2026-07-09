@@ -474,6 +474,10 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       return false;
     }
 
+    if (repository.hasExactValue(species, grade, growthIndicator, effectiveDate, expectedValue)) {
+      return true;
+    }
+
     List<RtmEmsLogAmvRowDto> appliedRows =
         repository.find(species, growthIndicator, effectiveDate, effectiveDate);
     if (appliedRows == null || appliedRows.isEmpty()) {

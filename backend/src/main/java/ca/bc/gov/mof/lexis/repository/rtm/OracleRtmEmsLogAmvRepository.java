@@ -63,6 +63,29 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
     return count != null && count > 0;
   }
 
+  public boolean hasExactValue(
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate,
+      BigDecimal expectedValue) {
+    if (effectiveDate == null || expectedValue == null) {
+      return false;
+    }
+
+    Boolean found =
+        hasExactValue("EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate, expectedValue);
+    if (found == null) {
+      found =
+          hasExactValue(
+              "THE.EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate, expectedValue);
+    }
+    if (found == null) {
+      logger.warn("RTM AMV exact value check could not verify EMS_LOG_AMV.");
+    }
+    return Boolean.TRUE.equals(found);
+  }
+
   private Integer countExact(
       String tableName,
       String species,
@@ -84,6 +107,37 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
           trim(grade),
           trim(growthIndicator),
           java.sql.Date.valueOf(effectiveDate));
+    } catch (DataAccessException ignored) {
+      return null;
+    }
+  }
+
+  private Boolean hasExactValue(
+      String tableName,
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate,
+      BigDecimal expectedValue) {
+    try {
+      List<BigDecimal> values =
+          jdbcTemplate.queryForList(
+              """
+              SELECT AVG_MARKET_PRICE
+              FROM %s
+              WHERE SPECIES = UPPER(?)
+                AND GRADE = UPPER(?)
+                AND GROWTH_TYPE_ST = UPPER(?)
+                AND TRUNC(EFFECTIVE_DATE) = ?
+              """.formatted(tableName),
+              BigDecimal.class,
+              trim(species),
+              trim(grade),
+              trim(growthIndicator),
+              java.sql.Date.valueOf(effectiveDate));
+      return values.stream()
+          .filter(value -> value != null)
+          .anyMatch(value -> value.compareTo(expectedValue) == 0);
     } catch (DataAccessException ignored) {
       return null;
     }

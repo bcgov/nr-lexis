@@ -348,6 +348,33 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldConfirmSaveWithExactTableValueWhenLegacySelectOmitsRow() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate effectiveDate = LocalDate.of(2026, 7, 1);
+    BigDecimal newValue = new BigDecimal("0.1234");
+    when(repository.update(
+            eq("HE"),
+            eq("B"),
+            eq("O"),
+            eq(effectiveDate),
+            eq(effectiveDate),
+            eq(newValue)))
+        .thenReturn("0");
+    when(repository.hasExactValue(eq("HE"), eq("B"), eq("O"), eq(effectiveDate), eq(newValue)))
+        .thenReturn(true);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
+
+    var result =
+        service.save(
+            new RtmEmsLogAmvSaveRequestDto(
+                "HE", "B", "O", "2026-07-01", "2026-07-01", newValue, "update"));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    verify(repository, never())
+        .find(anyString(), anyString(), any(LocalDate.class), any(LocalDate.class));
+  }
+
+  @Test
   void shouldRejectUpdateDateBeforeRetrievalDate() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
