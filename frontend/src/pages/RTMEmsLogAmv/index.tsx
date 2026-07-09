@@ -217,6 +217,14 @@ const compareMatrixRows = (left: RtmReviewMatrixRow, right: RtmReviewMatrixRow) 
 const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] => {
   const matrixRows = new Map<string, RtmReviewMatrixRow>()
 
+  RTM_REVIEW_GRADE_ORDER.forEach((grade) => {
+    matrixRows.set(grade, {
+      key: grade,
+      grade,
+      values: {},
+    })
+  })
+
   rows.forEach((row) => {
     const grade = normalizeKey(row.grade)
     const growthIndicator = normalizeKey(row.growthIndicator)
@@ -433,25 +441,6 @@ const ReviewUploadContent = ({
 
   return (
     <div className="admin-upload-review admin-upload-review--rtm">
-      <dl className="admin-upload-review__meta" aria-label="Average monthly values upload summary">
-        <div>
-          <dt>File</dt>
-          <dd>{previewResult.fileName ?? 'Selected spreadsheet'}</dd>
-        </div>
-        <div>
-          <dt>Update date</dt>
-          <dd>{previewResult.updateDate ?? ''}</dd>
-        </div>
-        <div>
-          <dt>Retrieval date</dt>
-          <dd>{previewResult.retrievalDate ?? ''}</dd>
-        </div>
-        <div>
-          <dt>Rows to apply</dt>
-          <dd>{previewResult.rowCount}</dd>
-        </div>
-      </dl>
-
       {matrixRows.length > 0 ? (
         <div className="admin-upload-review-table">
           <Table useZebraStyles aria-label="Average monthly value upload review">
@@ -852,7 +841,7 @@ const RTMEmsLogAmvPage = () => {
           <>
             <div className="admin-upload-section-heading">
               <h2 id="rtm-review-title">Review</h2>
-              <p>Confirm the average monthly values parsed from the spreadsheet.</p>
+              <p>Review the details extracted from your file and submit when ready</p>
             </div>
 
             <section className="admin-upload-panel" aria-labelledby="rtm-review-title">
@@ -867,26 +856,22 @@ const RTMEmsLogAmvPage = () => {
               )}
             </section>
 
-            <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split">
-              <div>
-                <Button kind="ghost" size="md" onClick={() => setUploadStep('upload')}>
-                  Back
-                </Button>
-              </div>
-              <div>
-                <Button
-                  kind="primary"
-                  size="md"
-                  className="admin-upload-fspts-action-button"
-                  renderIcon={ArrowRight}
-                  onClick={() => {
-                    void submitUpload()
-                  }}
-                  disabled={isUploadDisabled}
-                >
-                  Submit changes
-                </Button>
-              </div>
+            <div className="admin-upload-fspts-button-row">
+              <Button kind="ghost" size="md" onClick={() => setUploadStep('upload')}>
+                Back
+              </Button>
+              <Button
+                kind="primary"
+                size="md"
+                className="admin-upload-fspts-action-button"
+                renderIcon={ArrowRight}
+                onClick={() => {
+                  void submitUpload()
+                }}
+                disabled={isUploadDisabled}
+              >
+                Submit
+              </Button>
             </div>
           </>
         )}

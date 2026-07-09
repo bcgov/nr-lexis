@@ -181,7 +181,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(reviewUploadButton).toBeEnabled()
     await user.click(reviewUploadButton)
     expect(screen.getByText('Please upload a file before continuing.')).toBeVisible()
-    expect(screen.queryByRole('button', { name: 'Submit changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
   })
 
   it('validates the selected file automatically before review and submit', async () => {
@@ -203,6 +203,11 @@ describe('RTM EMS Log AMV actions', () => {
     await user.click(reviewButton)
 
     expect(screen.getByRole('heading', { name: 'Review' })).toBeVisible()
+    expect(
+      screen.getByText('Review the details extracted from your file and submit when ready'),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('Average monthly values upload summary')).not.toBeInTheDocument()
+    expect(screen.queryByText('Rows to apply')).not.toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', {
       name: 'Average monthly values upload workflow progress',
     })
@@ -216,13 +221,15 @@ describe('RTM EMS Log AMV actions', () => {
     expect(
       within(reviewTable).queryByRole('columnheader', { name: 'Growth' }),
     ).not.toBeInTheDocument()
-    expect(within(reviewTable).getAllByRole('row')).toHaveLength(2)
+    expect(within(reviewTable).getAllByRole('row')).toHaveLength(24)
+    expect(within(reviewTable).getByRole('cell', { name: 'A' })).toBeVisible()
+    expect(within(reviewTable).getByRole('cell', { name: '6' })).toBeVisible()
     expect(within(reviewTable).queryByText('Old growth')).not.toBeInTheDocument()
     expect(within(reviewTable).queryByText('Second growth')).not.toBeInTheDocument()
     expect(within(reviewTable).getAllByText('10.25')).toHaveLength(1)
     expect(within(reviewTable).getAllByText('30.75')).toHaveLength(1)
 
-    await user.click(screen.getByRole('button', { name: 'Submit changes' }))
+    await user.click(screen.getByRole('button', { name: 'Submit' }))
 
     await waitFor(() => expect(mockedUpload).toHaveBeenCalledWith({ file }))
     await waitFor(() => expect(screen.getByText('Upload applied.')).toBeVisible())

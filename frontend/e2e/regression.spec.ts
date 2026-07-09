@@ -1283,7 +1283,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(reviewUploadButton).toBeEnabled()
     await reviewUploadButton.click()
     await expect(page.getByText('Please upload a file before continuing.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Submit changes' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
 
     await page.locator('#rtm-upload-file').setInputFiles({
       name: 'invalid-amv.xlsx',
@@ -1959,6 +1959,7 @@ test.describe('TEST IDIR admin regression', () => {
       expect(rtmPreviewResponse.payload.status).toBe('accepted')
       expect(rtmPreviewResponse.payload.rowCount).toBeGreaterThan(0)
       expect(asStringArray(rtmPreviewResponse.payload.errors)).toEqual([])
+      expect(asStringArray(rtmPreviewResponse.payload.warnings)).toEqual([])
     } else {
       expect(rtmPreviewResponse.payload.status).toBe('validation_failed')
       expect(asStringArray(rtmPreviewResponse.payload.errors).join(' ')).toContain('update date')

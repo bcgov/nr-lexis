@@ -792,7 +792,12 @@ body {
 /* Carbon component polish aligned with NR FSPTS. Keep this scoped so legacy-parity
    layouts stay intact while shared Carbon controls use the modern rounded styling. */
 .app-shell .cds--btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 2.5rem;
   border-radius: 4px;
+  line-height: 1.125rem;
 }
 
 .app-shell .cds--btn:not(.cds--btn--icon-only) {
@@ -803,9 +808,10 @@ body {
 
 .app-shell .cds--btn:not(.cds--btn--icon-only) .cds--btn__icon {
   position: static;
+  align-self: center;
   inset-inline-end: auto;
   margin-inline-start: 0;
-  transform: translateY(1px);
+  transform: none;
 }
 
 .app-shell .cds--text-input,
@@ -2434,6 +2440,10 @@ body {
 
 .admin-upload-review-table table {
   min-inline-size: 56rem;
+}
+
+.admin-upload-review-table .cds--data-table tbody td {
+  border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
 }
 
 .admin-upload-review-field-table {
