@@ -113,6 +113,16 @@ date for the persisted application/received dates as the ESF consumer did. It re
 schedule from the supplied biweekly-list date and falls back to the next available schedule when
 there is no exact match.
 
+Synthetic smoke-test payloads are available under
+`backend/src/test/resources/lexis-upload-samples/`:
+
+- `pass-federal-application.xml` exercises successful validation.
+- `fail-federal-jurisdiction.xml` exercises rejected validation because required federal details
+  are missing.
+
+The passing fixture is safe for validation only. Replace its business identifiers with approved
+TEST values before calling the submission endpoint.
+
 Send the correlation, source, and business-reference metadata on every request. Send an
 idempotency key for submit requests:
 

@@ -1164,6 +1164,13 @@ class ApplicationSubmissionImportServiceTest {
       assertThat(result.scaleRows()).as(fileName).isPositive();
     }
 
+    ApplicationSubmissionImportResultDto federal =
+        service().validateApplicationSubmission(sampleResourceXml("pass-federal-application.xml"));
+    assertThat(federal.status()).isEqualTo("validated");
+    assertThat(federal.packageNumber()).isEqualTo("FED26-700123");
+    assertThat(federal.submissionSummary()).isNotNull();
+    assertThat(federal.scaleRows()).isPositive();
+
     ApplicationSubmissionImportResultDto missingBoom =
         service().validateApplicationSubmission(sampleResourceXml("fail-missing-boom-number.xml"));
     assertThat(missingBoom.status()).isEqualTo("rejected");

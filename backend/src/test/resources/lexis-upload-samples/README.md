@@ -7,6 +7,8 @@ Pass cases:
 - `pass-application-rsc.xml`
 - `pass-application-rsi.xml`
 - `pass-application-rkb.xml`
+- `pass-federal-application.xml` is a synthetic ESF-wrapped federal payload for the NEXCOL
+  validation endpoint. Change its business identifiers before testing the submission endpoint.
 
 Failure cases:
 
