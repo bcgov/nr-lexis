@@ -60,8 +60,6 @@ lexis:
     keycloak:
       # Optional second JWT issuer for machine-to-machine clients such as NEXCOL.
       issuer-uri: ${KEYCLOAK_ISSUER_URI:}
-      # Additional comma-separated Keycloak issuers, such as API Services Portal's shared apigw realm.
-      additional-issuer-uris: ${KEYCLOAK_ADDITIONAL_ISSUER_URIS:}
       jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:}
     # Mirrors legacy WebADE "industry-roles" behaviour with renamed submitter roles.
     industry-roles: "LEXIS_PROVINCIAL_SUBMITTER"

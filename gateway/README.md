@@ -18,16 +18,19 @@ Federal users do not use the LEXIS interactive login flow for these requests.
 ## Design
 
 - One gateway service exposes the two approved federal operations.
-- Gateway routes accept only `POST` and require the approved federal-submission authorization.
+- Gateway routes accept only `POST` and require the approved federal-submission OAuth scope.
+- Keycloak owns the single NEXCOL runtime client; the gateway does not issue consumer credentials.
+- The gateway validates the configured Keycloak issuer, audience, expiry, and scope before proxying.
 - LEXIS validates the signed gateway token and maps its authorization to the existing federal
   submission rule.
 - The gateway forwards to an environment-specific LEXIS backend route.
 
 ## Operational setup
 
-Use the API Services Portal operator documentation and the official client-credentials template
-to create and configure the gateway. Keep the filled configuration in an approved private
-location; it is not a repository artifact.
+Use the API Services Portal operator documentation to create and configure the gateway. Keep the
+filled configuration in an approved private location; it is not a repository artifact. Configure
+the gateway to accept the target environment's Keycloak issuer and standard OAuth `scope` claim;
+do not configure an API Services Portal credential issuer or consumer application.
 
 For the current rollout:
 
@@ -35,13 +38,13 @@ For the current rollout:
 - Do not maintain a long-lived DEV gateway: DEV uses changing PR-preview deployments.
 - Create a separate PROD gateway only after the production LEXIS deployment is stable and the
   required operational approvals are complete.
-- Keep the consumer product inactive while approvals are pending. Activate it when consumer
-  provisioning and smoke testing are authorized.
+- Keep the API product inactive while approvals are pending. Activate it when gateway publishing
+  and smoke testing are authorized.
 
 A new gateway must pass organization-administrator review before its APIs can be published to the
 Directory. While that review is pending, leave the existing gateway in preview mode; it does not
-need to be recreated. After approval, publish/activate the TEST product, provision a TEST consumer
-application, and run the verification below.
+need to be recreated. After approval, publish/activate the TEST product, assign the required scope
+to the dedicated TEST NEXCOL Keycloak client, and run the verification below.
 
 The NEXCOL token, request, response, and retry contract is documented in
 [`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).
@@ -54,7 +57,7 @@ Deployment values belong in the approved configuration and secret-management sys
 
 ## Verification
 
-Before enabling a consumer, verify all of the following through the gateway:
+Before enabling NEXCOL, verify all of the following through the gateway:
 
 - A valid token with the required authorization can validate valid and invalid XML.
 - A valid submission writes the expected federal records.

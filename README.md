@@ -123,9 +123,9 @@ If the backend starts but authenticated API calls fail, check network access, `a
 
 ### NEXCOL service-client auth
 
-Federal NEXCOL validation/submission calls use machine-to-machine Keycloak tokens, not Cognito/FAM user sessions. The calling client must receive the `lexis:federal-submission:submit` scope or client role, then call the federal validation/submission endpoints with a bearer token.
+Federal NEXCOL validation/submission calls use machine-to-machine Keycloak tokens, not Cognito/FAM user sessions. The dedicated NEXCOL client must receive the `lexis:federal-submission:submit` OAuth scope, then call the gateway's federal validation/submission endpoints with a bearer token.
 
-LEXIS deploys can idempotently create the required direct Keycloak client scope in each environment when `keycloak_sa_client_id` and `keycloak_sa_client_secret` are configured for the GitHub environment. API Services Portal gateway credentials are configured through the APS gateway product/application flow.
+LEXIS deploys can idempotently create the required Keycloak client scope in each environment when `keycloak_sa_client_id` and `keycloak_sa_client_secret` are configured for the GitHub environment. The deployment service account manages scopes only; it is not the NEXCOL runtime client and its credentials must not be shared.
 
 See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for consumer
 provisioning, the token flow, request/response examples, and the ESF replacement mapping.

@@ -5,7 +5,7 @@ machine-to-machine API path. Federal users do not sign in to the LEXIS UI.
 
 ```text
 NEXCOL
-  -> API Services Portal client-credentials token
+  -> dedicated Keycloak client-credentials token
   -> API gateway
   -> LEXIS federal validation or submission endpoint
   -> existing LEXIS federal application tables
@@ -22,32 +22,36 @@ Both federal endpoints require this authorization:
 lexis:federal-submission:submit
 ```
 
-The API Services Portal credential issuer assigns it to the NEXCOL client. The issued access token
-may represent it as a client role or OAuth scope; the LEXIS backend maps either representation to
-the same Spring Security authority.
+The client scope is assigned to the dedicated NEXCOL calling client in the same Keycloak realm
+trusted by the gateway and LEXIS. The issued access token carries it in the standard OAuth
+`scope` claim.
 
 There are two different service credentials involved in the overall setup:
 
-- The NEXCOL runtime client id and secret are issued through the API Services Portal
-  product/application flow. NEXCOL uses them to obtain access tokens.
-- The optional LEXIS deployment service account can create/check direct Keycloak client scopes.
+- The NEXCOL runtime client id and secret belong to a dedicated confidential Keycloak client.
+  NEXCOL uses them to obtain access tokens.
+- The optional LEXIS deployment service account creates/checks Keycloak client scopes.
   Its id and secret are deployment secrets and are never given to NEXCOL.
 
 The deploy-time scope synchronization follows the same pattern as `nr-user-lookup-api`: the issuer
 comes from `KEYCLOAK_ISSUER_URI`, and the sync step runs only when the Keycloak management service
-account is configured. API Services Portal tokens are trusted through the appropriate additional
-issuer configuration. Issuer values and credentials belong in environment configuration, not in
+account is configured. Issuer values and credentials belong in environment configuration, not in
 this repository.
 
 ## Consumer Provisioning
 
 Provision each environment independently:
 
-1. LEXIS publishes an API product containing only the two federal `POST` operations.
-2. NEXCOL creates or selects an API Services Portal application and requests access to the product.
-3. The access request is approved through the agreed operational process.
-4. API Services Portal provides the environment-specific token URL, client id, and client secret.
-5. NEXCOL stores the secret in an approved secret manager and obtains tokens with
+1. LEXIS creates/checks the required client scope in the target Keycloak realm.
+2. A dedicated confidential NEXCOL client is provisioned in that realm with service accounts
+   enabled.
+3. The client scope is assigned to NEXCOL as a default client scope so every service token carries
+   the required authorization.
+4. The client is configured with the gateway's dedicated audience when audience enforcement is
+   enabled.
+5. The gateway validates the token issuer, audience, expiry, and required scope before forwarding
+   either federal `POST` operation.
+6. NEXCOL stores its client secret in an approved secret manager and obtains tokens with
    `client_credentials`.
 
 Do not reuse TEST credentials in PROD. Do not send client secrets or bearer tokens through source
@@ -55,7 +59,7 @@ control, tickets, chat, request logs, or email.
 
 ## Obtain an Access Token
 
-Use the token URL and credentials supplied by API Services Portal:
+Use the target Keycloak realm's token URL and the dedicated NEXCOL client credentials:
 
 ```bash
 curl -sS -X POST "${TOKEN_URL}" \
@@ -72,7 +76,7 @@ Before integration testing, decode a token locally and verify:
 
 - `iss` is the expected issuer for the target environment.
 - `aud` is the expected gateway audience.
-- `client_roles` or `scope` contains `lexis:federal-submission:submit`.
+- `scope` contains `lexis:federal-submission:submit`.
 - The token is an access token and has not expired.
 
 Claim names are part of the provider configuration. NEXCOL must not modify or self-issue these
@@ -201,7 +205,7 @@ Expected HTTP results:
 | `201` | Submission accepted and written | Store returned identifiers; do not resubmit |
 | `400` | Missing/invalid request metadata or non-XML body | Correct the request |
 | `401` | Missing, expired, or invalid token | Obtain a valid token |
-| `403` | Token lacks the required authorization | Correct product/client access |
+| `403` | Token lacks the required authorization | Correct the Keycloak client-scope assignment |
 | `404` | Route or method is not exposed by the gateway | Correct the request URL/method |
 | `422` | XML or business validation rejected the submission | Correct the payload using `errors` |
 | `503` | LEXIS could not process the request | Honour `Retry-After` and retry cautiously |
