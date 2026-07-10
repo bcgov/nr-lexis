@@ -127,8 +127,8 @@ Federal NEXCOL validation/submission calls use machine-to-machine Keycloak token
 
 LEXIS deploys can idempotently create the required direct Keycloak client scope in each environment when `keycloak_sa_client_id` and `keycloak_sa_client_secret` are configured for the GitHub environment. API Services Portal gateway credentials are configured through the APS gateway product/application flow.
 
-See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for the
-Keycloak setup, token request, and endpoint request shape.
+See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for consumer
+provisioning, the token flow, request/response examples, and the ESF replacement mapping.
 See [gateway/README.md](gateway/README.md) for the API Services Portal gateway setup.
 
 ## CI regression

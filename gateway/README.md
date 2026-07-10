@@ -35,8 +35,16 @@ For the current rollout:
 - Do not maintain a long-lived DEV gateway: DEV uses changing PR-preview deployments.
 - Create a separate PROD gateway only after the production LEXIS deployment is stable and the
   required operational approvals are complete.
-- Keep the consumer product inactive until the external client has been provisioned and smoke
-  testing is authorized.
+- Keep the consumer product inactive while approvals are pending. Activate it when consumer
+  provisioning and smoke testing are authorized.
+
+A new gateway must pass organization-administrator review before its APIs can be published to the
+Directory. While that review is pending, leave the existing gateway in preview mode; it does not
+need to be recreated. After approval, publish/activate the TEST product, provision a TEST consumer
+application, and run the verification below.
+
+The NEXCOL token, request, response, and retry contract is documented in
+[`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).
 
 ## Backend trust
 
