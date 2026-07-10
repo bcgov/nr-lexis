@@ -1,60 +1,44 @@
-# Gateway integration
+# NEXCOL API Gateway
 
-This folder describes the NEXCOL-to-LEXIS machine-to-machine integration pattern. It is
-intentionally implementation-neutral because this is a public repository.
-
-## Flow
+The gateway is the external entry point for NEXCOL federal validation and submission traffic.
 
 ```text
-NEXCOL
-  -> client-credentials access token
-  -> API gateway
-  -> LEXIS federal validation or submission API
-  -> existing LEXIS federal application tables
+NEXCOL -> Keycloak token -> API gateway -> LEXIS backend
 ```
 
-Federal users do not use the LEXIS interactive login flow for these requests.
+## Responsibilities
 
-## Design
+- Keycloak owns the dedicated NEXCOL client and OAuth scope assignment.
+- The gateway exposes only the two federal `POST` endpoints.
+- The gateway validates issuer, expiry, required scope and audience when configured.
+- The gateway provides centralized routing, traffic controls, metrics and operational visibility.
+- LEXIS validates the forwarded token and applies application-level authorization and business
+  validation.
 
-- One gateway service exposes the two approved federal operations.
-- Gateway routes accept only `POST` and require the approved federal-submission authorization.
-- LEXIS validates the signed gateway token and maps its authorization to the existing federal
-  submission rule.
-- The gateway forwards to an environment-specific LEXIS backend route.
+Consumer credentials are provisioned in Keycloak rather than through an API Services Portal
+application.
 
-## Operational setup
+## Configuration
 
-Use the API Services Portal operator documentation and the official client-credentials template
-to create and configure the gateway. Keep the filled configuration in an approved private
-location; it is not a repository artifact.
+Gateway configuration is maintained per environment through API Services tooling. It defines:
 
-For the current rollout:
+- the environment-specific LEXIS upstream;
+- validation and submission routes;
+- the trusted Keycloak issuer;
+- the `lexis:federal-submission:submit` OAuth scope; and
+- an optional dedicated audience.
 
-- Maintain a TEST gateway against the stable TEST LEXIS deployment.
-- Do not maintain a long-lived DEV gateway: DEV uses changing PR-preview deployments.
-- Create a separate PROD gateway only after the production LEXIS deployment is stable and the
-  required operational approvals are complete.
-- Keep the consumer product inactive until the external client has been provisioned and smoke
-  testing is authorized.
+TEST and PROD use independent gateway and Keycloak client configurations. DEV uses ephemeral
+application deployments and has no long-lived NEXCOL gateway.
 
-## Backend trust
-
-Configure Keycloak issuer trust through the deployment environment for each LEXIS target. The
-gateway issuer, audience, and backend trust must be aligned for the same target environment.
-Deployment values belong in the approved configuration and secret-management systems, not here.
+The request, payload and response contract is documented in
+[`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).
 
 ## Verification
 
-Before enabling a consumer, verify all of the following through the gateway:
+Environment verification covers:
 
-- A valid token with the required authorization can validate valid and invalid XML.
-- A valid submission writes the expected federal records.
-- No token is rejected with `401`.
-- A token without the required authorization is rejected with `403`.
-
-## Public-repository boundary
-
-Do not commit generated gateway files, gateway identifiers, public hosts, upstream URLs, issuer
-URLs, audiences, product identifiers, client identifiers, client credentials, tokens, or portal
-exports. Record those values only in the approved private runbook and deployment systems.
+- missing token returns `401`;
+- missing scope returns `403`;
+- valid and invalid XML produce the expected validation results; and
+- a controlled valid submission persists the expected federal records.

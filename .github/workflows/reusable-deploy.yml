@@ -60,10 +60,10 @@ on:
         description: Enables PROD RTM-only feature restriction when set to true
         required: false
       keycloak_sa_client_id:
-        description: Keycloak service-account client id used to sync LEXIS client scopes
+        description: Keycloak service-account client id used to provision LEXIS clients/scopes
         required: false
       keycloak_sa_client_secret:
-        description: Keycloak service-account client secret used to sync LEXIS client scopes
+        description: Keycloak service-account client secret used to provision LEXIS clients/scopes
         required: false
 
     outputs:
@@ -94,12 +94,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # DEV deployments are ephemeral PR previews; gateway scope provisioning is TEST/PROD-only.
-      - name: Ensure Keycloak client scopes
+      # DEV deployments are ephemeral PR previews; gateway client provisioning is TEST/PROD-only.
+      - name: Ensure Keycloak scopes and NEXCOL client
         if: ${{ inputs.environment != 'dev' && env.KC_SA_CLIENT_ID != '' }}
         env:
           KEYCLOAK_ISSUER_URI: ${{ vars.KEYCLOAK_ISSUER_URI }}
           KC_SA_CLIENT_SECRET: ${{ secrets.keycloak_sa_client_secret }}
+          NEXCOL_KEYCLOAK_CLIENT_ID: ${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}
         run: ./.github/scripts/ensure-keycloak-scopes.sh
 
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
@@ -121,7 +122,6 @@ jobs:
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
             -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
             -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
-            -p KEYCLOAK_ADDITIONAL_ISSUER_URIS="${{ vars.KEYCLOAK_ADDITIONAL_ISSUER_URIS }}"
             -p IDENTITY_LOOKUP_BASE_URL="${{ vars.IDENTITY_LOOKUP_BASE_URL }}"
             -p DATABASE_HOST="$DATABASE_HOST"
             -p DATABASE_SERVICE_NAME="$DATABASE_SERVICE_NAME"

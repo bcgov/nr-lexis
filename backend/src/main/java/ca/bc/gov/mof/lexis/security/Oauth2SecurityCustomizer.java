@@ -41,7 +41,6 @@ public class Oauth2SecurityCustomizer
       @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String cognitoJwkSetUri,
       @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String cognitoIssuerUri,
       @Value("${lexis.auth.keycloak.issuer-uri:}") String keycloakIssuerUri,
-      @Value("${lexis.auth.keycloak.additional-issuer-uris:}") String additionalKeycloakIssuerUris,
       @Value("${lexis.auth.keycloak.jwk-set-uri:}") String keycloakJwkSetUri,
       LexisSessionService sessionService) {
 
@@ -66,17 +65,6 @@ public class Oauth2SecurityCustomizer
               resolvedKeycloakJwkSetUri,
               "lexis.auth.keycloak.issuer-uri",
               "lexis.auth.keycloak.jwk-set-uri"));
-    }
-
-    for (String additionalIssuerUri : splitIssuerUris(additionalKeycloakIssuerUris)) {
-      String normalizedAdditionalIssuerUri = normalizeIssuerUri(additionalIssuerUri);
-      decoders.putIfAbsent(
-          normalizedAdditionalIssuerUri,
-          createDecoder(
-              normalizedAdditionalIssuerUri,
-              resolveKeycloakJwkSetUri(normalizedAdditionalIssuerUri, ""),
-              "lexis.auth.keycloak.additional-issuer-uris",
-              "lexis.auth.keycloak.additional-issuer-uris"));
     }
 
     this.jwtDecoder = token -> decodeWithIssuer(decoders, token);
@@ -128,43 +116,9 @@ public class Oauth2SecurityCustomizer
           .forEach(scopes::add);
     }
 
-    addClaimList(scopes, jwt.getClaimAsStringList("client_roles"));
-    addResourceAccessRoles(scopes, jwt.getClaim("resource_access"));
-
     return scopes.stream()
         .map(scope -> "SCOPE_" + scope)
         .toList();
-  }
-
-  private static void addClaimList(LinkedHashSet<String> scopes, List<String> claimValues) {
-    if (claimValues == null || claimValues.isEmpty()) {
-      return;
-    }
-    claimValues.stream()
-        .map(String::trim)
-        .filter(scope -> !scope.isEmpty())
-        .forEach(scopes::add);
-  }
-
-  private static void addResourceAccessRoles(LinkedHashSet<String> scopes, Object resourceAccess) {
-    if (!(resourceAccess instanceof Map<?, ?> resourceAccessMap)) {
-      return;
-    }
-    for (Object clientAccess : resourceAccessMap.values()) {
-      if (!(clientAccess instanceof Map<?, ?> clientAccessMap)) {
-        continue;
-      }
-      Object roles = clientAccessMap.get("roles");
-      if (!(roles instanceof List<?> roleList)) {
-        continue;
-      }
-      roleList.stream()
-          .filter(String.class::isInstance)
-          .map(String.class::cast)
-          .map(String::trim)
-          .filter(role -> !role.isEmpty())
-          .forEach(scopes::add);
-    }
   }
 
   private static Jwt decodeWithIssuer(Map<String, JwtDecoder> decoders, String token) {
@@ -226,16 +180,6 @@ public class Oauth2SecurityCustomizer
       return null;
     }
     return issuerUri.replaceAll("/+$", "");
-  }
-
-  static List<String> splitIssuerUris(String issuerUris) {
-    if (!StringUtils.hasText(issuerUris)) {
-      return List.of();
-    }
-    return Arrays.stream(issuerUris.split(","))
-        .map(String::trim)
-        .filter(StringUtils::hasText)
-        .toList();
   }
 
   private static void requireAbsoluteUri(String value, String propertyName) {

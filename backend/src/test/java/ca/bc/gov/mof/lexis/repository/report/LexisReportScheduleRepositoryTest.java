@@ -304,6 +304,34 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  void findExportScheduleByAdvertisingDateShouldBindExactLegacyListDate() throws Exception {
+    when(jdbcTemplate.query(
+            any(String.class),
+            any(PreparedStatementSetter.class),
+            any(RowMapper.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return List.of();
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    var result =
+        repository.findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16));
+
+    assertThat(result).isEmpty();
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
+    assertThat(sqlCaptor.getValue())
+        .contains("WHERE TRUNC(ES.ADVERTISING_DATE) = ?")
+        .contains("ORDER BY ES.EXPORT_SCHEDULE_ID");
+    verify(preparedStatement).setDate(1, java.sql.Date.valueOf("2026-01-16"));
+  }
+
+  @Test
   void insertExportScheduleShouldUseLegacySequenceAndBindScheduleDates() throws Exception {
     when(jdbcTemplate.queryForObject("SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL", Long.class))
         .thenReturn(1002L);

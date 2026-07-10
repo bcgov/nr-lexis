@@ -11,10 +11,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository;
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository.FederalPermitDetailRecord;
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository.FederalPermitDetailRow;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationResult;
@@ -53,10 +52,10 @@ import org.springframework.mock.web.MockMultipartFile;
 class ApplicationSubmissionImportServiceTest {
 
   @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
-  @Mock private ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider;
+  @Mock private ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider;
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private VirusScanService virusScanService;
-  @Mock private FederalPermitDetailRepository federalPermitDetailRepository;
+  @Mock private LexisReportScheduleRepository scheduleRepository;
 
   @BeforeEach
   void setUpDefaultPackageValidity() {
@@ -70,6 +69,15 @@ class ApplicationSubmissionImportServiceTest {
                 any(PackageMutationRequest.class),
                 any()))
         .thenReturn(new SubmissionImportValidationResult(true, List.of(), List.of()));
+    lenient().when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
+    lenient()
+        .when(
+            scheduleRepository.findExportScheduleByAdvertisingDate(
+                LocalDate.of(2026, 1, 16)))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1016L, LocalDate.of(2026, 1, 16), null, null, null, null, null)));
   }
 
   @Test
@@ -303,56 +311,168 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
-  void shouldAcceptFederalApplicationNumberAliasesForDedicatedFederalValidation() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.isPackageValid("FED26-700123"))
-        .thenReturn(new PackageValidityItem(true, null));
-    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
-        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
-
-    for (String elementName : List.of("federalApplicationNumber", "fedApplicationNumber", "applicationNumber")) {
-      ApplicationSubmissionImportResultDto result =
-          service()
-              .validateDedicatedFederalApplicationSubmission(
-                  federalSampleXmlText(elementName).getBytes(StandardCharsets.UTF_8),
-                  "federal-" + elementName + ".xml",
-                  "FED-REF-" + elementName);
-
-      assertThat(result.status()).isEqualTo("validated");
-      assertThat(result.submissionSummary()).isNotNull();
-      assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
-      assertThat(result.submissionSummary().federalApplicationNumber()).isEqualTo(700123L);
-    }
-
-    verify(applicationDetailsService, times(3)).isPackageValid("FED26-700123");
-    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
-        ArgumentCaptor.forClass(CreateApplicationRequest.class);
-    verify(applicationDetailsService, times(3)).validateApplication(validationCaptor.capture());
-    assertThat(validationCaptor.getAllValues())
-        .extracting(CreateApplicationRequest::federalApplicationNumber)
-        .containsExactly(700123L, 700123L, 700123L);
-    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), anyString());
-  }
-
-  @Test
-  void shouldRejectConflictingFederalApplicationNumberAliasesForDedicatedFederalValidation() {
+  void shouldRejectFederalSubmissionWithoutOfficeUseMetadata() {
     String xml =
-        federalSampleXmlTextWithApplicationNumberFields(
-            """
-                      <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>
-                      <lexis:applicationNumber>700999</lexis:applicationNumber>""");
+        federalSampleXmlText()
+            .replaceFirst("(?s)\\s*<lexis:officeUseOnly>.*?</lexis:officeUseOnly>", "");
 
     ApplicationSubmissionImportResultDto result =
         service()
             .validateDedicatedFederalApplicationSubmission(
                 xml.getBytes(StandardCharsets.UTF_8),
-                "federal-conflicting-application-number.xml",
-                "FED-REF-CONFLICT");
+                "federal-missing-office-use.xml",
+                "FED-REF-MISSING-OFFICE-USE");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Federal office use details are required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRejectFederalSubmissionWithoutRequiredExcolMetadata() {
+    String xml =
+        federalSampleXmlText()
+            .replace("<lexis:eicbNumber>123456</lexis:eicbNumber>", "")
+            .replace(
+                "<lexis:internalOfficeUseApplicantUserid>NEXCOL</lexis:internalOfficeUseApplicantUserid>",
+                "")
+            .replace(
+                "<lexis:internalOfficeUseLanguage>E</lexis:internalOfficeUseLanguage>", "");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8),
+                "federal-missing-excol-metadata.xml",
+                "FED-REF-MISSING-EXCOL-METADATA");
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly("Federal application number aliases must not contain conflicting values.");
+        .containsExactlyInAnyOrder(
+            "Federal applicant EICB number is required.",
+            "Federal office use applicant user is required.",
+            "Federal office use language is required.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldUseNextExportScheduleWhenBiweeklyDateHasNoExactSchedule() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    when(scheduleRepository.findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16)))
+        .thenReturn(Optional.empty());
+    when(scheduleRepository.findUpcomingExportSchedules())
+        .thenReturn(
+            List.of(
+                new ExportScheduleRowDto(
+                    1018L, LocalDate.of(2026, 1, 30), null, null, null, null, null),
+                new ExportScheduleRowDto(
+                    1017L, LocalDate.of(2026, 1, 23), null, null, null, null, null)));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                federalSampleXmlText().getBytes(StandardCharsets.UTF_8),
+                "federal-next-schedule.xml",
+                "FED-REF-NEXT-SCHEDULE");
+
+    assertThat(result.status()).isEqualTo("validated");
+    ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().exportScheduleId()).isEqualTo(1017L);
+  }
+
+  @Test
+  void shouldRejectFederalSubmissionWhenNoExportScheduleIsAvailable() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(scheduleRepository.findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16)))
+        .thenReturn(Optional.empty());
+    when(scheduleRepository.findUpcomingExportSchedules()).thenReturn(List.of());
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                federalSampleXmlText().getBytes(StandardCharsets.UTF_8),
+                "federal-no-schedule.xml",
+                "FED-REF-NO-SCHEDULE");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("No export schedule is available for federal LEXIS submission.");
+    verify(applicationDetailsService, never())
+        .validateApplication(any(CreateApplicationRequest.class));
+  }
+
+  @Test
+  void shouldAcceptFederalHarvestedReadvertisementWithSummaryOfScale() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    String xml =
+        federalSampleXmlText()
+            .replace(
+                "<lexis:re-advertisement>false</lexis:re-advertisement>",
+                "<lexis:re-advertisement>true</lexis:re-advertisement>");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8),
+                "federal-readvertisement.xml",
+                "FED-REF-READVERTISEMENT");
+
+    assertThat(result.status()).isEqualTo("validated");
+    verify(applicationDetailsService).validateApplication(any(CreateApplicationRequest.class));
+  }
+
+  @Test
+  void shouldValidateDocumentedFederalAgentAndOwnerDetails() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    String xml =
+        federalSampleXmlText()
+            .replace(
+                "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>",
+                "<lexis:applicantTypeCode>A</lexis:applicantTypeCode>")
+            .replace(
+                "</lexis:applicant>",
+                """
+                </lexis:applicant>
+                <lexis:owner>
+                  <lexis:ownerDetails>
+                    <lexis:clientNumber>2000</lexis:clientNumber>
+                    <lexis:clientLocnCode>01</lexis:clientLocnCode>
+                    <lexis:name>Federal Owner Ltd.</lexis:name>
+                    <lexis:address>555 Government Street</lexis:address>
+                    <lexis:city>Vancouver</lexis:city>
+                    <lexis:provinceState>BC</lexis:provinceState>
+                    <lexis:postalZipCode>V8V8V8</lexis:postalZipCode>
+                    <lexis:country>CA</lexis:country>
+                    <lexis:telephoneNumber>2505551212</lexis:telephoneNumber>
+                  </lexis:ownerDetails>
+                  <lexis:ownerContact>
+                    <lexis:contactSurname>OWNER</lexis:contactSurname>
+                    <lexis:contactFirstname>CONTACT</lexis:contactFirstname>
+                    <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>
+                  </lexis:ownerContact>
+                </lexis:owner>""");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8),
+                "federal-agent.xml",
+                "FED-REF-AGENT");
+
+    assertThat(result.status()).isEqualTo("validated");
+    ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().agentClientNumber()).isEqualTo("00001074");
+    assertThat(requestCaptor.getValue().ownerClientNumber()).isEqualTo("00002000");
   }
 
   @Test
@@ -370,176 +490,8 @@ class ApplicationSubmissionImportServiceTest {
                 "FED-REF-UNKNOWN-STATUS");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("Federal application status code must be A, APP, N, or NEW.");
+    assertThat(result.errors()).containsExactly("Federal application status code must be A.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
-  }
-
-  @Test
-  void shouldAcceptPackageNumberAliasForDedicatedFederalValidation() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.isPackageValid("FED26-700123"))
-        .thenReturn(new PackageValidityItem(true, null));
-    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
-        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
-    String xml =
-        federalSampleXmlText().replace(
-            "<lexis:boomNumber>FED26-700123</lexis:boomNumber>",
-            "<lexis:packageNumber>FED26-700123</lexis:packageNumber>");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-package-number-alias.xml",
-                "FED-REF-PACKAGE-ALIAS");
-
-    assertThat(result.status()).isEqualTo("validated");
-    assertThat(result.packageNumber()).isEqualTo("FED26-700123");
-    assertThat(result.submissionSummary()).isNotNull();
-    assertThat(result.submissionSummary().packageNumber()).isEqualTo("FED26-700123");
-    verify(applicationDetailsService).isPackageValid("FED26-700123");
-    verify(applicationDetailsService).validateApplication(any(CreateApplicationRequest.class));
-  }
-
-  @Test
-  void shouldRejectConflictingPackageNumberAliasesForDedicatedFederalValidation() {
-    String xml =
-        federalSampleXmlText().replace(
-            "<lexis:boomNumber>FED26-700123</lexis:boomNumber>",
-            """
-                      <lexis:boomNumber>FED26-700123</lexis:boomNumber>
-                      <lexis:packageNumber>FED26-700999</lexis:packageNumber>""");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-conflicting-package-number.xml",
-                "FED-REF-PACKAGE-CONFLICT");
-
-    assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors())
-        .containsExactly("Boom/package number aliases must not contain conflicting values.");
-    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
-  }
-
-  @Test
-  void shouldAcceptApplicantClientLocationAliasForDedicatedFederalValidation() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.isPackageValid("FED26-700123"))
-        .thenReturn(new PackageValidityItem(true, null));
-    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
-        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
-    String xml =
-        federalSampleXmlText().replace(
-            "<lexis:clientLocnCode>03</lexis:clientLocnCode>",
-            """
-                <lexis:clientLocnCode>03</lexis:clientLocnCode>
-                <lexis:clientLocationCode>3</lexis:clientLocationCode>""");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-client-location-alias.xml",
-                "FED-REF-CLIENT-LOCATION-ALIAS");
-
-    assertThat(result.status()).isEqualTo("validated");
-    assertThat(result.submissionSummary()).isNotNull();
-    assertThat(result.submissionSummary().ownerClientLocationCode()).isEqualTo("03");
-
-    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
-        ArgumentCaptor.forClass(CreateApplicationRequest.class);
-    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
-    assertThat(validationCaptor.getValue().ownerClientLocationCode()).isEqualTo("03");
-  }
-
-  @Test
-  void shouldRejectConflictingApplicantClientLocationAliasesForDedicatedFederalValidation() {
-    String xml =
-        federalSampleXmlText().replace(
-            "<lexis:clientLocnCode>03</lexis:clientLocnCode>",
-            """
-                <lexis:clientLocnCode>03</lexis:clientLocnCode>
-                <lexis:clientLocationCode>04</lexis:clientLocationCode>""");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-conflicting-client-location.xml",
-                "FED-REF-CLIENT-LOCATION-CONFLICT");
-
-    assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors())
-        .containsExactly("Applicant client location aliases must not contain conflicting values.");
-    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
-  }
-
-  @Test
-  void shouldWarnValidationWhenFederalXmlContainsPermitShippingFields() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.isPackageValid("FED26-700123"))
-        .thenReturn(new PackageValidityItem(true, null));
-    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
-        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
-	    String xml =
-	        federalSampleXmlTextWithApplicationNumberFields(
-	            """
-	                      <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>
-	                      <lexis:permitIssueDate>2026-01-02</lexis:permitIssueDate>
-	                      <lexis:exportPermitIssueDate>01/02/2026</lexis:exportPermitIssueDate>
-	                      <lexis:destinationCountry>us</lexis:destinationCountry>
-	                      <lexis:exportCountryCode>US</lexis:exportCountryCode>
-	                      <lexis:transportType>vsl</lexis:transportType>
-	                      <lexis:exportTransportTypeCode>VSL</lexis:exportTransportTypeCode>
-	                      <lexis:transportName>TEST VESSEL</lexis:transportName>
-	                      <lexis:estimatedShippingDate>01/09/2026</lexis:estimatedShippingDate>
-	                      <lexis:shippingDate>2026-01-09</lexis:shippingDate>
-	                      <lexis:portOfExport>ot</lexis:portOfExport>
-	                      <lexis:exportPortOfExportCode>OT</lexis:exportPortOfExportCode>
-	                      <lexis:otherPortOfExport>TEST PORT</lexis:otherPortOfExport>""");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-permit-fields.xml",
-                "FED-REF-PERMIT-FIELDS");
-
-    assertThat(result.status()).isEqualTo("validated");
-    assertThat(result.warnings())
-        .contains(
-            "Federal payload includes permit/shipping fields; validation does not persist them. Create import will persist a federal permit detail row and link the returned permit number to the package.");
-    verify(federalPermitDetailRepositoryProvider, never()).getIfAvailable();
-  }
-
-  @Test
-  void shouldRejectFederalPermitShippingFieldsWhenRequiredValuesAreMissing() {
-    String xml =
-        federalSampleXmlTextWithApplicationNumberFields(
-            """
-                      <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>
-                      <lexis:permitIssueDate>2026-01-02</lexis:permitIssueDate>
-                      <lexis:destinationCountry>US</lexis:destinationCountry>
-                      <lexis:transportName>TEST VESSEL</lexis:transportName>
-                      <lexis:portOfExport>OT</lexis:portOfExport>""");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-incomplete-permit-fields.xml",
-                "FED-REF-PERMIT-FIELDS");
-
-    assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors())
-        .contains(
-            "Federal permit estimated shipping date is required.",
-            "Federal permit transport type is required.",
-            "Federal permit other port of export is required when port of export is OT.");
-    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
-    verify(federalPermitDetailRepositoryProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -625,7 +577,6 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
     verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
-    verify(federalPermitDetailRepositoryProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -667,15 +618,20 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.jurisdictionCode()).isEqualTo("F");
     assertThat(application.federalApplicationNumber()).isEqualTo(700123L);
     assertThat(application.applicationStatusCode()).isEqualTo("APP");
+    assertThat(application.applicationDate()).isEqualTo(LocalDate.of(2026, 6, 12));
+    assertThat(application.receivedDate()).isEqualTo(LocalDate.of(2026, 6, 12));
+    assertThat(application.exportScheduleId()).isEqualTo(1016L);
     assertThat(application.applicationVolume()).isEqualTo(525.0d);
     assertThat(application.averageLogVolume()).isEqualTo(0.3d);
     assertThat(application.remarkBody())
         .isEqualTo("Created from LEXIS application submission.\nUser reference: FED-REF-1");
+    verify(scheduleRepository)
+        .findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16));
 
-	    ArgumentCaptor<PackageMutationRequest> packageCaptor =
-	        ArgumentCaptor.forClass(PackageMutationRequest.class);
-	    verify(applicationDetailsService).addPackage(packageCaptor.capture(), eq("federal-user"));
-	    PackageMutationRequest packageRequest = packageCaptor.getValue();
+    ArgumentCaptor<PackageMutationRequest> packageCaptor =
+        ArgumentCaptor.forClass(PackageMutationRequest.class);
+    verify(applicationDetailsService).addPackage(packageCaptor.capture(), eq("federal-user"));
+    PackageMutationRequest packageRequest = packageCaptor.getValue();
     assertThat(packageRequest.packageNumber()).isEqualTo("FED26-700123");
     assertThat(packageRequest.applicationNumber()).isEqualTo(9001L);
     assertThat(packageRequest.volume()).isEqualTo(525.0d);
@@ -756,319 +712,6 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"));
   }
 
-  @Test
-  void shouldImportFederalPermitDetailAndLinkPackageWhenPayloadContainsPermitShippingFields() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("federal-user")))
-        .thenReturn(new CreateApplicationResult(true, "saved", 9003L, List.of(), List.of()));
-    when(federalPermitDetailRepositoryProvider.getIfAvailable()).thenReturn(federalPermitDetailRepository);
-    when(federalPermitDetailRepository.insertFederalPermitDetail(any(FederalPermitDetailRecord.class)))
-        .thenReturn(
-            Optional.of(
-                new FederalPermitDetailRow(
-                    7000123L,
-                    LocalDate.of(2026, 1, 2),
-                    LocalDate.of(2026, 1, 9),
-                    "US",
-                    "VSL",
-                    "TEST VESSEL",
-                    "OT",
-                    "TEST PORT",
-                    LocalDate.of(2026, 6, 12),
-                    1909L,
-                    "03",
-                    "00001074")));
-    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("federal-user")))
-        .thenReturn(
-            new PackagePersistenceResult(
-                true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user")))
-        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
-    String xml =
-        federalSampleXmlTextWithApplicationNumberFields(
-	            """
-	                      <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>
-	                      <lexis:permitIssueDate>2026-01-02</lexis:permitIssueDate>
-	                      <lexis:exportPermitIssueDate>01/02/2026</lexis:exportPermitIssueDate>
-	                      <lexis:destinationCountry>us</lexis:destinationCountry>
-	                      <lexis:exportCountryCode>US</lexis:exportCountryCode>
-	                      <lexis:transportType>vsl</lexis:transportType>
-	                      <lexis:exportTransportTypeCode>VSL</lexis:exportTransportTypeCode>
-	                      <lexis:transportName>TEST VESSEL</lexis:transportName>
-	                      <lexis:estimatedShippingDate>01/09/2026</lexis:estimatedShippingDate>
-	                      <lexis:shippingDate>2026-01-09</lexis:shippingDate>
-	                      <lexis:portOfExport>ot</lexis:portOfExport>
-	                      <lexis:exportPortOfExportCode>OT</lexis:exportPortOfExportCode>
-	                      <lexis:otherPortOfExport>TEST PORT</lexis:otherPortOfExport>""");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .importDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-permit-submission.xml",
-                "federal-user",
-                "FED-REF-PERMIT");
-
-    assertThat(result.status()).isEqualTo("accepted");
-    assertThat(result.applicationNumber()).isEqualTo(9003L);
-    assertThat(result.packageNumber()).isEqualTo("FED26-700123");
-    assertThat(result.federalPermitNumber()).isEqualTo(7000123L);
-    assertThat(result.warnings())
-        .doesNotContain(
-            "Federal payload includes permit/shipping fields; validation does not persist them. Create import will persist a federal permit detail row and link the returned permit number to the package.");
-
-    ArgumentCaptor<FederalPermitDetailRecord> permitCaptor =
-        ArgumentCaptor.forClass(FederalPermitDetailRecord.class);
-    verify(federalPermitDetailRepository).insertFederalPermitDetail(permitCaptor.capture());
-    FederalPermitDetailRecord permitRecord = permitCaptor.getValue();
-    assertThat(permitRecord.permitIssueDate()).isEqualTo(LocalDate.of(2026, 1, 2));
-    assertThat(permitRecord.estimatedShippingDate()).isEqualTo(LocalDate.of(2026, 1, 9));
-    assertThat(permitRecord.countryCode()).isEqualTo("US");
-    assertThat(permitRecord.transportTypeCode()).isEqualTo("VSL");
-    assertThat(permitRecord.transportName()).isEqualTo("TEST VESSEL");
-    assertThat(permitRecord.portOfExportCode()).isEqualTo("OT");
-    assertThat(permitRecord.otherPortOfExport()).isEqualTo("TEST PORT");
-    assertThat(permitRecord.applicationDate()).isEqualTo(LocalDate.of(2026, 6, 12));
-    assertThat(permitRecord.orgUnitNumber()).isEqualTo(1909L);
-    assertThat(permitRecord.clientLocationCode()).isEqualTo("03");
-    assertThat(permitRecord.clientNumber()).isEqualTo("00001074");
-    assertThat(permitRecord.entryUserId()).isEqualTo("federal-user");
-
-    ArgumentCaptor<PackageMutationRequest> packageCaptor =
-        ArgumentCaptor.forClass(PackageMutationRequest.class);
-	    verify(applicationDetailsService).addPackage(packageCaptor.capture(), eq("federal-user"));
-	    PackageMutationRequest packageRequest = packageCaptor.getValue();
-    assertThat(packageRequest.applicationNumber()).isEqualTo(9003L);
-    assertThat(packageRequest.federalPermitNumber()).isEqualTo(7000123L);
-    assertThat(packageRequest.reservePermitNumber()).isNull();
-  }
-
-  @Test
-  void shouldImportCompleteFederalPermitFixtureAndLinkPackage() throws Exception {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("federal-user")))
-        .thenReturn(new CreateApplicationResult(true, "saved", 9004L, List.of(), List.of()));
-    when(federalPermitDetailRepositoryProvider.getIfAvailable()).thenReturn(federalPermitDetailRepository);
-    when(federalPermitDetailRepository.insertFederalPermitDetail(any(FederalPermitDetailRecord.class)))
-        .thenReturn(
-            Optional.of(
-                new FederalPermitDetailRow(
-                    7000123L,
-                    LocalDate.of(2026, 1, 2),
-                    LocalDate.of(2026, 1, 9),
-                    "US",
-                    "VSL",
-                    "TEST VESSEL",
-                    "OT",
-                    "TEST PORT",
-                    LocalDate.of(2026, 6, 12),
-                    1909L,
-                    "03",
-                    "00001074")));
-    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("federal-user")))
-        .thenReturn(
-            new PackagePersistenceResult(
-                true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user")))
-        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .importDedicatedFederalApplicationSubmission(
-                sampleResourceXml("pass-federal-permit-complete.xml"),
-                "federal-user",
-                "FED-FIXTURE-PERMIT");
-
-    assertThat(result.status()).isEqualTo("accepted");
-    assertThat(result.applicationNumber()).isEqualTo(9004L);
-    assertThat(result.packageNumber()).isEqualTo("FED26-700123");
-    assertThat(result.federalPermitNumber()).isEqualTo(7000123L);
-    assertThat(result.scaleRows()).isEqualTo(3);
-    assertThat(result.submissionSummary()).isNotNull();
-    assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
-    assertThat(result.submissionSummary().federalApplicationNumber()).isEqualTo(700123L);
-
-    ArgumentCaptor<FederalPermitDetailRecord> permitCaptor =
-        ArgumentCaptor.forClass(FederalPermitDetailRecord.class);
-    verify(federalPermitDetailRepository).insertFederalPermitDetail(permitCaptor.capture());
-    FederalPermitDetailRecord permitRecord = permitCaptor.getValue();
-    assertThat(permitRecord.permitIssueDate()).isEqualTo(LocalDate.of(2026, 1, 2));
-    assertThat(permitRecord.estimatedShippingDate()).isEqualTo(LocalDate.of(2026, 1, 9));
-    assertThat(permitRecord.countryCode()).isEqualTo("US");
-    assertThat(permitRecord.transportTypeCode()).isEqualTo("VSL");
-    assertThat(permitRecord.transportName()).isEqualTo("TEST VESSEL");
-    assertThat(permitRecord.portOfExportCode()).isEqualTo("OT");
-    assertThat(permitRecord.otherPortOfExport()).isEqualTo("TEST PORT");
-
-    ArgumentCaptor<PackageMutationRequest> packageCaptor =
-        ArgumentCaptor.forClass(PackageMutationRequest.class);
-    verify(applicationDetailsService).addPackage(packageCaptor.capture(), eq("federal-user"));
-    assertThat(packageCaptor.getValue().federalPermitNumber()).isEqualTo(7000123L);
-  }
-
-  @Test
-  void shouldRejectPartialFederalPermitFixturesBeforePersistence() throws Exception {
-    ApplicationSubmissionImportResultDto missingRequired =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                sampleResourceXml("fail-federal-permit-missing-required.xml"),
-                "FED-FIXTURE-MISSING-REQUIRED");
-
-    assertThat(missingRequired.status()).isEqualTo("rejected");
-    assertThat(missingRequired.errors())
-        .contains(
-            "Federal permit estimated shipping date is required.",
-            "Federal permit transport type is required.",
-            "Federal permit transport name is required.",
-            "Federal permit port of export is required.");
-
-    ApplicationSubmissionImportResultDto missingOtherPort =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                sampleResourceXml("fail-federal-permit-missing-other-port.xml"),
-                "FED-FIXTURE-MISSING-OTHER-PORT");
-
-    assertThat(missingOtherPort.status()).isEqualTo("rejected");
-    assertThat(missingOtherPort.errors())
-        .containsExactly("Federal permit other port of export is required when port of export is OT.");
-    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
-    verify(federalPermitDetailRepositoryProvider, never()).getIfAvailable();
-  }
-
-  @Test
-  void shouldRejectConflictingFederalPermitAliasesForDedicatedFederalValidation() {
-    String xml =
-        federalSampleXmlTextWithApplicationNumberFields(
-            """
-                      <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>
-                      <lexis:permitIssueDate>2026-01-02</lexis:permitIssueDate>
-                      <lexis:destinationCountry>US</lexis:destinationCountry>
-                      <lexis:exportCountryCode>CA</lexis:exportCountryCode>
-                      <lexis:transportType>VSL</lexis:transportType>
-                      <lexis:transportName>TEST VESSEL</lexis:transportName>
-                      <lexis:estimatedShippingDate>2026-01-09</lexis:estimatedShippingDate>
-                      <lexis:portOfExport>VAN</lexis:portOfExport>""");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-conflicting-permit-alias.xml",
-                "FED-REF-PERMIT-CONFLICT");
-
-    assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors())
-        .containsExactly("Federal permit destination country aliases must not contain conflicting values.");
-    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
-    verify(federalPermitDetailRepositoryProvider, never()).getIfAvailable();
-  }
-
-  @Test
-  void shouldRejectFederalPermitDetailPayloadWhenPersistenceIsUnavailable() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.isPackageValid("FED26-700123"))
-        .thenReturn(new PackageValidityItem(true, null));
-    String xml =
-        federalSampleXmlTextWithApplicationNumberFields(
-            """
-                      <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>
-                      <lexis:permitIssueDate>2026-01-02</lexis:permitIssueDate>
-                      <lexis:destinationCountry>US</lexis:destinationCountry>
-                      <lexis:transportType>VSL</lexis:transportType>
-                      <lexis:transportName>TEST VESSEL</lexis:transportName>
-                      <lexis:estimatedShippingDate>2026-01-09</lexis:estimatedShippingDate>
-                      <lexis:portOfExport>VAN</lexis:portOfExport>""");
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .importDedicatedFederalApplicationSubmission(
-                xml.getBytes(StandardCharsets.UTF_8),
-                "federal-permit-submission.xml",
-                "federal-user",
-                "FED-REF-PERMIT");
-
-    assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors())
-        .containsExactly("Federal permit detail persistence is unavailable for this LEXIS submission.");
-    verify(applicationDetailsService, never())
-        .addApplication(any(CreateApplicationRequest.class), anyString());
-    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
-    verify(federalPermitDetailRepository, never())
-        .insertFederalPermitDetail(any(FederalPermitDetailRecord.class));
-  }
-
-  @Test
-  void shouldRejectFederalPermitDetailImportWhenInsertReturnsNoPermitNumber() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("federal-user")))
-        .thenReturn(new CreateApplicationResult(true, "saved", 9003L, List.of(), List.of()));
-    when(federalPermitDetailRepositoryProvider.getIfAvailable()).thenReturn(federalPermitDetailRepository);
-    when(federalPermitDetailRepository.insertFederalPermitDetail(any(FederalPermitDetailRecord.class)))
-        .thenReturn(Optional.empty());
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .importDedicatedFederalApplicationSubmission(
-                federalSampleXmlTextWithPermitShippingFields().getBytes(StandardCharsets.UTF_8),
-                "federal-permit-submission.xml",
-                "federal-user",
-                "FED-REF-PERMIT");
-
-    assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.applicationNumber()).isNull();
-    assertThat(result.packageNumber()).isNull();
-    assertThat(result.scaleRows()).isZero();
-    assertThat(result.errors()).containsExactly("Federal permit detail could not be saved.");
-    verify(applicationDetailsService).addApplication(any(CreateApplicationRequest.class), eq("federal-user"));
-    verify(federalPermitDetailRepository).insertFederalPermitDetail(any(FederalPermitDetailRecord.class));
-    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
-  }
-
-  @Test
-  void shouldRejectFederalPermitImportAndSkipScalesWhenPackagePersistenceFailsAfterPermitDetail() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("federal-user")))
-        .thenReturn(new CreateApplicationResult(true, "saved", 9003L, List.of(), List.of()));
-    when(federalPermitDetailRepositoryProvider.getIfAvailable()).thenReturn(federalPermitDetailRepository);
-    when(federalPermitDetailRepository.insertFederalPermitDetail(any(FederalPermitDetailRecord.class)))
-        .thenReturn(
-            Optional.of(
-                new FederalPermitDetailRow(
-                    7000123L,
-                    LocalDate.of(2026, 1, 2),
-                    LocalDate.of(2026, 1, 9),
-                    "US",
-                    "VSL",
-                    "TEST VESSEL",
-                    "OT",
-                    "TEST PORT",
-                    LocalDate.of(2026, 6, 12),
-                    1909L,
-                    "03",
-                    "00001074")));
-    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("federal-user")))
-        .thenReturn(
-            new PackagePersistenceResult(
-                false, null, null, null, null, null, List.of("Package could not be saved."), List.of()));
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .importDedicatedFederalApplicationSubmission(
-                federalSampleXmlTextWithPermitShippingFields().getBytes(StandardCharsets.UTF_8),
-                "federal-permit-submission.xml",
-                "federal-user",
-                "FED-REF-PERMIT");
-
-    assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.applicationNumber()).isNull();
-    assertThat(result.packageNumber()).isNull();
-    assertThat(result.scaleRows()).isZero();
-    assertThat(result.errors()).containsExactly("Package could not be saved.");
-    verify(federalPermitDetailRepository).insertFederalPermitDetail(any(FederalPermitDetailRecord.class));
-    verify(applicationDetailsService).addPackage(any(PackageMutationRequest.class), eq("federal-user"));
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
-  }
 
   @Test
   void shouldImportDedicatedBareFederalXmlAsApplicationPackageAndScales() {
@@ -1215,7 +858,7 @@ class ApplicationSubmissionImportServiceTest {
             <lexis:productDetail>
               <lexis:productTypeCode>S</lexis:productTypeCode>
               <lexis:exemptApplnVol>42.2</lexis:exemptApplnVol>
-              <lexis:avgLogVolume>0.5</lexis:avgLogVolume>
+              <lexis:averageLogVolume>0.5</lexis:averageLogVolume>
               <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
               <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
               <lexis:ageClass>O</lexis:ageClass>
@@ -1460,7 +1103,6 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
     verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
-    verify(federalPermitDetailRepositoryProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -1522,6 +1164,13 @@ class ApplicationSubmissionImportServiceTest {
       assertThat(result.scaleRows()).as(fileName).isPositive();
     }
 
+    ApplicationSubmissionImportResultDto federal =
+        service().validateApplicationSubmission(sampleResourceXml("pass-federal-application.xml"));
+    assertThat(federal.status()).isEqualTo("validated");
+    assertThat(federal.packageNumber()).isEqualTo("FED26-700123");
+    assertThat(federal.submissionSummary()).isNotNull();
+    assertThat(federal.scaleRows()).isPositive();
+
     ApplicationSubmissionImportResultDto missingBoom =
         service().validateApplicationSubmission(sampleResourceXml("fail-missing-boom-number.xml"));
     assertThat(missingBoom.status()).isEqualTo("rejected");
@@ -1531,7 +1180,7 @@ class ApplicationSubmissionImportServiceTest {
         service().validateApplicationSubmission(sampleResourceXml("fail-federal-jurisdiction.xml"));
     assertThat(federalJurisdiction.status()).isEqualTo("rejected");
     assertThat(federalJurisdiction.errors())
-        .contains("A federal application number is required for federal LEXIS submissions.");
+        .contains("Federal office use details are required.");
   }
 
   @Test
@@ -2032,7 +1681,7 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
-  void shouldRejectFederalLexisSubmissionsWithoutFederalApplicationNumber() {
+  void shouldRejectFederalLexisSubmissionsWithoutOfficeUseDetails() {
     ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
@@ -2046,8 +1695,7 @@ class ApplicationSubmissionImportServiceTest {
             "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors())
-        .contains("A federal application number is required for federal LEXIS submissions.");
+    assertThat(result.errors()).contains("Federal office use details are required.");
   }
 
   @Test
@@ -2192,7 +1840,7 @@ class ApplicationSubmissionImportServiceTest {
         Clock.fixed(Instant.parse("2026-06-12T12:00:00Z"), ZoneOffset.UTC),
         new ObjectMapper(),
         virusScanService,
-        federalPermitDetailRepositoryProvider);
+        scheduleRepositoryProvider);
   }
 
   private MockMultipartFile sampleXml() {
@@ -2205,51 +1853,66 @@ class ApplicationSubmissionImportServiceTest {
         "formFile", fileName, "application/xml", xml.getBytes(StandardCharsets.UTF_8));
   }
 
-  private String federalSampleXmlText() {
-    return federalSampleXmlText("federalApplicationNumber");
-  }
-
-  private String federalSampleXmlText(String federalNumberElementName) {
-    return federalSampleXmlTextWithApplicationNumberFields(
-        "<lexis:"
-            + federalNumberElementName
-            + ">700123</lexis:"
-            + federalNumberElementName
-            + ">");
-  }
-
-  private String federalSampleXmlTextWithPermitShippingFields() {
-    return federalSampleXmlTextWithApplicationNumberFields(
-        """
-                  <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>
-                  <lexis:permitIssueDate>2026-01-02</lexis:permitIssueDate>
-                  <lexis:destinationCountry>US</lexis:destinationCountry>
-                  <lexis:transportType>VSL</lexis:transportType>
-                  <lexis:transportName>TEST VESSEL</lexis:transportName>
-                  <lexis:estimatedShippingDate>2026-01-09</lexis:estimatedShippingDate>
-                  <lexis:portOfExport>VAN</lexis:portOfExport>""");
-  }
-
-  private String federalSampleXmlTextWithApplicationNumberFields(String federalNumberElements) {
+  private static String federalSampleXmlText() {
     return SAMPLE_XML
         .replace(
+            "<lexis:applicantDetails>",
+            "<lexis:applicantDetails>\n"
+                + "            <lexis:eicbNumber>123456</lexis:eicbNumber>")
+        .replace(
+            "<lexis:name>Mosaic Forest Management Corporation</lexis:name>",
+            """
+            <lexis:name>Mosaic Forest Management Corporation</lexis:name>
+            <lexis:address>555 Government Street</lexis:address>
+            <lexis:city>Vancouver</lexis:city>
+            <lexis:provinceState>BC</lexis:provinceState>
+            <lexis:postalZipCode>V8V8V8</lexis:postalZipCode>
+            <lexis:country>CA</lexis:country>
+            <lexis:telephoneNumber>2505551212</lexis:telephoneNumber>""")
+        .replace(
+            "<lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>",
+            """
+            <lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>
+            <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>""")
+        .replace(
+            "</lexis:applicant>",
+            """
+            <lexis:declarationCanadianResident>true</lexis:declarationCanadianResident>
+            <lexis:declarationSubmittedOffersPast90Days>false</lexis:declarationSubmittedOffersPast90Days>
+          </lexis:applicant>""")
+        .replace(
             "<lexis:jurisdictionCode>P</lexis:jurisdictionCode>",
-            "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>\n"
-                + federalNumberElements)
+            "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>")
+        .replace(
+            "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>",
+            """
+            <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
+            <lexis:re-advertisement>false</lexis:re-advertisement>
+            <lexis:officeUseOnly>
+              <lexis:internalOfficeUseRefId>700123</lexis:internalOfficeUseRefId>
+              <lexis:internalOfficeUseApplicationDate>2026-01-10</lexis:internalOfficeUseApplicationDate>
+              <lexis:internalOfficeUseBiWeeklyListDate>2026-01-16</lexis:internalOfficeUseBiWeeklyListDate>
+              <lexis:internalOfficeUseApplicantUserid>NEXCOL</lexis:internalOfficeUseApplicantUserid>
+              <lexis:internalOfficeUseLanguage>E</lexis:internalOfficeUseLanguage>
+            </lexis:officeUseOnly>""")
         .replace(
             "<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>",
             "<lexis:boomNumber>FED26-700123</lexis:boomNumber>");
   }
 
   private static String federalBareSampleXmlText() {
-    return bareSampleXmlText()
-        .replace(
-            "<lexis:jurisdictionCode>P</lexis:jurisdictionCode>",
-            "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>\n"
-                + "          <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>")
-        .replace(
-            "<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>",
-            "<lexis:boomNumber>FED26-700123</lexis:boomNumber>");
+    String federalSubmission = federalSampleXmlText();
+    String startTag = "<lexis:LexisSubmission>";
+    String endTag = "</lexis:LexisSubmission>";
+    int contentStart = federalSubmission.indexOf(startTag) + startTag.length();
+    int contentEnd = federalSubmission.indexOf(endTag);
+    return """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <lexis:LexisSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
+      %s
+      </lexis:LexisSubmission>
+      """
+        .formatted(federalSubmission.substring(contentStart, contentEnd));
   }
 
   private static String esfWrappedSubmissionContentText(String submissionContentText) {

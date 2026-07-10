@@ -1,181 +1,162 @@
-# NEXCOL Keycloak Service Client
+# NEXCOL Federal Submission API
 
-This flow replaces the old NEXCOL -> ESF path for federal LEXIS XML submissions with a direct
-NEXCOL -> LEXIS API path.
+## Overview
 
-## Runtime Flow
+NEXCOL submits federal LEXIS XML through a synchronous machine-to-machine API. Interactive LEXIS
+authentication remains independent of this integration.
 
 ```text
 NEXCOL
-  -> API Services Portal gateway client_credentials token
-  -> bearer token containing scope/client role lexis:federal-submission:submit
-  -> API Services Portal gateway route
-  -> LEXIS backend federal validation/submission endpoint
-  -> existing federal application import path
+  -> Keycloak client-credentials token
+  -> API gateway
+  -> LEXIS federal validation or submission endpoint
+  -> LEXIS federal application tables
 ```
 
-LEXIS still uses Cognito/FAM for interactive users. Keycloak is only for NEXCOL
-machine-to-machine traffic. The API Services Portal gateway setup is captured in `gateway/`.
+## Authentication
 
-## LEXIS-Owned Scope
-
-Required scope:
+NEXCOL uses a dedicated confidential Keycloak client. Both federal endpoints require the OAuth
+scope:
 
 ```text
 lexis:federal-submission:submit
 ```
 
-LEXIS creates this client scope in each target Keycloak realm during deploy through:
+The gateway validates the token issuer, expiry, required scope, and audience when configured.
+LEXIS validates the forwarded token and applies the same scope-based authorization.
 
-```text
-.github/scripts/ensure-keycloak-scopes.sh
-```
+CI idempotently creates/checks the client scope, confidential client, and default scope assignment
+when these GitHub environment values are configured:
 
-The deploy step is opt-in and runs when these GitHub environment secrets are present:
+- TEST: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
+- PROD: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-prod`
 
-```text
-keycloak_sa_client_id
-keycloak_sa_client_secret
-```
+Runtime client-secret lifecycle is managed through the environment's operational process.
 
-Those credentials are for a Keycloak management service account that can create client scopes. They
-are not the NEXCOL runtime client credentials.
-
-When using API Services Portal's shared `apigw` IdP, APS can grant the same value as a client role
-through the gateway `CredentialIssuer`. The backend maps Keycloak client roles to the same
-`SCOPE_...` authority as OAuth scopes, so `lexis:federal-submission:submit` remains the single
-authorization contract either way.
-
-Each GitHub environment also needs:
-
-```text
-KEYCLOAK_ISSUER_URI
-```
-
-Current LEXIS/NEXCOL setup should use the `forests` realm unless the Keycloak team directs
-otherwise.
-
-```text
-https://dev.loginproxy.gov.bc.ca/auth/realms/forests
-```
-
-Example GitHub environment setup:
+Obtain an access token with the standard client-credentials grant:
 
 ```bash
-gh variable set KEYCLOAK_ISSUER_URI --env dev --body "https://dev.loginproxy.gov.bc.ca/auth/realms/forests"
-gh variable set KEYCLOAK_ISSUER_URI --env test --body "https://test.loginproxy.gov.bc.ca/auth/realms/forests"
-gh variable set KEYCLOAK_ISSUER_URI --env prod --body "https://loginproxy.gov.bc.ca/auth/realms/forests"
-
-gh secret set keycloak_sa_client_id --env dev --body "<scope-management-client-id>"
-gh secret set keycloak_sa_client_secret --env dev --body "<scope-management-client-secret>"
-gh secret set keycloak_sa_client_id --env test --body "<scope-management-client-id>"
-gh secret set keycloak_sa_client_secret --env test --body "<scope-management-client-secret>"
-gh secret set keycloak_sa_client_id --env prod --body "<scope-management-client-id>"
-gh secret set keycloak_sa_client_secret --env prod --body "<scope-management-client-secret>"
-```
-
-Only the scope-management client credentials belong in GitHub Actions. Do not store the NEXCOL
-runtime client id/secret in this repository unless LEXIS itself needs to call NEXCOL, which this
-flow does not require.
-
-## Direct Keycloak Client Setup
-
-This section applies when NEXCOL calls LEXIS with a direct `forests` Keycloak token. For the API
-Services Portal path, create credentials through the gateway product/application flow in `gateway/`
-instead.
-
-Create the NEXCOL confidential client once in Keycloak, not on every LEXIS deploy.
-
-Recommended client shape:
-
-```text
-Client authentication: on
-Service accounts: on
-Authorization code / standard flow: off
-Direct access grants: off
-Grant type used by NEXCOL: client_credentials
-Assigned client scope: lexis:federal-submission:submit
-```
-
-Prefer assigning `lexis:federal-submission:submit` as a default client scope for the NEXCOL client so
-the token always carries it. If it is configured as an optional client scope, NEXCOL must request it
-explicitly in the token request.
-
-## Direct Token Request
-
-Token endpoint:
-
-```text
-${KEYCLOAK_ISSUER_URI}/protocol/openid-connect/token
-```
-
-Default-scope client:
-
-```bash
-curl -sS -X POST "${KEYCLOAK_ISSUER_URI}/protocol/openid-connect/token" \
+curl -sS -X POST "${TOKEN_URL}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d grant_type=client_credentials \
-  -d client_id="${NEXCOL_CLIENT_ID}" \
-  --data-urlencode "client_secret=${NEXCOL_CLIENT_SECRET}"
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=${CLIENT_ID}" \
+  --data-urlencode "client_secret=${CLIENT_SECRET}"
 ```
 
-Optional-scope client:
+Tokens should contain the expected issuer, an unexpired access-token lifetime, and
+`lexis:federal-submission:submit` in the `scope` claim. A configured gateway audience is also
+represented in `aud`.
+
+## Endpoints
+
+| Operation | Endpoint | Successful status | Persistence |
+|---|---|---|---|
+| Validate | `POST /api/lexis/federal/submissions/validation` | `200` | None |
+| Submit | `POST /api/lexis/federal/submissions` | `201` | Federal application, package and scale rows |
+
+Both endpoints consume `application/xml` and return JSON.
+
+## XML Contract
+
+The preferred payload is the legacy ESF submission envelope containing one LEXIS schema-version-2
+`LexisSubmission`. The inner `LexisSubmission` is also accepted as raw XML.
+
+Federal payloads include:
+
+- `jurisdictionCode=F` and `applStatusCode=A`;
+- federal applicant legal entity, contact and declaration fields;
+- `applicationDetail/officeUseOnly` reference, application date, biweekly list date, applicant
+  user id and language;
+- harvested timber with or without summary-of-scale data, or standing timber; and
+- version-2 element names and structure.
+
+Permit and shipping details are outside the federal exemption-submission contract.
+
+LEXIS validates the supplied application date and persists the service receipt date. The export
+schedule is resolved from the biweekly list date, with the next available schedule used when an
+exact date is unavailable.
+
+Synthetic fixtures are available in `backend/src/test/resources/lexis-upload-samples/`:
+
+- `pass-federal-application.xml`
+- `fail-federal-jurisdiction.xml`
+
+## Request Contract
+
+| Value | Location | Description |
+|---|---|---|
+| `userReference` | Query parameter | Stable business reference, maximum 50 characters |
+| `originalFileName` | Query parameter | Source filename for diagnostics |
+| `X-Request-ID` | Header | Correlation id for the HTTP attempt, maximum 200 characters |
+| `X-Source-System` | Header | Calling system identifier |
+| `X-Idempotency-Key` | Header | Stable logical submission id; required for submission |
+
+Each HTTP attempt uses a new request id. Retries of the same logical submission reuse the same
+idempotency key.
+
+### Validate
 
 ```bash
-curl -sS -X POST "${KEYCLOAK_ISSUER_URI}/protocol/openid-connect/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d grant_type=client_credentials \
-  -d client_id="${NEXCOL_CLIENT_ID}" \
-  --data-urlencode "client_secret=${NEXCOL_CLIENT_SECRET}" \
-  --data-urlencode "scope=lexis:federal-submission:submit"
-```
-
-The access token must contain:
-
-```text
-scope: lexis:federal-submission:submit
-iss: ${KEYCLOAK_ISSUER_URI}
-```
-
-## LEXIS Endpoints
-
-Validation:
-
-```text
-POST /api/lexis/federal/submissions/validation
-```
-
-Submission:
-
-```text
-POST /api/lexis/federal/submissions
-```
-
-Supported payload styles:
-
-```text
-Content-Type: application/xml
-Content-Type: text/xml
-Content-Type: application/soap+xml
-Content-Type: text/plain
-Content-Type: multipart/form-data with file or formFile
-```
-
-Useful optional metadata:
-
-```text
-query: userReference
-query: originalFileName
-header: X-Request-Id
-header: Idempotency-Key
-header: X-Source-System
-```
-
-Raw XML example:
-
-```bash
-curl -sS -X POST "${LEXIS_GATEWAY_BASE_URL}/api/lexis/federal/submissions/validation?originalFileName=federal.xml" \
+curl -sS -X POST \
+  "${LEXIS_GATEWAY_BASE_URL}/api/lexis/federal/submissions/validation" \
+  --url-query "userReference=${USER_REFERENCE}" \
+  --url-query "originalFileName=federal.xml" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/xml" \
+  -H "X-Request-ID: ${REQUEST_ID}" \
+  -H "X-Source-System: NEXCOL" \
   --data-binary "@federal.xml"
 ```
+
+### Submit
+
+```bash
+curl -sS -X POST \
+  "${LEXIS_GATEWAY_BASE_URL}/api/lexis/federal/submissions" \
+  --url-query "userReference=${USER_REFERENCE}" \
+  --url-query "originalFileName=federal.xml" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/xml" \
+  -H "X-Request-ID: ${REQUEST_ID}" \
+  -H "X-Idempotency-Key: ${IDEMPOTENCY_KEY}" \
+  -H "X-Source-System: NEXCOL" \
+  --data-binary "@federal.xml"
+```
+
+## Responses
+
+Responses include processing status, errors, warnings, trace metadata, payload digest and LEXIS
+identifiers when available.
+
+| Status | Meaning |
+|---|---|
+| `200` | XML validated successfully |
+| `201` | Submission accepted and persisted |
+| `400` | Invalid request metadata or body |
+| `401` | Missing, expired or invalid token |
+| `403` | Required scope is absent |
+| `404` | Gateway route or method is unavailable |
+| `422` | XML or business validation failed |
+| `503` | LEXIS processing dependency is unavailable |
+
+A successful submission includes an `applicationNumber` and, when available, a relative
+`Location` header. Processing is synchronous; there is no submission-status polling endpoint.
+
+For a transport timeout or `503`, retries use the original idempotency key. Durable response replay
+and duplicate suppression are required before automated submission retries are enabled.
+
+## ESF Migration Mapping
+
+| Previous ESF concept | Direct API equivalent |
+|---|---|
+| `submissionData` | XML request body |
+| `originalFileName` | `originalFileName` query parameter |
+| `userReference` | `userReference` query parameter |
+| ESF-authenticated submitter | Keycloak machine-client identity |
+| ESF submission id | Request/idempotency metadata and returned LEXIS identifiers |
+| Upload/schema/finalize stages | HTTP status plus response status, errors and warnings |
+| `getSubmissionStatus` polling | Immediate validation or submission response |
+| ESF accepted/rejected message | `201` or `422` JSON response |
+
+The legacy ESF source, LEXIS VC schema/parser and representative archived submissions define the
+compatibility baseline for the direct API.

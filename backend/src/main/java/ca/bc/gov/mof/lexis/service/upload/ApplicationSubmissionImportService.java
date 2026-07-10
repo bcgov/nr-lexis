@@ -1,14 +1,13 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
-import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionSummaryDto;
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository;
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository.FederalPermitDetailRecord;
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository.FederalPermitDetailRow;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationResult;
@@ -35,6 +34,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -98,7 +98,6 @@ public class ApplicationSubmissionImportService {
   private static final String FEDERAL_JURISDICTION = "F";
   private static final String APPLICATION_STATUS_ACTIVE = "A";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
-  private static final String APPLICATION_STATUS_NEW = "NEW";
   private static final String EXEMPTION_REASON_SURPLUS = "S";
   private static final String APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICANT_TYPE_AGENT = "A";
@@ -112,31 +111,6 @@ public class ApplicationSubmissionImportService {
       "ESF legacy LEXIS submissions must be federal. Provincial applications must be uploaded in modern LEXIS.";
   private static final String FEDERAL_ENDPOINT_ONLY_ERROR =
       "Federal submission endpoint only accepts jurisdictionCode=F. Provincial applications must use the modern provincial upload path.";
-  private static final String OTHER_PORT_OF_EXPORT_CODE = "OT";
-  private static final FederalPermitField FEDERAL_PERMIT_ISSUE_DATE_FIELD =
-      new FederalPermitField("permit issue date", List.of("permitIssueDate", "exportPermitIssueDate"));
-  private static final FederalPermitField FEDERAL_PERMIT_COUNTRY_FIELD =
-      new FederalPermitField("destination country", List.of("destinationCountry", "exportCountryCode"));
-  private static final FederalPermitField FEDERAL_PERMIT_TRANSPORT_TYPE_FIELD =
-      new FederalPermitField(
-          "transport type", List.of("transportType", "transportTypeCode", "exportTransportTypeCode"));
-  private static final FederalPermitField FEDERAL_PERMIT_TRANSPORT_NAME_FIELD =
-      new FederalPermitField("transport name", List.of("transportName"));
-  private static final FederalPermitField FEDERAL_PERMIT_ESTIMATED_SHIPPING_DATE_FIELD =
-      new FederalPermitField("estimated shipping date", List.of("estimatedShippingDate", "shippingDate"));
-  private static final FederalPermitField FEDERAL_PERMIT_PORT_OF_EXPORT_FIELD =
-      new FederalPermitField("port of export", List.of("portOfExport", "exportPortOfExportCode"));
-  private static final FederalPermitField FEDERAL_PERMIT_OTHER_PORT_OF_EXPORT_FIELD =
-      new FederalPermitField("other port of export", List.of("otherPortOfExport"));
-  private static final List<FederalPermitField> FEDERAL_PERMIT_FIELDS =
-      List.of(
-          FEDERAL_PERMIT_ISSUE_DATE_FIELD,
-          FEDERAL_PERMIT_COUNTRY_FIELD,
-          FEDERAL_PERMIT_TRANSPORT_TYPE_FIELD,
-          FEDERAL_PERMIT_TRANSPORT_NAME_FIELD,
-          FEDERAL_PERMIT_ESTIMATED_SHIPPING_DATE_FIELD,
-          FEDERAL_PERMIT_PORT_OF_EXPORT_FIELD,
-          FEDERAL_PERMIT_OTHER_PORT_OF_EXPORT_FIELD);
   private static final Pattern UNTERMINATED_XML_TAG_PATTERN =
       Pattern.compile("The element type \"([^\"]+)\" must be terminated by the matching end-tag \"</([^\"]+)>\"\\.");
   private static final Pattern INCOMPLETE_XML_TAG_PATTERN =
@@ -159,7 +133,7 @@ public class ApplicationSubmissionImportService {
           Map.entry("RWC", 1910L));
 
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
-  private final ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider;
+  private final ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider;
   private final Clock clock;
   private final ObjectMapper objectMapper;
   private final VirusScanService virusScanService;
@@ -169,13 +143,13 @@ public class ApplicationSubmissionImportService {
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ObjectMapper objectMapper,
       VirusScanService virusScanService,
-      ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider) {
+      ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider) {
     this(
         applicationDetailsServiceProvider,
         Clock.systemDefaultZone(),
         objectMapper,
         virusScanService,
-        federalPermitDetailRepositoryProvider);
+        scheduleRepositoryProvider);
   }
 
   ApplicationSubmissionImportService(
@@ -194,13 +168,13 @@ public class ApplicationSubmissionImportService {
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       Clock clock,
       ObjectMapper objectMapper,
-      ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider) {
+      ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider) {
     this(
         applicationDetailsServiceProvider,
         clock,
         objectMapper,
         VirusScanService.NO_OP,
-        federalPermitDetailRepositoryProvider);
+        scheduleRepositoryProvider);
   }
 
   ApplicationSubmissionImportService(
@@ -216,9 +190,9 @@ public class ApplicationSubmissionImportService {
       Clock clock,
       ObjectMapper objectMapper,
       VirusScanService virusScanService,
-      ObjectProvider<FederalPermitDetailRepository> federalPermitDetailRepositoryProvider) {
+      ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider) {
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
-    this.federalPermitDetailRepositoryProvider = federalPermitDetailRepositoryProvider;
+    this.scheduleRepositoryProvider = scheduleRepositoryProvider;
     this.clock = clock;
     this.objectMapper = objectMapper;
     this.virusScanService = virusScanService == null ? VirusScanService.NO_OP : virusScanService;
@@ -258,7 +232,7 @@ public class ApplicationSubmissionImportService {
     }
 
     ParsedSubmission submission = parsedUpload.submission();
-    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission, true);
+    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
     ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
     ApplicationSubmissionImportResultDto federalOnlyRejection =
         federalOnlyRejection(
@@ -310,8 +284,23 @@ public class ApplicationSubmissionImportService {
           normalizedUserReference);
     }
 
+    ScheduleResolution scheduleResolution = resolveExportSchedule(submission);
+    if (scheduleResolution.error() != null) {
+      return rejected(
+          fileName,
+          fileSize,
+          List.of(scheduleResolution.error()),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
+    }
+
     CreateApplicationRequest applicationRequest =
-        toCreateApplicationRequest(submission, LocalDate.now(clock), normalizedUserReference);
+        toCreateApplicationRequest(
+            submission,
+            LocalDate.now(clock),
+            scheduleResolution.exportScheduleId(),
+            normalizedUserReference);
     CreateApplicationResult applicationValidation =
         applicationDetailsService.validateApplication(applicationRequest);
     if (!applicationValidation.valid()) {
@@ -428,7 +417,7 @@ public class ApplicationSubmissionImportService {
     }
 
     ParsedSubmission submission = parsedUpload.submission();
-    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission, false);
+    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
     ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
     ApplicationSubmissionImportResultDto federalOnlyRejection =
         federalOnlyRejection(
@@ -480,24 +469,26 @@ public class ApplicationSubmissionImportService {
           normalizedUserReference);
     }
 
-    LocalDate importDate = LocalDate.now(clock);
-    FederalPermitDetailRepository federalPermitDetailRepository = null;
-    if (submission.federalPermitDetail().present()) {
-      federalPermitDetailRepository = federalPermitDetailRepository();
-      if (federalPermitDetailRepository == null) {
-        return rejected(
-            fileName,
-            fileSize,
-            List.of("Federal permit detail persistence is unavailable for this LEXIS submission."),
-            warnings,
-            submissionSummary,
-            normalizedUserReference);
-      }
+    ScheduleResolution scheduleResolution = resolveExportSchedule(submission);
+    if (scheduleResolution.error() != null) {
+      return rejected(
+          fileName,
+          fileSize,
+          List.of(scheduleResolution.error()),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
     }
 
+    LocalDate importDate = LocalDate.now(clock);
     CreateApplicationResult applicationResult =
         applicationDetailsService.addApplication(
-            toCreateApplicationRequest(submission, importDate, normalizedUserReference), userId);
+            toCreateApplicationRequest(
+                submission,
+                importDate,
+                scheduleResolution.exportScheduleId(),
+                normalizedUserReference),
+            userId);
     if (!applicationResult.valid() || applicationResult.applicationNumber() == null) {
       markRollbackOnly();
       return rejected(
@@ -510,28 +501,9 @@ public class ApplicationSubmissionImportService {
     }
 
     Long applicationNumber = applicationResult.applicationNumber();
-    Long federalPermitNumber = null;
-    if (submission.federalPermitDetail().present()) {
-      Optional<FederalPermitDetailRow> federalPermitResult =
-          federalPermitDetailRepository.insertFederalPermitDetail(
-              toFederalPermitDetailRecord(submission, importDate, userId));
-      federalPermitNumber = federalPermitResult.map(FederalPermitDetailRow::permitNumber).orElse(null);
-      if (federalPermitNumber == null || federalPermitNumber < 1) {
-        markRollbackOnly();
-        return rejected(
-            fileName,
-            fileSize,
-            List.of("Federal permit detail could not be saved."),
-            warnings,
-            submissionSummary,
-            normalizedUserReference);
-      }
-    }
-
     PackagePersistenceResult packageResult =
         applicationDetailsService.addPackage(
-            toPackageMutationRequest(
-                submission, applicationNumber, federalPermitNumber, normalizedUserReference),
+            toPackageMutationRequest(submission, applicationNumber, normalizedUserReference),
             userId);
     if (!packageResult.valid()) {
       markRollbackOnly();
@@ -562,25 +534,24 @@ public class ApplicationSubmissionImportService {
     }
 
     return new ApplicationSubmissionImportResultDto(
-            UPLOAD_TYPE,
-            fileName,
-            fileSize,
-            ACCEPTED,
-            "LEXIS application submission created application "
-                + applicationNumber
-                + " with package "
-                + submission.packageNumber()
-                + " and "
-                + importedScales
-                + " scale rows.",
-            applicationNumber,
-            submission.packageNumber(),
-            importedScales,
-            List.of(),
-            warnings,
-            normalizedUserReference,
-            submissionSummary)
-        .withFederalPermitNumber(federalPermitNumber);
+        UPLOAD_TYPE,
+        fileName,
+        fileSize,
+        ACCEPTED,
+        "LEXIS application submission created application "
+            + applicationNumber
+            + " with package "
+            + submission.packageNumber()
+            + " and "
+            + importedScales
+            + " scale rows.",
+        applicationNumber,
+        submission.packageNumber(),
+        importedScales,
+        List.of(),
+        warnings,
+        normalizedUserReference,
+        submissionSummary);
   }
 
   @Transactional
@@ -652,7 +623,7 @@ public class ApplicationSubmissionImportService {
   }
 
   private List<String> buildImportWarnings(
-      UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission, boolean validationOnly) {
+      UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission) {
     List<String> warnings = new ArrayList<>(uploadedSubmission.warnings());
     if (submission.applicationStatusCode() != null) {
       if (FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())) {
@@ -666,11 +637,6 @@ public class ApplicationSubmissionImportService {
                 + submission.applicationStatusCode()
                 + " was ignored; application submissions create new applications.");
       }
-    }
-    if (validationOnly && submission.federalPermitDetail().present()) {
-      warnings.add(
-          "Federal payload includes permit/shipping fields; validation does not persist them. "
-              + "Create import will persist a federal permit detail row and link the returned permit number to the package.");
     }
     return warnings;
   }
@@ -898,9 +864,9 @@ public class ApplicationSubmissionImportService {
             errors);
 
     String jurisdictionCode = upper(text(applicationDetail, "jurisdictionCode", "Jurisdiction code", errors));
-    Long federalApplicationNumber =
-        parseOptionalPositiveLong(
-            federalApplicationNumber(applicationDetail, errors), "federal application number", errors);
+    FederalSubmissionMetadata federalMetadata =
+        federalSubmissionMetadata(applicationDetail, jurisdictionCode, errors);
+    Long federalApplicationNumber = federalMetadata.federalApplicationNumber();
     String regionCode = upper(text(applicationDetail, "bcForestRegionCode", "Forest region code", errors));
     Long orgUnitNumber = resolveOrgUnitNumber(regionCode);
     String applicationStatusCode =
@@ -932,6 +898,9 @@ public class ApplicationSubmissionImportService {
             applicantTypeCode,
             errors);
     ParsedProduct product = parseProductDetail(productDetail, productTypeCode, errors);
+    validateFederalApplicant(applicant, applicantDetails, applicantContact, jurisdictionCode, errors);
+    validateFederalOwner(
+        lexisSubmission, jurisdictionCode, applicantTypeCode, errors);
 
     if (orgUnitNumber == null) {
       errors.add("Forest region code " + nullToValue(regionCode) + " is not mapped to a LEXIS region.");
@@ -941,8 +910,6 @@ public class ApplicationSubmissionImportService {
     } else if (!PROVINCIAL_JURISDICTION.equals(jurisdictionCode)
         && !FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
       errors.add("Jurisdiction code must be P or F.");
-    } else if (FEDERAL_JURISDICTION.equals(jurisdictionCode) && federalApplicationNumber == null) {
-      errors.add("A federal application number is required for federal LEXIS submissions.");
     }
     if (applicationStatusCode == null) {
       errors.add("Application status code is required.");
@@ -976,17 +943,20 @@ public class ApplicationSubmissionImportService {
     } else if (!AGE_CLASS_OLD_GROWTH.equals(ageClass) && !AGE_CLASS_SECOND_GROWTH.equals(ageClass)) {
       errors.add("Age class must be O or S.");
     }
-    if (Boolean.TRUE.equals(reAdvertisement)) {
+    if (FEDERAL_JURISDICTION.equals(jurisdictionCode) && reAdvertisement == null) {
+      errors.add("Re-advertisement indicator is required for federal LEXIS submissions.");
+    } else if (Boolean.TRUE.equals(reAdvertisement)
+        && !FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
       errors.add("Re-advertisements cannot be submitted electronically through LEXIS XML upload.");
+    } else if (Boolean.TRUE.equals(reAdvertisement)
+        && (PRODUCT_TYPE_STANDING.equals(productTypeCode)
+            || children(productDetail, "harvestedTimber").isEmpty())) {
+      errors.add(
+          "Federal re-advertisements require harvested timber with a summary of scale.");
     }
 
     ParsedSpeciesEndUseSort parsedSpeciesEndUseSort =
         parseSpeciesEndUseSort(speciesEndUseSort, errors);
-    FederalPermitDetail federalPermitDetail =
-        FEDERAL_JURISDICTION.equals(jurisdictionCode)
-            ? federalPermitDetail(lexisSubmission, errors)
-            : FederalPermitDetail.empty();
-
     if (!errors.isEmpty()) {
       throw new ApplicationSubmissionImportException(errors);
     }
@@ -1015,7 +985,7 @@ public class ApplicationSubmissionImportService {
         parsedSpeciesEndUseSort.endUseCode(),
         parsedSpeciesEndUseSort.speciesCodes(),
         product.scaleLines(),
-        federalPermitDetail);
+        federalMetadata.biweeklyListDate());
   }
 
   private void validateFederalApplicationStatusCode(
@@ -1023,8 +993,8 @@ public class ApplicationSubmissionImportService {
     if (!FEDERAL_JURISDICTION.equals(jurisdictionCode) || applicationStatusCode == null) {
       return;
     }
-    if (toFederalCreateApplicationStatusCode(applicationStatusCode) == null) {
-      errors.add("Federal application status code must be A, APP, N, or NEW.");
+    if (!APPLICATION_STATUS_ACTIVE.equals(applicationStatusCode)) {
+      errors.add("Federal application status code must be A.");
     }
   }
 
@@ -1033,93 +1003,181 @@ public class ApplicationSubmissionImportService {
       return null;
     }
     return switch (applicationStatusCode) {
-      case "A", APPLICATION_STATUS_APPROVED -> APPLICATION_STATUS_APPROVED;
-      case "N", APPLICATION_STATUS_NEW -> APPLICATION_STATUS_NEW;
+      case APPLICATION_STATUS_ACTIVE -> APPLICATION_STATUS_APPROVED;
       default -> null;
     };
   }
 
-  private FederalPermitDetail federalPermitDetail(Element lexisSubmission, List<String> errors) {
-    Map<FederalPermitField, String> values = new LinkedHashMap<>();
-    boolean present = false;
-    for (FederalPermitField field : FEDERAL_PERMIT_FIELDS) {
-      String value = federalPermitText(lexisSubmission, field, errors);
-      if (value != null) {
-        present = true;
-        values.put(field, value);
-      }
-    }
-    if (!present) {
-      return FederalPermitDetail.empty();
+  private void validateFederalApplicant(
+      Element applicant,
+      Element applicantDetails,
+      Element applicantContact,
+      String jurisdictionCode,
+      List<String> errors) {
+    if (!FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
+      return;
     }
 
-    LocalDate permitIssueDate =
-        requiredFederalPermitDate(values.get(FEDERAL_PERMIT_ISSUE_DATE_FIELD), "permit issue date", errors);
-    LocalDate estimatedShippingDate =
-        requiredFederalPermitDate(
-            values.get(FEDERAL_PERMIT_ESTIMATED_SHIPPING_DATE_FIELD), "estimated shipping date", errors);
-    String countryCode =
-        requiredFederalPermitText(values.get(FEDERAL_PERMIT_COUNTRY_FIELD), "destination country", errors);
-    String transportTypeCode =
-        requiredFederalPermitText(values.get(FEDERAL_PERMIT_TRANSPORT_TYPE_FIELD), "transport type", errors);
-    String transportName =
-        requiredFederalPermitText(values.get(FEDERAL_PERMIT_TRANSPORT_NAME_FIELD), "transport name", errors);
-    String portOfExportCode =
-        requiredFederalPermitText(values.get(FEDERAL_PERMIT_PORT_OF_EXPORT_FIELD), "port of export", errors);
-    String otherPortOfExport = trimToNull(values.get(FEDERAL_PERMIT_OTHER_PORT_OF_EXPORT_FIELD));
-    if (OTHER_PORT_OF_EXPORT_CODE.equalsIgnoreCase(nullToEmpty(portOfExportCode)) && otherPortOfExport == null) {
-      errors.add("Federal permit other port of export is required when port of export is OT.");
+    requireFederalText(applicantDetails, "eicbNumber", "applicant EICB number", errors);
+    requireFederalText(applicantDetails, "name", "applicant name", errors);
+    requireFederalText(applicantDetails, "address", "applicant address", errors);
+    requireFederalText(applicantDetails, "city", "applicant city", errors);
+    requireFederalText(applicantDetails, "provinceState", "applicant province/state", errors);
+    requireFederalText(applicantDetails, "postalZipCode", "applicant postal/zip code", errors);
+    requireFederalText(applicantDetails, "country", "applicant country", errors);
+    requireFederalText(applicantDetails, "telephoneNumber", "applicant telephone number", errors);
+    requireFederalText(applicantContact, "contactSurname", "applicant contact surname", errors);
+    requireFederalText(
+        applicantContact, "contactFirstname", "applicant contact first name", errors);
+    requireFederalText(
+        applicantContact, "contactTelephoneNumber", "applicant contact telephone number", errors);
+
+    Boolean canadianResident =
+        parseOptionalBoolean(
+            text(
+                applicant,
+                "declarationCanadianResident",
+                "Canadian resident declaration",
+                errors),
+            "Canadian resident declaration",
+            errors);
+    if (canadianResident == null) {
+      errors.add("Canadian resident declaration is required for federal LEXIS submissions.");
+    } else if (!canadianResident) {
+      errors.add("Federal LEXIS applicants must be Canadian residents.");
     }
-    return new FederalPermitDetail(
-        true,
-        permitIssueDate,
-        estimatedShippingDate,
-        otherPortOfExport,
-        transportName,
-        transportTypeCode,
-        countryCode,
-        portOfExportCode);
+
+    Boolean submittedOffersPast90Days =
+        parseOptionalBoolean(
+            text(
+                applicant,
+                "declarationSubmittedOffersPast90Days",
+                "Past 90 days offers declaration",
+                errors),
+            "past 90 days offers declaration",
+            errors);
+    if (submittedOffersPast90Days == null) {
+      errors.add("Past 90 days offers declaration is required for federal LEXIS submissions.");
+    } else if (submittedOffersPast90Days) {
+      errors.add(
+          "Federal LEXIS applicants cannot have submitted offers during the past 90 days.");
+    }
   }
 
-  private String federalPermitText(Element root, FederalPermitField field, List<String> errors) {
-    List<String> values = new ArrayList<>();
-    for (String localName : field.localNames()) {
-      List<Element> matches = descendants(root, localName);
-      if (matches.size() > 1) {
-        errors.add("Federal permit " + field.label() + " field " + localName + " must appear only once.");
-      }
-      for (Element match : matches) {
-        String value = normalizeFederalPermitAliasValue(field, match.getTextContent());
-        if (value != null) {
-          values.add(value);
-        }
-      }
+  private void requireFederalText(
+      Element parent, String localName, String label, List<String> errors) {
+    if (text(parent, localName, "Federal " + label, errors) == null) {
+      errors.add("Federal " + label + " is required.");
     }
-    if (values.isEmpty()) {
-      return null;
-    }
-    String first = values.get(0);
-    if (values.stream().distinct().count() > 1L) {
-      errors.add("Federal permit " + field.label() + " aliases must not contain conflicting values.");
-    }
-    return first;
   }
 
-  private String normalizeFederalPermitAliasValue(FederalPermitField field, String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
+  private void validateFederalOwner(
+      Element lexisSubmission,
+      String jurisdictionCode,
+      String applicantTypeCode,
+      List<String> errors) {
+    if (!FEDERAL_JURISDICTION.equals(jurisdictionCode)
+        || !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      return;
+    }
+    Element owner = firstElement(children(lexisSubmission, "owner"));
+    Element ownerDetails = firstElement(children(owner, "ownerDetails"));
+    Element ownerContact = firstElement(children(owner, "ownerContact"));
+    if (ownerDetails == null || ownerContact == null) {
+      return;
+    }
+
+    requireFederalText(ownerDetails, "name", "owner name", errors);
+    requireFederalText(ownerDetails, "address", "owner address", errors);
+    requireFederalText(ownerDetails, "city", "owner city", errors);
+    requireFederalText(ownerDetails, "provinceState", "owner province/state", errors);
+    requireFederalText(ownerDetails, "postalZipCode", "owner postal/zip code", errors);
+    requireFederalText(ownerDetails, "country", "owner country", errors);
+    requireFederalText(ownerDetails, "telephoneNumber", "owner telephone number", errors);
+    requireFederalText(ownerContact, "contactSurname", "owner contact surname", errors);
+    requireFederalText(ownerContact, "contactFirstname", "owner contact first name", errors);
+    requireFederalText(
+        ownerContact, "contactTelephoneNumber", "owner contact telephone number", errors);
+  }
+
+  private Element firstElement(List<Element> elements) {
+    return elements.isEmpty() ? null : elements.get(0);
+  }
+
+  private FederalSubmissionMetadata federalSubmissionMetadata(
+      Element applicationDetail, String jurisdictionCode, List<String> errors) {
+    if (!FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
+      return FederalSubmissionMetadata.empty();
+    }
+
+    Element officeUseOnly =
+        requiredChild(
+            applicationDetail,
+            LEXIS_NAMESPACE,
+            "officeUseOnly",
+            "Federal office use details are required.",
+            "Federal office use details must appear only once.",
+            errors);
+    if (officeUseOnly == null) {
+      return FederalSubmissionMetadata.empty();
+    }
+
+    Long federalApplicationNumber =
+        parseNonNegativeLong(
+            text(
+                officeUseOnly,
+                "internalOfficeUseRefId",
+                "Federal application number",
+                errors),
+            "federal application number",
+            errors);
+    // The legacy service required this value, then replaced it with the ESF receipt date. Modern
+    // LEXIS validates it but persists the service receipt date below for equivalent behaviour.
+    requiredFederalOfficeUseDate(
+        officeUseOnly, "internalOfficeUseApplicationDate", "application date", errors);
+    LocalDate biweeklyListDate =
+        requiredFederalOfficeUseDate(
+            officeUseOnly,
+            "internalOfficeUseBiWeeklyListDate",
+            "biweekly list date",
+            errors);
+    String applicantUserId =
+        text(
+            officeUseOnly,
+            "internalOfficeUseApplicantUserid",
+            "Federal office use applicant user",
+            errors);
+    if (applicantUserId == null) {
+      errors.add("Federal office use applicant user is required.");
+    }
+    String language =
+        upper(
+            text(
+                officeUseOnly,
+                "internalOfficeUseLanguage",
+                "Federal office use language",
+                errors));
+    if (language == null) {
+      errors.add("Federal office use language is required.");
+    } else if (!"E".equals(language) && !"F".equals(language)) {
+      errors.add("Federal office use language must be E or F.");
+    }
+
+    return new FederalSubmissionMetadata(federalApplicationNumber, biweeklyListDate);
+  }
+
+  private LocalDate requiredFederalOfficeUseDate(
+      Element officeUseOnly, String localName, String label, List<String> errors) {
+    String value = text(officeUseOnly, localName, "Federal office use " + label, errors);
+    if (value == null) {
+      errors.add("Federal office use " + label + " is required.");
       return null;
     }
-    if (field == FEDERAL_PERMIT_ISSUE_DATE_FIELD || field == FEDERAL_PERMIT_ESTIMATED_SHIPPING_DATE_FIELD) {
-      LocalDate parsed = parseIsoOrLegacyDate(normalized);
-      return parsed == null ? normalized : parsed.toString();
+    LocalDate parsed = parseIsoOrLegacyDate(value);
+    if (parsed == null) {
+      errors.add("Federal office use " + label + " must be a valid date.");
     }
-    if (field == FEDERAL_PERMIT_COUNTRY_FIELD
-        || field == FEDERAL_PERMIT_TRANSPORT_TYPE_FIELD
-        || field == FEDERAL_PERMIT_PORT_OF_EXPORT_FIELD) {
-      return normalized.toUpperCase(Locale.ROOT);
-    }
-    return normalized;
+    return parsed;
   }
 
   private List<Element> descendants(Element root, String localName) {
@@ -1134,31 +1192,6 @@ public class ApplicationSubmissionImportService {
       }
     }
     return matches;
-  }
-
-  private LocalDate requiredFederalPermitDate(String value, String label, List<String> errors) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      errors.add("Federal permit " + label + " is required.");
-      return null;
-    }
-    LocalDate parsed = parseIsoOrLegacyDate(normalized);
-    if (parsed == null) {
-      errors.add("A valid federal permit " + label + " is required.");
-    }
-    return parsed;
-  }
-
-  private String requiredFederalPermitText(String value, String label, List<String> errors) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      errors.add("Federal permit " + label + " is required.");
-    }
-    return normalized;
-  }
-
-  private String nullToEmpty(String value) {
-    return value == null ? "" : value;
   }
 
   private ParsedSubmission parseGeoJson(byte[] geoJsonBytes) throws ApplicationSubmissionImportException {
@@ -1926,11 +1959,7 @@ public class ApplicationSubmissionImportService {
             errors);
     Double averageLogVolume =
         parsePositiveDouble(
-            textAny(
-                productDetail,
-                List.of("avgLogVolume", "averageLogVolume"),
-                "Average log volume",
-                errors),
+            text(productDetail, "averageLogVolume", "Average log volume", errors),
             "average log volume",
             errors);
     return new ParsedProduct(
@@ -2005,8 +2034,49 @@ public class ApplicationSubmissionImportService {
     }
   }
 
+  private ScheduleResolution resolveExportSchedule(ParsedSubmission submission) {
+    if (!FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())) {
+      return ScheduleResolution.resolved(null);
+    }
+    if (submission.biweeklyListDate() == null) {
+      return ScheduleResolution.rejected("Federal biweekly list date is required.");
+    }
+
+    LexisReportScheduleRepository scheduleRepository =
+        scheduleRepositoryProvider == null ? null : scheduleRepositoryProvider.getIfAvailable();
+    if (scheduleRepository == null) {
+      return ScheduleResolution.rejected(
+          "Export schedule lookup is unavailable for federal LEXIS submission.");
+    }
+
+    Optional<ExportScheduleRowDto> exactSchedule =
+        scheduleRepository.findExportScheduleByAdvertisingDate(submission.biweeklyListDate());
+    if (exactSchedule.isPresent() && exactSchedule.get().exportScheduleId() != null) {
+      return ScheduleResolution.resolved(exactSchedule.get().exportScheduleId());
+    }
+
+    Optional<Long> nextScheduleId =
+        Optional.ofNullable(scheduleRepository.findUpcomingExportSchedules()).orElse(List.of()).stream()
+            .filter(schedule -> schedule.exportScheduleId() != null)
+            .filter(schedule -> schedule.advertisingDate() != null)
+            .sorted(
+                Comparator.comparing(ExportScheduleRowDto::advertisingDate)
+                    .thenComparing(ExportScheduleRowDto::exportScheduleId))
+            .map(ExportScheduleRowDto::exportScheduleId)
+            .findFirst();
+    return nextScheduleId
+        .map(ScheduleResolution::resolved)
+        .orElseGet(
+            () ->
+                ScheduleResolution.rejected(
+                    "No export schedule is available for federal LEXIS submission."));
+  }
+
   private CreateApplicationRequest toCreateApplicationRequest(
-      ParsedSubmission submission, LocalDate importDate, String userReference) {
+      ParsedSubmission submission,
+      LocalDate importDate,
+      Long exportScheduleId,
+      String userReference) {
     String applicationStatusCode =
         FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())
             ? toFederalCreateApplicationStatusCode(submission.applicationStatusCode())
@@ -2019,7 +2089,7 @@ public class ApplicationSubmissionImportService {
         submission.applicationVolume(),
         submission.averageLogVolume(),
         submission.productLocation(),
-        null,
+        exportScheduleId,
         submission.agentClientNumber(),
         submission.agentClientLocationCode(),
         submission.ownerClientNumber(),
@@ -2043,14 +2113,6 @@ public class ApplicationSubmissionImportService {
 
   private PackageMutationRequest toPackageMutationRequest(
       ParsedSubmission submission, Long applicationNumber, String userReference) {
-    return toPackageMutationRequest(submission, applicationNumber, null, userReference);
-  }
-
-  private PackageMutationRequest toPackageMutationRequest(
-      ParsedSubmission submission,
-      Long applicationNumber,
-      Long federalPermitNumber,
-      String userReference) {
     return new PackageMutationRequest(
         submission.packageNumber(),
         null,
@@ -2060,7 +2122,7 @@ public class ApplicationSubmissionImportService {
         submission.averageDiameter(),
         DEFAULT_PACKAGE_STATUS,
         importRemark(userReference),
-        federalPermitNumber,
+        null,
         null,
         DEFAULT_REPROCESSED_INDICATOR,
         submission.ageClass(),
@@ -2083,30 +2145,6 @@ public class ApplicationSubmissionImportService {
                     scale.pieces(),
                     scale.volume()))
         .toList();
-  }
-
-  private FederalPermitDetailRecord toFederalPermitDetailRecord(
-      ParsedSubmission submission, LocalDate importDate, String userId) {
-    FederalPermitDetail detail = submission.federalPermitDetail();
-    return new FederalPermitDetailRecord(
-        detail.permitIssueDate(),
-        detail.estimatedShippingDate(),
-        detail.otherPortOfExport(),
-        detail.transportName(),
-        userId,
-        detail.transportTypeCode(),
-        detail.countryCode(),
-        detail.portOfExportCode(),
-        importDate,
-        submission.orgUnitNumber(),
-        submission.ownerClientLocationCode(),
-        submission.ownerClientNumber());
-  }
-
-  private FederalPermitDetailRepository federalPermitDetailRepository() {
-    return federalPermitDetailRepositoryProvider == null
-        ? null
-        : federalPermitDetailRepositoryProvider.getIfAvailable();
   }
 
   private ApplicationSubmissionSummaryDto toSubmissionSummary(ParsedSubmission submission) {
@@ -2196,109 +2234,13 @@ public class ApplicationSubmissionImportService {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private String federalApplicationNumber(Element applicationDetail, List<String> errors) {
-    List<String> values = new ArrayList<>();
-    Element officeUseOnly =
-        optionalChild(
-            applicationDetail,
-            LEXIS_NAMESPACE,
-            "officeUseOnly",
-            "Office use only details must appear only once.",
-            errors);
-    String officeUseOnlyReference =
-        text(officeUseOnly, "internalOfficeUseRefId", "Internal office use reference ID", errors);
-    if (officeUseOnlyReference != null) {
-      values.add(officeUseOnlyReference);
-    }
-
-    for (String fieldName : List.of("federalApplicationNumber", "fedApplicationNumber", "applicationNumber")) {
-      List<Element> matches = children(applicationDetail, fieldName);
-      if (matches.size() > 1) {
-        errors.add("Federal application number field " + fieldName + " must appear only once.");
-      }
-      for (Element match : matches) {
-        String value = trimToNull(match.getTextContent());
-        if (value != null) {
-          values.add(value);
-        }
-      }
-    }
-    if (values.isEmpty()) {
-      return null;
-    }
-    String first = values.get(0);
-    boolean conflicting = values.stream().distinct().count() > 1L;
-    if (conflicting) {
-      errors.add("Federal application number aliases must not contain conflicting values.");
-    }
-    return first;
-  }
-
-  private String textAny(
-      Element parent, List<String> localNames, String label, List<String> errors) {
-    String selected = null;
-    for (String localName : localNames) {
-      String value = text(parent, localName, label, errors);
-      if (value == null) {
-        continue;
-      }
-      if (selected == null) {
-        selected = value;
-      } else if (!selected.equals(value)) {
-        errors.add(label + " must not be supplied with conflicting values.");
-      }
-    }
-    return selected;
-  }
-
   private String packageNumber(Element productDetail, List<String> errors) {
-    List<String> values = new ArrayList<>();
-    for (String fieldName : List.of("boomNumber", "packageNumber")) {
-      List<Element> matches = children(productDetail, fieldName);
-      if (matches.size() > 1) {
-        errors.add("Boom/package number field " + fieldName + " must appear only once.");
-      }
-      for (Element match : matches) {
-        String value = trimToNull(match.getTextContent());
-        if (value != null) {
-          values.add(value);
-        }
-      }
-    }
-    if (values.isEmpty()) {
-      return null;
-    }
-    String first = values.get(0);
-    boolean conflicting = values.stream().distinct().count() > 1L;
-    if (conflicting) {
-      errors.add("Boom/package number aliases must not contain conflicting values.");
-    }
-    return first;
+    return text(productDetail, "boomNumber", "Boom/package number", errors);
   }
 
   private String clientLocationCode(Element partyDetails, String label, List<String> errors) {
-    List<String> values = new ArrayList<>();
-    for (String fieldName : List.of("clientLocnCode", "clientLocationCode")) {
-      List<Element> matches = children(partyDetails, fieldName);
-      if (matches.size() > 1) {
-        errors.add(label + " client location field " + fieldName + " must appear only once.");
-      }
-      for (Element match : matches) {
-        String value = normalizeClientLocation(match.getTextContent());
-        if (value != null) {
-          values.add(value);
-        }
-      }
-    }
-    if (values.isEmpty()) {
-      return null;
-    }
-    String first = values.get(0);
-    boolean conflicting = values.stream().distinct().count() > 1L;
-    if (conflicting) {
-      errors.add(label + " client location aliases must not contain conflicting values.");
-    }
-    return first;
+    return normalizeClientLocation(
+        text(partyDetails, "clientLocnCode", label + " client location", errors));
   }
 
   private Long resolveOrgUnitNumber(String regionCode) {
@@ -2658,22 +2600,22 @@ public class ApplicationSubmissionImportService {
       String endUseCode,
       List<String> speciesCodes,
       List<ScaleLine> scaleLines,
-      FederalPermitDetail federalPermitDetail) {}
+      LocalDate biweeklyListDate) {}
 
-  private record FederalPermitField(String label, List<String> localNames) {}
+  private record FederalSubmissionMetadata(
+      Long federalApplicationNumber, LocalDate biweeklyListDate) {
+    static FederalSubmissionMetadata empty() {
+      return new FederalSubmissionMetadata(null, null);
+    }
+  }
 
-  private record FederalPermitDetail(
-      boolean present,
-      LocalDate permitIssueDate,
-      LocalDate estimatedShippingDate,
-      String otherPortOfExport,
-      String transportName,
-      String transportTypeCode,
-      String countryCode,
-      String portOfExportCode) {
+  private record ScheduleResolution(Long exportScheduleId, String error) {
+    static ScheduleResolution resolved(Long exportScheduleId) {
+      return new ScheduleResolution(exportScheduleId, null);
+    }
 
-    static FederalPermitDetail empty() {
-      return new FederalPermitDetail(false, null, null, null, null, null, null, null);
+    static ScheduleResolution rejected(String error) {
+      return new ScheduleResolution(null, error);
     }
   }
 

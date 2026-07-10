@@ -47,7 +47,6 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 | `AWS_COGNITO_ISSUER_URI` | Cognito issuer URI | - |
 | `COGNITO_USERINFO_URI` | Cognito userinfo endpoint | - |
 | `KEYCLOAK_ISSUER_URI` | Optional Keycloak issuer URI for machine-to-machine NEXCOL service-client tokens | - |
-| `KEYCLOAK_ADDITIONAL_ISSUER_URIS` | Optional comma-separated extra Keycloak issuers, such as API Services Portal's shared `apigw` realm | - |
 | `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
 | `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
 | `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |

@@ -20,7 +20,6 @@ class Oauth2SecurityCustomizerTest {
             "https://cognito-idp.ca-central-1.amazonaws.com/test",
             "https://dev.loginproxy.gov.bc.ca/auth/realms/standard",
             "",
-            "",
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
 
     Jwt jwt =
@@ -45,13 +44,12 @@ class Oauth2SecurityCustomizerTest {
   }
 
   @Test
-  void normalizedAuthoritiesShouldMapKeycloakClientRolesToScopeAuthorities() {
+  void normalizedAuthoritiesShouldNotTreatKeycloakClientRolesAsOauthScopes() {
     Oauth2SecurityCustomizer customizer =
         new Oauth2SecurityCustomizer(
             "https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
             "https://cognito-idp.ca-central-1.amazonaws.com/test",
             "https://dev.loginproxy.gov.bc.ca/auth/realms/forests",
-            "https://dev.loginproxy.gov.bc.ca/auth/realms/apigw",
             "",
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
 
@@ -69,8 +67,7 @@ class Oauth2SecurityCustomizerTest {
             customizer.normalizedAuthorities(jwt).stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList())
-        .containsExactly(
-            "SCOPE_lexis:extra:read", "SCOPE_lexis:federal-submission:submit");
+        .isEmpty();
   }
 
   @Test
@@ -101,16 +98,6 @@ class Oauth2SecurityCustomizerTest {
             Oauth2SecurityCustomizer.normalizeIssuerUri(
                 "https://dev.loginproxy.gov.bc.ca/auth/realms/standard/"))
         .isEqualTo("https://dev.loginproxy.gov.bc.ca/auth/realms/standard");
-  }
-
-  @Test
-  void splitIssuerUrisShouldIgnoreBlankCommaSeparatedValues() {
-    assertThat(
-            Oauth2SecurityCustomizer.splitIssuerUris(
-                " https://dev.loginproxy.gov.bc.ca/auth/realms/apigw, ,https://test.loginproxy.gov.bc.ca/auth/realms/apigw "))
-        .containsExactly(
-            "https://dev.loginproxy.gov.bc.ca/auth/realms/apigw",
-            "https://test.loginproxy.gov.bc.ca/auth/realms/apigw");
   }
 
   private Jwt jwt(Map<String, Object> claims) {
