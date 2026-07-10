@@ -1,64 +1,39 @@
-# NEXCOL Federal Submission Integration
+# NEXCOL Federal Submission API
 
-This integration replaces the NEXCOL-to-ESF path for federal LEXIS XML submissions with a
-machine-to-machine API path. Federal users do not sign in to the LEXIS UI.
+## Overview
+
+NEXCOL submits federal LEXIS XML through a synchronous machine-to-machine API. Interactive LEXIS
+authentication remains independent of this integration.
 
 ```text
 NEXCOL
-  -> dedicated Keycloak client-credentials token
+  -> Keycloak client-credentials token
   -> API gateway
   -> LEXIS federal validation or submission endpoint
-  -> existing LEXIS federal application tables
+  -> LEXIS federal application tables
 ```
 
-LEXIS continues to use Cognito/FAM for interactive users. That login flow is independent of the
-NEXCOL integration.
+## Authentication
 
-## Authorization Contract
-
-Both federal endpoints require this authorization:
+NEXCOL uses a dedicated confidential Keycloak client. Both federal endpoints require the OAuth
+scope:
 
 ```text
 lexis:federal-submission:submit
 ```
 
-The client scope is assigned to the dedicated NEXCOL calling client in the same Keycloak realm
-trusted by the gateway and LEXIS. The issued access token carries it in the standard OAuth
-`scope` claim.
+The gateway validates the token issuer, expiry, required scope, and audience when configured.
+LEXIS validates the forwarded token and applies the same scope-based authorization.
 
-There are two different service credentials involved in the overall setup:
+CI idempotently creates/checks the client scope, confidential client, and default scope assignment
+when these GitHub environment values are configured:
 
-- The NEXCOL runtime client id and secret belong to a dedicated confidential Keycloak client.
-  NEXCOL uses them to obtain access tokens.
-- The optional LEXIS deployment service account creates/checks Keycloak client scopes.
-  It is separate from the NEXCOL runtime client.
+- TEST: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
+- PROD: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-prod`
 
-The deploy-time scope synchronization follows the same pattern as `nr-user-lookup-api`: the issuer
-comes from `KEYCLOAK_ISSUER_URI`, and the sync step runs only when the Keycloak management service
-account is configured. Issuer values and credentials belong in environment configuration, not in
-this repository.
+Runtime client-secret lifecycle is managed through the environment's operational process.
 
-## Consumer Provisioning
-
-Configure the dedicated client id per GitHub environment:
-
-- TEST GitHub environment variable: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
-- PROD GitHub environment variable: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-prod`
-
-During deployment, CI:
-
-- creates/checks the required client scope in the target Keycloak realm;
-- creates/checks the confidential NEXCOL client with service accounts enabled;
-- assigns the submission scope as a default client scope; and
-- leaves runtime client-secret management to the environment's operational process.
-
-The client may also include a dedicated gateway audience. The gateway validates the configured
-issuer, audience when enabled, token expiry, and required scope before forwarding either federal
-`POST` operation.
-
-## Obtain an Access Token
-
-Use the target Keycloak realm's token URL and the dedicated NEXCOL client credentials:
+Obtain an access token with the standard client-credentials grant:
 
 ```bash
 curl -sS -X POST "${TOKEN_URL}" \
@@ -68,81 +43,58 @@ curl -sS -X POST "${TOKEN_URL}" \
   --data-urlencode "client_secret=${CLIENT_SECRET}"
 ```
 
-The response contains an `access_token`, `token_type`, and expiry. Cache the token in memory and
-refresh it before expiry rather than requesting a token for every XML call.
+Tokens should contain the expected issuer, an unexpired access-token lifetime, and
+`lexis:federal-submission:submit` in the `scope` claim. A configured gateway audience is also
+represented in `aud`.
 
-Before integration testing, decode a token locally and verify:
+## Endpoints
 
-- `iss` is the expected issuer for the target environment.
-- `aud` is the expected gateway audience.
-- `scope` contains `lexis:federal-submission:submit`.
-- The token is an access token and has not expired.
+| Operation | Endpoint | Successful status | Persistence |
+|---|---|---|---|
+| Validate | `POST /api/lexis/federal/submissions/validation` | `200` | None |
+| Submit | `POST /api/lexis/federal/submissions` | `201` | Federal application, package and scale rows |
 
-Claim names and values are managed by the provider configuration.
+Both endpoints consume `application/xml` and return JSON.
 
-## HTTP Contract
+## XML Contract
 
-Validation does not write federal application rows:
+The preferred payload is the legacy ESF submission envelope containing one LEXIS schema-version-2
+`LexisSubmission`. The inner `LexisSubmission` is also accepted as raw XML.
 
-```text
-POST /api/lexis/federal/submissions/validation
-```
+Federal payloads include:
 
-Submission validates and, when accepted, writes through the existing LEXIS federal application
-import transaction:
+- `jurisdictionCode=F` and `applStatusCode=A`;
+- federal applicant legal entity, contact and declaration fields;
+- `applicationDetail/officeUseOnly` reference, application date, biweekly list date, applicant
+  user id and language;
+- harvested timber with or without summary-of-scale data, or standing timber; and
+- version-2 element names and structure.
 
-```text
-POST /api/lexis/federal/submissions
-```
+Permit and shipping details are outside the federal exemption-submission contract.
 
-Use `Content-Type: application/xml`. For compatibility, the preferred NEXCOL payload is the same
-ESF submission envelope used by the legacy integration, containing one LEXIS schema-version-2
-`LexisSubmission`. The backend can also accept the inner `LexisSubmission` as raw XML, but NEXCOL
-does not need to transform its existing payload for the direct API.
+LEXIS validates the supplied application date and persists the service receipt date. The export
+schedule is resolved from the biweekly list date, with the next available schedule used when an
+exact date is unavailable.
 
-The federal XML contract is the existing LEXIS version-2 contract:
+Synthetic fixtures are available in `backend/src/test/resources/lexis-upload-samples/`:
 
-- `jurisdictionCode` is `F`, `applStatusCode` is `A`, and the applicant includes the federal
-  `eicbNumber`, legal-entity/contact details, and declarations.
-- `applicationDetail/officeUseOnly` contains the EXCOL reference id, application date, biweekly
-  list date, applicant user id, and language (`E` or `F`).
-- The product is harvested timber with summary of scale, harvested timber without summary of
-  scale, or standing timber, using the version-2 element names and structure.
-- Permit and shipping details are not part of the federal exemption-submission XML contract.
+- `pass-federal-application.xml`
+- `fail-federal-jurisdiction.xml`
 
-LEXIS validates the supplied application date for compatibility, then uses its service receipt
-date for the persisted application/received dates as the ESF consumer did. It resolves the export
-schedule from the supplied biweekly-list date and falls back to the next available schedule when
-there is no exact match.
+## Request Contract
 
-Synthetic smoke-test payloads are available under
-`backend/src/test/resources/lexis-upload-samples/`:
-
-- `pass-federal-application.xml` exercises successful validation.
-- `fail-federal-jurisdiction.xml` exercises rejected validation because required federal details
-  are missing.
-
-The passing fixture is safe for validation only. Replace its business identifiers with approved
-TEST values before calling the submission endpoint.
-
-Send the correlation, source, and business-reference metadata on every request. Send an
-idempotency key for submit requests:
-
-| Value | Location | Semantics |
+| Value | Location | Description |
 |---|---|---|
-| `userReference` | Query parameter | Stable NEXCOL business reference, at most 50 characters |
-| `originalFileName` | Query parameter | Diagnostic source filename |
-| `X-Request-ID` | Header | Unique correlation id for this HTTP attempt, at most 200 characters |
-| `X-Source-System` | Header | Calling system identifier, for example `NEXCOL` |
-| `X-Idempotency-Key` | Header | Stable logical submission id; required for submit requests |
+| `userReference` | Query parameter | Stable business reference, maximum 50 characters |
+| `originalFileName` | Query parameter | Source filename for diagnostics |
+| `X-Request-ID` | Header | Correlation id for the HTTP attempt, maximum 200 characters |
+| `X-Source-System` | Header | Calling system identifier |
+| `X-Idempotency-Key` | Header | Stable logical submission id; required for submission |
 
-These are integration-contract requirements even if an environment is temporarily configured with
-permissive compatibility settings. Consumers must not depend on being able to omit them.
+Each HTTP attempt uses a new request id. Retries of the same logical submission reuse the same
+idempotency key.
 
-Use a new `X-Request-ID` for each HTTP attempt. Reuse the same `X-Idempotency-Key` when retrying the
-same logical submission, and never reuse it for different XML.
-
-### Validate XML
+### Validate
 
 ```bash
 curl -sS -X POST \
@@ -156,7 +108,7 @@ curl -sS -X POST \
   --data-binary "@federal.xml"
 ```
 
-### Submit XML
+### Submit
 
 ```bash
 curl -sS -X POST \
@@ -173,90 +125,38 @@ curl -sS -X POST \
 
 ## Responses
 
-The response body is JSON and includes the processing status, validation errors and warnings,
-LEXIS identifiers when available, the supplied trace metadata, and a SHA-256 digest of the payload.
-An abridged successful validation response has this shape:
+Responses include processing status, errors, warnings, trace metadata, payload digest and LEXIS
+identifiers when available.
 
-```json
-{
-  "uploadType": "applicationSubmission",
-  "fileName": "federal.xml",
-  "status": "validated",
-  "message": "<validation summary>",
-  "applicationNumber": null,
-  "errors": [],
-  "warnings": [],
-  "userReference": "<NEXCOL reference>",
-  "requestId": "<request id>",
-  "idempotencyKey": null,
-  "payloadSha256": "<SHA-256 digest>",
-  "sourceSystem": "NEXCOL",
-  "payloadRootType": "<recognized XML root type>"
-}
-```
+| Status | Meaning |
+|---|---|
+| `200` | XML validated successfully |
+| `201` | Submission accepted and persisted |
+| `400` | Invalid request metadata or body |
+| `401` | Missing, expired or invalid token |
+| `403` | Required scope is absent |
+| `404` | Gateway route or method is unavailable |
+| `422` | XML or business validation failed |
+| `503` | LEXIS processing dependency is unavailable |
 
-Expected HTTP results:
+A successful submission includes an `applicationNumber` and, when available, a relative
+`Location` header. Processing is synchronous; there is no submission-status polling endpoint.
 
-| Status | Meaning | NEXCOL action |
-|---|---|---|
-| `200` | XML validated successfully | Submit when appropriate |
-| `201` | Submission accepted and written | Store returned identifiers; do not resubmit |
-| `400` | Missing/invalid request metadata or non-XML body | Correct the request |
-| `401` | Missing, expired, or invalid token | Obtain a valid token |
-| `403` | Token lacks the required authorization | Correct the Keycloak client-scope assignment |
-| `404` | Route or method is not exposed by the gateway | Correct the request URL/method |
-| `422` | XML or business validation rejected the submission | Correct the payload using `errors` |
-| `503` | LEXIS could not process the request | Honour `Retry-After` and retry cautiously |
+For a transport timeout or `503`, retries use the original idempotency key. Durable response replay
+and duplicate suppression are required before automated submission retries are enabled.
 
-A successful submit returns `201 Created`, an `applicationNumber`, and a relative `Location` header
-when the application number is available. This is synchronous: there is no ESF submission-status
-polling step.
+## ESF Migration Mapping
 
-## Retry and Idempotency Gate
-
-Do not retry `400`, `401`, `403`, `404`, or `422` unchanged. Token refresh may resolve `401`;
-corrected access may resolve `403`.
-
-For a transport timeout or `503`, keep the same logical idempotency key. The current endpoint
-captures and returns `X-Idempotency-Key` for traceability, but durable server-side response replay
-and duplicate suppression must be completed and tested before automated PROD retries are enabled.
-Until then, treat an indeterminate submit result as an operational reconciliation case rather than
-blindly resubmitting it.
-
-## ESF Replacement Mapping
-
-| Previous ESF concept | Direct LEXIS API equivalent |
+| Previous ESF concept | Direct API equivalent |
 |---|---|
 | `submissionData` | XML request body |
 | `originalFileName` | `originalFileName` query parameter |
 | `userReference` | `userReference` query parameter |
-| ESF-authenticated `submittedBy` | JWT machine-client identity |
+| ESF-authenticated submitter | Keycloak machine-client identity |
 | ESF submission id | Request/idempotency metadata and returned LEXIS identifiers |
-| Upload/schema/finalize stages | HTTP status plus response `status`, `errors`, and `warnings` |
+| Upload/schema/finalize stages | HTTP status plus response status, errors and warnings |
 | `getSubmissionStatus` polling | Immediate validation or submission response |
-| ESF accepted/rejected status message | `201` or `422` JSON response |
+| ESF accepted/rejected message | `201` or `422` JSON response |
 
-The legacy ESF source, LEXIS VC 2.8.x schema/parser, and archived ESF submissions define the
-compatibility contract. Archived production XML must be extracted and sanitized in an approved
-private workspace before it is converted into repository fixtures.
-
-## Readiness Decisions
-
-Resolve these before PROD consumer onboarding:
-
-- Extract a small set of recent archived federal LEXIS submissions from ESF and use them to build
-  sanitized accepted/rejected schema-version-2 fixtures.
-- Verify the deployed ESF schema copy against the version-2 schema before enabling full local XSD
-  validation at the direct endpoint.
-- Confirm through source/integration inventory whether either legacy LEXIS validation web service
-  is still called independently of ESF submission.
-- Implement and test durable idempotent replay for submit requests.
-- Confirm gateway-only ingress or enforce the expected audience at the backend if direct route bypass
-  is not acceptable.
-
-## Public Repository Boundary
-
-Do not commit gateway hosts, upstream routes, issuer URLs, audiences, product or gateway identifiers,
-client identifiers, credentials, bearer tokens, filled gateway configuration, portal exports, or
-real federal XML. Store operational values in approved private configuration and secret-management
-systems.
+The legacy ESF source, LEXIS VC schema/parser and representative archived submissions define the
+compatibility baseline for the direct API.

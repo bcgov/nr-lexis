@@ -121,15 +121,14 @@ Regardless of option:
 
 If the backend starts but authenticated API calls fail, check network access, `application-local.yml` credentials, Cognito config, and the truststore path.
 
-### NEXCOL service-client auth
+### NEXCOL federal submission API
 
-Federal NEXCOL validation/submission calls use machine-to-machine Keycloak tokens, not Cognito/FAM user sessions. The dedicated NEXCOL client must receive the `lexis:federal-submission:submit` OAuth scope, then call the gateway's federal validation/submission endpoints with a bearer token.
+NEXCOL uses a dedicated Keycloak client and the `lexis:federal-submission:submit` OAuth scope to
+validate or submit federal XML through the API gateway. CI manages the client, scope and default
+scope assignment for configured environments.
 
-LEXIS deploys can idempotently create the required Keycloak client scope in each environment when `keycloak_sa_client_id` and `keycloak_sa_client_secret` are configured for the GitHub environment. When the non-secret `NEXCOL_KEYCLOAK_CLIENT_ID` environment variable is also configured, CI creates/checks that dedicated confidential client and its default scope assignment. The deployment service account is administrative and separate from the NEXCOL runtime client.
-
-See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for consumer
-provisioning, the token flow, request/response examples, and the ESF replacement mapping.
-See [gateway/README.md](gateway/README.md) for the API Services Portal gateway setup.
+See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for the API
+contract and [gateway/README.md](gateway/README.md) for gateway responsibilities.
 
 ## CI regression
 
