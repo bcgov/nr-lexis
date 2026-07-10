@@ -93,8 +93,10 @@ import transaction:
 POST /api/lexis/federal/submissions
 ```
 
-Use raw XML with `Content-Type: application/xml`. The backend also supports XML-compatible legacy
-content types and multipart uploads, but raw XML is the preferred NEXCOL contract.
+Use `Content-Type: application/xml`. For compatibility, the preferred NEXCOL payload is the same
+ESF submission envelope used by the legacy integration, containing one LEXIS schema-version-2
+`LexisSubmission`. The backend can also accept the inner `LexisSubmission` as raw XML, but NEXCOL
+does not need to transform its existing payload for the direct API.
 
 Send the correlation, source, and business-reference metadata on every request. Send an
 idempotency key for submit requests:
@@ -207,18 +209,23 @@ blindly resubmitting it.
 | `getSubmissionStatus` polling | Immediate validation or submission response |
 | ESF accepted/rejected status message | `201` or `422` JSON response |
 
-The legacy VC and ESF source are implementation references, not the new wire contract. NEXCOL must
-confirm its current XML schema/version and supply representative accepted and rejected payloads.
+The legacy ESF source, LEXIS VC 2.8.x schema/parser, and archived ESF submissions define the
+compatibility contract. Archived production XML must be extracted and sanitized in an approved
+private workspace before it is converted into repository fixtures.
 
 ## Readiness Decisions
 
 Resolve these before PROD consumer onboarding:
 
-- Confirm whether NEXCOL sends raw LEXIS XML, an ESF envelope, or SOAP-wrapped XML. Raw LEXIS XML is
-  preferred.
-- Obtain sanitized current-schema fixtures for a valid submission and expected validation failures.
-- Confirm how the federal export/listing schedule date is supplied or derived.
-- Confirm whether NEXCOL still calls either legacy LEXIS validation web service separately.
+- Extract a small set of recent archived federal LEXIS submissions from ESF and use them to build
+  sanitized accepted/rejected schema-version-2 fixtures.
+- Validate the required 2.8.x `officeUseOnly` fields. Preserve the legacy behaviour of using the
+  service receipt date for application/received dates, and use the supplied biweekly-list date to
+  resolve the export schedule.
+- Treat federal permit/shipping-detail fields as a separate workflow unless legacy source or
+  archived submissions prove they are part of this exemption-submission contract.
+- Confirm through source/integration inventory whether either legacy LEXIS validation web service
+  is still called independently of ESF submission.
 - Implement and test durable idempotent replay for submit requests.
 - Confirm gateway-only ingress or enforce the expected audience at the backend if direct route bypass
   is not acceptable.
