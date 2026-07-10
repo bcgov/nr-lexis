@@ -1891,7 +1891,7 @@ class LexisRouteAuthorizationIntegrationTest {
         .formatted(
             lexisSubmissionXml(
                 "F",
-                "<lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>",
+                federalOfficeUseXml(),
                 "FED26-700123"));
   }
 
@@ -1916,8 +1916,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   private static String bareFederalLexisXml() {
-    return lexisSubmissionXml(
-        "F", "<lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>", "FED26-700123");
+    return lexisSubmissionXml("F", federalOfficeUseXml(), "FED26-700123");
   }
 
   private static String esfWrappedProvincialLexisXml() {
@@ -1933,27 +1932,38 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   private static String lexisSubmissionXml(
-      String jurisdictionCode, String federalApplicationNumberElement, String packageNumber) {
+      String jurisdictionCode, String federalOfficeUseElement, String packageNumber) {
     return """
         <lexis:LexisSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
           <lexis:applicant>
             <lexis:applicantDetails>
+              <lexis:eicbNumber>123456</lexis:eicbNumber>
               <lexis:clientNumber>99887766</lexis:clientNumber>
               <lexis:clientLocnCode>99</lexis:clientLocnCode>
               <lexis:name>Sample Federal Applicant Ltd.</lexis:name>
+              <lexis:address>555 Government Street</lexis:address>
+              <lexis:city>Vancouver</lexis:city>
+              <lexis:provinceState>BC</lexis:provinceState>
+              <lexis:postalZipCode>V8V8V8</lexis:postalZipCode>
+              <lexis:country>CA</lexis:country>
+              <lexis:telephoneNumber>2505551212</lexis:telephoneNumber>
             </lexis:applicantDetails>
             <lexis:applicantContact>
               <lexis:contactSurname>SAMPLE</lexis:contactSurname>
               <lexis:contactFirstname>CONTACT</lexis:contactFirstname>
+              <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>
             </lexis:applicantContact>
+            <lexis:declarationCanadianResident>true</lexis:declarationCanadianResident>
+            <lexis:declarationSubmittedOffersPast90Days>false</lexis:declarationSubmittedOffersPast90Days>
           </lexis:applicant>
           <lexis:applicationDetail>
             <lexis:jurisdictionCode>%s</lexis:jurisdictionCode>
-            %s
             <lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>
             <lexis:applStatusCode>A</lexis:applStatusCode>
             <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
             <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
+            <lexis:re-advertisement>false</lexis:re-advertisement>
+            %s
           </lexis:applicationDetail>
           <lexis:productDetail>
             <lexis:productTypeCode>H</lexis:productTypeCode>
@@ -1973,7 +1983,19 @@ class LexisRouteAuthorizationIntegrationTest {
           </lexis:productDetail>
         </lexis:LexisSubmission>
         """
-        .formatted(jurisdictionCode, federalApplicationNumberElement, packageNumber);
+        .formatted(jurisdictionCode, federalOfficeUseElement, packageNumber);
+  }
+
+  private static String federalOfficeUseXml() {
+    return """
+        <lexis:officeUseOnly>
+          <lexis:internalOfficeUseRefId>700123</lexis:internalOfficeUseRefId>
+          <lexis:internalOfficeUseApplicationDate>2026-01-10</lexis:internalOfficeUseApplicationDate>
+          <lexis:internalOfficeUseBiWeeklyListDate>2026-01-16</lexis:internalOfficeUseBiWeeklyListDate>
+          <lexis:internalOfficeUseApplicantUserid>NEXCOL</lexis:internalOfficeUseApplicantUserid>
+          <lexis:internalOfficeUseLanguage>E</lexis:internalOfficeUseLanguage>
+        </lexis:officeUseOnly>
+        """;
   }
 
   private record EndpointAuthorizationLookup(

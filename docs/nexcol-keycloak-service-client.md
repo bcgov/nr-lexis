@@ -98,6 +98,21 @@ ESF submission envelope used by the legacy integration, containing one LEXIS sch
 `LexisSubmission`. The backend can also accept the inner `LexisSubmission` as raw XML, but NEXCOL
 does not need to transform its existing payload for the direct API.
 
+The federal XML contract is the existing LEXIS version-2 contract:
+
+- `jurisdictionCode` is `F`, `applStatusCode` is `A`, and the applicant includes the federal
+  `eicbNumber`, legal-entity/contact details, and declarations.
+- `applicationDetail/officeUseOnly` contains the EXCOL reference id, application date, biweekly
+  list date, applicant user id, and language (`E` or `F`).
+- The product is harvested timber with summary of scale, harvested timber without summary of
+  scale, or standing timber, using the version-2 element names and structure.
+- Permit and shipping details are not part of the federal exemption-submission XML contract.
+
+LEXIS validates the supplied application date for compatibility, then uses its service receipt
+date for the persisted application/received dates as the ESF consumer did. It resolves the export
+schedule from the supplied biweekly-list date and falls back to the next available schedule when
+there is no exact match.
+
 Send the correlation, source, and business-reference metadata on every request. Send an
 idempotency key for submit requests:
 
@@ -219,11 +234,8 @@ Resolve these before PROD consumer onboarding:
 
 - Extract a small set of recent archived federal LEXIS submissions from ESF and use them to build
   sanitized accepted/rejected schema-version-2 fixtures.
-- Validate the required 2.8.x `officeUseOnly` fields. Preserve the legacy behaviour of using the
-  service receipt date for application/received dates, and use the supplied biweekly-list date to
-  resolve the export schedule.
-- Treat federal permit/shipping-detail fields as a separate workflow unless legacy source or
-  archived submissions prove they are part of this exemption-submission contract.
+- Verify the deployed ESF schema copy against the version-2 schema before enabling full local XSD
+  validation at the direct endpoint.
 - Confirm through source/integration inventory whether either legacy LEXIS validation web service
   is still called independently of ESF submission.
 - Implement and test durable idempotent replay for submit requests.
