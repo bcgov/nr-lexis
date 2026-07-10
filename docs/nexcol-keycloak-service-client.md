@@ -31,7 +31,7 @@ There are two different service credentials involved in the overall setup:
 - The NEXCOL runtime client id and secret belong to a dedicated confidential Keycloak client.
   NEXCOL uses them to obtain access tokens.
 - The optional LEXIS deployment service account creates/checks Keycloak client scopes.
-  Its id and secret are deployment secrets and are never given to NEXCOL.
+  It is separate from the NEXCOL runtime client.
 
 The deploy-time scope synchronization follows the same pattern as `nr-user-lookup-api`: the issuer
 comes from `KEYCLOAK_ISSUER_URI`, and the sync step runs only when the Keycloak management service
@@ -40,28 +40,21 @@ this repository.
 
 ## Consumer Provisioning
 
-Provision each environment independently:
+Configure the dedicated client id per GitHub environment:
 
 - TEST GitHub environment variable: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
-- PROD GitHub environment variable: use a separate PROD client id agreed with the NEXCOL owner.
+- PROD GitHub environment variable: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-prod`
 
-1. LEXIS creates/checks the required client scope in the target Keycloak realm during deploy.
-2. When `NEXCOL_KEYCLOAK_CLIENT_ID` is configured for the GitHub environment, the same deploy step
-   creates/checks the dedicated confidential NEXCOL client with service accounts enabled.
-3. CI assigns the client scope to NEXCOL as a default client scope so every service token carries
-   the required authorization. CI never reads, prints, or rotates the generated client secret.
-4. The client is configured with the gateway's dedicated audience when audience enforcement is
-   enabled.
-5. The gateway validates the token issuer, audience, expiry, and required scope before forwarding
-   either federal `POST` operation.
-6. NEXCOL stores its client secret in an approved secret manager and obtains tokens with
-   `client_credentials`.
+During deployment, CI:
 
-After the first deployment, an authorized operator retrieves the generated runtime client secret
-once from Keycloak and transfers it to NEXCOL through the approved secret-management process.
+- creates/checks the required client scope in the target Keycloak realm;
+- creates/checks the confidential NEXCOL client with service accounts enabled;
+- assigns the submission scope as a default client scope; and
+- leaves runtime client-secret management to the environment's operational process.
 
-Do not reuse TEST credentials in PROD. Do not send client secrets or bearer tokens through source
-control, tickets, chat, request logs, or email.
+The client may also include a dedicated gateway audience. The gateway validates the configured
+issuer, audience when enabled, token expiry, and required scope before forwarding either federal
+`POST` operation.
 
 ## Obtain an Access Token
 
@@ -85,8 +78,7 @@ Before integration testing, decode a token locally and verify:
 - `scope` contains `lexis:federal-submission:submit`.
 - The token is an access token and has not expired.
 
-Claim names are part of the provider configuration. NEXCOL must not modify or self-issue these
-claims.
+Claim names and values are managed by the provider configuration.
 
 ## HTTP Contract
 
