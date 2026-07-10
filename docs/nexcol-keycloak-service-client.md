@@ -42,17 +42,23 @@ this repository.
 
 Provision each environment independently:
 
-1. LEXIS creates/checks the required client scope in the target Keycloak realm.
-2. A dedicated confidential NEXCOL client is provisioned in that realm with service accounts
-   enabled.
-3. The client scope is assigned to NEXCOL as a default client scope so every service token carries
-   the required authorization.
+- TEST GitHub environment variable: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
+- PROD GitHub environment variable: use a separate PROD client id agreed with the NEXCOL owner.
+
+1. LEXIS creates/checks the required client scope in the target Keycloak realm during deploy.
+2. When `NEXCOL_KEYCLOAK_CLIENT_ID` is configured for the GitHub environment, the same deploy step
+   creates/checks the dedicated confidential NEXCOL client with service accounts enabled.
+3. CI assigns the client scope to NEXCOL as a default client scope so every service token carries
+   the required authorization. CI never reads, prints, or rotates the generated client secret.
 4. The client is configured with the gateway's dedicated audience when audience enforcement is
    enabled.
 5. The gateway validates the token issuer, audience, expiry, and required scope before forwarding
    either federal `POST` operation.
 6. NEXCOL stores its client secret in an approved secret manager and obtains tokens with
    `client_credentials`.
+
+After the first deployment, an authorized operator retrieves the generated runtime client secret
+once from Keycloak and transfers it to NEXCOL through the approved secret-management process.
 
 Do not reuse TEST credentials in PROD. Do not send client secrets or bearer tokens through source
 control, tickets, chat, request logs, or email.

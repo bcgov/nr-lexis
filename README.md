@@ -125,7 +125,7 @@ If the backend starts but authenticated API calls fail, check network access, `a
 
 Federal NEXCOL validation/submission calls use machine-to-machine Keycloak tokens, not Cognito/FAM user sessions. The dedicated NEXCOL client must receive the `lexis:federal-submission:submit` OAuth scope, then call the gateway's federal validation/submission endpoints with a bearer token.
 
-LEXIS deploys can idempotently create the required Keycloak client scope in each environment when `keycloak_sa_client_id` and `keycloak_sa_client_secret` are configured for the GitHub environment. The deployment service account manages scopes only; it is not the NEXCOL runtime client and its credentials must not be shared.
+LEXIS deploys can idempotently create the required Keycloak client scope in each environment when `keycloak_sa_client_id` and `keycloak_sa_client_secret` are configured for the GitHub environment. When the non-secret `NEXCOL_KEYCLOAK_CLIENT_ID` environment variable is also configured, CI creates/checks that dedicated confidential client and its default scope assignment without reading or printing its generated secret. The deployment service account is administrative and its credentials must not be shared.
 
 See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for consumer
 provisioning, the token flow, request/response examples, and the ESF replacement mapping.
