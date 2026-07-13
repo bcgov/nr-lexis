@@ -75,7 +75,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             resolveFileName(file),
             file.getSize(),
             "validated",
-            "File passed validation and virus scanning."));
+            validationSuccessMessage()));
   }
 
   @Override
@@ -350,6 +350,12 @@ public class OracleLexisUploadService implements LexisUploadService {
     } catch (VirusScanException ex) {
       return Optional.of(rejected(uploadType, file, ex.userMessage()));
     }
+  }
+
+  private String validationSuccessMessage() {
+    return virusScanService.isEnabled()
+        ? "File passed validation and virus scanning."
+        : "File passed validation.";
   }
 
   private boolean validFile(MultipartFile file) {

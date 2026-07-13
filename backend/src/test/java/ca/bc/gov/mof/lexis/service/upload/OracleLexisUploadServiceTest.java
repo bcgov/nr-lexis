@@ -275,6 +275,36 @@ class OracleLexisUploadServiceTest {
   }
 
   @Test
+  void validationShouldNotClaimVirusScanningWhenItIsDisabled() {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "application.pdf", "application/pdf", validPdf());
+    when(uploadRepository.isFileTypeCodeValidRequired("PDF")).thenReturn(true);
+    when(virusScanService.isEnabled()).thenReturn(false);
+
+    LexisUploadResultDto result =
+        service().validateDocument(file, "application").orElseThrow();
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.message()).isEqualTo("File passed validation.");
+    verify(virusScanService).assertClean(file);
+  }
+
+  @Test
+  void validationShouldConfirmVirusScanningWhenItIsEnabled() {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "application.pdf", "application/pdf", validPdf());
+    when(uploadRepository.isFileTypeCodeValidRequired("PDF")).thenReturn(true);
+    when(virusScanService.isEnabled()).thenReturn(true);
+
+    LexisUploadResultDto result =
+        service().validateDocument(file, "application").orElseThrow();
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.message()).isEqualTo("File passed validation and virus scanning.");
+    verify(virusScanService).assertClean(file);
+  }
+
+  @Test
   void uploadShouldRejectUnsafeFileNameBeforeLookupScanOrPersistence() {
     OracleLexisUploadService service = service();
     MockMultipartFile file =

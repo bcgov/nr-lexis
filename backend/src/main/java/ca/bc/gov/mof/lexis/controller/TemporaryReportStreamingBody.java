@@ -18,19 +18,23 @@ final class TemporaryReportStreamingBody implements StreamingResponseBody {
   private static final String TEMP_FILE_SUFFIX = ".tmp";
 
   private final Path temporaryFile;
+  private final TransferObserver transferObserver;
 
-  private TemporaryReportStreamingBody(Path temporaryFile) {
+  private TemporaryReportStreamingBody(
+      Path temporaryFile, TransferObserver transferObserver) {
     this.temporaryFile = temporaryFile;
+    this.transferObserver = transferObserver;
   }
 
-  static TemporaryReportStreamingBody stage(byte[] content) throws IOException {
+  static TemporaryReportStreamingBody stage(
+      byte[] content, TransferObserver transferObserver) throws IOException {
     Path temporaryFile = Files.createTempFile(TEMP_FILE_PREFIX, TEMP_FILE_SUFFIX);
     try {
       Files.write(
           temporaryFile,
           content == null ? new byte[0] : content,
           StandardOpenOption.TRUNCATE_EXISTING);
-      return new TemporaryReportStreamingBody(temporaryFile);
+      return new TemporaryReportStreamingBody(temporaryFile, transferObserver);
     } catch (IOException exception) {
       try {
         Files.deleteIfExists(temporaryFile);
@@ -43,10 +47,14 @@ final class TemporaryReportStreamingBody implements StreamingResponseBody {
 
   @Override
   public void writeTo(OutputStream outputStream) throws IOException {
+    long startedNanos = System.nanoTime();
+    boolean successful = false;
     try {
       Files.copy(temporaryFile, outputStream);
       outputStream.flush();
+      successful = true;
     } finally {
+      notifyTransferObserver(successful, System.nanoTime() - startedNanos);
       try {
         Files.deleteIfExists(temporaryFile);
       } catch (IOException exception) {
@@ -55,7 +63,23 @@ final class TemporaryReportStreamingBody implements StreamingResponseBody {
     }
   }
 
+  private void notifyTransferObserver(boolean successful, long durationNanos) {
+    if (transferObserver == null) {
+      return;
+    }
+    try {
+      transferObserver.completed(successful, Math.max(0L, durationNanos));
+    } catch (RuntimeException exception) {
+      LOGGER.warn("Unable to record staged LEXIS report transfer outcome", exception);
+    }
+  }
+
   Path temporaryFile() {
     return temporaryFile;
+  }
+
+  @FunctionalInterface
+  interface TransferObserver {
+    void completed(boolean successful, long durationNanos);
   }
 }

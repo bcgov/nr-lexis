@@ -14,8 +14,10 @@ import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,13 +70,16 @@ class LexisReportAuditTest {
                 new LexisGeneratedReport(
                     "forced-report.pdf", "application/pdf", new byte[] {1, 2, 3, 4})));
 
-    LexisReportController controller = reportController();
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    LexisReportController controller = reportController(meterRegistry);
     var response =
         controller.offerReport(
             new LexisReportRequestDto(
                 Map.of("clientNumber", "secret-filter-value"), " xls "));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(output).contains("outcome=generation_succeeded");
+    assertThat(meterRegistry.find("lexis_report_stream_writes_total").counter()).isNull();
     consume(response);
     assertThat(output)
         .contains("event=lexis_report")
@@ -83,11 +88,70 @@ class LexisReportAuditTest {
         .contains("requestedFormat=XLS")
         .contains("effectiveFormat=PDF")
         .contains("status=200")
-        .contains("outcome=generated")
+        .contains("outcome=generation_succeeded")
+        .contains("outcome=stream_write_succeeded")
         .contains("durationMs=")
         .contains("bytes=4")
         .doesNotContain("clientNumber")
         .doesNotContain("secret-filter-value");
+    assertThat(
+            meterRegistry
+                .get("lexis_report_stream_writes_total")
+                .tags(
+                    "report_action", "offerReport",
+                    "format", "PDF",
+                    "outcome", "success")
+                .counter()
+                .count())
+        .isEqualTo(1.0);
+  }
+
+  @Test
+  void failedClientTransferShouldAuditAndCountFailureWhilePropagatingIOException(
+      CapturedOutput output) {
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\jsmith");
+    when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
+    when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
+        .thenReturn(
+            Optional.of(
+                new LexisGeneratedReport(
+                    "report.pdf", "application/pdf", new byte[] {1, 2, 3})));
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    var response =
+        reportController(meterRegistry)
+            .offerReport(new LexisReportRequestDto(Map.of(), "PDF"));
+    OutputStream failingOutput =
+        new OutputStream() {
+          @Override
+          public void write(int value) throws IOException {
+            throw new IOException("client disconnected");
+          }
+
+          @Override
+          public void write(byte[] bytes, int offset, int length) throws IOException {
+            throw new IOException("client disconnected");
+          }
+        };
+
+    assertThatThrownBy(() -> response.getBody().writeTo(failingOutput))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("client disconnected");
+
+    assertThat(output)
+        .contains("outcome=generation_succeeded")
+        .contains("event=lexis_report_stream")
+        .contains("outcome=stream_write_failed")
+        .doesNotContain("outcome=stream_write_succeeded");
+    assertThat(
+            meterRegistry
+                .get("lexis_report_stream_writes_total")
+                .tags(
+                    "report_action", "offerReport",
+                    "format", "PDF",
+                    "outcome", "failure")
+                .counter()
+                .count())
+        .isEqualTo(1.0);
   }
 
   @Test
@@ -194,15 +258,25 @@ class LexisReportAuditTest {
         .contains("requestedFormat=CSV")
         .contains("effectiveFormat=CSV")
         .contains("status=200")
-        .contains("outcome=generated")
+        .contains("outcome=generation_succeeded")
+        .contains("outcome=stream_write_succeeded")
         .contains("bytes=2")
         .doesNotContain("legacy-private-filter");
-    assertThat(countOccurrences(logs, "event=lexis_report")).isEqualTo(1);
+    assertThat(countOccurrences(logs, "event=lexis_report actor=")).isEqualTo(1);
+    assertThat(countOccurrences(logs, "event=lexis_report_stream actor=")).isEqualTo(1);
   }
 
   private LexisReportController reportController() {
     return new LexisReportController(
         reportServiceProvider, provincialAuthorizationService, principalService);
+  }
+
+  private LexisReportController reportController(SimpleMeterRegistry meterRegistry) {
+    return new LexisReportController(
+        reportServiceProvider,
+        provincialAuthorizationService,
+        principalService,
+        meterRegistry);
   }
 
   private void consume(ResponseEntity<StreamingResponseBody> response) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -16,6 +16,7 @@ import { AppNotification } from '../../components/AppNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
+import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import {
@@ -229,6 +230,9 @@ const ProvincialExemptionCreatePage = () => {
   )
   const initialForm = useMemo(() => buildInitialForm(prefillState), [prefillState])
   const [form, setForm] = useState<ProvincialExemptionCreateForm>(() => initialForm)
+  const draftBaselineRef = useRef(form)
+  const [formEdited, setFormEdited] = useState(false)
+  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>([])
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
@@ -298,6 +302,12 @@ const ProvincialExemptionCreatePage = () => {
     exemptionStatuses.find((option) => option.value === form.exemptionStatusCode)?.label ||
     form.exemptionStatusCode ||
     'New'
+
+  useEffect(() => {
+    if (createdRecordPath) {
+      navigate(createdRecordPath)
+    }
+  }, [createdRecordPath, navigate])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -455,6 +465,13 @@ const ProvincialExemptionCreatePage = () => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
   }
 
+  const markFormEdited = (): void => {
+    if (!formEdited) {
+      draftBaselineRef.current = form
+    }
+    setFormEdited(true)
+  }
+
   const fieldError = (field: ProvincialExemptionCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
   const firstSubmitValidationError = Object.values(fieldErrors).find(
@@ -462,6 +479,10 @@ const ProvincialExemptionCreatePage = () => {
   )
 
   const onExemptionTypeChange = (value: string): void => {
+    if (value === form.exemptionTypeCode) {
+      return
+    }
+    markFormEdited()
     const typeCode = value.trim().toUpperCase()
     const nextStatus = typeCode === 'M' ? 'NEW' : OIC_TYPES.has(typeCode) ? 'ACT' : ''
     setForm((current) => {
@@ -488,9 +509,14 @@ const ProvincialExemptionCreatePage = () => {
     })
   }
 
-  const onSave = async () => {
-    if (!optionsLoaded || optionsUnavailable || requiredOptionsUnavailable) {
-      return
+  const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
+    if (
+      !optionsLoaded ||
+      optionsUnavailable ||
+      requiredOptionsUnavailable ||
+      !canUseApplicationPrefill
+    ) {
+      return false
     }
     if (selectedApplicationNumbers.length > 0 && !hasCurrentPreview) {
       setStatus({
@@ -499,7 +525,7 @@ const ProvincialExemptionCreatePage = () => {
         message:
           previewError ?? 'Wait for LEXIS to validate the selected applications before saving.',
       })
-      return
+      return false
     }
     if (hasValidationError) {
       setShowAllValidationErrors(true)
@@ -508,7 +534,7 @@ const ProvincialExemptionCreatePage = () => {
         title: 'Validation Error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
       })
-      return
+      return false
     }
 
     setStatus(null)
@@ -524,16 +550,20 @@ const ProvincialExemptionCreatePage = () => {
               : [],
       })
       if (result.success) {
+        draftBaselineRef.current = form
+        setFormEdited(false)
         if (result.createdId) {
-          navigate(`/provincial/exemption/${encodeURIComponent(result.createdId)}`)
-          return
+          if (navigateToCreatedRecord) {
+            setCreatedRecordPath(`/provincial/exemption/${encodeURIComponent(result.createdId)}`)
+          }
+          return true
         }
         setStatus({
           kind: 'success',
           title: 'Exemption Saved',
           message: 'Exemption saved successfully.',
         })
-        return
+        return true
       }
 
       setStatus({
@@ -544,6 +574,7 @@ const ProvincialExemptionCreatePage = () => {
           result.message ||
           'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } catch (error) {
       console.error(error)
       setStatus({
@@ -552,10 +583,21 @@ const ProvincialExemptionCreatePage = () => {
         message:
           'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  const onDiscardCreateDraft = (): void => {
+    setForm(draftBaselineRef.current)
+    setFormEdited(false)
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
+    setStatus(null)
+  }
+
+  const isCreateDraftDirty = formEdited && !formValuesEqual(form, draftBaselineRef.current)
 
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-exemption-create-page">
@@ -667,9 +709,10 @@ const ProvincialExemptionCreatePage = () => {
                     invalid={!!fieldError('applicationNumber')}
                     invalidText={fieldError('applicationNumber')}
                     onBlur={() => markFieldTouched('applicationNumber')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, applicationNumber: value }))
-                    }
+                    }}
                   />
                 ))}
               <SearchableSelect
@@ -693,12 +736,13 @@ const ProvincialExemptionCreatePage = () => {
                   invalid={!!fieldError('exemptionNumber')}
                   invalidText={fieldError('exemptionNumber')}
                   onBlur={() => markFieldTouched('exemptionNumber')}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    markFormEdited()
                     setForm((current) => ({
                       ...current,
                       exemptionNumber: event.target.value,
                     }))
-                  }
+                  }}
                 />
               )}
               <SearchableSelect
@@ -715,9 +759,10 @@ const ProvincialExemptionCreatePage = () => {
                   ['M', 'O', 'B'].includes(normalizedTypeCode)
                 }
                 onBlur={() => markFieldTouched('exemptionStatusCode')}
-                onChange={(value) =>
+                onChange={(value) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, exemptionStatusCode: value }))
-                }
+                }}
               />
               <IsoDatePicker
                 id="approvalDate"
@@ -726,7 +771,10 @@ const ProvincialExemptionCreatePage = () => {
                 invalid={!!fieldError('approvalDate')}
                 invalidText={fieldError('approvalDate')}
                 onBlur={() => markFieldTouched('approvalDate')}
-                onChange={(value) => setForm((current) => ({ ...current, approvalDate: value }))}
+                onChange={(value) => {
+                  markFormEdited()
+                  setForm((current) => ({ ...current, approvalDate: value }))
+                }}
               />
               <IsoDatePicker
                 id="expiryDate"
@@ -735,7 +783,10 @@ const ProvincialExemptionCreatePage = () => {
                 invalid={!!fieldError('expiryDate')}
                 invalidText={fieldError('expiryDate')}
                 onBlur={() => markFieldTouched('expiryDate')}
-                onChange={(value) => setForm((current) => ({ ...current, expiryDate: value }))}
+                onChange={(value) => {
+                  markFormEdited()
+                  setForm((current) => ({ ...current, expiryDate: value }))
+                }}
               />
               <TextInput
                 id="approvedVolume"
@@ -744,9 +795,10 @@ const ProvincialExemptionCreatePage = () => {
                 invalid={!!fieldError('approvedVolume')}
                 invalidText={fieldError('approvedVolume')}
                 onBlur={() => markFieldTouched('approvedVolume')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, approvedVolume: event.target.value }))
-                }
+                }}
               />
               {blanketOic && (
                 <FilterableMultiSelect
@@ -758,14 +810,19 @@ const ProvincialExemptionCreatePage = () => {
                   invalid={!!fieldError('regionNumbers')}
                   invalidText={fieldError('regionNumbers')}
                   disabled={!optionsLoaded || optionsUnavailable}
-                  onChange={({ selectedItems }) =>
+                  onChange={({ selectedItems }) => {
+                    const regionNumbers = ((selectedItems ?? []) as IdTextOption[]).map(
+                      (item) => item.id,
+                    )
+                    if (formValuesEqual(regionNumbers, form.regionNumbers)) {
+                      return
+                    }
+                    markFormEdited()
                     setForm((current) => ({
                       ...current,
-                      regionNumbers: ((selectedItems ?? []) as IdTextOption[]).map(
-                        (item) => item.id,
-                      ),
+                      regionNumbers,
                     }))
-                  }
+                  }}
                 />
               )}
             </div>
@@ -775,13 +832,17 @@ const ProvincialExemptionCreatePage = () => {
                   id="enableExemptionRateOverride"
                   labelText="Enable fee rate override"
                   checked={form.enableRateOverride}
-                  onChange={(_, { checked }) =>
+                  onChange={(_, { checked }) => {
+                    if (Boolean(checked) === form.enableRateOverride) {
+                      return
+                    }
+                    markFormEdited()
                     setForm((current) => ({
                       ...current,
                       enableRateOverride: Boolean(checked),
                       feeRate: checked ? current.feeRate : '',
                     }))
-                  }
+                  }}
                 />
                 {form.enableRateOverride && (
                   <TextInput
@@ -791,9 +852,10 @@ const ProvincialExemptionCreatePage = () => {
                     invalid={!!fieldError('feeRate')}
                     invalidText={fieldError('feeRate')}
                     onBlur={() => markFieldTouched('feeRate')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, feeRate: event.target.value }))
-                    }
+                    }}
                   />
                 )}
               </div>
@@ -804,9 +866,10 @@ const ProvincialExemptionCreatePage = () => {
                 labelText="Other conditions"
                 maxLength={250}
                 value={form.otherConditions}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, otherConditions: event.target.value }))
-                }
+                }}
               />
             </div>
           </fieldset>
@@ -827,7 +890,7 @@ const ProvincialExemptionCreatePage = () => {
             <Button
               type="button"
               kind="primary"
-              onClick={() => void onSave()}
+              onClick={() => void onSave(true)}
               disabled={
                 !optionsLoaded ||
                 optionsUnavailable ||
@@ -842,6 +905,22 @@ const ProvincialExemptionCreatePage = () => {
           </div>
         </Tile>
       </Column>
+      <UnsavedChangesGuard
+        isDirty={isCreateDraftDirty}
+        isBusy={isSubmitting}
+        onSave={() => onSave(false)}
+        onDiscard={onDiscardCreateDraft}
+        subject="this new exemption"
+        saveUnavailableReason={
+          !optionsLoaded || optionsUnavailable || requiredOptionsUnavailable
+            ? 'Authoritative exemption options must load before this exemption can be saved.'
+            : !canUseApplicationPrefill
+              ? 'Authorization to create this exemption is required before it can be saved.'
+              : selectedApplicationNumbers.length > 0 && !hasCurrentPreview
+                ? 'The selected applications must be validated before this exemption can be saved.'
+                : undefined
+        }
+      />
     </Grid>
   )
 }

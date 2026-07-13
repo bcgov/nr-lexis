@@ -76,8 +76,8 @@ class EmailEventDispatcherTest {
     verify(mailService)
         .send(
             "LEXIS exemption #EX-205 approved",
-            "Exemption #EX-205 has been approved.\n\nApplication Number:\n"
-                + "1000456\n1000457\n\nDo NOT reply to this e-mail.\n",
+            "Exemption #EX-205 has been approved.\n\nApplication number(s):\n"
+                + "1000456\n1000457\n\nThis is an automated notification; do not reply.\n",
             List.of("client@example.com"),
             List.of());
     verify(mailService)
@@ -138,7 +138,7 @@ class EmailEventDispatcherTest {
             "LEXIS permit #7000123 payment pending",
             "Permit #7000123 has been approved as Payment Pending.\n\n"
                 + "Package(s): PKG-1, PKG-2\n\n"
-                + "Do NOT reply to this e-mail.\n",
+                + "This is an automated notification; do not reply.\n",
             List.of("applicant@example.com"),
             List.of());
     verify(mailService)
@@ -146,7 +146,7 @@ class EmailEventDispatcherTest {
             "LEXIS permit #7000124 approved",
             "Permit #7000124 has been approved.\n\n"
                 + "Package(s): PKG-3\n\n"
-                + "Do NOT reply to this e-mail.\n",
+                + "This is an automated notification; do not reply.\n",
             List.of("applicant@example.com"),
             List.of());
     assertThatCount("PermitReview", "attempted", 1.0);

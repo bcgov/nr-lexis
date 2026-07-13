@@ -44,6 +44,11 @@ public class ClamAvVirusScanService implements VirusScanService {
   }
 
   @Override
+  public boolean isEnabled() {
+    return properties.enabled();
+  }
+
+  @Override
   public void assertClean(MultipartFile file) {
     if (!properties.enabled() || file == null || file.isEmpty()) {
       return;

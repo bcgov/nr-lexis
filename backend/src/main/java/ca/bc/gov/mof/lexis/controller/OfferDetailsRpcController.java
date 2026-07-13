@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
@@ -402,13 +403,14 @@ public class OfferDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
+    Long offerNumber =
+        parsePositiveLong(first(parameters, "exportPurchaseOfferNumber", "offerNumber"));
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
     boolean canCreateOffer =
         authorizationService.canPerformAction(roles, LEGACY_ACTION_CREATE_OFFER);
     boolean offerApprover = isOfferApprover(roles);
     Optional<PurchaseOfferDetailDto> currentOffer =
-        service.findByOfferNumber(request.exportPurchaseOfferNumber());
+        service.findByOfferNumber(offerNumber);
     if (currentOffer.isEmpty()) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
@@ -418,7 +420,8 @@ public class OfferDetailsRpcController {
         () ->
             updateOfferWhileSerialized(
                 service,
-                request,
+                parameters,
+                offerNumber,
                 canCreateOffer,
                 offerApprover,
                 applicationNumber,
@@ -427,18 +430,20 @@ public class OfferDetailsRpcController {
 
   private ResponseEntity<OfferPersistenceResponseDto> updateOfferWhileSerialized(
       PurchaseOfferService service,
-      PurchaseOfferService.CreateOfferRequest originalRequest,
+      MultiValueMap<String, String> parameters,
+      Long offerNumber,
       boolean canCreateOffer,
       boolean offerApprover,
       Long expectedApplicationNumber,
       Authentication authentication) {
     Optional<PurchaseOfferDetailDto> currentOffer =
-        service.findByOfferNumber(originalRequest.exportPurchaseOfferNumber());
+        service.findByOfferNumber(offerNumber);
     if (currentOffer.isEmpty()
         || !expectedApplicationNumber.equals(currentOffer.get().applicationNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
-    PurchaseOfferService.CreateOfferRequest request = originalRequest;
+    PurchaseOfferService.UpdateOfferRequest request =
+        toUpdateOfferRequest(parameters, currentOffer.get());
     boolean scopedOfferingClient =
         isScopedOfferingClient(authentication, currentOffer.get());
     if (scopedOfferingClient
@@ -466,7 +471,7 @@ public class OfferDetailsRpcController {
     String userId = userId(authentication);
     requireOwnedOfferLock(currentOffer.get().offerNumber(), userId);
     PurchaseOfferService.CreateOfferResult result =
-        service.updateOffer(request, userId);
+        service.updateOfferSnapshot(request, userId);
     return ResponseEntity.ok(toPersistenceResponse(result));
   }
 
@@ -650,7 +655,7 @@ public class OfferDetailsRpcController {
   }
 
   private boolean withdrawalDateChanged(
-      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+      PurchaseOfferService.UpdateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
     return requested.offerWithdrawalDate() != null
         && !requested.offerWithdrawalDate().equals(currentOffer.offerWithdrawalDate());
   }
@@ -710,13 +715,13 @@ public class OfferDetailsRpcController {
         request.offerVolume());
   }
 
-  private PurchaseOfferService.CreateOfferRequest restrictOfferingClientUpdate(
-      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+  private PurchaseOfferService.UpdateOfferRequest restrictOfferingClientUpdate(
+      PurchaseOfferService.UpdateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
     boolean canWithdraw =
         currentOffer.offerWithdrawalDate() == null
             && currentOffer.offerEndDate() != null
             && !currentOffer.offerEndDate().isBefore(LexisBusinessTime.today());
-    return new PurchaseOfferService.CreateOfferRequest(
+    return new PurchaseOfferService.UpdateOfferRequest(
         currentOffer.applicationNumber(),
         currentOffer.offerNumber(),
         currentOffer.packageNumber(),
@@ -739,9 +744,9 @@ public class OfferDetailsRpcController {
         requested.offerVolume());
   }
 
-  private PurchaseOfferService.CreateOfferRequest preserveLegacyApproverFields(
-      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
-    return new PurchaseOfferService.CreateOfferRequest(
+  private PurchaseOfferService.UpdateOfferRequest preserveLegacyApproverFields(
+      PurchaseOfferService.UpdateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+    return new PurchaseOfferService.UpdateOfferRequest(
         requested.applicationNumber(),
         requested.exportPurchaseOfferNumber(),
         requested.packageNumber(),
@@ -773,6 +778,77 @@ public class OfferDetailsRpcController {
     } catch (NumberFormatException ex) {
       return null;
     }
+  }
+
+  private PurchaseOfferService.UpdateOfferRequest toUpdateOfferRequest(
+      MultiValueMap<String, String> parameters, PurchaseOfferDetailDto current) {
+    return new PurchaseOfferService.UpdateOfferRequest(
+        hasAnyParameter(parameters, "applicationNumber")
+            ? parsePositiveLong(firstPresent(parameters, "applicationNumber"))
+            : current.applicationNumber(),
+        current.offerNumber(),
+        hasAnyParameter(parameters, "packageNumber")
+            ? firstPresent(parameters, "packageNumber")
+            : current.packageNumber(),
+        hasAnyParameter(parameters, "companyName")
+            ? firstPresent(parameters, "companyName")
+            : current.companyName(),
+        hasAnyParameter(parameters, "contactName")
+            ? firstPresent(parameters, "contactName")
+            : current.contactName(),
+        hasAnyParameter(parameters, "purchaseOfferAmount")
+            ? parseOfferDecimal(firstPresent(parameters, "purchaseOfferAmount"))
+            : Double.valueOf(current.purchaseOfferAmount()),
+        hasAnyParameter(parameters, "purchaseOfferDate")
+            ? parseDate(firstPresent(parameters, "purchaseOfferDate"))
+            : current.purchaseOfferDate(),
+        hasAnyParameter(parameters, "offerWithdrawalDate", "offerEndDate")
+            ? parseDate(firstPresent(parameters, "offerWithdrawalDate", "offerEndDate"))
+            : current.offerWithdrawalDate(),
+        hasAnyParameter(parameters, "teacReviewDate")
+            ? parseDate(firstPresent(parameters, "teacReviewDate"))
+            : current.teacReviewDate(),
+        hasAnyParameter(parameters, "fairOfferIndicator")
+            ? firstPresent(parameters, "fairOfferIndicator")
+            : current.fairOfferIndicator(),
+        hasAnyParameter(parameters, "validOfferIndicator")
+            ? firstPresent(parameters, "validOfferIndicator")
+            : current.validOfferIndicator(),
+        hasAnyParameter(parameters, "offerRemark")
+            ? firstPresent(parameters, "offerRemark")
+            : current.offerRemark(),
+        hasAnyParameter(parameters, "approvalIndicator")
+            ? firstPresent(parameters, "approvalIndicator")
+            : current.approvalIndicator(),
+        hasAnyParameter(parameters, "withdrawReason")
+            ? firstPresent(parameters, "withdrawReason")
+            : current.withdrawReason(),
+        hasAnyParameter(parameters, "exportJurisdictionCode", "jurisdictionCode")
+            ? firstPresent(parameters, "exportJurisdictionCode", "jurisdictionCode")
+            : current.exportJurisdictionCode(),
+        current.manufacturingFacilityInfo(),
+        hasAnyParameter(parameters, "offeringClientNumber", "clientNumber")
+            ? firstPresent(parameters, "offeringClientNumber", "clientNumber")
+            : current.offeringClientNumber(),
+        hasAnyParameter(parameters, "pickupLocation")
+            ? firstPresent(parameters, "pickupLocation")
+            : current.pickupLocation(),
+        hasAnyParameter(parameters, "offerCondition")
+            ? firstPresent(parameters, "offerCondition")
+            : current.offerCondition(),
+        hasAnyParameter(parameters, "offerVolume")
+            ? parseOfferDecimal(firstPresent(parameters, "offerVolume"))
+            : current.offerVolume());
+  }
+
+  private boolean hasAnyParameter(
+      MultiValueMap<String, String> parameters, String... names) {
+    for (String name : names) {
+      if (parameters.containsKey(name)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private PurchaseOfferService.CreateOfferRequest toCreateOfferRequest(

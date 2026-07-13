@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.service.report.LexisReportOutputLimitException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.InvalidMediaTypeException;
@@ -54,14 +56,37 @@ public class LexisReportController {
   private final ObjectProvider<LexisReportService> reportServiceProvider;
   private final ProvincialAuthorizationService provincialAuthorizationService;
   private final LexisPrincipalService principalService;
+  private final MeterRegistry meterRegistry;
 
+  @Autowired
   public LexisReportController(
       ObjectProvider<LexisReportService> reportServiceProvider,
       ProvincialAuthorizationService provincialAuthorizationService,
+      LexisPrincipalService principalService,
+      ObjectProvider<MeterRegistry> meterRegistryProvider) {
+    this(
+        reportServiceProvider,
+        provincialAuthorizationService,
+        principalService,
+        meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable());
+  }
+
+  LexisReportController(
+      ObjectProvider<LexisReportService> reportServiceProvider,
+      ProvincialAuthorizationService provincialAuthorizationService,
       LexisPrincipalService principalService) {
+    this(reportServiceProvider, provincialAuthorizationService, principalService, (MeterRegistry) null);
+  }
+
+  LexisReportController(
+      ObjectProvider<LexisReportService> reportServiceProvider,
+      ProvincialAuthorizationService provincialAuthorizationService,
+      LexisPrincipalService principalService,
+      MeterRegistry meterRegistry) {
     this.reportServiceProvider = reportServiceProvider;
     this.provincialAuthorizationService = provincialAuthorizationService;
     this.principalService = principalService;
+    this.meterRegistry = meterRegistry;
   }
 
   @PostMapping({"/biweeklyListing", "/biweekly-listing"})
@@ -257,11 +282,12 @@ public class LexisReportController {
 
       LexisGeneratedReport report = generatedReport.orElseThrow();
       byte[] content = report.content() == null ? new byte[0] : report.content();
+      String effectiveFormat = effectiveFormat(report, normalizedRequest.format());
       return completeAudit(
           audit,
-          toResponse(report),
-          effectiveFormat(report, normalizedRequest.format()),
-          "generated",
+          toResponse(report, audit, effectiveFormat),
+          effectiveFormat,
+          "generation_succeeded",
           content.length);
     } catch (LexisReportCapacityException ex) {
       LOGGER.info("Report generation capacity is busy for {}", reportLabel);
@@ -383,6 +409,36 @@ public class LexisReportController {
     return response;
   }
 
+  private void completeTransferAudit(
+      ReportAuditContext audit,
+      String effectiveFormat,
+      int expectedBytes,
+      boolean successful,
+      long durationNanos) {
+    String outcome = successful ? "stream_write_succeeded" : "stream_write_failed";
+    AUDIT_LOGGER.info(
+        "event=lexis_report_stream actor={} reportAction={} requestedFormat={} effectiveFormat={} outcome={} durationMs={} expectedBytes={}",
+        audit.actor(),
+        audit.reportAction(),
+        audit.requestedFormat(),
+        effectiveFormat,
+        outcome,
+        Math.max(0L, durationNanos / 1_000_000L),
+        Math.max(0, expectedBytes));
+    if (meterRegistry != null) {
+      meterRegistry
+          .counter(
+              "lexis_report_stream_writes_total",
+              "report_action",
+              audit.reportAction(),
+              "format",
+              effectiveFormat,
+              "outcome",
+              successful ? "success" : "failure")
+          .increment();
+    }
+  }
+
   private String safeAuditToken(String value) {
     String normalized = trimToNull(value);
     if (normalized == null) {
@@ -448,16 +504,23 @@ public class LexisReportController {
     return value != null && !value.isBlank();
   }
 
-  private ResponseEntity<StreamingResponseBody> toResponse(LexisGeneratedReport report) {
+  private ResponseEntity<StreamingResponseBody> toResponse(
+      LexisGeneratedReport report, ReportAuditContext audit, String effectiveFormat) {
     String filename =
         report.filename() == null || report.filename().isBlank()
             ? "lexis-report.bin"
             : report.filename();
     MediaType mediaType = resolveMediaType(report.mediaType());
     byte[] content = report.content() == null ? new byte[0] : report.content();
+    int contentLength = content.length;
     TemporaryReportStreamingBody responseBody;
     try {
-      responseBody = TemporaryReportStreamingBody.stage(content);
+      responseBody =
+          TemporaryReportStreamingBody.stage(
+              content,
+              (successful, durationNanos) ->
+                  completeTransferAudit(
+                      audit, effectiveFormat, contentLength, successful, durationNanos));
     } catch (IOException exception) {
       throw new LexisReportGenerationException("Unable to stage the generated report", exception);
     }
@@ -468,7 +531,7 @@ public class LexisReportController {
     return ResponseEntity.ok()
         .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
         .contentType(mediaType)
-        .contentLength(content.length)
+        .contentLength(contentLength)
         .body(responseBody);
   }
 

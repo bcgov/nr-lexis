@@ -909,7 +909,7 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
-  void updateOfferShouldPreserveExistingValuesAndCallOracleUpdate() {
+  void updateOfferShouldPersistLegacyNotifiedFieldsAndQueueUpdatedNotification() {
     stubProvincialApplicationWithPackage(1000456L, "PKG-903");
     Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
     when(repository.findUpdateSourceByOfferNumber(81001L))
@@ -939,6 +939,13 @@ class PurchaseOfferOracleServiceTest {
                     95.5d)));
     when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
         .thenReturn(true);
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null)));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("client@example.com"));
 
     PurchaseOfferService.CreateOfferResult response =
         service.updateOffer(
@@ -950,13 +957,13 @@ class PurchaseOfferOracleServiceTest {
                 null,
                 13000.0d,
                 LocalDate.of(2026, 3, 3),
-                LocalDate.of(2026, 3, 19),
                 null,
                 null,
                 null,
                 null,
                 null,
-                "Withdrawn by buyer",
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -979,7 +986,7 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.contactName()).isEqualTo("Sample Contact");
     assertThat(record.purchaseOfferAmount()).isEqualTo(13000.0d);
     assertThat(record.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 3));
-    assertThat(record.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 19));
+    assertThat(record.offerWithdrawalDate()).isNull();
     assertThat(record.fairOfferIndicator()).isEqualTo("Y");
     assertThat(record.validOfferIndicator()).isEqualTo("Y");
     assertThat(record.approvalIndicator()).isEqualTo("Y");
@@ -991,10 +998,17 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.entryTimestamp()).isEqualTo(entryTimestamp);
     assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.offerVolume()).isEqualTo(99.99d);
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.UPDATED,
+                "client@example.com"));
   }
 
   @Test
-  void updateOfferShouldTreatApprovalIndicatorsAsMaterialUpdates() {
+  void updateOfferShouldPersistInternalFieldsWithoutApplicantNotification() {
     stubProvincialApplicationWithPackage(1000456L, "PKG-903");
     Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
     when(repository.findUpdateSourceByOfferNumber(81001L))
@@ -1031,15 +1045,15 @@ class PurchaseOfferOracleServiceTest {
                 1000456L,
                 81001L,
                 null,
+                "Updated Lumber",
+                "Updated Contact",
                 null,
                 null,
                 null,
-                null,
-                null,
-                null,
+                LocalDate.of(2026, 3, 19),
                 "Y",
                 "N",
-                null,
+                "Updated internal remark",
                 "Y",
                 null,
                 null,
@@ -1051,7 +1065,8 @@ class PurchaseOfferOracleServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
-    assertThat(response.sendEmail()).isTrue();
+    assertThat(response.sendEmail()).isFalse();
+    assertThat(response.clientHasEmail()).isFalse();
 
     ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> recordCaptor =
         ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
@@ -1060,6 +1075,229 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.fairOfferIndicator()).isEqualTo("Y");
     assertThat(record.validOfferIndicator()).isEqualTo("N");
     assertThat(record.approvalIndicator()).isEqualTo("Y");
+    assertThat(record.companyName()).isEqualTo("Updated Lumber");
+    assertThat(record.contactName()).isEqualTo("Updated Contact");
+    assertThat(record.teacReviewDate()).isEqualTo(LocalDate.of(2026, 3, 19));
+    assertThat(record.offerRemark()).isEqualTo("Updated internal remark");
+    verifyNoInteractions(clientEmailResolver, notificationService);
+  }
+
+  @Test
+  void updateOfferShouldNotNotifyForCaseOnlyOrBlankTextChanges() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                81001L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "   ",
+                null,
+                null,
+                null,
+                "port moody",
+                "EXISTING CONDITION",
+                null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.sendEmail()).isFalse();
+    verify(repository).updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class));
+    verifyNoInteractions(clientEmailResolver, notificationService);
+  }
+
+  @Test
+  void updateOfferSnapshotShouldClearOptionalValuesAndQueueUpdatedNotification() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+                    81001L,
+                    1000456L,
+                    "PKG-903",
+                    "Example Lumber",
+                    "Sample Contact",
+                    12500.25d,
+                    LocalDate.of(2026, 3, 2),
+                    LocalDate.of(2026, 3, 10),
+                    LocalDate.of(2026, 3, 18),
+                    "N",
+                    "Y",
+                    "Existing remark",
+                    "N",
+                    "Withdrawn by buyer",
+                    "P",
+                    "Existing mill",
+                    "Port Moody",
+                    "Existing condition",
+                    "creator",
+                    Instant.parse("2026-03-01T18:00:00Z"),
+                    95.5d)));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null)));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("client@example.com"));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            new PurchaseOfferService.UpdateOfferRequest(
+                1000456L,
+                81001L,
+                "PKG-903",
+                "Example Lumber",
+                "Sample Contact",
+                12500.25d,
+                LocalDate.of(2026, 3, 2),
+                null,
+                null,
+                "N",
+                "Y",
+                null,
+                "N",
+                null,
+                null,
+                null,
+                "00077881",
+                "Port Moody",
+                null,
+                null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.sendEmail()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(recordCaptor.capture());
+    PurchaseOfferRepository.PurchaseOfferUpdateRecord record = recordCaptor.getValue();
+    assertThat(record.offerWithdrawalDate()).isNull();
+    assertThat(record.withdrawReason()).isNull();
+    assertThat(record.teacReviewDate()).isNull();
+    assertThat(record.offerRemark()).isNull();
+    assertThat(record.offerCondition()).isNull();
+    assertThat(record.offerVolume()).isNull();
+    assertThat(record.exportJurisdictionCode()).isEqualTo("P");
+    assertThat(record.manufacturingFacilityInfo()).isEqualTo("Existing mill");
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.UPDATED,
+                "client@example.com"));
+  }
+
+  @Test
+  void updateOfferSnapshotShouldQueueWithdrawnNotificationForNewWithdrawalDate() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null)));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("client@example.com"));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            new PurchaseOfferService.UpdateOfferRequest(
+                1000456L,
+                81001L,
+                "PKG-903",
+                "Example Lumber",
+                "Sample Contact",
+                12500.25d,
+                LocalDate.of(2026, 3, 2),
+                LocalDate.of(2026, 3, 10),
+                LocalDate.of(2026, 3, 18),
+                "N",
+                "Y",
+                "Existing remark",
+                "N",
+                "Withdrawn by buyer",
+                "P",
+                "Existing mill",
+                "00077881",
+                "Port Moody",
+                "Existing condition",
+                95.5d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.sendEmail()).isTrue();
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.WITHDRAWN,
+                "client@example.com"));
+  }
+
+  @Test
+  void updateOfferSnapshotShouldValidateRequiredValuesInsteadOfMergingCurrentValues() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, null, "P")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            new PurchaseOfferService.UpdateOfferRequest(
+                1000456L,
+                81001L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "A valid company name is required.",
+            "A valid contact name is required.",
+            "The purchase offer amount must be greater than 0",
+            "A valid purchase offer date is required.",
+            "A valid pickup location is required.",
+            "A valid fair offer indicator is required.");
+    verify(repository, never()).updateOffer(any());
   }
 
   @Test

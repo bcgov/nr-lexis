@@ -243,6 +243,52 @@ describe('create-submit-service', () => {
     expect(body.get('offerRemark')).toBeNull()
   })
 
+  it('keeps explicitly cleared fields present in an offer update snapshot', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        exportPurchaseOfferNumber: '81001',
+      },
+    })
+
+    await submitProvincialOfferUpdate({
+      offerNumber: '81001',
+      applicationNumber: '200',
+      packageNumber: 'PKG-9',
+      offeringClientNumber: '00012345',
+      companyName: 'Example Lumber',
+      contactName: 'Sample Contact',
+      region: '11',
+      offerVolume: '99.9',
+      purchaseOfferAmount: '25000',
+      purchaseOfferDate: '2026-01-10',
+      offerWithdrawalDate: '',
+      withdrawReason: '',
+      teacReviewDate: '',
+      fairOfferIndicator: 'N',
+      validOfferIndicator: 'Y',
+      approvalIndicator: 'N',
+      offerRemark: '',
+      pickupLocation: '',
+      offerCondition: '',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body).toBeInstanceOf(URLSearchParams)
+    for (const key of [
+      'offerWithdrawalDate',
+      'withdrawReason',
+      'teacReviewDate',
+      'offerRemark',
+      'pickupLocation',
+      'offerCondition',
+    ]) {
+      expect(body.has(key)).toBe(true)
+      expect(body.get(key)).toBe('')
+    }
+    expect(body.has('region')).toBe(false)
+  })
+
   it('returns actionable guidance when an offer update loses its edit lock', async () => {
     postMock.mockRejectedValue({
       isAxiosError: true,
@@ -276,8 +322,8 @@ describe('create-submit-service', () => {
     const [, body] = postMock.mock.calls[0]
     expect(body.get('region')).toBeNull()
     expect(body.get('purchaseOfferDate')).toBe('2026-01-10')
-    expect(body.get('offerWithdrawalDate')).toBeNull()
-    expect(body.get('withdrawReason')).toBeNull()
+    expect(body.get('offerWithdrawalDate')).toBe('')
+    expect(body.get('withdrawReason')).toBe('')
   })
 
   it('posts provincial application agent applicant fields when applicant type is agent', async () => {

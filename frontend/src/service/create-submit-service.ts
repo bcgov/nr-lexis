@@ -36,6 +36,7 @@ type LegacyCreateResponse = {
 }
 
 type CreateSubmitRequestMode = 'form' | 'json'
+type LegacyFormEncoder = (payload: LegacyFormPayload) => URLSearchParams
 
 const withQueryParam = (path: string, key: string, value: string | undefined): string => {
   if (!value) {
@@ -141,9 +142,10 @@ const buildFailureResult = (
 const postLegacyForm = async (
   path: string,
   payload: LegacyFormPayload,
+  formEncoder: LegacyFormEncoder = toUrlEncodedParams,
 ): Promise<LegacyCreateResponse> => {
   const requestMode = getCreateSubmitRequestMode()
-  const requestBody = requestMode === 'json' ? payload : toUrlEncodedParams(payload)
+  const requestBody = requestMode === 'json' ? payload : formEncoder(payload)
   const requestPath =
     requestMode === 'json' ? withQueryParam(path, 'actionMapping', payload.actionMapping) : path
   const contentType = requestMode === 'json' ? 'application/json' : LEGACY_FORM_CONTENT_TYPE
@@ -426,6 +428,16 @@ const buildProvincialOfferPayload = (form: ProvincialOfferCreateSubmission): Leg
   offerRemark: form.offerRemark,
 })
 
+const toProvincialOfferUpdateParams = (payload: LegacyFormPayload): URLSearchParams => {
+  const params = new URLSearchParams()
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value !== undefined) {
+      params.append(key, value)
+    }
+  })
+  return params
+}
+
 export const submitProvincialOfferCreate = async (
   form: ProvincialOfferCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
@@ -457,6 +469,7 @@ export const submitProvincialOfferUpdate = async (
         exportPurchaseOfferNumber: form.offerNumber,
         offerNumber: form.offerNumber,
       }),
+      toProvincialOfferUpdateParams,
     )
     return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])
   } catch (error) {

@@ -54,6 +54,10 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
 | `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | canadian-internal |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Requested timeout in seconds for each isolated GBMS transaction (1-3600); cancellation can leave the outcome unknown | 60 |
+| `LEXIS_VIRUS_SCAN_ENABLED` | Enables ClamAV scanning. Deployed Oracle runtimes refuse to start when this is false. | false locally; true in OpenShift |
+| `LEXIS_VIRUS_SCAN_HOST` | ClamAV service hostname | localhost |
+| `LEXIS_VIRUS_SCAN_PORT` | ClamAV INSTREAM port | 3310 |
+| `LEXIS_VIRUS_SCAN_TIMEOUT` | End-to-end deadline for one ClamAV scan | 10s |
 | `LEXIS_MAIL_ENABLED` | Enables outbound workflow email | false |
 | `LEXIS_MAIL_NON_PRODUCTION` | Replaces original recipients with override recipients and marks the message as non-production | true outside PROD |
 | `LEXIS_MAIL_FROM` | Approved sender mailbox for LEXIS workflow messages | Provincial analyst mailbox |
@@ -76,6 +80,10 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Variable `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` |
 | `LEXIS_PERMIT_INVOICE_MODE` | Variable `LEXIS_PERMIT_INVOICE_MODE` |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Variable `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` |
+| `LEXIS_VIRUS_SCAN_ENABLED` | OpenShift template default `true` |
+| `LEXIS_VIRUS_SCAN_HOST` | Generated ClamAV service name |
+| `LEXIS_VIRUS_SCAN_PORT` | OpenShift template value `3310` |
+| `LEXIS_VIRUS_SCAN_TIMEOUT` | OpenShift template default `10s` |
 | `LEXIS_MAIL_ENABLED` | Variable `LEXIS_MAIL_ENABLED` |
 | `LEXIS_MAIL_NON_PRODUCTION` | Derived from the deployment environment |
 | `LEXIS_MAIL_FROM` | Variable `LEXIS_MAIL_FROM` |

@@ -42,7 +42,7 @@ public class InMemoryLexisUploadService implements LexisUploadService {
                     payload.fileName(),
                     payload.fileSize(),
                     "validated",
-                    "File passed validation and virus scanning.")
+                    validationSuccessMessage())
                 : payload);
   }
 
@@ -136,5 +136,11 @@ public class InMemoryLexisUploadService implements LexisUploadService {
   private String defaultDescription(String description) {
     String normalizedDescription = trimToNull(description);
     return normalizedDescription == null ? "" : normalizedDescription;
+  }
+
+  private String validationSuccessMessage() {
+    return virusScanService.isEnabled()
+        ? "File passed validation and virus scanning."
+        : "File passed validation.";
   }
 }

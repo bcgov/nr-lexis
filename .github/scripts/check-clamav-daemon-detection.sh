@@ -46,7 +46,7 @@ for _ in $(seq 1 60); do
     exit 1
   fi
 
-  if docker exec "${CONTAINER}" /opt/app-root/clamdcheck.sh >/dev/null 2>&1; then
+  if docker exec "${CONTAINER}" /opt/app-root/clamdcheck.sh live >/dev/null 2>&1; then
     ready=true
     break
   fi

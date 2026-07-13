@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -19,7 +19,10 @@ import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
-import ApplicationAccuracyConfirmation from '@/components/ApplicationAccuracyConfirmation'
+import ApplicationAccuracyConfirmation, {
+  APPLICATION_ACCURACY_ACKNOWLEDGEMENT,
+} from '@/components/ApplicationAccuracyConfirmation'
+import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import {
   calculateApplicationTermDays,
   nonNegativeWholeNumberFieldError,
@@ -263,6 +266,9 @@ const ProvincialApplicationCreatePage = () => {
       authoritativeOwnerClientNumber,
     ),
   )
+  const draftBaselineRef = useRef(form)
+  const [formEdited, setFormEdited] = useState(false)
+  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
   const [growthTypes, setGrowthTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
@@ -299,6 +305,12 @@ const ProvincialApplicationCreatePage = () => {
   const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState<number>(
     APPLICATION_CREATE_TAB_INDEX.summary,
   )
+
+  useEffect(() => {
+    if (createdRecordPath) {
+      navigate(createdRecordPath)
+    }
+  }, [createdRecordPath, navigate])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -1015,6 +1027,13 @@ const ProvincialApplicationCreatePage = () => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
   }
 
+  const markFormEdited = (): void => {
+    if (!formEdited) {
+      draftBaselineRef.current = form
+    }
+    setFormEdited(true)
+  }
+
   const onAddApplicationSpecies = (): void => {
     const speciesCode = applicationSpeciesCandidate.trim()
     if (
@@ -1025,6 +1044,7 @@ const ProvincialApplicationCreatePage = () => {
       return
     }
 
+    markFormEdited()
     setForm((current) => ({
       ...current,
       speciesCodes: [...current.speciesCodes, speciesCode],
@@ -1034,6 +1054,7 @@ const ProvincialApplicationCreatePage = () => {
   }
 
   const onRemoveApplicationSpecies = (speciesCode: string): void => {
+    markFormEdited()
     setForm((current) => ({
       ...current,
       speciesCodes: current.speciesCodes.filter((code) => code !== speciesCode),
@@ -1051,17 +1072,22 @@ const ProvincialApplicationCreatePage = () => {
     (field) => !!fieldErrors[field],
   )
 
-  const onSave = async (accuracyAcknowledged = false) => {
+  const onSave = async (
+    accuracyAcknowledged = false,
+    navigateToCreatedRecord = true,
+  ): Promise<boolean> => {
     if (provincialSubmitterIdentityLocked && !accuracyAcknowledged) {
-      return
+      return false
     }
     if (
       !optionsLoaded ||
       optionsUnavailable ||
       requiredApplicationOptionsMissing ||
+      isLoadingOwnerClientLocations ||
+      isLoadingAgentClientLocations ||
       provincialSubmitterScopeUnavailable
     ) {
-      return
+      return false
     }
     if (hasValidationError) {
       if (firstInvalidField) {
@@ -1075,7 +1101,7 @@ const ProvincialApplicationCreatePage = () => {
         title: 'Validation Error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
       })
-      return
+      return false
     }
 
     setStatus(null)
@@ -1086,16 +1112,20 @@ const ProvincialApplicationCreatePage = () => {
         applicationTermDays: calculatedApplicationTermDays,
       })
       if (result.success) {
+        draftBaselineRef.current = form
+        setFormEdited(false)
         if (result.createdId) {
-          navigate(`/provincial/application/${encodeURIComponent(result.createdId)}`)
-          return
+          if (navigateToCreatedRecord) {
+            setCreatedRecordPath(`/provincial/application/${encodeURIComponent(result.createdId)}`)
+          }
+          return true
         }
         setStatus({
           kind: 'success',
           title: 'Application Saved',
           message: 'Application saved successfully.',
         })
-        return
+        return true
       }
 
       setStatus({
@@ -1104,6 +1134,7 @@ const ProvincialApplicationCreatePage = () => {
         message:
           'Application save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } catch (error) {
       console.error(error)
       setStatus({
@@ -1112,6 +1143,7 @@ const ProvincialApplicationCreatePage = () => {
         message:
           'Application save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } finally {
       setIsSubmitting(false)
     }
@@ -1124,7 +1156,7 @@ const ProvincialApplicationCreatePage = () => {
 
   const onRequestSave = () => {
     if (!provincialSubmitterIdentityLocked) {
-      void onSave()
+      void onSave(false, true)
       return
     }
     setAccuracyConfirmed(false)
@@ -1133,8 +1165,19 @@ const ProvincialApplicationCreatePage = () => {
 
   const onConfirmAccuracy = async () => {
     if (!accuracyConfirmed || isSubmitting) return
-    await onSave(true)
+    await onSave(true, true)
   }
+
+  const onDiscardCreateDraft = (): void => {
+    setForm(draftBaselineRef.current)
+    setFormEdited(false)
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
+    setStatus(null)
+    closeAccuracyConfirmation()
+  }
+
+  const isCreateDraftDirty = formEdited && !formValuesEqual(form, draftBaselineRef.current)
 
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-application-create-page">
@@ -1241,7 +1284,8 @@ const ProvincialApplicationCreatePage = () => {
                     options={productTypes}
                     disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('productTypeCode')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => {
                         if (current.productTypeCode === value) {
                           return current
@@ -1254,7 +1298,7 @@ const ProvincialApplicationCreatePage = () => {
                           endUseCode: '',
                         }
                       })
-                    }
+                    }}
                   />
                   <SearchableSelect
                     id="ageClass"
@@ -1270,7 +1314,10 @@ const ProvincialApplicationCreatePage = () => {
                     placeholder="Select age class"
                     options={growthTypes}
                     onBlur={() => markFieldTouched('ageClass')}
-                    onChange={(value) => setForm((current) => ({ ...current, ageClass: value }))}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => ({ ...current, ageClass: value }))
+                    }}
                   />
                   <SearchableSelect
                     id="exemptionType"
@@ -1282,9 +1329,10 @@ const ProvincialApplicationCreatePage = () => {
                     options={exemptionReasons}
                     disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('exemptionType')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, exemptionType: value }))
-                    }
+                    }}
                   />
                   <SearchableSelect
                     id="region"
@@ -1296,7 +1344,8 @@ const ProvincialApplicationCreatePage = () => {
                     options={regions}
                     disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('region')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => {
                         if (current.region === value) {
                           return current
@@ -1308,7 +1357,7 @@ const ProvincialApplicationCreatePage = () => {
                           endUseCode: '',
                         }
                       })
-                    }
+                    }}
                   />
                   <IsoDatePicker
                     id="applicationDate"
@@ -1317,9 +1366,10 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationDate')}
                     invalidText={fieldError('applicationDate')}
                     onBlur={() => markFieldTouched('applicationDate')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, applicationDate: value }))
-                    }
+                    }}
                   />
                   <TextInput
                     id="applicationTermDays"
@@ -1328,12 +1378,13 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationTermDays')}
                     invalidText={fieldError('applicationTermDays')}
                     onBlur={() => markFieldTouched('applicationTermDays')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         applicationTermDays: event.target.value,
                       }))
-                    }
+                    }}
                   />
                   <TextInput
                     id="applicationTermMonths"
@@ -1342,12 +1393,13 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationTermMonths')}
                     invalidText={fieldError('applicationTermMonths')}
                     onBlur={() => markFieldTouched('applicationTermMonths')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         applicationTermMonths: event.target.value,
                       }))
-                    }
+                    }}
                   />
                   <TextInput
                     id="applicationTermYears"
@@ -1356,12 +1408,13 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationTermYears')}
                     invalidText={fieldError('applicationTermYears')}
                     onBlur={() => markFieldTouched('applicationTermYears')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         applicationTermYears: event.target.value,
                       }))
-                    }
+                    }}
                   />
                   <IsoDatePicker
                     id="receivedDate"
@@ -1370,9 +1423,10 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('receivedDate')}
                     invalidText={fieldError('receivedDate')}
                     onBlur={() => markFieldTouched('receivedDate')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, receivedDate: value }))
-                    }
+                    }}
                   />
                   <SearchableSelect
                     id="exportScheduleId"
@@ -1382,7 +1436,8 @@ const ProvincialApplicationCreatePage = () => {
                     disabled={!optionsLoaded || optionsUnavailable}
                     placeholder="Search listing date"
                     onBlur={() => markFieldTouched('exportScheduleId')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         exportScheduleId: value,
@@ -1390,7 +1445,7 @@ const ProvincialApplicationCreatePage = () => {
                           ? (currentSchedules.find((option) => option.value === value)?.label ?? '')
                           : '',
                       }))
-                    }
+                    }}
                   />
                   <TextArea
                     id="productLocation"
@@ -1400,9 +1455,10 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('productLocation')}
                     invalidText={fieldError('productLocation')}
                     onBlur={() => markFieldTouched('productLocation')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, productLocation: event.target.value }))
-                    }
+                    }}
                   />
                   <TextInput
                     id="applicationVolume"
@@ -1411,9 +1467,10 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationVolume')}
                     invalidText={fieldError('applicationVolume')}
                     onBlur={() => markFieldTouched('applicationVolume')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, applicationVolume: event.target.value }))
-                    }
+                    }}
                   />
                   <TextInput
                     id="averageLogVolume"
@@ -1422,9 +1479,10 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('averageLogVolume')}
                     invalidText={fieldError('averageLogVolume')}
                     onBlur={() => markFieldTouched('averageLogVolume')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, averageLogVolume: event.target.value }))
-                    }
+                    }}
                   />
                 </div>
               </Tile>
@@ -1452,12 +1510,13 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('ownerClientNumber')}
                     invalidText={fieldError('ownerClientNumber')}
                     onBlur={() => markFieldTouched('ownerClientNumber')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         ownerClientNumber: event.target.value,
                       }))
-                    }
+                    }}
                   />
                   <SearchableSelect
                     id="ownerClientLocationCode"
@@ -1478,12 +1537,13 @@ const ProvincialApplicationCreatePage = () => {
                         label: location.locationName,
                       }))}
                     onBlur={() => markFieldTouched('ownerClientLocationCode')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         ownerClientLocationCode: value,
                       }))
-                    }
+                    }}
                   />
                   {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
                     <SearchableSelect
@@ -1503,9 +1563,10 @@ const ProvincialApplicationCreatePage = () => {
                           label: contact.contactName,
                         }))}
                       onBlur={() => markFieldTouched('ownerContactName')}
-                      onChange={(value) =>
+                      onChange={(value) => {
+                        markFormEdited()
                         setForm((current) => ({ ...current, ownerContactName: value }))
-                      }
+                      }}
                     />
                   ) : (
                     <TextInput
@@ -1517,12 +1578,13 @@ const ProvincialApplicationCreatePage = () => {
                       invalid={!!fieldError('ownerContactName')}
                       invalidText={fieldError('ownerContactName')}
                       onBlur={() => markFieldTouched('ownerContactName')}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        markFormEdited()
                         setForm((current) => ({
                           ...current,
                           ownerContactName: event.target.value,
                         }))
-                      }
+                      }}
                     />
                   )}
                   <SearchableSelect
@@ -1538,6 +1600,7 @@ const ProvincialApplicationCreatePage = () => {
                     invalidText={fieldError('applicantTypeCode')}
                     onBlur={() => markFieldTouched('applicantTypeCode')}
                     onChange={(applicantTypeCode) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         applicantTypeCode,
@@ -1562,12 +1625,13 @@ const ProvincialApplicationCreatePage = () => {
                         invalid={!!fieldError('agentClientNumber')}
                         invalidText={fieldError('agentClientNumber')}
                         onBlur={() => markFieldTouched('agentClientNumber')}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          markFormEdited()
                           setForm((current) => ({
                             ...current,
                             agentClientNumber: event.target.value,
                           }))
-                        }
+                        }}
                       />
                       <SearchableSelect
                         id="agentClientLocationCode"
@@ -1584,12 +1648,13 @@ const ProvincialApplicationCreatePage = () => {
                             label: location.locationName,
                           }))}
                         onBlur={() => markFieldTouched('agentClientLocationCode')}
-                        onChange={(value) =>
+                        onChange={(value) => {
+                          markFormEdited()
                           setForm((current) => ({
                             ...current,
                             agentClientLocationCode: value,
                           }))
-                        }
+                        }}
                       />
                       {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
                         <SearchableSelect
@@ -1609,9 +1674,10 @@ const ProvincialApplicationCreatePage = () => {
                               label: contact.contactName,
                             }))}
                           onBlur={() => markFieldTouched('agentContactName')}
-                          onChange={(value) =>
+                          onChange={(value) => {
+                            markFormEdited()
                             setForm((current) => ({ ...current, agentContactName: value }))
-                          }
+                          }}
                         />
                       ) : (
                         <TextInput
@@ -1623,12 +1689,13 @@ const ProvincialApplicationCreatePage = () => {
                           invalid={!!fieldError('agentContactName')}
                           invalidText={fieldError('agentContactName')}
                           onBlur={() => markFieldTouched('agentContactName')}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            markFormEdited()
                             setForm((current) => ({
                               ...current,
                               agentContactName: event.target.value,
                             }))
-                          }
+                          }}
                         />
                       )}
                     </>
@@ -1676,7 +1743,10 @@ const ProvincialApplicationCreatePage = () => {
                     }
                     placeholder={endUsePlaceholder}
                     options={applicationEndUseSelectOptions}
-                    onChange={(value) => setForm((current) => ({ ...current, endUseCode: value }))}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => ({ ...current, endUseCode: value }))
+                    }}
                   />
                 </div>
                 <div className="legacy-search-actions">
@@ -1768,9 +1838,10 @@ const ProvincialApplicationCreatePage = () => {
                     id="applicationComments"
                     labelText="Comments"
                     value={form.comments}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, comments: event.target.value }))
-                    }
+                    }}
                   />
                 </div>
               </Tile>
@@ -1822,6 +1893,25 @@ const ProvincialApplicationCreatePage = () => {
           onClose={closeAccuracyConfirmation}
         />
       )}
+      <UnsavedChangesGuard
+        isDirty={isCreateDraftDirty}
+        isBusy={isSubmitting}
+        onSave={() => onSave(provincialSubmitterIdentityLocked, false)}
+        onDiscard={onDiscardCreateDraft}
+        subject="this new application"
+        saveAcknowledgement={
+          provincialSubmitterIdentityLocked ? APPLICATION_ACCURACY_ACKNOWLEDGEMENT : undefined
+        }
+        saveUnavailableReason={
+          !optionsLoaded || optionsUnavailable || requiredApplicationOptionsMissing
+            ? 'Authoritative application options must load before this application can be saved.'
+            : isLoadingOwnerClientLocations || isLoadingAgentClientLocations
+              ? 'Client locations must finish loading before this application can be saved.'
+              : provincialSubmitterScopeUnavailable
+                ? 'An authenticated forest client is required before this application can be saved.'
+                : undefined
+        }
+      />
     </Grid>
   )
 }

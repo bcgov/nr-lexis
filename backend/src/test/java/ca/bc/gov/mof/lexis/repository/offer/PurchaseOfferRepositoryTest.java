@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import org.springframework.data.domain.Page;
 import org.springframework.dao.DataAccessResourceFailureException;
 import java.sql.CallableStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
@@ -244,6 +246,14 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
+  void detailLookupShouldPreserveANullOfferVolume() {
+    NullVolumePurchaseOfferRepository repository = new NullVolumePurchaseOfferRepository();
+
+    assertThat(repository.findByOfferNumber(81001L))
+        .hasValueSatisfying(detail -> assertThat(detail.offerVolume()).isNull());
+  }
+
+  @Test
   void applicationRecipientLookupShouldUseRequiredCursorAndPropagateOracleFailure() {
     FailingPurchaseOfferRepository repository = new FailingPurchaseOfferRepository();
 
@@ -440,6 +450,31 @@ class PurchaseOfferRepositoryTest {
     protected void executeProcedureRequired(
         String procedureSignature, SqlConsumer<CallableStatement> binder) {
       throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+  }
+
+  private static final class NullVolumePurchaseOfferRepository extends PurchaseOfferRepository {
+    NullVolumePurchaseOfferRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      ResultSet resultSet = mock(ResultSet.class);
+      try {
+        when(resultSet.getLong("EXPORT_PURCHASE_OFFER_NUMBER")).thenReturn(81001L);
+        when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+        when(resultSet.getDouble("PURCHASE_OFFER_AMOUNT")).thenReturn(12500.25d);
+        when(resultSet.getDouble("EXPORT_PURCHASE_VOLUME")).thenReturn(0.0d);
+        when(resultSet.wasNull()).thenReturn(false, false, false, true);
+        return Optional.of(rowMapper.map(resultSet));
+      } catch (SQLException exception) {
+        throw new AssertionError(exception);
+      }
     }
   }
 }

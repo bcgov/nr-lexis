@@ -192,7 +192,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 getString(rs, "OFFER_CONDITION"),
                 getLocalDate(rs, "ADVERTISING_DATE"),
                 getLocalDate(rs, "OFFER_END_DATE"),
-                coalesce(getDouble(rs, "EXPORT_PURCHASE_VOLUME"), 0.0d),
+                getDouble(rs, "EXPORT_PURCHASE_VOLUME"),
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
   }
 

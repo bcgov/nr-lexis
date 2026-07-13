@@ -39,6 +39,6 @@ class EmailTemplateRendererTest {
         .isEqualTo(
             "Permit #7000123 has been approved as Payment Pending.\n\n"
                 + "Package(s): PKG-1, PKG-2\n\n"
-                + "Do NOT reply to this e-mail.\n");
+                + "This is an automated notification; do not reply.\n");
   }
 }

@@ -53,6 +53,23 @@ class InMemoryLexisUploadServiceTest {
   }
 
   @Test
+  void validationShouldNotClaimVirusScanningWhenItIsDisabled() {
+    InMemoryLexisUploadService service = new InMemoryLexisUploadService();
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "file",
+            "application.pdf",
+            "application/pdf",
+            "%PDF-1.7\n%%EOF\n".getBytes(StandardCharsets.US_ASCII));
+
+    LexisUploadResultDto result =
+        service.validateDocument(file, "application").orElseThrow();
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.message()).isEqualTo("File passed validation.");
+  }
+
+  @Test
   void shouldApplyContentValidationBeforeVirusScanInLocalProfile() {
     VirusScanService virusScanService = mock(VirusScanService.class);
     InMemoryLexisUploadService service =

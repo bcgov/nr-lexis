@@ -177,6 +177,17 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   @Override
   @Transactional
   public CreateOfferResult updateOffer(CreateOfferRequest request, String userId) {
+    return updateOfferInternal(request, userId, true);
+  }
+
+  @Override
+  @Transactional
+  public CreateOfferResult updateOfferSnapshot(UpdateOfferRequest request, String userId) {
+    return updateOfferInternal(toCreateOfferRequest(request), userId, false);
+  }
+
+  private CreateOfferResult updateOfferInternal(
+      CreateOfferRequest request, String userId, boolean mergeMissingValues) {
     Long offerNumber = request == null ? null : request.exportPurchaseOfferNumber();
     if (offerNumber == null || offerNumber < 1) {
       return new CreateOfferResult(
@@ -210,13 +221,16 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
 
     PurchaseOfferRepository.PurchaseOfferUpdateSourceRow current = existing.get();
     CreateOfferRequest normalizedInput = normalizeUpdateInput(request);
-    CreateOfferRequest merged = mergeUpdateRequest(normalizedInput, current);
+    CreateOfferRequest updated =
+        mergeMissingValues
+            ? mergeUpdateRequest(normalizedInput, current)
+            : snapshotUpdateRequest(normalizedInput, current);
     List<String> errors = validateUpdateIdentity(normalizedInput, current);
-    errors.addAll(validateCreateOffer(merged));
+    errors.addAll(validateCreateOffer(updated));
     errors.addAll(
-        validateChangedReceivedDate(merged.purchaseOfferDate(), current.purchaseOfferDate()));
+        validateChangedReceivedDate(updated.purchaseOfferDate(), current.purchaseOfferDate()));
     if (errors.isEmpty()) {
-      errors.addAll(validateCreateOfferReferences(merged));
+      errors.addAll(validateCreateOfferReferences(updated));
     }
     List<String> warnings = List.of();
 
@@ -224,7 +238,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       return new CreateOfferResult(
           false,
           null,
-          merged.applicationNumber(),
+          updated.applicationNumber(),
           offerNumber,
           false,
           null,
@@ -234,13 +248,13 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
           warnings);
     }
 
-    boolean updated =
-        repository.updateOffer(toUpdateRecord(merged, current, defaultMutationUser(userId)));
-    if (!updated) {
+    boolean persisted =
+        repository.updateOffer(toUpdateRecord(updated, current, defaultMutationUser(userId)));
+    if (!persisted) {
       return new CreateOfferResult(
           false,
           "We were unable to update this purchase offer. Please note the time this error occurred and report to someone.",
-          merged.applicationNumber(),
+          updated.applicationNumber(),
           offerNumber,
           false,
           null,
@@ -250,19 +264,19 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
           warnings);
     }
 
-    boolean withdrawn = current.offerWithdrawalDate() == null && merged.offerWithdrawalDate() != null;
-    boolean materialUpdate = hasMaterialUpdate(current, merged);
+    boolean withdrawn = current.offerWithdrawalDate() == null && updated.offerWithdrawalDate() != null;
+    boolean materialUpdate = hasLegacyNotificationUpdate(current, updated);
     EmailResult email =
         materialUpdate
             ? sendOfferEmail(
-                merged.applicationNumber(),
+                updated.applicationNumber(),
                 offerNumber,
                 withdrawn ? OfferEmailType.WITHDRAWN : OfferEmailType.UPDATED)
             : EmailResult.notRequired();
     return new CreateOfferResult(
         true,
         UPDATE_SUCCESS_MESSAGE,
-        merged.applicationNumber(),
+        updated.applicationNumber(),
         offerNumber,
         email.hasRecipient(),
         email.recipient(),
@@ -650,6 +664,58 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         firstNonNull(input.offerVolume(), current.offerVolume()));
   }
 
+  private CreateOfferRequest snapshotUpdateRequest(
+      CreateOfferRequest input, PurchaseOfferRepository.PurchaseOfferUpdateSourceRow current) {
+    return new CreateOfferRequest(
+        current.applicationNumber(),
+        current.exportPurchaseOfferNumber(),
+        input.packageNumber(),
+        input.companyName(),
+        input.contactName(),
+        input.purchaseOfferAmount(),
+        input.purchaseOfferDate(),
+        input.offerWithdrawalDate(),
+        input.teacReviewDate(),
+        input.fairOfferIndicator(),
+        input.validOfferIndicator(),
+        input.offerRemark(),
+        input.approvalIndicator(),
+        input.withdrawReason(),
+        current.exportJurisdictionCode(),
+        firstNonBlank(current.manufacturingFacilityInfo(), MANUFACTURING_FACILITY_DEFAULT),
+        input.offeringClientNumber(),
+        input.pickupLocation(),
+        input.offerCondition(),
+        input.offerVolume());
+  }
+
+  private CreateOfferRequest toCreateOfferRequest(UpdateOfferRequest input) {
+    if (input == null) {
+      return null;
+    }
+    return new CreateOfferRequest(
+        input.applicationNumber(),
+        input.exportPurchaseOfferNumber(),
+        input.packageNumber(),
+        input.companyName(),
+        input.contactName(),
+        input.purchaseOfferAmount(),
+        input.purchaseOfferDate(),
+        input.offerWithdrawalDate(),
+        input.teacReviewDate(),
+        input.fairOfferIndicator(),
+        input.validOfferIndicator(),
+        input.offerRemark(),
+        input.approvalIndicator(),
+        input.withdrawReason(),
+        input.exportJurisdictionCode(),
+        input.manufacturingFacilityInfo(),
+        input.offeringClientNumber(),
+        input.pickupLocation(),
+        input.offerCondition(),
+        input.offerVolume());
+  }
+
   private CreateOfferRequest normalizeUpdateInput(CreateOfferRequest input) {
     if (input == null) {
       return new CreateOfferRequest(
@@ -679,23 +745,31 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         input.offerVolume());
   }
 
-  private boolean hasMaterialUpdate(
+  private boolean hasLegacyNotificationUpdate(
       PurchaseOfferRepository.PurchaseOfferUpdateSourceRow current, CreateOfferRequest updated) {
-    return !equalsNullable(current.packageNumber(), updated.packageNumber())
-        || !equalsNullable(current.companyName(), updated.companyName())
-        || !equalsNullable(current.contactName(), updated.contactName())
-        || !equalsNullable(current.purchaseOfferAmount(), updated.purchaseOfferAmount())
+    return legacyNumberChanged(current.purchaseOfferAmount(), updated.purchaseOfferAmount())
         || !equalsNullable(current.purchaseOfferDate(), updated.purchaseOfferDate())
         || !equalsNullable(current.offerWithdrawalDate(), updated.offerWithdrawalDate())
-        || !equalsNullable(current.teacReviewDate(), updated.teacReviewDate())
-        || !equalsNullable(current.fairOfferIndicator(), updated.fairOfferIndicator())
-        || !equalsNullable(current.validOfferIndicator(), updated.validOfferIndicator())
-        || !equalsNullable(current.approvalIndicator(), updated.approvalIndicator())
-        || !equalsNullable(current.offerRemark(), updated.offerRemark())
-        || !equalsNullable(current.withdrawReason(), updated.withdrawReason())
-        || !equalsNullable(current.pickupLocation(), updated.pickupLocation())
-        || !equalsNullable(current.offerCondition(), updated.offerCondition())
-        || !equalsNullable(current.offerVolume(), updated.offerVolume());
+        || legacyTextChanged(current.withdrawReason(), updated.withdrawReason())
+        || legacyTextChanged(current.pickupLocation(), updated.pickupLocation())
+        || legacyTextChanged(current.offerCondition(), updated.offerCondition())
+        || legacyNumberChanged(current.offerVolume(), updated.offerVolume());
+  }
+
+  private boolean legacyNumberChanged(Double current, Double updated) {
+    if (current == null || updated == null) {
+      return current != updated;
+    }
+    return current.doubleValue() != updated.doubleValue();
+  }
+
+  private boolean legacyTextChanged(String current, String updated) {
+    boolean currentBlank = current == null || current.isEmpty();
+    boolean updatedBlank = updated == null || updated.isEmpty();
+    if (currentBlank || updatedBlank) {
+      return currentBlank != updatedBlank;
+    }
+    return !current.equalsIgnoreCase(updated);
   }
 
   private String normalizePackageNumber(String value) {

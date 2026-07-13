@@ -26,7 +26,7 @@ public record PurchaseOfferDetailDto(
     String offerCondition,
     LocalDate advertisingDate,
     LocalDate offerEndDate,
-    double offerVolume,
+    Double offerVolume,
     String region,
     boolean canEditScheduleDates,
     boolean canEditOfferRemarks,
@@ -60,7 +60,7 @@ public record PurchaseOfferDetailDto(
       String offerCondition,
       LocalDate advertisingDate,
       LocalDate offerEndDate,
-      double offerVolume,
+      Double offerVolume,
       String region,
       boolean canEditScheduleDates,
       boolean canEditOfferRemarks,
@@ -125,7 +125,7 @@ public record PurchaseOfferDetailDto(
       String offerCondition,
       LocalDate advertisingDate,
       LocalDate offerEndDate,
-      double offerVolume,
+      Double offerVolume,
       String region) {
     this(
         offerNumber,

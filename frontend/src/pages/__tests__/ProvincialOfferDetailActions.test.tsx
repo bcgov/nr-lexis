@@ -147,6 +147,67 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 
+  it('submits an explicitly cleared offer condition', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Offer conditions / remarks'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerNumber: '81001',
+          offerCondition: '',
+        }),
+      )
+    })
+  })
+
+  it('submits an explicitly cleared offer volume', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Offer volume (m³)'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerNumber: '81001',
+          offerVolume: '',
+        }),
+      )
+    })
+  })
+
+  it('keeps a null Oracle offer volume blank during an unrelated update', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      offerVolume: null,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('Offer volume (m³)')).toHaveValue('')
+    const amountInput = screen.getByLabelText('Offer amount ($/m³)')
+    await userEvent.clear(amountInput)
+    await userEvent.type(amountInput, '13000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purchaseOfferAmount: '13000',
+          offerVolume: '',
+        }),
+      )
+    })
+  })
+
   it('preserves the form when the backend rejects a stale offer lock', async () => {
     mockedSubmitProvincialOfferUpdate.mockResolvedValue({
       success: false,

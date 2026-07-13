@@ -31,7 +31,11 @@ export default function IsoDatePicker({
       dateFormat="Y-m-d"
       allowInput
       value={flatpickrValue}
-      onChange={(_selectedDates, dateString) => onChange(dateString)}
+      onChange={(_selectedDates, dateString) => {
+        if (dateString !== value) {
+          onChange(dateString)
+        }
+      }}
     >
       <DatePickerInput
         id={id}
@@ -43,7 +47,11 @@ export default function IsoDatePicker({
         invalidText={invalidText}
         disabled={disabled}
         onBlur={onBlur}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          if (event.target.value !== value) {
+            onChange(event.target.value)
+          }
+        }}
       />
     </DatePicker>
   )

@@ -42,7 +42,8 @@ class ClamAvWorkflowDaemonDetectionTest {
 
     assertThat(script)
         .contains("docker build --pull")
-        .contains("/opt/app-root/clamdcheck.sh")
+        .contains("docker exec \"${CONTAINER}\" /opt/app-root/clamdcheck.sh live")
+        .doesNotContain("docker exec \"${CONTAINER}\" /opt/app-root/clamdcheck.sh >/dev/null")
         .contains("ClamAv-Ci-Test-Signature")
         .contains("FOUND")
         .contains("Expected ClamAV to detect the CI test payload.");

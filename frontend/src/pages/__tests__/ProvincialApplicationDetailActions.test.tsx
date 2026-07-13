@@ -2101,22 +2101,36 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     await selectApplicationDetailTab('Application')
-    await userEvent.clear(await screen.findByLabelText('Location of logs'))
-    await userEvent.type(screen.getByLabelText('Location of logs'), 'AB')
+    fireEvent.change(await screen.findByLabelText('Location of logs'), {
+      target: { value: 'AB' },
+    })
     await selectApplicationDetailTab('Remarks')
-    await userEvent.type(await screen.findByLabelText('New Remark'), 'Preserve remark draft')
+    fireEvent.change(await screen.findByLabelText('New Remark'), {
+      target: { value: 'Preserve remark draft' },
+    })
     const reviewTile = within(await selectApplicationReviewTile())
     await chooseComboBoxOption(
       reviewTile.getByRole('combobox', { name: 'Application status' }),
       'Rejected',
     )
-    await userEvent.clear(reviewTile.getByLabelText('Review remark'))
-    await userEvent.type(reviewTile.getByLabelText('Review remark'), 'Preserve review draft')
+    fireEvent.change(reviewTile.getByLabelText('Review remark'), {
+      target: { value: 'Preserve review draft' },
+    })
     await selectApplicationDetailTab('Items')
-    await userEvent.clear(await screen.findByLabelText('Package Comments'))
-    await userEvent.type(screen.getByLabelText('Package Comments'), 'Saved package change')
-    await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
-    await waitFor(() => expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1))
+    fireEvent.change(await screen.findByLabelText('Package Comments'), {
+      target: { value: 'Saved package change' },
+    })
+    const detailFetchCountBeforeSave = mockedFetchProvincialApplicationDetail.mock.calls.length
+    const savePackageButton = screen.getByRole('button', { name: 'Save Package' })
+    await userEvent.click(savePackageButton)
+    await waitFor(() => {
+      expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1)
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
+        detailFetchCountBeforeSave + 1,
+      )
+      expect(savePackageButton).toBeEnabled()
+    })
+    expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Application')
     expect(screen.getByLabelText('Location of logs')).toHaveValue('AB')

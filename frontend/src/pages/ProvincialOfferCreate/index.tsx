@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import PageHeader from '@/components/PageHeader'
+import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import {
   firstValidationError,
@@ -205,6 +206,9 @@ const ProvincialOfferCreatePage = () => {
     [searchParamsKey],
   )
   const [form, setForm] = useState<ProvincialOfferCreateForm>(() => initialForm)
+  const draftBaselineRef = useRef(form)
+  const [formEdited, setFormEdited] = useState(false)
+  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
   const [applicationContext, dispatchApplicationContext] = useReducer(
     offerApplicationContextReducer,
     queryPackageOptions,
@@ -227,6 +231,7 @@ const ProvincialOfferCreatePage = () => {
     errorMessage: '',
   })
   const [scopedContact, setScopedContact] = useState({ clientNumber: '', contactName: '' })
+  const scopedContactBaselineRef = useRef(scopedContact)
   const canManageOfferApproval =
     hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN')
   const isScopedProvincialSubmitter =
@@ -262,6 +267,12 @@ const ProvincialOfferCreatePage = () => {
     !isLoadingApplicationContext &&
     applicationDetails !== null &&
     packageOptions.length === 0
+
+  useEffect(() => {
+    if (createdRecordPath) {
+      navigate(createdRecordPath)
+    }
+  }, [createdRecordPath, navigate])
 
   useEffect(() => {
     if (!isScopedProvincialSubmitter) {
@@ -482,7 +493,10 @@ const ProvincialOfferCreatePage = () => {
   const fieldError = (field: ProvincialOfferCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
 
-  const onSave = async () => {
+  const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
+    if (isLoadingApplicationContext || scopedClientLookupPending) {
+      return false
+    }
     if (hasValidationError) {
       const validationMessage =
         Object.values(fieldErrors).find((error): error is string => !!error) ??
@@ -493,7 +507,7 @@ const ProvincialOfferCreatePage = () => {
         title: 'Validation error',
         message: validationMessage,
       })
-      return
+      return false
     }
 
     setStatus(null)
@@ -513,16 +527,21 @@ const ProvincialOfferCreatePage = () => {
         offerRemark: canManageOfferApproval ? form.offerRemark : '',
       })
       if (result.success) {
+        draftBaselineRef.current = form
+        scopedContactBaselineRef.current = scopedContact
+        setFormEdited(false)
         if (result.createdId) {
-          navigate(`/provincial/offers/${encodeURIComponent(result.createdId)}`)
-          return
+          if (navigateToCreatedRecord) {
+            setCreatedRecordPath(`/provincial/offers/${encodeURIComponent(result.createdId)}`)
+          }
+          return true
         }
         setStatus({
           kind: 'success',
           title: 'Offer saved',
           message: 'Offer saved successfully.',
         })
-        return
+        return true
       }
 
       setStatus({
@@ -531,6 +550,7 @@ const ProvincialOfferCreatePage = () => {
         message:
           'Offer save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } catch (error) {
       console.error(error)
       setStatus({
@@ -539,10 +559,33 @@ const ProvincialOfferCreatePage = () => {
         message:
           'Offer save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  const onDiscardCreateDraft = (): void => {
+    setForm(draftBaselineRef.current)
+    setScopedContact(scopedContactBaselineRef.current)
+    setFormEdited(false)
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
+    setStatus(null)
+  }
+
+  const markFormEdited = (): void => {
+    if (!formEdited) {
+      draftBaselineRef.current = form
+      scopedContactBaselineRef.current = scopedContact
+    }
+    setFormEdited(true)
+  }
+
+  const isCreateDraftDirty =
+    formEdited &&
+    (!formValuesEqual(form, draftBaselineRef.current) ||
+      !formValuesEqual(scopedContact, scopedContactBaselineRef.current))
 
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-offer-create-page">
@@ -602,9 +645,10 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('applicationNumber')}
                 invalidText={fieldError('applicationNumber')}
                 onBlur={() => markFieldTouched('applicationNumber')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, applicationNumber: event.target.value }))
-                }
+                }}
               />
               {packageOptions.length > 0 ? (
                 <SearchableSelect
@@ -618,7 +662,10 @@ const ProvincialOfferCreatePage = () => {
                   invalid={!!fieldError('packageNumber')}
                   invalidText={fieldError('packageNumber')}
                   onBlur={() => markFieldTouched('packageNumber')}
-                  onChange={(value) => setForm((current) => ({ ...current, packageNumber: value }))}
+                  onChange={(value) => {
+                    markFormEdited()
+                    setForm((current) => ({ ...current, packageNumber: value }))
+                  }}
                 />
               ) : (
                 <TextInput
@@ -629,9 +676,10 @@ const ProvincialOfferCreatePage = () => {
                   invalid={!!fieldError('packageNumber')}
                   invalidText={fieldError('packageNumber')}
                   onBlur={() => markFieldTouched('packageNumber')}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    markFormEdited()
                     setForm((current) => ({ ...current, packageNumber: event.target.value }))
-                  }
+                  }}
                 />
               )}
             </div>
@@ -669,9 +717,10 @@ const ProvincialOfferCreatePage = () => {
                       : undefined
                 }
                 onBlur={() => markFieldTouched('offeringClientNumber')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, offeringClientNumber: event.target.value }))
-                }
+                }}
               />
               <TextInput
                 id="companyName"
@@ -688,9 +737,10 @@ const ProvincialOfferCreatePage = () => {
                     : undefined
                 }
                 onBlur={() => markFieldTouched('companyName')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, companyName: event.target.value }))
-                }
+                }}
                 maxLength={OFFER_COMPANY_NAME_MAX_LENGTH}
               />
               <TextInput
@@ -701,6 +751,7 @@ const ProvincialOfferCreatePage = () => {
                 invalidText={fieldError('contactName')}
                 onBlur={() => markFieldTouched('contactName')}
                 onChange={(event) => {
+                  markFormEdited()
                   if (isScopedProvincialSubmitter) {
                     setScopedContact({
                       clientNumber: authoritativeOfferingClientNumber,
@@ -733,9 +784,10 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('offerVolume')}
                 invalidText={fieldError('offerVolume')}
                 onBlur={() => markFieldTouched('offerVolume')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, offerVolume: event.target.value }))
-                }
+                }}
               />
               {applicationDetails?.speciesGradeCode && (
                 <TextInput
@@ -752,9 +804,10 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('purchaseOfferAmount')}
                 invalidText={fieldError('purchaseOfferAmount')}
                 onBlur={() => markFieldTouched('purchaseOfferAmount')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, purchaseOfferAmount: event.target.value }))
-                }
+                }}
               />
               <TextInput
                 id="region"
@@ -793,9 +846,10 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('pickupLocation')}
                 invalidText={fieldError('pickupLocation')}
                 onBlur={() => markFieldTouched('pickupLocation')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, pickupLocation: event.target.value }))
-                }
+                }}
                 maxLength={OFFER_PICKUP_LOCATION_MAX_LENGTH}
               />
               <TextArea
@@ -805,9 +859,10 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('offerCondition')}
                 invalidText={fieldError('offerCondition')}
                 onBlur={() => markFieldTouched('offerCondition')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, offerCondition: event.target.value }))
-                }
+                }}
                 maxLength={OFFER_CONDITION_MAX_LENGTH}
               />
             </div>
@@ -838,9 +893,10 @@ const ProvincialOfferCreatePage = () => {
                   invalid={!!fieldError('teacReviewDate')}
                   invalidText={fieldError('teacReviewDate')}
                   onBlur={() => markFieldTouched('teacReviewDate')}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    markFormEdited()
                     setForm((current) => ({ ...current, teacReviewDate: value }))
-                  }
+                  }}
                 />
                 <SearchableSelect
                   id="fairOfferIndicator"
@@ -848,9 +904,10 @@ const ProvincialOfferCreatePage = () => {
                   value={form.fairOfferIndicator}
                   placeholder="Select value"
                   options={YES_NO_OPTIONS}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    markFormEdited()
                     setForm((current) => ({ ...current, fairOfferIndicator: value }))
-                  }
+                  }}
                 />
                 <SearchableSelect
                   id="validOfferIndicator"
@@ -858,9 +915,10 @@ const ProvincialOfferCreatePage = () => {
                   value={form.validOfferIndicator}
                   placeholder="Select value"
                   options={YES_NO_OPTIONS}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    markFormEdited()
                     setForm((current) => ({ ...current, validOfferIndicator: value }))
-                  }
+                  }}
                 />
                 <SearchableSelect
                   id="approvalIndicator"
@@ -868,9 +926,10 @@ const ProvincialOfferCreatePage = () => {
                   value={form.approvalIndicator}
                   placeholder="Select value"
                   options={YES_NO_OPTIONS}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    markFormEdited()
                     setForm((current) => ({ ...current, approvalIndicator: value }))
-                  }
+                  }}
                 />
                 <TextArea
                   id="offerRemark"
@@ -879,9 +938,10 @@ const ProvincialOfferCreatePage = () => {
                   invalid={!!fieldError('offerRemark')}
                   invalidText={fieldError('offerRemark')}
                   onBlur={() => markFieldTouched('offerRemark')}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    markFormEdited()
                     setForm((current) => ({ ...current, offerRemark: event.target.value }))
-                  }
+                  }}
                   maxLength={OFFER_REMARK_MAX_LENGTH}
                 />
               </div>
@@ -927,7 +987,7 @@ const ProvincialOfferCreatePage = () => {
               <Button
                 type="button"
                 kind="primary"
-                onClick={() => void onSave()}
+                onClick={() => void onSave(true)}
                 disabled={isSubmitting || isLoadingApplicationContext || scopedClientLookupPending}
               >
                 Save
@@ -936,6 +996,18 @@ const ProvincialOfferCreatePage = () => {
           </div>
         </Tile>
       </Column>
+      <UnsavedChangesGuard
+        isDirty={isCreateDraftDirty}
+        isBusy={isSubmitting}
+        onSave={() => onSave(false)}
+        onDiscard={onDiscardCreateDraft}
+        subject="this new purchase offer"
+        saveUnavailableReason={
+          isLoadingApplicationContext || scopedClientLookupPending
+            ? 'Application and client details must finish loading before this offer can be saved.'
+            : undefined
+        }
+      />
     </Grid>
   )
 }
