@@ -66,6 +66,8 @@ import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService.ClientData;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceLine;
+import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceSnapshot;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceSnapshot;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.Transition;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
@@ -80,6 +82,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -1916,6 +1919,7 @@ class OraclePermitDetailsRpcServiceTest {
   @Test
   void updatePermitShouldPersistInteriorCompletionWithoutReceiptAsPaymentPending() {
     stubInvoiceOrchestration();
+    stubNonCanadianInvoiceSnapshot(1903L);
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(interiorPermitMutationRowWithReceipt()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
@@ -2383,9 +2387,10 @@ class OraclePermitDetailsRpcServiceTest {
   @Test
   void updatePermitShouldAllowSettingOverrideBeforeEnteringInvoicedStatus() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
+        .thenReturn(Optional.of(withOrgUnit(permitMutationRow("ACT"), 1903L)));
     stubTargetMinisterialExemption("EX-700");
     stubInvoiceOrchestration();
+    stubNonCanadianInvoiceSnapshot(1903L);
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
@@ -2427,9 +2432,9 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void updatePermitShouldFailClosedWhenALinkedApplicationHasAnUnexpectedStatus() {
-    stubInvoiceOrchestration();
+    stubInvoiceOrchestrationAvailability();
     when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
+        .thenReturn(Optional.of(withOrgUnit(permitMutationRow("ACT"), 1903L)));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
     when(exemptionService.findByExemptionNumber("EX-700"))
         .thenReturn(
@@ -2445,7 +2450,8 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(Optional.of("APP"));
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(formCheckRequest("COM", "42", "Legacy notes"), "idir\\jsmith");
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors()).containsExactly("Unable to update linked application statuses.");
@@ -2543,7 +2549,7 @@ class OraclePermitDetailsRpcServiceTest {
   @Test
   void updatePermitShouldFailClosedWhenAnotherLinkedPermitCannotBeResolved() {
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    stubInvoiceOrchestration();
+    stubInvoiceOrchestrationAvailability();
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
     stubTargetMinisterialExemption("EX-700");
@@ -2573,7 +2579,7 @@ class OraclePermitDetailsRpcServiceTest {
   @Test
   void updatePermitShouldFailTheAggregateWhenLinkedApplicationStatusCannotBeSaved() {
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    stubInvoiceOrchestration();
+    stubInvoiceOrchestrationAvailability();
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
@@ -2608,7 +2614,7 @@ class OraclePermitDetailsRpcServiceTest {
   @Test
   void updatePermitShouldFailWhenLinkedApplicationStatusChangesConcurrently() {
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    stubInvoiceOrchestration();
+    stubInvoiceOrchestrationAvailability();
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
@@ -2651,7 +2657,8 @@ class OraclePermitDetailsRpcServiceTest {
                     "EX-700", "M", "00077881", "00077880")));
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(formCheckRequest("COM", "42", "Legacy notes"), "idir\\jsmith");
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
@@ -2831,13 +2838,131 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(invoice.details().get(0).amvRate()).isEqualByComparingTo("100.25");
     assertThat(invoice.details().get(0).feePolicyAdmin()).isEqualByComparingTo(BigDecimal.ZERO);
     assertThat(invoice.details().get(0).feePercentage()).isEqualByComparingTo(BigDecimal.ZERO);
+    assertThat(transition.gbmsInvoice()).isNull();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "1833,EXF", "1834,EXF", "1835,FLM",
+    "1903,EXF", "1904,EXF", "1905,EXF", "1906,EXF", "1907,EXF", "1908,EXF",
+    "1909,FLM", "1910,FLM"
+  })
+  void updatePermitShouldBuildLegacyGbmsPackageInvoiceSnapshot(
+      long orgUnitNumber, String expectedAckMask) {
+    PermitMutationRow current = withOrgUnit(permitMutationRow("ACT"), orgUnitNumber);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+    stubCanadianInvoiceApplication(orgUnitNumber, "EX-700");
+    stubInvoiceOrchestration();
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM-1", "FI", "A", 10.0d, 20L, "7000123", "PKG-1"),
+                scale("102", "TM-2", "FI", "A", 5.0d, 10L, "7000123", "PKG-1"),
+                scale("103", "TM-3", "FI", "A", 2.0d, 4L, "7000123", "PKG-2")));
+    when(repository.findFeePolicyPercentIncrease(LocalDate.of(2026, 3, 15), orgUnitNumber))
+        .thenReturn(BigDecimal.ZERO);
+    when(repository.isApplicationUnmanufactured(1000456L)).thenReturn(true);
+    when(repository.findAverageMarketValueByScaleId(any()))
+        .thenReturn(Optional.of(BigDecimal.ONE));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<Transition> transitionCaptor = ArgumentCaptor.forClass(Transition.class);
+    verify(permitInvoiceOrchestrationService)
+        .orchestrate(transitionCaptor.capture(), eq("idir\\jsmith"));
+    Transition transition = transitionCaptor.getValue();
+    InternalInvoiceSnapshot internal = transition.internalInvoice();
+    GbmsInvoiceSnapshot gbms = transition.gbmsInvoice();
+    assertThat(internal.invoiceTotal()).isEqualByComparingTo("17.00");
+    assertThat(internal.billingClientNumber()).isEqualTo("00077881");
+    assertThat(internal.ackMaskAcode()).isEqualTo(expectedAckMask);
+    assertThat(gbms.invoiceTotal()).isEqualByComparingTo("17.00");
+    assertThat(gbms.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(gbms.ownerClientLocationCode()).isEqualTo("01");
+    assertThat(gbms.ackMaskAcode()).isEqualTo(expectedAckMask);
+    assertThat(gbms.lines())
+        .extracting(line -> line.description() + ":" + line.amount().toPlainString())
+        .containsExactly("PACKAGE PKG-1:15.00", "PACKAGE PKG-2:2.00");
+    assertThat(gbms.notationText())
+        .isEqualTo("EXPORT FEES FOR PERMIT 7000123 ISSUED 2026-03-16 RN:RCPT-100");
+  }
+
+  @Test
+  void updatePermitShouldBuildLegacyGbmsOverrideDescription() {
+    PermitMutationRow current =
+        withOrgUnit(
+            permitMutationRowWithOverride(25.0d, "Reviewed calculation"), 1909L);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+    stubCanadianInvoiceApplication(1909L, "EX-700");
+    stubInvoiceOrchestration();
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM-1", "FI", "A", 10.0d, 20L, "7000123", "PKG-1"),
+                scale("102", "TM-2", "FI", "A", 5.0d, 10L, "7000123", "PKG-2")));
+    when(repository.findFeePolicyPercentIncrease(LocalDate.of(2026, 3, 15), 1909L))
+        .thenReturn(BigDecimal.ZERO);
+    when(repository.isApplicationUnmanufactured(1000456L)).thenReturn(true);
+    when(repository.findAverageMarketValueByScaleId(any()))
+        .thenReturn(Optional.of(BigDecimal.ONE));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<Transition> transition = ArgumentCaptor.forClass(Transition.class);
+    verify(permitInvoiceOrchestrationService)
+        .orchestrate(transition.capture(), eq("idir\\jsmith"));
+    assertThat(transition.getValue().internalInvoice().invoiceTotal())
+        .isEqualByComparingTo("25.0");
+    assertThat(transition.getValue().gbmsInvoice().lines())
+        .containsExactly(new GbmsInvoiceLine(BigDecimal.valueOf(25.0), "PKGS: PKG-1, PKG-2"));
+  }
+
+  @Test
+  void updatePermitShouldRejectAnUnsupportedGbmsOrganization() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("ACT")));
+    stubTargetMinisterialExemption("EX-700");
+    stubInvoiceOrchestrationAvailability();
+    stubNonCanadianInvoiceSnapshot(9999L);
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Unable to coordinate the permit invoice status change.");
+    verify(permitInvoiceOrchestrationService, never()).orchestrate(any(), any());
   }
 
   @Test
   void updatePermitShouldPersistPreCutoverCanadianInvoiceTotalAndPolicyFactors() {
     PermitMutationRow current =
         withInvoiceContext(
-            permitMutationRow("ACT"), LocalDate.of(2024, 1, 15), "CA", null, null);
+            permitMutationRowWithOverride(25.0d, "Reviewed calculation"),
+            LocalDate.of(2024, 1, 15),
+            "CA",
+            null,
+            null);
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(current));
     stubTargetMinisterialExemption("EX-700");
@@ -2866,6 +2991,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(invoice.billingClientNumber()).isEqualTo("00077881");
     assertThat(invoice.billingClientLocationCode()).isEqualTo("01");
     assertThat(invoice.exemptionOverrideRate()).isEqualByComparingTo(BigDecimal.ZERO);
+    assertThat(invoice.permitOverrideAmount()).isEqualByComparingTo("25.0");
     assertThat(invoice.details().get(0).amount()).isEqualByComparingTo("157.50");
     assertThat(invoice.details().get(0).feePolicyAdmin()).isEqualByComparingTo("5");
     assertThat(invoice.details().get(0).feePercentage()).isEqualByComparingTo("0.15");
@@ -3048,7 +3174,7 @@ class OraclePermitDetailsRpcServiceTest {
   @Test
   void updatePermitShouldRollBackWhenInvoiceOrchestrationThrows() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
+        .thenReturn(Optional.of(withOrgUnit(permitMutationRow("ACT"), 1903L)));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
     when(exemptionService.findByExemptionNumber("EX-700"))
         .thenReturn(
@@ -3058,6 +3184,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(permitInvoiceOrchestrationServiceProvider.getIfAvailable())
         .thenReturn(permitInvoiceOrchestrationService);
     when(permitInvoiceOrchestrationService.supportsCountry("US")).thenReturn(true);
+    stubNonCanadianInvoiceSnapshot(1903L);
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
@@ -3065,12 +3192,40 @@ class OraclePermitDetailsRpcServiceTest {
         .thenThrow(new IllegalStateException("simulated GBMS outage"));
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(formCheckRequest("COM", "42", "Legacy notes"), "idir\\jsmith");
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .contains("Unable to coordinate the permit invoice status change.");
     verify(applicationReviewRepository, never()).updateStatus(anyLong(), any(), any(), any());
+  }
+
+  @Test
+  void updatePermitShouldSurfaceReconciliationBeforeRetry() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(withOrgUnit(permitMutationRow("ACT"), 1903L)));
+    stubTargetMinisterialExemption("EX-700");
+    stubNonCanadianInvoiceSnapshot(1903L);
+    when(permitInvoiceOrchestrationServiceProvider.getIfAvailable())
+        .thenReturn(permitInvoiceOrchestrationService);
+    when(permitInvoiceOrchestrationService.supportsCountry("US")).thenReturn(true);
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(permitInvoiceOrchestrationService.orchestrate(any(), eq("idir\\jsmith")))
+        .thenReturn(
+            PermitInvoiceOrchestrationService.TransitionResult.failed(
+                "Permit invoicing failed after GBMS processing began; reconcile before retry."));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Permit invoicing failed after GBMS processing began; reconcile before retry.");
   }
 
   @Test
@@ -3196,8 +3351,9 @@ class OraclePermitDetailsRpcServiceTest {
   @Test
   void updatePermitShouldOnlySynchronizeBlanketOicPackageVolume() {
     stubInvoiceOrchestration();
+    stubNonCanadianInvoiceSnapshot(1903L);
     when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+        .thenReturn(Optional.of(withOrgUnit(blanketOicPermitMutationRow(), 1903L)));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(exemptionService.findByExemptionNumber("EX-700"))
         .thenReturn(
@@ -3213,7 +3369,7 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(
             Optional.of(
                 new PackageInfoRow("PKG-903", 1000999L, 12.0d, 10.0d, 2.0d, null, null)));
-    stubOicApplicationBinding("EX-700");
+    stubOicApplicationBinding("EX-700", "Y", 1903L);
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(
             List.of(
@@ -3224,7 +3380,8 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(formCheckRequest("COM", "42", "Legacy notes"), "idir\\jsmith");
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
     verify(applicationDetailsRpcService)
@@ -6198,6 +6355,45 @@ class OraclePermitDetailsRpcServiceTest {
         row.productTypeCode());
   }
 
+  private PermitMutationRow withOrgUnit(PermitMutationRow row, Long orgUnitNo) {
+    return new PermitMutationRow(
+        row.permitNumber(),
+        row.destinationCompanyName(),
+        row.transportName(),
+        row.estimatedShippingDate(),
+        row.otherPortOfExport(),
+        row.applicationDate(),
+        row.receivedDate(),
+        row.permitIssueDate(),
+        row.receiptNumber(),
+        row.expiryDate(),
+        row.permitVolume(),
+        row.numberOfPieces(),
+        row.feeInLieuVolume(),
+        row.federalPermitNumber(),
+        row.remarks(),
+        row.entryUserId(),
+        row.entryTimestamp(),
+        row.transportTypeCode(),
+        row.scaleMethodCode(),
+        row.clientNumber(),
+        row.clientLocationCode(),
+        row.agentNumber(),
+        row.agentLocationCode(),
+        row.exemptionNumber(),
+        orgUnitNo,
+        row.portOfExportCode(),
+        row.permitStatusCode(),
+        row.growthTypeCode(),
+        row.countryCode(),
+        row.overrideFee(),
+        row.overrideComment(),
+        row.oicApplicationNumber(),
+        row.oicRequestPieces(),
+        row.oicRequestVolume(),
+        row.productTypeCode());
+  }
+
   private ExemptionDetailDto exemptionDetail(
       String exemptionNumber, double remainingVolume, boolean blanketOic) {
     return new ExemptionDetailDto(
@@ -6333,13 +6529,18 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   private void stubOicApplicationBinding(String exemptionNumber, String oicIndicator) {
+    stubOicApplicationBinding(exemptionNumber, oicIndicator, 1835L);
+  }
+
+  private void stubOicApplicationBinding(
+      String exemptionNumber, String oicIndicator, Long orgUnitNo) {
     when(repository.findApplicationInfoByNumber(1000999L))
         .thenReturn(
             Optional.of(
                 new ApplicationInfoRow(
                     1000999L,
                     exemptionNumber,
-                    1835L,
+                    orgUnitNo,
                     "RCO",
                     "T",
                     "S",
@@ -6365,12 +6566,40 @@ class OraclePermitDetailsRpcServiceTest {
                     "HE/UT")));
   }
 
+  private void stubNonCanadianInvoiceSnapshot(Long orgUnitNo) {
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale(
+                    "INV-101",
+                    "TM-INV",
+                    "FI",
+                    "A",
+                    10.0d,
+                    20L,
+                    "7000123",
+                    "PKG-INV")));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(
+                    1000456L, "EX-700", orgUnitNo, "Region", "T", "S", "FI/UT")));
+    when(repository.findFeePolicyPercentIncrease(any(LocalDate.class), eq(orgUnitNo)))
+        .thenReturn(BigDecimal.ZERO);
+    when(repository.findAverageMarketValueByScaleId("INV-101"))
+        .thenReturn(Optional.of(BigDecimal.ONE));
+  }
+
   private void stubInvoiceOrchestration() {
+    stubInvoiceOrchestrationAvailability();
+    when(permitInvoiceOrchestrationService.orchestrate(any(), eq("idir\\jsmith")))
+        .thenReturn(PermitInvoiceOrchestrationService.TransitionResult.succeeded());
+  }
+
+  private void stubInvoiceOrchestrationAvailability() {
     when(permitInvoiceOrchestrationServiceProvider.getIfAvailable())
         .thenReturn(permitInvoiceOrchestrationService);
     when(permitInvoiceOrchestrationService.supportsCountry(any())).thenReturn(true);
-    when(permitInvoiceOrchestrationService.orchestrate(any(), eq("idir\\jsmith")))
-        .thenReturn(PermitInvoiceOrchestrationService.TransitionResult.succeeded());
   }
 
   private PermitMutationRequestDto updatePermitRequest(

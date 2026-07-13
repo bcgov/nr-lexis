@@ -12,7 +12,6 @@ import java.util.List;
  */
 public interface PermitInvoiceOrchestrationService {
 
-  /** Allows callers to fail before aggregate mutation when a configured mode cannot handle it. */
   default boolean supportsCountry(String countryCode) {
     return false;
   }
@@ -29,9 +28,35 @@ public interface PermitInvoiceOrchestrationService {
       String clientNumber,
       String clientLocationCode,
       String receiptNumber,
-      InternalInvoiceSnapshot internalInvoice) {}
+      InternalInvoiceSnapshot internalInvoice,
+      GbmsInvoiceSnapshot gbmsInvoice) {
 
-  /** Immutable values calculated from the validated target permit before invoice persistence. */
+    public Transition(
+        Long permitNumber,
+        String previousStatusCode,
+        String targetStatusCode,
+        String countryCode,
+        String exemptionNumber,
+        Long orgUnitNumber,
+        String clientNumber,
+        String clientLocationCode,
+        String receiptNumber,
+        InternalInvoiceSnapshot internalInvoice) {
+      this(
+          permitNumber,
+          previousStatusCode,
+          targetStatusCode,
+          countryCode,
+          exemptionNumber,
+          orgUnitNumber,
+          clientNumber,
+          clientLocationCode,
+          receiptNumber,
+          internalInvoice,
+          null);
+    }
+  }
+
   record InternalInvoiceSnapshot(
       BigDecimal invoiceTotal,
       String billingClientNumber,
@@ -48,7 +73,6 @@ public interface PermitInvoiceOrchestrationService {
     }
   }
 
-  /** One scale-level internal permit-invoice detail. */
   record InternalInvoiceDetail(
       String timberMark,
       String speciesCode,
@@ -58,6 +82,23 @@ public interface PermitInvoiceOrchestrationService {
       BigDecimal amvRate,
       BigDecimal feePolicyAdmin,
       BigDecimal feePercentage) {}
+
+  record GbmsInvoiceSnapshot(
+      BigDecimal invoiceTotal,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      Long originOrgNumber,
+      Long adminOrgNumber,
+      String ackMaskAcode,
+      String notationText,
+      List<GbmsInvoiceLine> lines) {
+
+    public GbmsInvoiceSnapshot {
+      lines = lines == null ? List.of() : List.copyOf(lines);
+    }
+  }
+
+  record GbmsInvoiceLine(BigDecimal amount, String description) {}
 
   record TransitionResult(boolean success, String message) {
     public static TransitionResult succeeded() {

@@ -54,6 +54,12 @@ class TestDeploymentTopologyConfigTest {
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'canadian-internal' }}")
         .contains("-p LEXIS_PERMIT_INVOICE_MODE=\"$LEXIS_PERMIT_INVOICE_MODE\"")
         .contains(
+            "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:"
+                + " ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}")
+        .contains(
+            "-p LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS="
+                + "\"$LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\"")
+        .contains(
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}")
         .contains(
             "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:"
@@ -67,9 +73,11 @@ class TestDeploymentTopologyConfigTest {
         .contains("type: Recreate")
         .contains(
             "- name: LEXIS_PERMIT_INVOICE_MODE\n"
-                + "    description: Canadian-only internal invoicing mode; set disabled for operational rollback\n"
+                + "    description: Permit invoice coordinator; enable legacy-best-effort after environment acceptance\n"
                 + "    value: canadian-internal")
         .contains("- name: LEXIS_PERMIT_INVOICE_MODE\n                  value: ${LEXIS_PERMIT_INVOICE_MODE}")
+        .contains("- name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\n    description: Requested timeout for each isolated GBMS transaction\n    value: \"60\"")
+        .contains("- name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\n                  value: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS}")
         .contains("cpu: ${MIN_CPU}")
         .contains("memory: ${MIN_MEM}")
         .contains("cpu: ${MAX_CPU}")
@@ -117,6 +125,7 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_PROD_RTM_ONLY",
             "LEXIS_EXPIRY_ENABLED",
             "LEXIS_PERMIT_INVOICE_MODE",
+            "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS",
             "LEXIS_MAIL_ENABLED",
             "LEXIS_MAIL_NON_PRODUCTION",
             "LEXIS_MAIL_FROM",
@@ -139,6 +148,7 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_PROD_RTM_ONLY",
             "LEXIS_EXPIRY_ENABLED",
             "LEXIS_PERMIT_INVOICE_MODE",
+            "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS",
             "LEXIS_MAIL_ENABLED",
             "LEXIS_MAIL_NON_PRODUCTION",
             "LEXIS_MAIL_FROM",
@@ -155,6 +165,9 @@ class TestDeploymentTopologyConfigTest {
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'canadian-internal' }}")
+        .contains(
+            "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:"
+                + " ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}")
         .contains("LEXIS_MAIL_ENABLED: ${{ vars.LEXIS_MAIL_ENABLED || 'false' }}")
         .contains(
             "LEXIS_MAIL_NON_PRODUCTION:"

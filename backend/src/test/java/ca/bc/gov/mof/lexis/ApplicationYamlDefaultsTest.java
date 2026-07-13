@@ -28,6 +28,9 @@ class ApplicationYamlDefaultsTest {
         .containsEntry("spring.servlet.multipart.max-file-size", "20MB")
         .containsEntry("spring.servlet.multipart.max-request-size", "21MB")
         .containsEntry(
+            "lexis.permit-invoice.gbms-timeout-seconds",
+            "${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:60}")
+        .containsEntry(
             "lexis.mail.from", "${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}");
   }
 

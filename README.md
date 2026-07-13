@@ -152,4 +152,5 @@ default URL from `VITE_ZONE`.
 
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
 - [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.
+- [docs/permit-invoicing.md](docs/permit-invoicing.md) - Canadian and GBMS permit invoicing modes, consistency limits, and recovery.
 - [docs/rtm-amv-ui-and-procedure-contract.md](docs/rtm-amv-ui-and-procedure-contract.md) - RTM AMV UI rules and Oracle procedure constraints.

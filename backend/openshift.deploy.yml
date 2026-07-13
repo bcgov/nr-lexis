@@ -55,8 +55,11 @@ parameters:
     description: Maximum Oracle/Jasper report query duration before cancellation
     value: "120"
   - name: LEXIS_PERMIT_INVOICE_MODE
-    description: Canadian-only internal invoicing mode; set disabled for operational rollback
+    description: Permit invoice coordinator; enable legacy-best-effort after environment acceptance
     value: canadian-internal
+  - name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS
+    description: Requested timeout for each isolated GBMS transaction
+    value: "60"
   - name: LEXIS_MAIL_ENABLED
     description: Enable outbound LEXIS workflow email
     value: "false"
@@ -66,10 +69,10 @@ parameters:
   - name: LEXIS_MAIL_FROM
     value: Provincial.Log.Export.Analyst@gov.bc.ca
   - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
-    description: Comma-separated TEST/DEV administrator email addresses
+    description: Comma- or semicolon-separated TEST/DEV administrator email addresses
     value: ""
   - name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
-    description: Comma-separated ministry inboxes receiving permit review requests
+    description: Comma- or semicolon-separated ministry inboxes receiving permit review requests
     value: ""
   - name: AWS_COGNITO_ISSUER_URI
     required: true
@@ -223,6 +226,8 @@ objects:
                   value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}
                 - name: LEXIS_PERMIT_INVOICE_MODE
                   value: ${LEXIS_PERMIT_INVOICE_MODE}
+                - name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS
+                  value: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS}
                 - name: LEXIS_MAIL_ENABLED
                   value: ${LEXIS_MAIL_ENABLED}
                 - name: LEXIS_MAIL_NON_PRODUCTION

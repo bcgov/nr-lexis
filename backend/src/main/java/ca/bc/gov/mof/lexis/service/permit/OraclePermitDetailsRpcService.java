@@ -65,6 +65,8 @@ import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceLine;
+import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceSnapshot;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceDetail;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceSnapshot;
 import ca.bc.gov.mof.lexis.service.permit.ProvincialPermitMutationValidator.ValidationResult;
@@ -80,6 +82,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -139,6 +142,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final Pattern OIC_REQUEST_VOLUME_PATTERN =
       Pattern.compile("\\d+(?:\\.\\d{1,2})?");
   private static final long RCO_REGION_CODE = 1835L;
+  private static final Set<Long> GBMS_INTERIOR_ORG_UNITS =
+      Set.of(1833L, 1834L, 1903L, 1904L, 1905L, 1906L, 1907L, 1908L);
+  private static final Set<Long> GBMS_COASTAL_ORG_UNITS = Set.of(1835L, 1909L, 1910L);
   private static final long RSK_REGION_CODE = 1908L;
   private static final long RSC_REGION_CODE = 1909L;
   private static final long RWC_REGION_CODE = 1910L;
@@ -1603,13 +1609,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(
           List.of("Unable to synchronize linked application or package data."), permitNumber);
     }
-    if (invoiceOrchestrationService != null
-        && !orchestrateInvoiceTransition(
-            invoiceOrchestrationService, current, updated, normalizedUserId)) {
-      markRollbackOnly();
-      return failureMutationResponse(
-          List.of("Unable to coordinate the permit invoice status change."), permitNumber);
-    }
     if (!updateLinkedApplicationStatusesForPermitTransition(
         permitNumber,
         current.permitStatusCode(),
@@ -1619,7 +1618,24 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(
           List.of("Unable to update linked application statuses."), permitNumber);
     }
-
+    if (invoiceOrchestrationService != null) {
+      PermitInvoiceOrchestrationService.TransitionResult invoiceResult =
+          orchestrateInvoiceTransition(
+              invoiceOrchestrationService,
+              current,
+              updated,
+              normalizedUserId);
+      if (!invoiceResult.success()) {
+        markRollbackOnly();
+        String message = trimToNull(invoiceResult.message());
+        return failureMutationResponse(
+            List.of(
+                message == null
+                    ? "Unable to coordinate the permit invoice status change."
+                    : message),
+            permitNumber);
+      }
+    }
     return new PermitMutationRpcResponseDto(
         true,
         "The permit was updated successfully.",
@@ -3930,17 +3946,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             current.permitIssueDate(), target.permitIssueDate());
   }
 
-  private boolean orchestrateInvoiceTransition(
+  private PermitInvoiceOrchestrationService.TransitionResult orchestrateInvoiceTransition(
       PermitInvoiceOrchestrationService service,
       PermitMutationRow previous,
       PermitMutationRow target,
       String userId) {
     try {
-      InternalInvoiceSnapshot internalInvoice =
-          isCanadaCountryCode(target.countryCode())
-                  && isEnteringInvoiceStatus(
-                      previous.permitStatusCode(), target.permitStatusCode())
-              ? buildCanadianInternalInvoiceSnapshot(target)
+      InvoiceSnapshots invoiceSnapshots =
+          isEnteringInvoiceStatus(
+                  previous.permitStatusCode(), target.permitStatusCode())
+              ? buildPermitInvoiceSnapshots(target)
               : null;
       PermitInvoiceOrchestrationService.TransitionResult result =
           service.orchestrate(
@@ -3954,7 +3969,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                   target.clientNumber(),
                   target.clientLocationCode(),
                   target.receiptNumber(),
-                  internalInvoice),
+                  invoiceSnapshots == null ? null : invoiceSnapshots.internalInvoice(),
+                  invoiceSnapshots == null ? null : invoiceSnapshots.gbmsInvoice()),
               userId);
       if (result == null || !result.success()) {
         LOGGER.warn(
@@ -3963,9 +3979,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             controlSafe(previous.permitStatusCode()),
             controlSafe(target.permitStatusCode()),
             result == null ? "missing" : "failed");
-        return false;
+        return result == null
+            ? PermitInvoiceOrchestrationService.TransitionResult.failed(
+                "Unable to coordinate the permit invoice status change.")
+            : result;
       }
-      return true;
+      return result;
     } catch (RuntimeException ex) {
       LOGGER.warn(
           "event=lexis_permit_invoice operation=orchestrate outcome=failed permitFingerprint={} fromStatus={} toStatus={} failureType={}",
@@ -3973,7 +3992,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           controlSafe(previous.permitStatusCode()),
           controlSafe(target.permitStatusCode()),
           exceptionType(ex));
-      return false;
+      return PermitInvoiceOrchestrationService.TransitionResult.failed(
+          "Unable to coordinate the permit invoice status change.");
     }
   }
 
@@ -3990,32 +4010,35 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
   }
 
-  private InternalInvoiceSnapshot buildCanadianInternalInvoiceSnapshot(
-      PermitMutationRow permit) {
+  private InvoiceSnapshots buildPermitInvoiceSnapshots(PermitMutationRow permit) {
     if (permit == null
         || permit.permitNumber() == null
         || permit.permitNumber() < 1
         || permit.applicationDate() == null
-        || !isCanadaCountryCode(permit.countryCode())) {
+        || trimToNull(permit.countryCode()) == null) {
       throw new DataRetrievalFailureException(
-          "A valid Canadian permit is required for internal invoicing.");
+          "A valid permit is required for invoicing.");
     }
 
     List<PermitScaleDetailRow> scales =
         repository.findScaleDetailsByPermitNumber(permit.permitNumber());
     if (scales == null || scales.isEmpty()) {
       throw new DataRetrievalFailureException(
-          "At least one permit scale is required for internal invoicing.");
+          "At least one permit scale is required for invoicing.");
     }
 
+    boolean canadian = isCanadaCountryCode(permit.countryCode());
     FeeCalculationContext context = buildFeeContext(permit);
     String expectedPermitNumber = permit.permitNumber().toString();
     List<InternalInvoiceDetail> details = new ArrayList<>(scales.size());
     Set<String> scaleIds = new HashSet<>();
     Map<Long, ApplicationInfoRow> applicationByNumber = new HashMap<>();
+    Set<String> packageNumbers = new LinkedHashSet<>();
+    Map<String, BigDecimal> packageTotals = new LinkedHashMap<>();
     BigDecimal total = BigDecimal.ZERO;
     for (PermitScaleDetailRow scale : scales) {
       String scaleId = scale == null ? null : trimToNull(scale.exportScaleDetailId());
+      String packageNumber = scale == null ? null : trimToNull(scale.packageNumber());
       if (scale == null
           || !expectedPermitNumber.equals(trimToNull(scale.exportPermitDetailNumber()))
           || scaleId == null
@@ -4024,9 +4047,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           || trimToNull(scale.exportSpeciesCode()) == null
           || trimToNull(scale.exportGradeCode()) == null
           || !Double.isFinite(scale.speciesGradeVolume())
-          || scale.speciesGradeVolume() <= 0.0d) {
+          || scale.speciesGradeVolume() <= 0.0d
+          || (!canadian && packageNumber == null)) {
         throw new DataRetrievalFailureException(
-            "Oracle returned an invalid scale for internal permit invoicing.");
+            "Oracle returned an invalid scale for permit invoicing.");
       }
       Long applicationNumber = scale.applicationNumber();
       if (applicationNumber == null || applicationNumber < 1) {
@@ -4068,13 +4092,22 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               feePolicyAdmin,
               feePercentage));
       total = total.add(amount);
+      if (packageNumber != null) {
+        packageNumbers.add(packageNumber);
+        packageTotals.merge(packageNumber, amount, BigDecimal::add);
+      }
     }
 
+    String ownerClientNumber = trimToNull(permit.clientNumber());
+    String ownerClientLocationCode = trimToNull(permit.clientLocationCode());
     String billingClientNumber =
-        firstNonNull(trimToNull(permit.agentNumber()), trimToNull(permit.clientNumber()));
+        canadian
+            ? firstNonNull(trimToNull(permit.agentNumber()), ownerClientNumber)
+            : ownerClientNumber;
     String billingClientLocationCode =
-        firstNonNull(
-            trimToNull(permit.agentLocationCode()), trimToNull(permit.clientLocationCode()));
+        canadian
+            ? firstNonNull(trimToNull(permit.agentLocationCode()), ownerClientLocationCode)
+            : ownerClientLocationCode;
     if (billingClientNumber == null
         || billingClientLocationCode == null
         || permit.orgUnitNo() == null
@@ -4083,23 +4116,93 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           "Permit billing client or organization data was unavailable for invoicing.");
     }
 
-    BigDecimal invoiceTotal =
-        shouldMaskFees(permit.countryCode(), permit.applicationDate())
-            ? BigDecimal.ZERO
-            : total;
-    return new InternalInvoiceSnapshot(
-        invoiceTotal,
-        billingClientNumber,
-        billingClientLocationCode,
-        context.fixedExemptionRate() == null
-            ? BigDecimal.ZERO
-            : context.fixedExemptionRate(),
-        permit.overrideFee() == null ? BigDecimal.ZERO : BigDecimal.valueOf(permit.overrideFee()),
-        permit.orgUnitNo(),
-        permit.orgUnitNo(),
-        null,
-        details);
+    BigDecimal permitOverride =
+        permit.overrideFee() == null ? BigDecimal.ZERO : BigDecimal.valueOf(permit.overrideFee());
+    BigDecimal invoiceTotal;
+    if (shouldMaskFees(permit.countryCode(), permit.applicationDate())) {
+      invoiceTotal = BigDecimal.ZERO;
+    } else if (!canadian && permitOverride.compareTo(BigDecimal.ZERO) > 0) {
+      invoiceTotal = permitOverride;
+    } else {
+      invoiceTotal = total;
+    }
+    String ackMask = canadian ? null : gbmsAckMask(permit.orgUnitNo());
+    InternalInvoiceSnapshot internal =
+        new InternalInvoiceSnapshot(
+            invoiceTotal,
+            billingClientNumber,
+            billingClientLocationCode,
+            context.fixedExemptionRate() == null
+                ? BigDecimal.ZERO
+                : context.fixedExemptionRate(),
+            permitOverride,
+            permit.orgUnitNo(),
+            permit.orgUnitNo(),
+            ackMask,
+            details);
+    if (canadian) {
+      return new InvoiceSnapshots(internal, null);
+    }
+    if (permit.permitIssueDate() == null || packageNumbers.isEmpty()) {
+      throw new DataRetrievalFailureException(
+          "Permit issue date or package data was unavailable for GBMS invoicing.");
+    }
+
+    List<GbmsInvoiceLine> lines = new ArrayList<>();
+    if (permitOverride.compareTo(BigDecimal.ZERO) > 0
+        || (context.fixedExemptionRate() != null
+            && context.fixedExemptionRate().compareTo(BigDecimal.ZERO) > 0)) {
+      lines.add(
+          new GbmsInvoiceLine(
+              invoiceTotal,
+              truncateLegacyText("PKGS: " + String.join(", ", packageNumbers), 38)));
+    } else {
+      for (Map.Entry<String, BigDecimal> entry : packageTotals.entrySet()) {
+        lines.add(
+            new GbmsInvoiceLine(
+                entry.getValue(),
+                truncateLegacyText("PACKAGE " + entry.getKey(), 38)));
+      }
+    }
+
+    String notation =
+        "EXPORT FEES FOR PERMIT "
+            + permit.permitNumber()
+            + " ISSUED "
+            + permit.permitIssueDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
+    if (trimToNull(permit.receiptNumber()) != null) {
+      notation += " RN:" + trimToNull(permit.receiptNumber());
+    }
+    GbmsInvoiceSnapshot gbms =
+        new GbmsInvoiceSnapshot(
+            invoiceTotal,
+            ownerClientNumber,
+            ownerClientLocationCode,
+            permit.orgUnitNo(),
+            permit.orgUnitNo(),
+            ackMask,
+            truncateLegacyText(notation, 62),
+            lines);
+    return new InvoiceSnapshots(internal, gbms);
   }
+
+  private String gbmsAckMask(Long orgUnitNumber) {
+    if (GBMS_COASTAL_ORG_UNITS.contains(orgUnitNumber)) {
+      return "FLM";
+    }
+    if (GBMS_INTERIOR_ORG_UNITS.contains(orgUnitNumber)) {
+      return "EXF";
+    }
+    throw new DataRetrievalFailureException(
+        "The permit organization is not supported for GBMS invoicing.");
+  }
+
+  private String truncateLegacyText(String value, int maxLength) {
+    return value.length() <= maxLength ? value : value.substring(0, maxLength);
+  }
+
+  private record InvoiceSnapshots(
+      InternalInvoiceSnapshot internalInvoice, GbmsInvoiceSnapshot gbmsInvoice) {}
 
   private BigDecimal invoiceFeePercentage(
       PermitScaleDetailRow scale, FeeCalculationContext context) {

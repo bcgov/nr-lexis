@@ -88,8 +88,8 @@ lexis:
     cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}
     zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}
   permit-invoice:
-    # Legacy parity: Canadian permits use internal LEXIS invoicing and skip GBMS.
     mode: ${LEXIS_PERMIT_INVOICE_MODE:canadian-internal}
+    gbms-timeout-seconds: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:60}
   virus-scan:
     enabled: ${LEXIS_VIRUS_SCAN_ENABLED:false}
     host: ${LEXIS_VIRUS_SCAN_HOST:localhost}
