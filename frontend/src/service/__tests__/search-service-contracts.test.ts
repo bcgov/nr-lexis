@@ -49,6 +49,8 @@ const applicationRequest = {
     applicationStatus: 'NEW',
     productTypeCode: 'LUM',
     region: ['12'],
+    receivedFromDate: '2025-12-01',
+    receivedToDate: '2025-12-31',
     listingFromDate: '2026-01-01',
     listingToDate: '2026-01-31',
     applicantClientNumber: '00012345',
@@ -66,6 +68,8 @@ const exemptionRequest = {
     packageNumber: 'PKG-2',
     exemptionNumber: 'EX-2',
     region: ['22'],
+    approvalFromDate: '2026-01-01',
+    approvalToDate: '2026-01-31',
     listFromDate: '2026-02-01',
     listToDate: '2026-02-28',
     exemptionTypeCode: 'LOG',
@@ -120,6 +124,7 @@ const permitRequest = {
     issuedToDate: '',
     permitStatus: '',
     permitNumber: '',
+    invoiceNumber: '',
     ownerClientNumber: '',
     applicantClientNumber: '',
   },
@@ -214,6 +219,8 @@ describe('search-service contracts', () => {
     expect(params.get('applicationNumber')).toBe('101')
     expect(params.get('agentClientNumber')).toBe('00012345')
     expect(params.get('region')).toBe('12')
+    expect(params.get('receivedFromDate')).toBe('2025-12-01')
+    expect(params.get('receivedToDate')).toBe('2025-12-31')
     expect(params.get('sortField')).toBe('applicationNumber DESC')
     expect(result.page.totalElements).toBe(12)
     expect(result.content[0]).toEqual(
@@ -356,6 +363,8 @@ describe('search-service contracts', () => {
     const params = readParams()
     expect(params.get('exemptionStatusCode')).toBe('NEW')
     expect(params.get('region')).toBe('22')
+    expect(params.get('approvalFromDate')).toBe('2026-01-01')
+    expect(params.get('approvalToDate')).toBe('2026-01-31')
     expect(params.get('sortField')).toBe('exemptionNumber')
     expect(result.content[0]).toEqual(
       expect.objectContaining({
@@ -476,6 +485,48 @@ describe('search-service contracts', () => {
       expect(readParams().get('sortField')).toBe(`${sortField} DESC`)
     },
   )
+
+  it('maps the provincial permit invoice number to search and count requests', async () => {
+    getCachedResponseMock
+      .mockResolvedValueOnce({
+        data: {
+          results: [],
+          total: 0,
+          page: 0,
+          size: 10,
+        },
+      })
+      .mockResolvedValueOnce({ data: { total: 4 } })
+    const request = {
+      ...permitRequest,
+      filters: {
+        ...permitRequest.filters,
+        invoiceNumber: ' SI-99881 ',
+      },
+    }
+
+    await searchProvincialPermits(request)
+    await countProvincialPermits(request)
+
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/permits/search',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
+    expect(readParams(0).get('invoiceNumber')).toBe('SI-99881')
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/permits/search/count',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
+    const countParams = readParams(1)
+    expect(countParams.get('invoiceNumber')).toBe('SI-99881')
+    expect(countParams.has('sortField')).toBe(false)
+    expect(countParams.has('page')).toBe(false)
+    expect(countParams.has('size')).toBe(false)
+  })
 
   it.each([
     {

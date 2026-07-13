@@ -20,6 +20,7 @@ import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUni
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -29,7 +30,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,6 +64,7 @@ public class LexisUploadController {
   private static final String FEDERAL_SUBMISSION_ACTION = "uploadFederalSubmission";
   private static final int MAX_FEDERAL_HEADER_VALUE_LENGTH = 200;
   private static final int MAX_FEDERAL_USER_REFERENCE_LENGTH = 50;
+  private static final int MAX_FEDERAL_XML_PREFIX_BYTES = 16 * 1024;
 
   private final ObjectProvider<LexisUploadService> uploadServiceProvider;
   private final ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider;
@@ -808,18 +809,12 @@ public class LexisUploadController {
     if (authentication == null) {
       return null;
     }
-    String serviceClientId = jwtServiceClientId(authentication);
-    if (serviceClientId != null) {
-      return serviceClientId;
-    }
     if (principalService != null) {
       return principalService.resolvePrincipalName(authentication);
     }
-    if (authentication instanceof JwtAuthenticationToken jwtAuthentication) {
-      String jwtPrincipalName = jwtPrincipalName(jwtAuthentication);
-      if (jwtPrincipalName != null) {
-        return jwtPrincipalName;
-      }
+    if (authentication instanceof JwtAuthenticationToken) {
+      throw new AccessDeniedException(
+          "Authenticated JWT audit identity service is unavailable.");
     }
     if (authentication.getName() == null) {
       return null;
@@ -829,55 +824,6 @@ public class LexisUploadController {
       return null;
     }
     return principalName;
-  }
-
-  private String jwtServiceClientId(Authentication authentication) {
-    if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
-      return null;
-    }
-    Map<String, Object> claims = jwtAuthentication.getToken().getClaims();
-    if (claims.get("cognito:groups") != null) {
-      return null;
-    }
-    return firstClaim(claims, "client_id", "azp");
-  }
-
-  private String jwtPrincipalName(JwtAuthenticationToken authentication) {
-    Map<String, Object> claims = authentication.getToken().getClaims();
-    String userName =
-        firstClaim(
-            claims,
-            "custom:idp_username",
-            "custom:idp_user_id",
-            "preferred_username",
-            "cognito:username",
-            "username",
-            "email");
-    if (userName != null) {
-      String provider = firstClaim(claims, "custom:idp_name");
-      return provider == null ? userName : provider.toUpperCase(Locale.ROOT) + "\\" + userName;
-    }
-
-    if (claims.get("cognito:groups") == null) {
-      String clientId = firstClaim(claims, "client_id", "azp");
-      if (clientId != null) {
-        return clientId;
-      }
-    }
-    return null;
-  }
-
-  private String firstClaim(Map<String, Object> claims, String... names) {
-    for (String name : names) {
-      Object value = claims.get(name);
-      if (value instanceof String text) {
-        String normalized = text.trim();
-        if (!normalized.isEmpty()) {
-          return normalized;
-        }
-      }
-    }
-    return null;
   }
 
   private ResponseEntity<LexisUploadResultDto> uploadResponse(LexisUploadResultDto result) {
@@ -1294,10 +1240,11 @@ public class LexisUploadController {
       String sourceSystem,
       Authentication authentication) {
     long startedAtNanos = System.nanoTime();
-    String payloadSha256 = sha256Hex(submissionData);
-    String payloadRootType = federalPayloadRootType(submissionData);
+    String fileName = resolveFileName(submissionData);
+    long fileSize = submissionData == null ? 0L : submissionData.getSize();
+    String payloadSha256 = null;
     FederalSubmissionTraceMetadata traceMetadata =
-        federalTraceMetadata(null, payloadRootType, authentication);
+        federalTraceMetadata(null, null, authentication);
     if (!federalCreateEnabled) {
       return loggedFederalCreateDisabled(
           "create-multipart",
@@ -1306,15 +1253,12 @@ public class LexisUploadController {
           payloadSha256,
           traceMetadata,
           authentication,
-          resolveFileName(submissionData),
-          submissionData == null ? 0L : submissionData.getSize(),
+          fileName,
+          fileSize,
           startedAtNanos);
     }
     ResponseEntity<ApplicationSubmissionImportResultDto> missingRequestId =
-        validateFederalRequestId(
-            requestId,
-            resolveFileName(submissionData),
-            submissionData == null ? 0L : submissionData.getSize());
+        validateFederalRequestId(requestId, fileName, fileSize);
     if (missingRequestId != null) {
       return loggedFederalPreflightInvalidRequest(
           "create-multipart",
@@ -1328,10 +1272,7 @@ public class LexisUploadController {
     }
     ResponseEntity<ApplicationSubmissionImportResultDto> invalidUserReference =
         validateFederalUserReference(
-            userReference,
-            requireFederalCreateUserReference,
-            resolveFileName(submissionData),
-            submissionData == null ? 0L : submissionData.getSize());
+            userReference, requireFederalCreateUserReference, fileName, fileSize);
     if (invalidUserReference != null) {
       return loggedFederalPreflightInvalidRequest(
           "create-multipart",
@@ -1343,10 +1284,13 @@ public class LexisUploadController {
           invalidUserReference,
           startedAtNanos);
     }
-    ResponseEntity<ApplicationSubmissionImportResultDto> invalidRequest =
-        validateFederalXmlPayload(
-            submissionData, "Choose a federal LEXIS application submission file before uploading.");
-    if (invalidRequest != null) {
+    ResponseEntity<ApplicationSubmissionImportResultDto> invalidFile =
+        validateFederalMultipartFilePreflight(
+            submissionData,
+            fileName,
+            fileSize,
+            "Choose a federal LEXIS application submission file before uploading.");
+    if (invalidFile != null) {
       return loggedFederalPreflightInvalidRequest(
           "create-multipart",
           requestId,
@@ -1354,14 +1298,11 @@ public class LexisUploadController {
           payloadSha256,
           traceMetadata,
           authentication,
-          invalidRequest,
+          invalidFile,
           startedAtNanos);
     }
     ResponseEntity<ApplicationSubmissionImportResultDto> invalidSourceSystem =
-        validateFederalSourceSystem(
-            sourceSystem,
-            resolveFileName(submissionData),
-            submissionData == null ? 0L : submissionData.getSize());
+        validateFederalSourceSystem(sourceSystem, fileName, fileSize);
     if (invalidSourceSystem != null) {
       return loggedFederalPreflightInvalidRequest(
           "create-multipart",
@@ -1373,13 +1314,13 @@ public class LexisUploadController {
           invalidSourceSystem,
           startedAtNanos);
     }
-    traceMetadata = federalTraceMetadata(sourceSystem, payloadRootType, authentication);
+    traceMetadata = federalTraceMetadata(sourceSystem, null, authentication);
     ResponseEntity<ApplicationSubmissionImportResultDto> invalidIdempotencyKey =
         validateFederalIdempotencyKey(
             idempotencyKey,
             federalCreateEnabled || requireFederalCreateIdempotencyKey,
-            resolveFileName(submissionData),
-            submissionData.getSize());
+            fileName,
+            fileSize);
     if (invalidIdempotencyKey != null) {
       return loggedFederalPreflightInvalidRequest(
           "create-multipart",
@@ -1391,14 +1332,43 @@ public class LexisUploadController {
           invalidIdempotencyKey,
           startedAtNanos);
     }
+
+    FederalMultipartPayloadInspection inspection =
+        inspectFederalMultipartPayload(submissionData, fileName, fileSize);
+    payloadSha256 = inspection.payloadSha256();
+    traceMetadata =
+        federalTraceMetadata(sourceSystem, inspection.payloadRootType(), authentication);
+    if (inspection.failure() != null) {
+      return loggedFederalPreflightInvalidRequest(
+          "create-multipart",
+          requestId,
+          idempotencyKey,
+          payloadSha256,
+          traceMetadata,
+          authentication,
+          inspection.failure(),
+          startedAtNanos);
+    }
+    if (!inspection.xmlPayload()) {
+      return loggedFederalPreflightInvalidRequest(
+          "create-multipart",
+          requestId,
+          idempotencyKey,
+          payloadSha256,
+          traceMetadata,
+          authentication,
+          federalMultipartXmlRequired(fileName, fileSize),
+          startedAtNanos);
+    }
+
     String entryUserId = resolveEntryUserId(authentication);
     FederalCreateIdempotencyStart idempotencyStart =
         beginFederalCreateIdempotency(
             entryUserId,
             idempotencyKey,
             payloadSha256,
-            resolveFileName(submissionData),
-            submissionData.getSize());
+            fileName,
+            fileSize);
     if (idempotencyStart.immediateResponse() != null) {
       if (idempotencyStart.replay()) {
         return idempotencyStart.immediateResponse();
@@ -1426,8 +1396,8 @@ public class LexisUploadController {
               payloadSha256,
               traceMetadata,
               authentication,
-              resolveFileName(submissionData),
-              submissionData.getSize(),
+              fileName,
+              fileSize,
               startedAtNanos));
     }
 
@@ -1446,8 +1416,8 @@ public class LexisUploadController {
               payloadSha256,
               traceMetadata,
               entryUserId,
-              resolveFileName(submissionData),
-              submissionData.getSize(),
+              fileName,
+              fileSize,
               startedAtNanos,
               ex));
     }
@@ -1461,8 +1431,8 @@ public class LexisUploadController {
               payloadSha256,
               traceMetadata,
               entryUserId,
-              resolveFileName(submissionData),
-              submissionData.getSize(),
+              fileName,
+              fileSize,
               startedAtNanos,
               new IllegalStateException("Federal LEXIS submission service returned no result.")));
     }
@@ -1649,15 +1619,13 @@ public class LexisUploadController {
       String sourceSystem,
       Authentication authentication) {
     long startedAtNanos = System.nanoTime();
-    String payloadSha256 = sha256Hex(submissionData);
-    String payloadRootType = federalPayloadRootType(submissionData);
+    String fileName = resolveFileName(submissionData);
+    long fileSize = submissionData == null ? 0L : submissionData.getSize();
+    String payloadSha256 = null;
     FederalSubmissionTraceMetadata traceMetadata =
-        federalTraceMetadata(null, payloadRootType, authentication);
+        federalTraceMetadata(null, null, authentication);
     ResponseEntity<ApplicationSubmissionImportResultDto> missingRequestId =
-        validateFederalRequestId(
-            requestId,
-            resolveFileName(submissionData),
-            submissionData == null ? 0L : submissionData.getSize());
+        validateFederalRequestId(requestId, fileName, fileSize);
     if (missingRequestId != null) {
       return loggedFederalInvalidRequest(
           "validate-multipart",
@@ -1670,11 +1638,7 @@ public class LexisUploadController {
           startedAtNanos);
     }
     ResponseEntity<ApplicationSubmissionImportResultDto> invalidUserReference =
-        validateFederalUserReference(
-            userReference,
-            false,
-            resolveFileName(submissionData),
-            submissionData == null ? 0L : submissionData.getSize());
+        validateFederalUserReference(userReference, false, fileName, fileSize);
     if (invalidUserReference != null) {
       return loggedFederalInvalidRequest(
           "validate-multipart",
@@ -1687,11 +1651,7 @@ public class LexisUploadController {
           startedAtNanos);
     }
     ResponseEntity<ApplicationSubmissionImportResultDto> invalidIdempotencyKey =
-        validateFederalIdempotencyKey(
-            idempotencyKey,
-            false,
-            resolveFileName(submissionData),
-            submissionData == null ? 0L : submissionData.getSize());
+        validateFederalIdempotencyKey(idempotencyKey, false, fileName, fileSize);
     if (invalidIdempotencyKey != null) {
       return loggedFederalInvalidRequest(
           "validate-multipart",
@@ -1704,10 +1664,7 @@ public class LexisUploadController {
           startedAtNanos);
     }
     ResponseEntity<ApplicationSubmissionImportResultDto> invalidSourceSystem =
-        validateFederalSourceSystem(
-            sourceSystem,
-            resolveFileName(submissionData),
-            submissionData == null ? 0L : submissionData.getSize());
+        validateFederalSourceSystem(sourceSystem, fileName, fileSize);
     if (invalidSourceSystem != null) {
       return loggedFederalInvalidRequest(
           "validate-multipart",
@@ -1719,11 +1676,14 @@ public class LexisUploadController {
           invalidSourceSystem,
           startedAtNanos);
     }
-    traceMetadata = federalTraceMetadata(sourceSystem, payloadRootType, authentication);
-    ResponseEntity<ApplicationSubmissionImportResultDto> invalidRequest =
-        validateFederalXmlPayload(
-            submissionData, "Choose a federal LEXIS application submission file before validating.");
-    if (invalidRequest != null) {
+    traceMetadata = federalTraceMetadata(sourceSystem, null, authentication);
+    ResponseEntity<ApplicationSubmissionImportResultDto> invalidFile =
+        validateFederalMultipartFilePreflight(
+            submissionData,
+            fileName,
+            fileSize,
+            "Choose a federal LEXIS application submission file before validating.");
+    if (invalidFile != null) {
       return loggedFederalInvalidRequest(
           "validate-multipart",
           requestId,
@@ -1731,7 +1691,35 @@ public class LexisUploadController {
           payloadSha256,
           traceMetadata,
           authentication,
-          invalidRequest,
+          invalidFile,
+          startedAtNanos);
+    }
+
+    FederalMultipartPayloadInspection inspection =
+        inspectFederalMultipartPayload(submissionData, fileName, fileSize);
+    payloadSha256 = inspection.payloadSha256();
+    traceMetadata =
+        federalTraceMetadata(sourceSystem, inspection.payloadRootType(), authentication);
+    if (inspection.failure() != null) {
+      return loggedFederalInvalidRequest(
+          "validate-multipart",
+          requestId,
+          idempotencyKey,
+          payloadSha256,
+          traceMetadata,
+          authentication,
+          inspection.failure(),
+          startedAtNanos);
+    }
+    if (!inspection.xmlPayload()) {
+      return loggedFederalInvalidRequest(
+          "validate-multipart",
+          requestId,
+          idempotencyKey,
+          payloadSha256,
+          traceMetadata,
+          authentication,
+          federalMultipartXmlRequired(fileName, fileSize),
           startedAtNanos);
     }
 
@@ -1745,8 +1733,8 @@ public class LexisUploadController {
           payloadSha256,
           traceMetadata,
           authentication,
-          resolveFileName(submissionData),
-          submissionData.getSize(),
+          fileName,
+          fileSize,
           startedAtNanos);
     }
 
@@ -1762,8 +1750,8 @@ public class LexisUploadController {
           payloadSha256,
           traceMetadata,
           resolveEntryUserId(authentication),
-          resolveFileName(submissionData),
-          submissionData.getSize(),
+          fileName,
+          fileSize,
           startedAtNanos,
           ex);
     }
@@ -1775,8 +1763,8 @@ public class LexisUploadController {
           payloadSha256,
           traceMetadata,
           resolveEntryUserId(authentication),
-          resolveFileName(submissionData),
-          submissionData.getSize(),
+          fileName,
+          fileSize,
           startedAtNanos,
           new IllegalStateException("Federal LEXIS submission service returned no result."));
     }
@@ -2034,21 +2022,95 @@ public class LexisUploadController {
     return null;
   }
 
-  private ResponseEntity<ApplicationSubmissionImportResultDto> validateFederalXmlPayload(
-      MultipartFile submissionData, String missingMessage) {
-    String fileName = resolveFileName(submissionData);
-    long fileSize = submissionData == null ? 0L : submissionData.getSize();
-    if (submissionData == null || submissionData.isEmpty()) {
+  private ResponseEntity<ApplicationSubmissionImportResultDto>
+      validateFederalMultipartFilePreflight(
+          MultipartFile submissionData, String fileName, long fileSize, String missingMessage) {
+    if (submissionData == null || submissionData.isEmpty() || fileSize <= 0L) {
       return ResponseEntity.badRequest()
           .body(applicationSubmissionFailure(missingMessage, fileName, fileSize));
     }
-    if (!startsWithXml(submissionData)) {
-      return ResponseEntity.badRequest()
-          .body(
-              applicationSubmissionFailure(
-                  "Federal submission endpoint only accepts XML files.", fileName, fileSize));
+    if (fileSize > ApplicationSubmissionImportService.MAX_IMPORT_BYTES) {
+      return rawFederalSubmissionTooLarge(fileName, fileSize);
     }
     return null;
+  }
+
+  private FederalMultipartPayloadInspection inspectFederalMultipartPayload(
+      MultipartFile submissionData, String fileName, long fileSize) {
+    MessageDigest digest;
+    try {
+      digest = MessageDigest.getInstance("SHA-256");
+    } catch (NoSuchAlgorithmException ex) {
+      throw new IllegalStateException("SHA-256 digest algorithm is unavailable", ex);
+    }
+
+    ByteArrayOutputStream prefix =
+        new ByteArrayOutputStream(MAX_FEDERAL_XML_PREFIX_BYTES);
+    byte[] buffer = new byte[8192];
+    long observedBytes = 0L;
+    try (InputStream inputStream = submissionData.getInputStream()) {
+      int bytesRead;
+      while ((bytesRead = inputStream.read(buffer)) >= 0) {
+        if (bytesRead == 0) {
+          continue;
+        }
+        observedBytes += bytesRead;
+        if (observedBytes > ApplicationSubmissionImportService.MAX_IMPORT_BYTES) {
+          byte[] prefixBytes = prefix.toByteArray();
+          return new FederalMultipartPayloadInspection(
+              null,
+              federalPayloadRootType(prefixBytes),
+              startsWithXml(prefixBytes),
+              rawFederalSubmissionTooLarge(fileName, Math.max(fileSize, observedBytes)));
+        }
+        digest.update(buffer, 0, bytesRead);
+        int remainingPrefixBytes = MAX_FEDERAL_XML_PREFIX_BYTES - prefix.size();
+        if (remainingPrefixBytes > 0) {
+          prefix.write(buffer, 0, Math.min(bytesRead, remainingPrefixBytes));
+        }
+      }
+    } catch (IOException | RuntimeException ex) {
+      LOGGER.warn(
+          "event=lexis_federal_submission outcome=payload_inspection_failed failureType={}",
+          exceptionType(ex));
+      byte[] prefixBytes = prefix.toByteArray();
+      return new FederalMultipartPayloadInspection(
+          null,
+          federalPayloadRootType(prefixBytes),
+          startsWithXml(prefixBytes),
+          ResponseEntity.badRequest()
+              .body(
+                  applicationSubmissionFailure(
+                      "Federal submission file could not be read.", fileName, fileSize)));
+    }
+
+    if (observedBytes == 0L) {
+      return new FederalMultipartPayloadInspection(
+          null,
+          null,
+          false,
+          ResponseEntity.badRequest()
+              .body(
+                  applicationSubmissionFailure(
+                      "Choose a non-empty federal LEXIS application submission file.",
+                      fileName,
+                      fileSize)));
+    }
+
+    byte[] prefixBytes = prefix.toByteArray();
+    return new FederalMultipartPayloadInspection(
+        HexFormat.of().formatHex(digest.digest()),
+        federalPayloadRootType(prefixBytes),
+        startsWithXml(prefixBytes),
+        null);
+  }
+
+  private ResponseEntity<ApplicationSubmissionImportResultDto> federalMultipartXmlRequired(
+      String fileName, long fileSize) {
+    return ResponseEntity.badRequest()
+        .body(
+            applicationSubmissionFailure(
+                "Federal submission endpoint only accepts XML files.", fileName, fileSize));
   }
 
   private String effectiveFederalFileName(String originalFileName) {
@@ -2287,20 +2349,6 @@ public class LexisUploadController {
     return FederalPayloadRootClassifier.classify(payload);
   }
 
-  private String federalPayloadRootType(MultipartFile file) {
-    if (file == null || file.isEmpty()) {
-      return null;
-    }
-    try {
-      return federalPayloadRootType(file.getBytes());
-    } catch (IOException ex) {
-      LOGGER.warn(
-          "event=lexis_federal_submission outcome=payload_root_inspection_failed failureType={}",
-          exceptionType(ex));
-      return null;
-    }
-  }
-
   private RawFederalSubmission readRawFederalSubmission(
       HttpServletRequest request, String originalFileName) {
     String fileName = effectiveFederalFileName(originalFileName);
@@ -2370,20 +2418,6 @@ public class LexisUploadController {
     }
   }
 
-  private String sha256Hex(MultipartFile file) {
-    if (file == null || file.isEmpty()) {
-      return null;
-    }
-    try {
-      return sha256Hex(file.getBytes());
-    } catch (IOException ex) {
-      LOGGER.warn(
-          "event=lexis_federal_submission outcome=payload_hash_failed failureType={}",
-          exceptionType(ex));
-      return null;
-    }
-  }
-
   private String resolveFileName(MultipartFile file) {
     if (file == null) {
       return null;
@@ -2429,33 +2463,6 @@ public class LexisUploadController {
     return false;
   }
 
-  private boolean startsWithXml(MultipartFile file) {
-    try (InputStream inputStream = file.getInputStream()) {
-      int first = inputStream.read();
-      if (first == 0xEF) {
-        int second = inputStream.read();
-        int third = inputStream.read();
-        if (second != 0xBB || third != 0xBF) {
-          return false;
-        }
-        first = inputStream.read();
-      }
-      while (first >= 0) {
-        if (first == ' ' || first == '\t' || first == '\n' || first == '\r') {
-          first = inputStream.read();
-          continue;
-        }
-        return first == '<';
-      }
-      return false;
-    } catch (IOException ex) {
-      LOGGER.warn(
-          "event=lexis_federal_submission outcome=payload_inspection_failed failureType={}",
-          exceptionType(ex));
-      return false;
-    }
-  }
-
   private String trimToNull(String value) {
     if (value == null || value.isBlank()) {
       return null;
@@ -2472,6 +2479,12 @@ public class LexisUploadController {
       return new FederalSubmissionTraceMetadata(null, 0, null, null);
     }
   }
+
+  private record FederalMultipartPayloadInspection(
+      String payloadSha256,
+      String payloadRootType,
+      boolean xmlPayload,
+      ResponseEntity<ApplicationSubmissionImportResultDto> failure) {}
 
   private record FederalCreateIdempotencyStart(
       FederalSubmissionIdempotencyStore.Claim claim,

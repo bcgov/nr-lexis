@@ -28,6 +28,7 @@ final class LexisApiAuthorizationRules {
   private static final String ACTION_CREATE_APPLICATION = "createApplication";
   private static final String ACTION_CREATE_EXEMPTION = "/createExemption";
   private static final String ACTION_CREATE_OFFER = "createOffer";
+  private static final String ACTION_CREATE_PERMIT = "createPermit";
   private static final String ACTION_EXEMPTION_DETAILS = "/exemptionDetails";
   private static final String ACTION_EXEMPTION_REPORT = "/exemptionReport";
   private static final String ACTION_FEDERAL_APPLICATION_DETAILS = "/federalApplicationDetails";
@@ -549,6 +550,10 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/permit-details/**",
               "/api/lexis/permitDetailsRPC",
               "/api/lexis/permitDetailsRPC.do"),
+          action(
+              HttpMethod.POST,
+              ACTION_CREATE_PERMIT,
+              "/api/lexis/rpc/permit-details/create-from-exemption"),
           action(
               HttpMethod.POST,
               ACTION_SAVE_PERMIT,

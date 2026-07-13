@@ -14,6 +14,7 @@ import {
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
   addPermitInvoice,
+  createPermitFromExemption,
   fetchPermitFeeOverrideContext,
   fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
@@ -740,6 +741,38 @@ describe('provincial permit detail services', () => {
       source: 'api',
       permitStatus: 'PPD',
       permitReceiptNo: '',
+    })
+  })
+
+  it('creates a permit from only the normalized exemption number', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'The permit was created successfully.',
+        permitNumber: 98765,
+        warnings: ['Attach applications separately.'],
+      }),
+    )
+
+    const result = await createPermitFromExemption(' EX-205 ')
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/create-from-exemption')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect([...body.entries()]).toEqual([['exemptionNumber', 'EX-205']])
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'The permit was created successfully.',
+      errors: [],
+      warnings: ['Attach applications separately.'],
+      source: 'api',
+      permitNumber: '98765',
     })
   })
 

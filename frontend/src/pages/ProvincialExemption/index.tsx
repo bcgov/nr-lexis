@@ -101,6 +101,8 @@ const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
   packageNumber: '',
   exemptionNumber: '',
   region: [],
+  approvalFromDate: '',
+  approvalToDate: '',
   listFromDate: '',
   listToDate: '',
   exemptionTypeCode: '',
@@ -145,6 +147,8 @@ const buildSearchParams = (
     ['packageNumber', filters.packageNumber],
     ['exemptionNumber', filters.exemptionNumber],
     ['region', filters.region],
+    ['approvalFromDate', filters.approvalFromDate],
+    ['approvalToDate', filters.approvalToDate],
     ['listFromDate', filters.listFromDate],
     ['listToDate', filters.listToDate],
     ['exemptionTypeCode', filters.exemptionTypeCode],
@@ -197,6 +201,8 @@ const ProvincialExemptionPage = () => {
       packageNumber: searchParams.get('packageNumber') ?? '',
       exemptionNumber: searchParams.get('exemptionNumber') ?? '',
       region: parseCsvParam(searchParams.get('region')),
+      approvalFromDate: searchParams.get('approvalFromDate') ?? '',
+      approvalToDate: searchParams.get('approvalToDate') ?? '',
       listFromDate: searchParams.get('listFromDate') ?? '',
       listToDate: searchParams.get('listToDate') ?? '',
       exemptionTypeCode: searchParams.get('exemptionTypeCode') ?? '',
@@ -261,8 +267,13 @@ const ProvincialExemptionPage = () => {
       : undefined
 
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(filters.listFromDate, filters.listToDate)
-  }, [filters.listFromDate, filters.listToDate])
+    return hasInvalidIsoDateValue(
+      filters.approvalFromDate,
+      filters.approvalToDate,
+      filters.listFromDate,
+      filters.listToDate,
+    )
+  }, [filters.approvalFromDate, filters.approvalToDate, filters.listFromDate, filters.listToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback((nextResults: ProvincialExemptionSearchResponse) => {
@@ -301,7 +312,14 @@ const ProvincialExemptionPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateValue(request.filters.listFromDate, request.filters.listToDate)) {
+      if (
+        hasInvalidIsoDateValue(
+          request.filters.approvalFromDate,
+          request.filters.approvalToDate,
+          request.filters.listFromDate,
+          request.filters.listToDate,
+        )
+      ) {
         setLoading(false)
         return
       }
@@ -672,6 +690,22 @@ const ProvincialExemptionPage = () => {
                 labelText="Owner client number"
                 value={filters.ownerClientNumber}
                 onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="approvalFromDate"
+                labelText="Approval from date"
+                value={filters.approvalFromDate}
+                invalid={!isValidIsoDate(filters.approvalFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('approvalFromDate', value)}
+              />
+              <IsoDatePicker
+                id="approvalToDate"
+                labelText="Approval to date"
+                value={filters.approvalToDate}
+                invalid={!isValidIsoDate(filters.approvalToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('approvalToDate', value)}
               />
               <IsoDatePicker
                 id="listFromDate"

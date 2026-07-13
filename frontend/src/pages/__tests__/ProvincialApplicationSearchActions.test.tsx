@@ -182,9 +182,58 @@ describe('Provincial Application Search Actions', () => {
       'Region',
       'Applicant client number',
       'Owner client number',
+      'Received from date',
+      'Received to date',
       'Listing from date',
       'Listing to date',
     ])
+  })
+
+  it('restores received date filters from the URL and clears them', async () => {
+    renderPage('/provincial/application?receivedFromDate=2026-01-01&receivedToDate=2026-01-31')
+    await screen.findByText('321')
+
+    expect(screen.getByLabelText('Received from date')).toHaveValue('2026-01-01')
+    expect(screen.getByLabelText('Received to date')).toHaveValue('2026-01-31')
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          receivedFromDate: '2026-01-01',
+          receivedToDate: '2026-01-31',
+        }),
+      }),
+      expect.any(Object),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+
+    expect(screen.getByLabelText('Received from date')).toHaveValue('')
+    expect(screen.getByLabelText('Received to date')).toHaveValue('')
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            receivedFromDate: '',
+            receivedToDate: '',
+          }),
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('disables search for an invalid received date', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    const searchButton = screen.getByRole('button', { name: 'Search' })
+    expect(searchButton).toBeEnabled()
+
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-13-01')
+
+    await waitFor(() => {
+      expect(searchButton).toBeDisabled()
+    })
   })
 
   it('hides exemption-only filters, selection, action, and applicant column without permission', async () => {

@@ -3,6 +3,8 @@ export type ProvincialExemptionSearchFilters = {
   packageNumber: string
   exemptionNumber: string
   region: string[]
+  approvalFromDate: string
+  approvalToDate: string
   listFromDate: string
   listToDate: string
   exemptionTypeCode: string

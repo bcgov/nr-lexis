@@ -13,6 +13,10 @@ NEXCOL
   -> LEXIS federal application tables
 ```
 
+The OpenShift Route remains internet-accessible. Direct requests still require a valid Keycloak
+token with the submission scope, but bypass gateway metrics and throttling. The submission scope
+must be assigned only to the approved NEXCOL client.
+
 ## Authentication
 
 NEXCOL uses a dedicated confidential Keycloak client. Both federal endpoints require the OAuth
@@ -147,19 +151,17 @@ The submitted `FED_APPLICATION_NUMBER` is returned as
 to be unique, and must not be used as a detail or mutation identifier. Processing is synchronous;
 there is no submission-status polling endpoint.
 
-Dedicated submission creation is disabled by default and must be explicitly enabled for controlled
-testing. Enabling CREATE also makes `X-Idempotency-Key` mandatory, regardless of the optional
-compatibility setting for that header. When enabled on a single backend pod, LEXIS provides bounded,
-in-JVM duplicate suppression:
+Submission creation is disabled by default. Enabling CREATE makes `X-Idempotency-Key` mandatory,
+regardless of the optional compatibility setting for that header. When enabled, LEXIS provides
+bounded, process-local duplicate suppression:
 the idempotency key is scoped to the authenticated caller, bound to the XML payload SHA-256, and a
 completed non-5xx response is replayed while its cache entry remains available. An in-flight `409`
 includes `Retry-After` guidance and must be retried with the same key and identical payload. A
 different-payload `409` must not be retried with that key.
 
-This safeguard is per JVM only. It does not coordinate across pods, survive a restart, or provide a
-durable submission ledger. It therefore does not permit multi-pod CREATE traffic or automated
-submission retries. Oracle-backed claim and response replay is still required before either is
-enabled. Validation remains available while CREATE is disabled.
+This safeguard does not coordinate replicas or survive a restart. CREATE therefore supports only a
+single backend replica and controlled retries. Validation remains available while CREATE is
+disabled.
 
 ## ESF Migration Mapping
 

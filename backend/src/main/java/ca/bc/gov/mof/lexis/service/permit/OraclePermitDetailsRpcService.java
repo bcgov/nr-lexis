@@ -130,6 +130,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           EXPORT_PERMIT_STATUS_CANCELLED);
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
+  private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
   private static final String SPECIES_FIR = "FI";
   private static final int MAX_SALES_INVOICE_NUMBER_LENGTH = 9;
   private static final long MAX_OIC_REQUEST_PIECES = 9_999_999_999L;
@@ -746,23 +747,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     Set<String> selectedApplications = parseCsvSet(selectedApplicationsCsv);
-    Map<Long, Boolean> hasUnassignedPermitByApplication = new LinkedHashMap<>();
-    Map<Long, Boolean> applicationAccessByNumber = new HashMap<>();
-    for (PackageCandidateRow row :
-        repository.findPackagesByExemptionNumberRequired(normalizedExemptionNumber)) {
-      if (!canAccessApplication(
-          row.applicationNumber(), applicationAccess, applicationAccessByNumber)) {
-        continue;
-      }
-      boolean hasUnassignedPermit =
-          row.exportPermitNumber() == null || row.exportPermitNumber() < 1;
-      hasUnassignedPermitByApplication.merge(
-          row.applicationNumber(), hasUnassignedPermit, Boolean::logicalOr);
-    }
+    Map<Long, List<ScaleMutationRow>> unassignedScalesByApplication =
+        findUnassignedScalesByApplication(
+            normalizedExemptionNumber, applicationAccess);
 
     List<String> applicationList =
-        hasUnassignedPermitByApplication.entrySet().stream()
-            .filter(Map.Entry::getValue)
+        unassignedScalesByApplication.entrySet().stream()
+            .filter(entry -> !entry.getValue().isEmpty())
             .map(entry -> String.valueOf(entry.getKey()))
             .filter(applicationNumber -> !selectedApplications.contains(applicationNumber))
             .sorted()
@@ -785,15 +776,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     Set<String> selectedPackages = parseCsvSet(selectedPackagesCsv);
-    Map<Long, Boolean> applicationAccessByNumber = new HashMap<>();
     List<String> distinctPackages =
-        repository.findPackagesByExemptionNumberRequired(normalizedExemptionNumber).stream()
-            .filter(
-                row ->
-                    canAccessApplication(
-                        row.applicationNumber(), applicationAccess, applicationAccessByNumber))
-            .filter(row -> row.exportPermitNumber() == null || row.exportPermitNumber() < 1)
-            .map(PackageCandidateRow::packageNumber)
+        findUnassignedScalesByApplication(normalizedExemptionNumber, applicationAccess).values()
+            .stream()
+            .flatMap(List::stream)
+            .map(ScaleMutationRow::packageNumber)
             .map(TextUtils::trimToNull)
             .filter(java.util.Objects::nonNull)
             .filter(packageNumber -> !selectedPackages.contains(packageNumber))
@@ -813,6 +800,57 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         && applicationNumber > 0
         && applicationAccessByNumber.computeIfAbsent(
             applicationNumber, applicationAccess::test);
+  }
+
+  private Map<Long, List<ScaleMutationRow>> findUnassignedScalesByApplication(
+      String exemptionNumber, Predicate<Long> applicationAccess) {
+    Map<Long, Set<String>> packagesByApplication = new LinkedHashMap<>();
+    for (PackageCandidateRow candidate :
+        repository.findPackagesByExemptionNumberRequired(exemptionNumber)) {
+      Long applicationNumber = candidate.applicationNumber();
+      String packageNumber = trimToNull(candidate.packageNumber());
+      if (applicationNumber == null || applicationNumber < 1 || packageNumber == null) {
+        throw new DataRetrievalFailureException(
+            "Oracle returned an invalid package relationship for exemption "
+                + exemptionNumber
+                + ".");
+      }
+      packagesByApplication
+          .computeIfAbsent(applicationNumber, ignored -> new HashSet<>())
+          .add(normalizeIdentifier(packageNumber));
+    }
+
+    Map<Long, Boolean> applicationAccessByNumber = new HashMap<>();
+    Map<Long, List<ScaleMutationRow>> result = new LinkedHashMap<>();
+    for (Map.Entry<Long, Set<String>> entry : packagesByApplication.entrySet()) {
+      Long applicationNumber = entry.getKey();
+      if (!canAccessApplication(
+          applicationNumber, applicationAccess, applicationAccessByNumber)) {
+        continue;
+      }
+      List<ScaleMutationRow> scaleRows =
+          repository.findScaleMutationDetailsByApplicationNumber(applicationNumber);
+      if (scaleRows.stream()
+          .anyMatch(
+              scale ->
+                  scale == null
+                      || !applicationNumber.equals(scale.applicationNumber())
+                      || (scale.exportPermitDetailNumber() != null
+                          && scale.exportPermitDetailNumber() < 1))) {
+        throw new DataRetrievalFailureException(
+            "Oracle returned an invalid scale relationship for application "
+                + applicationNumber
+                + ".");
+      }
+      List<ScaleMutationRow> unassignedScales =
+          scaleRows.stream()
+              .filter(
+                  scale -> entry.getValue().contains(normalizeIdentifier(scale.packageNumber())))
+              .filter(scale -> scale.exportPermitDetailNumber() == null)
+              .toList();
+      result.put(applicationNumber, unassignedScales);
+    }
+    return result;
   }
 
   @Override
@@ -886,6 +924,230 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   @Transactional
+  public PermitMutationRpcResponseDto createPermitFromExemption(
+      String exemptionNumber, String userId) {
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
+    String normalizedUserId = trimToNull(userId);
+    List<String> errors = new ArrayList<>();
+    if (normalizedExemptionNumber == null) {
+      errors.add("A valid exemption number is required.");
+    }
+    if (normalizedUserId == null) {
+      errors.add("A valid user identifier is required.");
+    }
+
+    ValidatedExemptionBinding exemption =
+        normalizedExemptionNumber == null
+            ? null
+            : validateExemptionBinding(normalizedExemptionNumber, errors);
+    List<Long> applicationNumbers = List.of();
+    if (exemption != null) {
+      if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
+        errors.add(
+            "Only a Ministerial exemption can use the one-step permit creation action.");
+      } else {
+        applicationNumbers = validatePermitCreationEligibility(exemption, errors);
+      }
+    }
+
+    ApplicationInfoRow application =
+        errors.isEmpty()
+            ? resolveMinisterialPermitCreationContext(exemption, applicationNumbers, errors)
+            : null;
+    if (!errors.isEmpty()) {
+      return failureMutationResponse(List.copyOf(errors), null);
+    }
+
+    PermitMutationRow insertRow =
+        new PermitMutationRow(
+            null,
+            null,
+            null,
+            null,
+            null,
+            LexisBusinessTime.today(),
+            null,
+            null,
+            null,
+            exemption.detail().expiryDate(),
+            0.0d,
+            0L,
+            0L,
+            null,
+            null,
+            normalizedUserId,
+            null,
+            null,
+            EXPORT_SCALE_METHOD_WEIGHT,
+            trimToNull(application.ownerClientNumber()),
+            trimToNull(application.ownerClientLocationCode()),
+            trimToNull(application.agentClientNumber()),
+            trimToNull(application.agentClientLocationCode()),
+            normalizedExemptionNumber,
+            application.orgUnitNo(),
+            null,
+            EXPORT_PERMIT_STATUS_ACTIVE,
+            trimToNull(application.growthTypeCode()),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            trimToNull(application.productTypeCode()));
+
+    Optional<PermitMutationRow> inserted =
+        repository.insertPermitDetail(insertRow, normalizedUserId);
+    if (inserted.filter(row -> matchesInsertedPermit(row, insertRow)).isEmpty()) {
+      markRollbackOnly();
+      return failureMutationResponse(List.of("Unable to create permit."), null);
+    }
+
+    PermitMutationRow permit = inserted.get();
+    return new PermitMutationRpcResponseDto(
+        true,
+        "The permit was created successfully.",
+        List.of(),
+        List.of(),
+        permit.permitNumber(),
+        permit.permitStatusCode(),
+        permit.receiptNumber(),
+        false,
+        false,
+        null);
+  }
+
+  private void validatePermitCreationContext(
+      ValidatedExemptionBinding exemption,
+      Long expectedApplicationNumber,
+      ApplicationInfoRow application,
+      List<String> errors) {
+    if (!isExpectedPermitCreationApplication(
+        exemption, expectedApplicationNumber, application)) {
+      errors.add("The permit application context could not be verified.");
+      return;
+    }
+
+    String ownerClientNumber = trimToNull(application.ownerClientNumber());
+    String ownerLocationCode = trimToNull(application.ownerClientLocationCode());
+    String agentClientNumber = trimToNull(application.agentClientNumber());
+    String agentLocationCode = trimToNull(application.agentClientLocationCode());
+    validatePermitCreationClientBinding(
+        exemption, ownerClientNumber, agentClientNumber, errors);
+    if (application.orgUnitNo() == null || application.orgUnitNo() < 1) {
+      errors.add("The application region could not be verified.");
+    }
+    if (ownerClientNumber == null
+        || ownerLocationCode == null
+        || clientLookupService
+            .getClientDataRequired(ownerClientNumber, ownerLocationCode)
+            .isEmpty()) {
+      errors.add("The application owner and location could not be verified.");
+    }
+    if ((agentClientNumber == null) != (agentLocationCode == null)
+        || (agentClientNumber != null
+            && clientLookupService
+                .getClientDataRequired(agentClientNumber, agentLocationCode)
+                .isEmpty())) {
+      errors.add("The application agent and location could not be verified.");
+    }
+    if (!repository.isPermitStatusCodeValidRequired(EXPORT_PERMIT_STATUS_ACTIVE)) {
+      errors.add("The active permit status code could not be verified.");
+    }
+    if (!repository.isScaleMethodCodeValidRequired(EXPORT_SCALE_METHOD_WEIGHT)) {
+      errors.add("The weight scale method code could not be verified.");
+    }
+    String growthTypeCode = trimToNull(application.growthTypeCode());
+    if (growthTypeCode != null
+        && repository.findGrowthTypeDescription(growthTypeCode).isEmpty()) {
+      errors.add("The application growth type could not be verified.");
+    }
+    String productTypeCode = trimToNull(application.productTypeCode());
+    if (productTypeCode != null
+        && repository.findProductTypeDescription(productTypeCode).isEmpty()) {
+      errors.add("The application product type could not be verified.");
+    }
+  }
+
+  private ApplicationInfoRow resolveMinisterialPermitCreationContext(
+      ValidatedExemptionBinding exemption,
+      List<Long> applicationNumbers,
+      List<String> errors) {
+    if (exemption == null
+        || applicationNumbers == null
+        || applicationNumbers.isEmpty()
+        || errors == null) {
+      return null;
+    }
+
+    List<ApplicationInfoRow> applicationContexts = new ArrayList<>();
+    for (Long applicationNumber : applicationNumbers) {
+      ApplicationInfoRow context =
+          repository.findApplicationInfoByNumber(applicationNumber).orElse(null);
+      if (!isExpectedPermitCreationApplication(exemption, applicationNumber, context)) {
+        errors.add("The permit application context could not be verified.");
+        return null;
+      }
+      applicationContexts.add(context);
+    }
+
+    ApplicationInfoRow primaryApplication = applicationContexts.getFirst();
+    validatePermitCreationContext(
+        exemption,
+        primaryApplication.applicationNumber(),
+        primaryApplication,
+        errors);
+    if (errors.isEmpty()
+        && applicationContexts.stream()
+            .skip(1)
+            .anyMatch(context -> !hasSamePermitCreationContext(primaryApplication, context))) {
+      errors.add(
+          "Linked applications do not share one permit client, region, growth, and product context.");
+    }
+    return errors.isEmpty() ? primaryApplication : null;
+  }
+
+  private boolean isExpectedPermitCreationApplication(
+      ValidatedExemptionBinding exemption,
+      Long expectedApplicationNumber,
+      ApplicationInfoRow application) {
+    return exemption != null
+        && application != null
+        && java.util.Objects.equals(expectedApplicationNumber, application.applicationNumber())
+        && sameIgnoreCase(
+            exemption.detail().exemptionNumber(), application.exemptionNumber());
+  }
+
+  private boolean hasSamePermitCreationContext(
+      ApplicationInfoRow first, ApplicationInfoRow candidate) {
+    return first != null
+        && candidate != null
+        && sameText(first.ownerClientNumber(), candidate.ownerClientNumber())
+        && sameText(first.ownerClientLocationCode(), candidate.ownerClientLocationCode())
+        && sameText(first.agentClientNumber(), candidate.agentClientNumber())
+        && sameText(first.agentClientLocationCode(), candidate.agentClientLocationCode())
+        && java.util.Objects.equals(first.orgUnitNo(), candidate.orgUnitNo())
+        && sameIgnoreCase(first.growthTypeCode(), candidate.growthTypeCode())
+        && sameIgnoreCase(first.productTypeCode(), candidate.productTypeCode());
+  }
+
+  private void validatePermitCreationClientBinding(
+      ValidatedExemptionBinding exemption,
+      String ownerClientNumber,
+      String agentClientNumber,
+      List<String> errors) {
+    String exemptionOwner = trimToNull(exemption.detail().ownerClientNumber());
+    String exemptionAgent = trimToNull(exemption.detail().agentClientNumber());
+    if (!java.util.Objects.equals(ownerClientNumber, exemptionOwner)) {
+      errors.add("The permit owner does not match the selected exemption.");
+    }
+    if (!java.util.Objects.equals(agentClientNumber, exemptionAgent)) {
+      errors.add("The permit agent does not match the selected exemption.");
+    }
+  }
+
+  @Override
+  @Transactional
   public PermitMutationRpcResponseDto addPermit(PermitMutationRequestDto request, String userId) {
     if (request == null) {
       return failureMutationResponse(List.of("Permit details are required."), null);
@@ -903,10 +1165,30 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     ValidatedExemptionBinding exemptionBinding =
         exemptionNumber == null ? null : validateExemptionBinding(exemptionNumber, errors);
+    List<Long> ministerialApplicationNumbers = List.of();
+    if (exemptionBinding != null) {
+      ministerialApplicationNumbers =
+          validatePermitCreationEligibility(exemptionBinding, errors);
+    }
     boolean blanketOic = exemptionBinding != null && exemptionBinding.blanketOic();
+    ApplicationInfoRow ministerialApplication =
+        exemptionBinding != null
+                && EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(
+                    exemptionBinding.exemptionTypeCode())
+                && errors.isEmpty()
+            ? resolveMinisterialPermitCreationContext(
+                exemptionBinding, ministerialApplicationNumbers, errors)
+            : null;
 
+    Long submittedOrgUnitNumber =
+        parsePositiveLong(
+            blanketOic
+                ? firstNonNull(request.oicRegion(), request.orgUnitNumber())
+                : request.orgUnitNumber());
     Long orgUnitNumber =
-        parsePositiveLong(blanketOic ? firstNonNull(request.oicRegion(), request.orgUnitNumber()) : request.orgUnitNumber());
+        ministerialApplication == null
+            ? submittedOrgUnitNumber
+            : ministerialApplication.orgUnitNo();
     if (orgUnitNumber == null) {
       errors.add("A valid region is required.");
     }
@@ -955,24 +1237,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       validateClientBinding(exemptionBinding, clientNumber, agentNumber, errors);
     }
 
-    if (!blanketOic && exemptionNumber != null) {
-      List<Long> applicationNumbers = repository.findApplicationNumbersByExemptionNumber(exemptionNumber);
-      if (!applicationNumbers.isEmpty()) {
-        Optional<ApplicationInfoRow> firstApplication =
-            repository.findApplicationInfoByNumber(applicationNumbers.get(0));
-        if (firstApplication.isPresent()) {
-          ApplicationInfoRow app = firstApplication.get();
-          clientNumber = firstNonNull(clientNumber, trimToNull(app.ownerClientNumber()));
-          clientLocationCode =
-              firstNonNull(clientLocationCode, trimToNull(app.ownerClientLocationCode()));
-          agentNumber = firstNonNull(agentNumber, trimToNull(app.agentClientNumber()));
-          agentLocationCode =
-              firstNonNull(agentLocationCode, trimToNull(app.agentClientLocationCode()));
-          productTypeCode = firstNonNull(productTypeCode, trimToNull(app.productTypeCode()));
-          growthTypeCode = firstNonNull(growthTypeCode, trimToNull(app.growthTypeCode()));
-        }
-      }
+    if (ministerialApplication != null) {
+      clientNumber = trimToNull(ministerialApplication.ownerClientNumber());
+      clientLocationCode = trimToNull(ministerialApplication.ownerClientLocationCode());
+      agentNumber = trimToNull(ministerialApplication.agentClientNumber());
+      agentLocationCode = trimToNull(ministerialApplication.agentClientLocationCode());
+      productTypeCode = trimToNull(ministerialApplication.productTypeCode());
+      growthTypeCode = trimToNull(ministerialApplication.growthTypeCode());
+    }
 
+    if (!blanketOic && exemptionNumber != null) {
       Optional<LocalDate> exemptionExpiryDate =
           repository.findExemptionExpiryDate(exemptionNumber);
       if (exemptionExpiryDate.isPresent()) {
@@ -1314,7 +1588,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               invoiceOrchestrationService, updated.countryCode())) {
         return failureMutationResponse(
             List.of(
-                "This permit status change is unavailable until permit invoice processing is configured."),
+                "Invoice processing is unavailable for this destination; the permit was not changed."),
             permitNumber);
       }
     }
@@ -1692,14 +1966,26 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(validationErrors, permitNumber);
     }
 
+    PermitMutationRow permit =
+        repository
+            .findPermitMutationByPermitNumber(permitNumber)
+            .orElseThrow(
+                () ->
+                    new DataRetrievalFailureException(
+                        "Permit " + permitNumber + " was unavailable after validation."));
+    Map<Long, List<ScaleMutationRow>> eligibleScalesByApplication =
+        findUnassignedScalesByApplication(permit.exemptionNumber(), ignored -> true);
     List<ApplicationScaleAttachmentPlan> attachmentPlans = new ArrayList<>();
     for (Long applicationNumber : applicationNumbers) {
       List<ScaleMutationRow> unassignedScales =
-          repository.findScaleMutationDetailsByApplicationNumber(applicationNumber).stream()
-              .filter(scale -> scale.exportPermitDetailNumber() == null)
-              .toList();
+          eligibleScalesByApplication.getOrDefault(applicationNumber, List.of());
       if (unassignedScales.isEmpty()) {
-        continue;
+        return failurePersistenceResponse(
+            List.of(
+                "Application "
+                    + applicationNumber
+                    + " is no longer eligible to be added to this permit."),
+            permitNumber);
       }
 
       String sourceStatus =
@@ -3015,7 +3301,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       String ownerClientNumber,
       String agentClientNumber,
       List<String> errors) {
-    if (exemption.blanketOic()) {
+    if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
       return;
     }
 
@@ -3029,6 +3315,45 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (submittedAgent != null && !submittedAgent.equals(exemptionAgent)) {
       errors.add("The permit agent does not match the selected exemption.");
     }
+  }
+
+  private List<Long> validatePermitCreationEligibility(
+      ValidatedExemptionBinding exemption, List<String> errors) {
+    String statusCode = normalizeCode(exemption.detail().exemptionStatusCode());
+    if (!EXEMPTION_STATUS_ACTIVE.equals(statusCode)) {
+      errors.add("A new permit can only be created from an active exemption.");
+      return List.of();
+    }
+    if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
+      return List.of();
+    }
+
+    String exemptionNumber = exemption.detail().exemptionNumber();
+    List<Long> applicationNumbers =
+        repository.findApplicationNumbersByExemptionNumberRequired(exemptionNumber);
+    if (applicationNumbers.isEmpty()) {
+      errors.add(
+          "A Ministerial exemption must have at least one linked application before a permit can be created.");
+      return List.of();
+    }
+
+    for (Long applicationNumber : applicationNumbers) {
+      String applicationStatus =
+          repository
+              .findApplicationStatusCodeByNumber(applicationNumber)
+              .map(this::normalizeCode)
+              .filter(status -> !status.isBlank())
+              .orElse(null);
+      if (applicationStatus == null) {
+        errors.add(
+            "Application " + applicationNumber + " status could not be verified.");
+      } else if (!APPLICATION_STATUS_EXEMPTED.equals(applicationStatus)
+          && !APPLICATION_STATUS_PERMITTED.equals(applicationStatus)) {
+        errors.add(
+            "Every application linked to a Ministerial exemption must be exempted or permitted before a permit can be created.");
+      }
+    }
+    return applicationNumbers;
   }
 
   private void validateOicApplicationBinding(
@@ -3177,15 +3502,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return List.of("Permit exemption is unavailable.");
     }
     Set<Long> eligibleApplicationNumbers =
-        repository.findPackagesByExemptionNumberRequired(exemptionNumber).stream()
-            .filter(
-                row ->
-                    row.applicationNumber() != null
-                        && row.applicationNumber() > 0
-                        && (row.exportPermitNumber() == null
-                            || row.exportPermitNumber() < 1
-                            || permitNumber.equals(row.exportPermitNumber())))
-            .map(PackageCandidateRow::applicationNumber)
+        findUnassignedScalesByApplication(exemptionNumber, ignored -> true).entrySet().stream()
+            .filter(entry -> !entry.getValue().isEmpty())
+            .map(Map.Entry::getKey)
             .collect(java.util.stream.Collectors.toSet());
     List<Long> ineligibleApplications =
         applicationNumbers.stream()
@@ -3221,17 +3540,20 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     String exemptionNumber = trimToNull(permit.exemptionNumber());
-    if (exemptionNumber == null) {
+    String normalizedPackageNumber = normalizeIdentifier(packageNumber);
+    if (exemptionNumber == null || normalizedPackageNumber == null) {
       return false;
     }
-    return repository.findPackagesByExemptionNumberRequired(exemptionNumber).stream()
-        .anyMatch(
-            row ->
-                scale.applicationNumber().equals(row.applicationNumber())
-                    && packageNumber.equals(trimToNull(row.packageNumber()))
-                    && (row.exportPermitNumber() == null
-                        || row.exportPermitNumber() < 1
-                        || permit.permitNumber().equals(row.exportPermitNumber())));
+    boolean belongsToExemption =
+        repository.findPackagesByExemptionNumberRequired(exemptionNumber).stream()
+            .anyMatch(
+                row ->
+                    scale.applicationNumber().equals(row.applicationNumber())
+                        && normalizedPackageNumber.equals(
+                            normalizeIdentifier(row.packageNumber())));
+    return belongsToExemption
+        && (scale.exportPermitDetailNumber() == null
+            || permit.permitNumber().equals(scale.exportPermitDetailNumber()));
   }
 
   private boolean updateScalePermitAssignment(
@@ -3328,6 +3650,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       Long permitNumber, String previousStatus, String targetStatus, String userId) {
     String normalizedPrevious = normalizeCode(previousStatus);
     String normalizedTarget = normalizeCode(targetStatus);
+
+    // Preserve legacy cancellation behavior: applications remain permitted when a payment-pending
+    // permit is cancelled.
+    if (EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(normalizedPrevious)
+        && EXPORT_PERMIT_STATUS_CANCELLED.equals(normalizedTarget)) {
+      return true;
+    }
+
     String requiredApplicationStatus;
     String newApplicationStatus;
     boolean deriveStatusFromEffectiveRelationships = false;

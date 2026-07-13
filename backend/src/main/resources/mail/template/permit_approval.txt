@@ -2,4 +2,4 @@ Permit #{{permitNumber}} {{approvalDescription}}
 
 Package(s): {{packageNumbers}}
 
-Do NOT reply to this e-mail.
+This is an automated notification; do not reply.

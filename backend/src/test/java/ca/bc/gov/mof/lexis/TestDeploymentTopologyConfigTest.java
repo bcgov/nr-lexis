@@ -47,11 +47,11 @@ class TestDeploymentTopologyConfigTest {
 
     assertThat(workflow)
         .contains("if: ${{ inputs.backend_replicas != '1' }}")
-        .contains("Keep backend_replicas at 1 until a distributed lock design is implemented")
+        .contains("LEXIS edit and scheduler locks are JVM-local; backend_replicas must be 1")
         .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
-                + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'disabled' }}")
+                + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'canadian-internal' }}")
         .contains("-p LEXIS_PERMIT_INVOICE_MODE=\"$LEXIS_PERMIT_INVOICE_MODE\"")
         .contains(
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}")
@@ -67,8 +67,8 @@ class TestDeploymentTopologyConfigTest {
         .contains("type: Recreate")
         .contains(
             "- name: LEXIS_PERMIT_INVOICE_MODE\n"
-                + "    description: Keep disabled until Canadian internal invoicing passes Oracle rollback acceptance\n"
-                + "    value: disabled")
+                + "    description: Canadian-only internal invoicing mode; set disabled for operational rollback\n"
+                + "    value: canadian-internal")
         .contains("- name: LEXIS_PERMIT_INVOICE_MODE\n                  value: ${LEXIS_PERMIT_INVOICE_MODE}")
         .contains("cpu: ${MIN_CPU}")
         .contains("memory: ${MIN_MEM}")
@@ -154,7 +154,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
-                + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'disabled' }}")
+                + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'canadian-internal' }}")
         .contains("LEXIS_MAIL_ENABLED: ${{ vars.LEXIS_MAIL_ENABLED || 'false' }}")
         .contains(
             "LEXIS_MAIL_NON_PRODUCTION:"

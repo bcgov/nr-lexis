@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/lexis")
@@ -73,7 +74,7 @@ public class LegacyReportRouteController {
         "/tenureReport.do"
       },
       method = {RequestMethod.GET, RequestMethod.POST})
-  public ResponseEntity<byte[]> legacyReport(
+  public ResponseEntity<StreamingResponseBody> legacyReport(
       @RequestParam Map<String, String> requestParams,
       @RequestParam MultiValueMap<String, String> multiValueRequestParams,
       HttpServletRequest request,
@@ -102,7 +103,7 @@ public class LegacyReportRouteController {
     return dispatch(reportAction, requestDto, authentication);
   }
 
-  private ResponseEntity<byte[]> dispatch(
+  private ResponseEntity<StreamingResponseBody> dispatch(
       String reportAction,
       LexisReportRequestDto request,
       Authentication authentication) {

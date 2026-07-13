@@ -26,8 +26,7 @@ public class PermitNotificationEmailService {
     if (permitNumber == null || permitNumber < 1 || requestRecipients.isEmpty()) {
       return false;
     }
-    // The caller-supplied copy address is untrusted. Review mail is restricted to the configured
-    // reviewer recipients until role-based recipient discovery or a distribution list is adopted.
+    // Ignore the caller-supplied address; review mail is sent only to configured recipients.
     notificationService.publish(
         new WorkflowEmailEvent.PermitReview(
             permitNumber,

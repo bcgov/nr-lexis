@@ -17,10 +17,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
- * Low-level Oracle adapter for the legacy permit-invoice and GBMS procedures.
- *
- * <p>This repository deliberately exposes individual procedure calls. It does not define the
- * transaction, retry, compensation, or reconciliation policy needed to coordinate them.
+ * Low-level Oracle adapter for permit-invoice and GBMS procedures. Callers own transaction, retry,
+ * compensation, and reconciliation policy.
  */
 @Repository
 @Profile("oracle")

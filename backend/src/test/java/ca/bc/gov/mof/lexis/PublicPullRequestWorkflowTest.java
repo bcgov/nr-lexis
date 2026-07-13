@@ -28,9 +28,9 @@ class PublicPullRequestWorkflowTest {
 
     assertThat(workflowJob(workflow, "backend-tests", "frontend-tests"))
         .doesNotContain(SAME_REPOSITORY_CONDITION);
-    assertThat(workflowJob(workflow, "frontend-tests", "clamav-startup"))
+    assertThat(workflowJob(workflow, "frontend-tests", "clamav-daemon-detection"))
         .doesNotContain(SAME_REPOSITORY_CONDITION);
-    assertThat(workflowJob(workflow, "clamav-startup", "deploys"))
+    assertThat(workflowJob(workflow, "clamav-daemon-detection", "deploys"))
         .doesNotContain(SAME_REPOSITORY_CONDITION);
     assertThat(workflowJob(workflow, "results", null))
         .contains("contains(needs.*.result, 'failure')")

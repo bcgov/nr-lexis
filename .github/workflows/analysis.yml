@@ -87,8 +87,8 @@ jobs:
           supply_scan: true
           triggers: ('frontend/')
 
-  clamav-startup:
-    name: ClamAV Startup
+  clamav-daemon-detection:
+    name: ClamAV Daemon Detection
     if: (! github.event.pull_request.draft)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,8 +97,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Build and verify ClamAV container startup
-        run: bash .github/scripts/check-clamav-startup.sh
+      - name: Build and verify ClamAV daemon and malware detection
+        run: bash .github/scripts/check-clamav-daemon-detection.sh
 
   trivy:
     name: Trivy Security Scan
@@ -128,7 +128,7 @@ jobs:
           scan-type: "fs"
           scanners: "vuln,secret,misconfig"
           severity: "CRITICAL,HIGH"
-          # Require scanner execution, while findings remain non-blocking pending team policy.
+          # Run the scanner and publish findings without failing this workflow.
           exit-code: "0"
           trivyignores: ".github/.trivyignore"
           cache-dir: .trivycache
@@ -142,7 +142,7 @@ jobs:
 
   results:
     name: Analysis Results
-    needs: [backend-tests, frontend-tests, clamav-startup, trivy]
+    needs: [backend-tests, frontend-tests, clamav-daemon-detection, trivy]
     if: always() && (! github.event.pull_request.draft)
     runs-on: ubuntu-slim
     steps:

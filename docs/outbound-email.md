@@ -8,11 +8,9 @@ Modern LEXIS uses Spring Mail with the BC Government application SMTP relay defa
 - STARTTLS: disabled
 - default From: `Provincial.Log.Export.Analyst@gov.bc.ca`
 
-The From address was already the modern hard-coded default. It is now explicitly configurable.
+Workflow services publish immutable email snapshots. A dedicated executor dispatches them asynchronously after the surrounding transaction commits. Events published outside a transaction use the same executor.
 
-Workflow services publish immutable email snapshots. Spring dispatches them asynchronously from a dedicated executor after the surrounding transaction commits, matching the `nr-fspts` pattern. Manual email actions published outside a transaction use the same asynchronous dispatcher.
-
-Email responses mean **queued**, not delivered. Delivery is best effort: failures are logged after the business operation has completed and are not retried. A transactional outbox would be required if guaranteed delivery becomes a business requirement.
+Email responses mean **queued**, not delivered. Delivery is best effort; failures are logged and are not retried.
 
 ## Safe TEST/DEV delivery
 

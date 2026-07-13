@@ -16,6 +16,7 @@ import { AppNotification } from '../../components/AppNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   atMostOneDecimalFieldError,
@@ -258,11 +259,11 @@ const ProvincialExemptionCreatePage = () => {
     ? 'federal application(s)'
     : 'application(s)'
   const canCreateBlanketOic =
-    !roles.includes('LEXIS_EXEMPTION_APPROVER') ||
-    roles.includes('LEXIS_ADMIN') ||
-    roles.includes('LEXIS_APPLICATION_APPROVER') ||
-    roles.includes('LEXIS_READ_ONLY') ||
-    roles.includes('LEXIS_PROVINCIAL_SUBMITTER')
+    !hasRole(roles, 'EXEMPTION_APPROVER') ||
+    hasRole(roles, 'ADMIN') ||
+    hasRole(roles, 'APPLICATION_APPROVER') ||
+    hasRole(roles, 'READ_ONLY') ||
+    hasProvincialSubmitterRole(roles)
   const selectedApplicationNumbers = useMemo(() => {
     const values =
       prefillState?.selectedApplicationNumbers ??

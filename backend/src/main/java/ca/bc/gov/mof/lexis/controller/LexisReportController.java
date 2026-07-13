@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.service.report.LexisReportOutputLimitException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/lexis/reports")
@@ -63,28 +65,31 @@ public class LexisReportController {
   }
 
   @PostMapping({"/biweeklyListing", "/biweekly-listing"})
-  public ResponseEntity<byte[]> biweeklyListing(@RequestBody(required = false) LexisReportRequestDto request) {
+  public ResponseEntity<StreamingResponseBody> biweeklyListing(
+      @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("biweeklyListing", "biweekly listing", request);
   }
 
   @PostMapping({"/offerReport", "/offer-report"})
-  public ResponseEntity<byte[]> offerReport(@RequestBody(required = false) LexisReportRequestDto request) {
+  public ResponseEntity<StreamingResponseBody> offerReport(
+      @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("offerReport", "offer report", request);
   }
 
   @PostMapping({"/speciesGradeReport", "/species-grade-report"})
-  public ResponseEntity<byte[]> speciesGradeReport(
+  public ResponseEntity<StreamingResponseBody> speciesGradeReport(
       @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("speciesGradeReport", "species grade report", request);
   }
 
   @PostMapping({"/exemptionReport", "/exemption-report"})
-  public ResponseEntity<byte[]> exemptionReport(@RequestBody(required = false) LexisReportRequestDto request) {
+  public ResponseEntity<StreamingResponseBody> exemptionReport(
+      @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("exemptionReport", "exemption report", request);
   }
 
   @PostMapping({"/applicationReport", "/application-report"})
-  public ResponseEntity<byte[]> applicationReport(
+  public ResponseEntity<StreamingResponseBody> applicationReport(
       @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport(
         "applicationReport",
@@ -100,7 +105,7 @@ public class LexisReportController {
   }
 
   @PostMapping({"/approvedExemptionReport", "/approved-exemption-report"})
-  public ResponseEntity<byte[]> approvedExemptionReport(
+  public ResponseEntity<StreamingResponseBody> approvedExemptionReport(
       @RequestBody(required = false) LexisReportRequestDto request,
       Authentication authentication) {
     return executeReport(
@@ -120,7 +125,7 @@ public class LexisReportController {
   }
 
   @PostMapping({"/permitReport", "/permit-report"})
-  public ResponseEntity<byte[]> permitReport(
+  public ResponseEntity<StreamingResponseBody> permitReport(
       @RequestBody(required = false) LexisReportRequestDto request,
       Authentication authentication) {
     return executeReport(
@@ -140,38 +145,41 @@ public class LexisReportController {
   }
 
   @PostMapping({"/permitLedgerReport", "/permit-ledger-report"})
-  public ResponseEntity<byte[]> permitLedgerReport(
+  public ResponseEntity<StreamingResponseBody> permitLedgerReport(
       @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("permitLedgerReport", "permit ledger report", request);
   }
 
   @PostMapping({"/feeReport", "/fee-report"})
-  public ResponseEntity<byte[]> feeReport(@RequestBody(required = false) LexisReportRequestDto request) {
+  public ResponseEntity<StreamingResponseBody> feeReport(
+      @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("feeReport", "fee report", request);
   }
 
   @PostMapping({"/transportReport", "/transport-report"})
-  public ResponseEntity<byte[]> transportReport(
+  public ResponseEntity<StreamingResponseBody> transportReport(
       @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("transportReport", "transport report", request);
   }
 
   @PostMapping({"/teacReport", "/teac-report"})
-  public ResponseEntity<byte[]> teacReport(@RequestBody(required = false) LexisReportRequestDto request) {
+  public ResponseEntity<StreamingResponseBody> teacReport(
+      @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("teacReport", "teac report", request);
   }
 
   @PostMapping({"/tenureReport", "/tenure-report"})
-  public ResponseEntity<byte[]> tenureReport(@RequestBody(required = false) LexisReportRequestDto request) {
+  public ResponseEntity<StreamingResponseBody> tenureReport(
+      @RequestBody(required = false) LexisReportRequestDto request) {
     return executeReport("tenureReport", "tenure report", request);
   }
 
-  private ResponseEntity<byte[]> executeReport(
+  private ResponseEntity<StreamingResponseBody> executeReport(
       String reportAction, String reportLabel, LexisReportRequestDto request) {
     return executeReport(reportAction, reportLabel, request, null, normalized -> normalized);
   }
 
-  private ResponseEntity<byte[]> executeReport(
+  private ResponseEntity<StreamingResponseBody> executeReport(
       String reportAction,
       String reportLabel,
       LexisReportRequestDto request,
@@ -217,7 +225,7 @@ public class LexisReportController {
     }
   }
 
-  private ResponseEntity<byte[]> executeNormalizedReport(
+  private ResponseEntity<StreamingResponseBody> executeNormalizedReport(
       String reportAction,
       String reportLabel,
       LexisReportRequestDto normalizedRequest,
@@ -356,9 +364,9 @@ public class LexisReportController {
     return requestedFormat;
   }
 
-  private ResponseEntity<byte[]> completeAudit(
+  private ResponseEntity<StreamingResponseBody> completeAudit(
       ReportAuditContext audit,
-      ResponseEntity<byte[]> response,
+      ResponseEntity<StreamingResponseBody> response,
       String effectiveFormat,
       String outcome,
       int bytes) {
@@ -440,11 +448,19 @@ public class LexisReportController {
     return value != null && !value.isBlank();
   }
 
-  private ResponseEntity<byte[]> toResponse(LexisGeneratedReport report) {
+  private ResponseEntity<StreamingResponseBody> toResponse(LexisGeneratedReport report) {
     String filename =
-        report.filename() == null || report.filename().isBlank() ? "lexis-report.bin" : report.filename();
+        report.filename() == null || report.filename().isBlank()
+            ? "lexis-report.bin"
+            : report.filename();
     MediaType mediaType = resolveMediaType(report.mediaType());
     byte[] content = report.content() == null ? new byte[0] : report.content();
+    TemporaryReportStreamingBody responseBody;
+    try {
+      responseBody = TemporaryReportStreamingBody.stage(content);
+    } catch (IOException exception) {
+      throw new LexisReportGenerationException("Unable to stage the generated report", exception);
+    }
 
     ContentDisposition disposition =
         ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build();
@@ -452,14 +468,18 @@ public class LexisReportController {
     return ResponseEntity.ok()
         .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
         .contentType(mediaType)
-        .body(content);
+        .contentLength(content.length)
+        .body(responseBody);
   }
 
-  private ResponseEntity<byte[]> reportError(
+  private ResponseEntity<StreamingResponseBody> reportError(
       org.springframework.http.HttpStatus status, String message) {
+    byte[] content = message.getBytes(StandardCharsets.UTF_8);
+    StreamingResponseBody responseBody = outputStream -> outputStream.write(content);
     return ResponseEntity.status(status)
         .contentType(MediaType.TEXT_PLAIN)
-        .body(message.getBytes(StandardCharsets.UTF_8));
+        .contentLength(content.length)
+        .body(responseBody);
   }
 
   private MediaType resolveMediaType(String mediaType) {

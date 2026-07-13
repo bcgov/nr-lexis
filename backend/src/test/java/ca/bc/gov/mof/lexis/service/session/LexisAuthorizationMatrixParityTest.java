@@ -104,6 +104,7 @@ class LexisAuthorizationMatrixParityTest {
             "/filePermitUpload",
             "approveExemption",
             "createOffer",
+            "createPermit",
             "saveExemption",
             "savePermit",
             "uploadFederalSubmission")
@@ -126,6 +127,7 @@ class LexisAuthorizationMatrixParityTest {
             "/fileInvoiceUpload",
             "/filePermitUpload",
             "createOffer",
+            "createPermit",
             "saveExemption",
             "savePermit",
             "uploadFederalSubmission")
@@ -218,6 +220,7 @@ class LexisAuthorizationMatrixParityTest {
             "approveExemption",
             "createApplication",
             "createOffer",
+            "createPermit",
             "saveExemption",
             "savePermit",
             "manageFederalApplication",
@@ -250,6 +253,7 @@ class LexisAuthorizationMatrixParityTest {
             "/permitSearch",
             "createApplication",
             "createOffer",
+            "createPermit",
             "/federalApplicationSearch",
             "/federalApplicationDetails",
             "viewFederalApplication",
@@ -279,9 +283,16 @@ class LexisAuthorizationMatrixParityTest {
             "approveExemption",
             "createApplication",
             "createOffer",
+            "createPermit",
             "saveExemption",
             "savePermit",
             "uploadApplicationSubmission")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
+  }
+
+  @Test
+  void createPermitShouldBeAvailableToAdminsAndApplicationApproversOnly() {
+    assertThat(authorizationService.resolveRolesForAction("createPermit"))
+        .containsExactlyInAnyOrder("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
   }
 }

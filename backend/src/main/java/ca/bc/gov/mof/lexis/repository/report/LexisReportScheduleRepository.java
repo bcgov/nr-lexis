@@ -101,15 +101,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
        WHERE TRUNC(ES.ADVERTISING_DATE) = ?
        ORDER BY ES.EXPORT_SCHEDULE_ID
       """;
-  private static final String FIND_DUPLICATE_ADVERTISING_DATE_COUNT =
-      "SELECT COUNT(*) FROM EXPORT_SCHEDULE WHERE TRUNC(ADVERTISING_DATE) = ?";
-  private static final String FIND_DUPLICATE_ADVERTISING_DATE_COUNT_EXCLUDING_ID =
-      """
-      SELECT COUNT(*)
-        FROM EXPORT_SCHEDULE
-       WHERE TRUNC(ADVERTISING_DATE) = ?
-         AND EXPORT_SCHEDULE_ID <> ?
-      """;
   private static final String COUNT_APPLICATIONS_FOR_EXPORT_SCHEDULE =
       "SELECT COUNT(*) FROM EXPORT_EXEMPTION_APPLICATION WHERE EXPORT_SCHEDULE_ID = ?";
   private static final String NEXT_EXPORT_SCHEDULE_ID =
@@ -206,32 +197,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
             this::mapExportScheduleRow)
         .stream()
         .findFirst();
-  }
-
-  public boolean advertisingDateExists(LocalDate advertisingDate) {
-    if (advertisingDate == null) {
-      return false;
-    }
-    Integer count =
-        jdbcTemplate.queryForObject(
-            FIND_DUPLICATE_ADVERTISING_DATE_COUNT,
-            Integer.class,
-            java.sql.Date.valueOf(advertisingDate));
-    return count != null && count > 0;
-  }
-
-  public boolean advertisingDateExistsForOtherSchedule(
-      LocalDate advertisingDate, long exportScheduleId) {
-    if (advertisingDate == null) {
-      return false;
-    }
-    Integer count =
-        jdbcTemplate.queryForObject(
-            FIND_DUPLICATE_ADVERTISING_DATE_COUNT_EXCLUDING_ID,
-            Integer.class,
-            java.sql.Date.valueOf(advertisingDate),
-            exportScheduleId);
-    return count != null && count > 0;
   }
 
   public long countApplicationsForExportSchedule(long exportScheduleId) {

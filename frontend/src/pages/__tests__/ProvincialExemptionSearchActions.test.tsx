@@ -49,9 +49,9 @@ const exemptionSearchResponse = (
   },
 })
 
-const renderPage = () => {
+const renderPage = (path = '/provincial/exemption') => {
   render(
-    <MemoryRouter initialEntries={['/provincial/exemption']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/provincial/exemption" element={<ProvincialExemptionPage />} />
       </Routes>
@@ -370,9 +370,46 @@ describe('Provincial Exemption Search Actions', () => {
       'Region',
       'Applicant client number',
       'Owner client number',
+      'Approval from date',
+      'Approval to date',
       'Listing from date',
       'Listing to date',
     ])
+  })
+
+  it('restores approval date filters from the URL and clears them', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage('/provincial/exemption?approvalFromDate=2026-02-01&approvalToDate=2026-02-28')
+    await screen.findByText('EX-1001')
+
+    expect(screen.getByLabelText('Approval from date')).toHaveValue('2026-02-01')
+    expect(screen.getByLabelText('Approval to date')).toHaveValue('2026-02-28')
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          approvalFromDate: '2026-02-01',
+          approvalToDate: '2026-02-28',
+        }),
+      }),
+      expect.any(Object),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+
+    expect(screen.getByLabelText('Approval from date')).toHaveValue('')
+    expect(screen.getByLabelText('Approval to date')).toHaveValue('')
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            approvalFromDate: '',
+            approvalToDate: '',
+          }),
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('disables search button for invalid date filters', async () => {
@@ -384,7 +421,7 @@ describe('Provincial Exemption Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-99-99')
+    await userEvent.type(screen.getByLabelText('Approval from date'), '2026-99-99')
 
     await waitFor(() => {
       expect(searchButton).toBeDisabled()

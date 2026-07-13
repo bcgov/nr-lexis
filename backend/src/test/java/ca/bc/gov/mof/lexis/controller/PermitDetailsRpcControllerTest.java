@@ -918,6 +918,166 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void createPermitFromExemptionShouldAllowApplicationApproverAndReauthorizeTheExemption() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was created successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
+    when(service.createPermitFromExemption("EX-700", "idir\\jsmith")).thenReturn(dto);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.createPermitFromExemption(" EX-700 ", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(provincialAuthorizationService, times(2))
+        .requireExemption(authentication, "EX-700");
+    verify(service, times(2)).getApplicationNumbersForExemptionMutation("EX-700");
+    verify(service).createPermitFromExemption("EX-700", "idir\\jsmith");
+  }
+
+  @Test
+  void createPermitFromExemptionShouldAllowAdmin() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was created successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_ADMIN"), "createPermit"))
+        .thenReturn(true);
+    when(service.createPermitFromExemption("EX-700", "idir\\admin")).thenReturn(dto);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.createPermitFromExemption("EX-700", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).createPermitFromExemption("EX-700", "idir\\admin");
+  }
+
+  @Test
+  void createPermitFromExemptionShouldRejectProvincialSubmitterEvenIfActionIsGranted() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "bceid\\submitter", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createPermit"))
+        .thenReturn(true);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.createPermitFromExemption("EX-700", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(serviceProvider, never()).getIfAvailable();
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void createPermitFromExemptionShouldReauthorizeAfterWaitingForSerialization()
+      throws Exception {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    CountDownLatch holderEntered = new CountDownLatch(1);
+    CountDownLatch releaseHolder = new CountDownLatch(1);
+    CountDownLatch initialAuthorizationPassed = new CountDownLatch(1);
+    java.util.concurrent.atomic.AtomicInteger authorizationChecks =
+        new java.util.concurrent.atomic.AtomicInteger();
+    doAnswer(
+            ignored -> {
+              if (authorizationChecks.incrementAndGet() == 1) {
+                initialAuthorizationPassed.countDown();
+                return null;
+              }
+              throw new org.springframework.security.access.AccessDeniedException(
+                  "Exemption ownership changed while waiting.");
+            })
+        .when(provincialAuthorizationService)
+        .requireExemption(authentication, "EX-700");
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    try {
+      Future<String> holder =
+          executor.submit(
+              () ->
+                  operationMutex.executeExemptions(
+                      List.of("EX-700"),
+                      () -> {
+                        holderEntered.countDown();
+                        try {
+                          if (!releaseHolder.await(2, SECONDS)) {
+                            throw new IllegalStateException(
+                                "Timed out waiting to release exemption lock.");
+                          }
+                        } catch (InterruptedException exception) {
+                          Thread.currentThread().interrupt();
+                          throw new IllegalStateException(exception);
+                        }
+                        return "released";
+                      }));
+      assertThat(holderEntered.await(2, SECONDS)).isTrue();
+
+      Future<ResponseEntity<PermitMutationRpcResponseDto>> waitingMutation =
+          executor.submit(
+              () -> controller.createPermitFromExemption("EX-700", authentication));
+      assertThat(initialAuthorizationPassed.await(2, SECONDS)).isTrue();
+      assertThat(authorizationChecks).hasValue(1);
+      assertThat(waitingMutation.isDone()).isFalse();
+
+      releaseHolder.countDown();
+      assertThat(holder.get(2, SECONDS)).isEqualTo("released");
+      assertThatThrownBy(() -> waitingMutation.get(2, SECONDS))
+          .hasCauseInstanceOf(
+              org.springframework.security.access.AccessDeniedException.class);
+      assertThat(authorizationChecks).hasValue(2);
+      verify(service, never()).createPermitFromExemption(any(), any());
+    } finally {
+      releaseHolder.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void addPermitShouldRequireSavePermitEvenWhenCreatePermitIsGranted() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "idir\\approver", List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "savePermit"))
+        .thenReturn(false);
+    lenient()
+        .when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "createPermit"))
+        .thenReturn(true);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(serviceProvider, never()).getIfAvailable();
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void addPermitShouldRejectAnExemptionOutsideTheAuthenticatedScope() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
@@ -2035,6 +2195,7 @@ class PermitDetailsRpcControllerTest {
     List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
     lenient().when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(true);
+    lenient().when(authorizationService.canPerformAction(roles, "createPermit")).thenReturn(true);
     lenient()
         .when(authorizationService.canPerformAction(roles, "/applicationDetails"))
         .thenReturn(true);
@@ -2048,6 +2209,7 @@ class PermitDetailsRpcControllerTest {
     List<String> roles = List.of("LEXIS_READ_ONLY");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
     lenient().when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(false);
+    lenient().when(authorizationService.canPerformAction(roles, "createPermit")).thenReturn(false);
     return authentication;
   }
 

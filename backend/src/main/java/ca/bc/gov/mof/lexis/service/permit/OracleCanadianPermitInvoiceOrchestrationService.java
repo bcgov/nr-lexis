@@ -32,14 +32,15 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 /**
  * Legacy-compatible internal permit invoicing for Canadian destinations.
  *
- * <p>This implementation deliberately has no GBMS dependency. It is disabled by default and must
- * not be enabled until the deployed Oracle procedures have passed rollback acceptance testing.
+ * <p>This implementation has no GBMS dependency, is enabled by default, and can be disabled through
+ * configuration.
  */
 @Service
 @Profile("oracle")
 @ConditionalOnProperty(
     name = "lexis.permit-invoice.mode",
-    havingValue = "canadian-internal")
+    havingValue = "canadian-internal",
+    matchIfMissing = true)
 public class OracleCanadianPermitInvoiceOrchestrationService
     implements PermitInvoiceOrchestrationService {
 

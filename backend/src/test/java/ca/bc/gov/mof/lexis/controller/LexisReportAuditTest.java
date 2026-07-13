@@ -14,6 +14,8 @@ import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,11 +29,13 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class LexisReportAuditTest {
@@ -71,6 +75,7 @@ class LexisReportAuditTest {
                 Map.of("clientNumber", "secret-filter-value"), " xls "));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    consume(response);
     assertThat(output)
         .contains("event=lexis_report")
         .contains("actor=idir\\jsmith_forged_true")
@@ -181,6 +186,7 @@ class LexisReportAuditTest {
             authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    consume(response);
     String logs = output.getOut();
     assertThat(logs)
         .contains("actor=idir\\legacy-user")
@@ -197,6 +203,17 @@ class LexisReportAuditTest {
   private LexisReportController reportController() {
     return new LexisReportController(
         reportServiceProvider, provincialAuthorizationService, principalService);
+  }
+
+  private void consume(ResponseEntity<StreamingResponseBody> response) {
+    if (response.getBody() == null) {
+      return;
+    }
+    try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+      response.getBody().writeTo(outputStream);
+    } catch (IOException exception) {
+      throw new AssertionError("Unable to consume streamed report response", exception);
+    }
   }
 
   private int countOccurrences(String value, String needle) {

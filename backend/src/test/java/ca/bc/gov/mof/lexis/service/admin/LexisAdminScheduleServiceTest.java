@@ -24,8 +24,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -198,20 +196,21 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
-  void createScheduleShouldRejectDuplicateAdvertisingDate() {
+  void createScheduleShouldAllowLegacyDuplicateAdvertisingDate() {
     LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
             LocalDate.of(2026, 7, 1),
             LocalDate.of(2026, 6, 25),
             LocalDate.of(2026, 7, 8));
-    when(repository.advertisingDateExists(LocalDate.of(2026, 7, 1))).thenReturn(true);
+    ExportScheduleRowDto inserted = scheduleRow(1002L, request);
+    when(repository.insertExportSchedule(request)).thenReturn(inserted);
 
     var result = service.createSchedule(request);
 
-    assertThat(result.success()).isFalse();
-    assertThat(result.message()).isEqualTo("A schedule already exists for that advertising date.");
-    verify(repository).advertisingDateExists(LocalDate.of(2026, 7, 1));
+    assertThat(result.success()).isTrue();
+    assertThat(result.schedule()).isEqualTo(inserted);
+    verify(repository).insertExportSchedule(request);
   }
 
   @Test
@@ -231,7 +230,6 @@ class LexisAdminScheduleServiceTest {
             request.offerEndDate(),
             request.offerWithdrawalDate(),
             request.teacMeetingDate());
-    when(repository.advertisingDateExists(LocalDate.of(2026, 7, 1))).thenReturn(false);
     when(repository.insertExportSchedule(request)).thenReturn(inserted);
 
     var result = service.createSchedule(request);
@@ -243,40 +241,19 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
-  void createScheduleShouldTranslateDuplicateKeyToAdvertisingDateCollision() {
+  void createScheduleShouldNotMisclassifyPrimaryKeyCollisionAsAdvertisingDateCollision() {
     LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
             LocalDate.of(2026, 7, 1),
             LocalDate.of(2026, 7, 1),
             LocalDate.of(2026, 7, 15));
-    when(repository.advertisingDateExists(LocalDate.of(2026, 7, 1))).thenReturn(false);
     when(repository.insertExportSchedule(request))
         .thenThrow(new DuplicateKeyException("unique constraint"));
 
-    var result = service.createSchedule(request);
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.message())
-        .isEqualTo("A schedule already exists for that advertising date.");
-    assertThat(result.schedule()).isNull();
-  }
-
-  @Test
-  void createScheduleShouldFailClosedWhenAdvertisingDateLookupFails() {
-    LexisAdminScheduleService service = newService();
-    ExportScheduleCreateRequestDto request =
-        request(
-            LocalDate.of(2026, 7, 1),
-            LocalDate.of(2026, 7, 1),
-            LocalDate.of(2026, 7, 15));
-    when(repository.advertisingDateExists(request.advertisingDate()))
-        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
-
     assertThatThrownBy(() -> service.createSchedule(request))
-        .isInstanceOf(DataAccessResourceFailureException.class)
-        .hasMessage("Oracle unavailable");
-    verify(repository, never()).insertExportSchedule(any());
+        .isInstanceOf(DuplicateKeyException.class)
+        .hasMessage("unique constraint");
   }
 
   @Test
@@ -321,7 +298,7 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
-  void updateScheduleShouldRejectDuplicateAdvertisingDateBeforeMutation() {
+  void updateScheduleShouldAllowLegacyDuplicateAdvertisingDate() {
     LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
@@ -334,14 +311,14 @@ class LexisAdminScheduleServiceTest {
                 new ExportScheduleRowDto(
                     1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
     when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
-    when(repository.advertisingDateExistsForOtherSchedule(LocalDate.of(2026, 7, 15), 1001L))
-        .thenReturn(true);
+    ExportScheduleRowDto updated = scheduleRow(1001L, request);
+    when(repository.updateExportSchedule(1001L, request)).thenReturn(updated);
 
     var result = service.updateSchedule(1001L, request);
 
-    assertThat(result.success()).isFalse();
-    assertThat(result.message()).isEqualTo("A schedule already exists for that advertising date.");
-    verify(repository, never()).updateExportSchedule(1001L, request);
+    assertThat(result.success()).isTrue();
+    assertThat(result.schedule()).isEqualTo(updated);
+    verify(repository).updateExportSchedule(1001L, request);
   }
 
   @Test
@@ -367,8 +344,6 @@ class LexisAdminScheduleServiceTest {
                 new ExportScheduleRowDto(
                     1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
     when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
-    when(repository.advertisingDateExistsForOtherSchedule(LocalDate.of(2026, 7, 15), 1001L))
-        .thenReturn(false);
     when(repository.updateExportSchedule(1001L, request)).thenReturn(updated);
 
     var result = service.updateSchedule(1001L, request);
@@ -400,8 +375,6 @@ class LexisAdminScheduleServiceTest {
             request.teacMeetingDate());
     when(repository.findExportScheduleById(1001L)).thenReturn(Optional.of(existing));
     when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
-    when(repository.advertisingDateExistsForOtherSchedule(request.advertisingDate(), 1001L))
-        .thenReturn(false);
     when(repository.updateExportSchedule(1001L, request)).thenReturn(updated);
 
     var result = service.updateSchedule(1001L, request);
@@ -425,8 +398,6 @@ class LexisAdminScheduleServiceTest {
                 new ExportScheduleRowDto(
                     1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
     when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
-    when(repository.advertisingDateExistsForOtherSchedule(LocalDate.of(2026, 7, 15), 1001L))
-        .thenReturn(false);
     when(repository.updateExportSchedule(1001L, request))
         .thenThrow(new DataIntegrityViolationException("constraint"));
 
@@ -503,147 +474,8 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
-  void concurrentSameDateCreatesShouldInsertAtMostOneSchedule() throws Exception {
-    LexisAdminScheduleService service = newService();
-    ExportScheduleCreateRequestDto request =
-        request(
-            LocalDate.of(2026, 7, 15),
-            LocalDate.of(2026, 7, 8),
-            LocalDate.of(2026, 7, 22));
-    AtomicReference<Long> storedScheduleId = new AtomicReference<>();
-    AtomicInteger lookupCount = new AtomicInteger();
-    AtomicInteger insertCount = new AtomicInteger();
-    CountDownLatch firstLookupEntered = new CountDownLatch(1);
-    CountDownLatch releaseFirstLookup = new CountDownLatch(1);
-    CountDownLatch secondTaskStarted = new CountDownLatch(1);
-    CountDownLatch secondLookupEntered = new CountDownLatch(1);
-
-    when(repository.advertisingDateExists(request.advertisingDate()))
-        .thenAnswer(
-            invocation -> {
-              boolean exists = storedScheduleId.get() != null;
-              if (lookupCount.incrementAndGet() == 1) {
-                firstLookupEntered.countDown();
-                awaitOrFail(releaseFirstLookup);
-              } else {
-                secondLookupEntered.countDown();
-              }
-              return exists;
-            });
-    when(repository.insertExportSchedule(request))
-        .thenAnswer(
-            invocation -> {
-              int sequence = insertCount.incrementAndGet();
-              storedScheduleId.set(2000L + sequence);
-              return scheduleRow(2000L + sequence, request);
-            });
-
-    ExecutorService executor = Executors.newFixedThreadPool(2);
-    try {
-      var first = executor.submit(() -> service.createSchedule(request));
-      assertThat(firstLookupEntered.await(5, TimeUnit.SECONDS)).isTrue();
-      var second =
-          executor.submit(
-              () -> {
-                secondTaskStarted.countDown();
-                return service.createSchedule(request);
-              });
-      assertThat(secondTaskStarted.await(5, TimeUnit.SECONDS)).isTrue();
-      assertThat(secondLookupEntered.await(250, TimeUnit.MILLISECONDS)).isFalse();
-
-      releaseFirstLookup.countDown();
-      var firstResult = first.get(5, TimeUnit.SECONDS);
-      var secondResult = second.get(5, TimeUnit.SECONDS);
-
-      assertThat(insertCount).hasValue(1);
-      assertThat(List.of(firstResult.success(), secondResult.success()))
-          .containsExactlyInAnyOrder(true, false);
-      verify(repository, times(1)).insertExportSchedule(request);
-    } finally {
-      releaseFirstLookup.countDown();
-      executor.shutdownNow();
-    }
-  }
-
-  @Test
-  void concurrentCreateAndUpdateToSameDateShouldAllowOnlyOneWriter() throws Exception {
-    LexisAdminScheduleService service = newService();
-    LocalDate targetDate = LocalDate.of(2026, 7, 15);
-    ExportScheduleCreateRequestDto createRequest =
-        request(targetDate, LocalDate.of(2026, 7, 8), LocalDate.of(2026, 7, 22));
-    ExportScheduleCreateRequestDto updateRequest =
-        request(targetDate, LocalDate.of(2026, 7, 9), LocalDate.of(2026, 7, 23));
-    AtomicLong targetDateOwner = new AtomicLong();
-    AtomicInteger writeCount = new AtomicInteger();
-
-    when(repository.findExportScheduleById(1001L))
-        .thenReturn(
-            Optional.of(
-                new ExportScheduleRowDto(
-                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
-    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
-    when(repository.advertisingDateExists(targetDate))
-        .thenAnswer(invocation -> targetDateOwner.get() != 0L);
-    when(repository.advertisingDateExistsForOtherSchedule(targetDate, 1001L))
-        .thenAnswer(
-            invocation ->
-                targetDateOwner.get() != 0L && targetDateOwner.get() != 1001L);
-    org.mockito.Mockito.lenient()
-        .when(repository.insertExportSchedule(createRequest))
-        .thenAnswer(
-            invocation -> {
-              if (!targetDateOwner.compareAndSet(0L, 2002L)) {
-                throw new AssertionError("Create wrote a duplicate advertising date");
-              }
-              writeCount.incrementAndGet();
-              return scheduleRow(2002L, createRequest);
-            });
-    org.mockito.Mockito.lenient()
-        .when(repository.updateExportSchedule(1001L, updateRequest))
-        .thenAnswer(
-            invocation -> {
-              if (!targetDateOwner.compareAndSet(0L, 1001L)) {
-                throw new AssertionError("Update wrote a duplicate advertising date");
-              }
-              writeCount.incrementAndGet();
-              return scheduleRow(1001L, updateRequest);
-            });
-
-    CountDownLatch ready = new CountDownLatch(2);
-    CountDownLatch start = new CountDownLatch(1);
-    ExecutorService executor = Executors.newFixedThreadPool(2);
-    try {
-      var create =
-          executor.submit(
-              () -> {
-                ready.countDown();
-                awaitOrFail(start);
-                return service.createSchedule(createRequest);
-              });
-      var update =
-          executor.submit(
-              () -> {
-                ready.countDown();
-                awaitOrFail(start);
-                return service.updateSchedule(1001L, updateRequest);
-              });
-      assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
-      start.countDown();
-
-      var createResult = create.get(5, TimeUnit.SECONDS);
-      var updateResult = update.get(5, TimeUnit.SECONDS);
-
-      assertThat(writeCount).hasValue(1);
-      assertThat(List.of(createResult.success(), updateResult.success()))
-          .containsExactlyInAnyOrder(true, false);
-    } finally {
-      start.countDown();
-      executor.shutdownNow();
-    }
-  }
-
-  @Test
-  void mutationGuardShouldRemainHeldUntilTransactionCompletionReturns() throws Exception {
+  void mutationGuardShouldAllowLegacyDuplicateDateAfterFirstTransactionCompletes()
+      throws Exception {
     BlockingCompletionTransactions transactions = new BlockingCompletionTransactions();
     LexisAdminScheduleService service =
         new LexisAdminScheduleService(repository, FIXED_CLOCK, transactions);
@@ -652,13 +484,8 @@ class LexisAdminScheduleServiceTest {
             LocalDate.of(2026, 7, 15),
             LocalDate.of(2026, 7, 8),
             LocalDate.of(2026, 7, 22));
-    ExportScheduleCreateRequestDto secondRequest =
-        request(
-            LocalDate.of(2026, 8, 15),
-            LocalDate.of(2026, 8, 8),
-            LocalDate.of(2026, 8, 22));
+    ExportScheduleCreateRequestDto secondRequest = firstRequest;
     AtomicInteger sequence = new AtomicInteger();
-    when(repository.advertisingDateExists(any())).thenReturn(false);
     when(repository.insertExportSchedule(any()))
         .thenAnswer(
             invocation ->

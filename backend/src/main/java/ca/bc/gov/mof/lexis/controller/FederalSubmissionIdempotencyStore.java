@@ -12,9 +12,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 
 /**
- * Bounded, per-JVM duplicate suppression for synchronous federal submissions.
- *
- * <p>This store deliberately does not claim to provide cross-pod or restart-durable idempotency.
+ * Process-local duplicate suppression for synchronous federal submissions. State is not shared
+ * across pods or retained across restarts.
  */
 final class FederalSubmissionIdempotencyStore {
 

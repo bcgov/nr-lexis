@@ -298,7 +298,7 @@ class OfferDetailsRpcControllerTest {
     params.add("offerNumber", "81001");
     params.add("packageNumber", " PKG-903 ");
     params.add("companyName", "Example Lumber");
-    params.add("contactName", "Alex Example");
+    params.add("contactName", "Sample Contact");
     params.add("purchaseOfferAmount", "12500.25");
     params.add("purchaseOfferDate", "03/02/2026");
     params.add("offerEndDate", "2026-03-18");

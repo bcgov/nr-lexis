@@ -6,6 +6,8 @@ export type ProvincialApplicationSearchFilters = {
   applicationStatus: string
   productTypeCode: string
   region: string[]
+  receivedFromDate: string
+  receivedToDate: string
   listingFromDate: string
   listingToDate: string
   applicantClientNumber: string

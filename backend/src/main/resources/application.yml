@@ -88,8 +88,8 @@ lexis:
     cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}
     zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}
   permit-invoice:
-    # Keep disabled until the deployed Oracle procedures pass rollback acceptance testing.
-    mode: ${LEXIS_PERMIT_INVOICE_MODE:disabled}
+    # Legacy parity: Canadian permits use internal LEXIS invoicing and skip GBMS.
+    mode: ${LEXIS_PERMIT_INVOICE_MODE:canadian-internal}
   virus-scan:
     enabled: ${LEXIS_VIRUS_SCAN_ENABLED:false}
     host: ${LEXIS_VIRUS_SCAN_HOST:localhost}
@@ -166,6 +166,7 @@ lexis:
         - "approveExemption"
         - "createApplication"
         - "createOffer"
+        - "createPermit"
         - "saveExemption"
         - "savePermit"
         - "uploadApplicationSubmission"
@@ -192,7 +193,7 @@ lexis:
         - "uploadApplicationSubmission"
       LEXIS_DELEGATED_ADMIN: []
   federal-submission:
-    # Dedicated CREATE stays disabled until the caller contract and deployment are explicitly approved.
+    # Federal submission creation is disabled by default and must be enabled explicitly.
     create-enabled: false
     require-request-id: false
     require-user-reference: false

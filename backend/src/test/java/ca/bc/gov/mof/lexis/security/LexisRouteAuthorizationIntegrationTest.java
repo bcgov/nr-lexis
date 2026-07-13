@@ -285,6 +285,21 @@ class LexisRouteAuthorizationIntegrationTest {
             expected(
                 HttpMethod.POST,
                 "/api/lexis/permitDetailsRPC.do",
+                "addPermit",
+                "savePermit"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/rpc/permit-details/add-permit",
+                null,
+                "savePermit"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/rpc/permit-details/create-from-exemption",
+                null,
+                "createPermit"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/permitDetailsRPC.do",
                 "updateShipping",
                 "savePermit"),
             expected(
@@ -1131,6 +1146,40 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
         .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void createPermitFromExemptionShouldAllowOnlyAdminAndApplicationApprover() throws Exception {
+    String path = "/api/lexis/rpc/permit-details/create-from-exemption";
+
+    mockMvc
+        .perform(post(path).param("exemptionNumber", "EX-700").with(csrf()))
+        .andExpect(status().isUnauthorized());
+    for (String forbiddenRole :
+        List.of(
+            "LEXIS_READ_ONLY",
+            "LEXIS_EXEMPTION_APPROVER",
+            "LEXIS_PROVINCIAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER_00077881")) {
+      mockMvc
+          .perform(
+              post(path)
+                  .param("exemptionNumber", "EX-700")
+                  .with(csrf())
+                  .with(jwt().authorities(new SimpleGrantedAuthority(forbiddenRole))))
+          .andExpect(status().isForbidden());
+    }
+    for (String allowedRole : List.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER")) {
+      mockMvc
+          .perform(
+              post(path)
+                  .param("exemptionNumber", "EX-700")
+                  .with(csrf())
+                  .with(jwt().authorities(new SimpleGrantedAuthority(allowedRole))))
+          .andExpect(status().isNoContent())
+          .andExpect(handler().handlerType(PermitDetailsRpcController.class))
+          .andExpect(handler().methodName("createPermitFromExemption"));
+    }
   }
 
   @Test

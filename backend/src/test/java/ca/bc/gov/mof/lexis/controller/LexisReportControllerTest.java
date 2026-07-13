@@ -18,6 +18,11 @@ import ca.bc.gov.mof.lexis.service.report.LexisReportOutputLimitException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +42,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | LexisReportController")
@@ -66,10 +72,11 @@ class LexisReportControllerTest {
         new LexisReportController(
             reportServiceProvider, provincialAuthorizationService, principalService);
 
-    ResponseEntity<byte[]> response = controller.offerReport(sampleRequest());
+    ResponseEntity<StreamingResponseBody> response = controller.offerReport(sampleRequest());
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-    assertThat(new String(response.getBody())).contains("temporarily unavailable");
+    assertThat(new String(responseBody(response), StandardCharsets.UTF_8))
+        .contains("temporarily unavailable");
     verifyNoInteractions(reportService);
   }
 
@@ -82,7 +89,7 @@ class LexisReportControllerTest {
         new LexisReportController(
             reportServiceProvider, provincialAuthorizationService, principalService);
 
-    ResponseEntity<byte[]> response = controller.offerReport(sampleRequest());
+    ResponseEntity<StreamingResponseBody> response = controller.offerReport(sampleRequest());
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
   }
@@ -96,10 +103,10 @@ class LexisReportControllerTest {
         new LexisReportController(
             reportServiceProvider, provincialAuthorizationService, principalService);
 
-    ResponseEntity<byte[]> response = controller.offerReport(sampleRequest());
+    ResponseEntity<StreamingResponseBody> response = controller.offerReport(sampleRequest());
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-    assertThat(new String(response.getBody()))
+    assertThat(new String(responseBody(response), StandardCharsets.UTF_8))
         .contains("Unable to generate")
         .doesNotContain("Oracle failed")
         .doesNotContain("down");
@@ -114,11 +121,12 @@ class LexisReportControllerTest {
         new LexisReportController(
             reportServiceProvider, provincialAuthorizationService, principalService);
 
-    ResponseEntity<byte[]> response = controller.offerReport(sampleRequest());
+    ResponseEntity<StreamingResponseBody> response = controller.offerReport(sampleRequest());
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
     assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
-    assertThat(new String(response.getBody())).isEqualTo("Report generation is busy. Try again shortly.");
+    assertThat(new String(responseBody(response), StandardCharsets.UTF_8))
+        .isEqualTo("Report generation is busy. Try again shortly.");
   }
 
   @Test
@@ -130,11 +138,11 @@ class LexisReportControllerTest {
         new LexisReportController(
             reportServiceProvider, provincialAuthorizationService, principalService);
 
-    ResponseEntity<byte[]> response = controller.offerReport(sampleRequest());
+    ResponseEntity<StreamingResponseBody> response = controller.offerReport(sampleRequest());
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
     assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
-    assertThat(new String(response.getBody()))
+    assertThat(new String(responseBody(response), StandardCharsets.UTF_8))
         .contains("configured maximum of 1024 bytes")
         .contains("Narrow the report filters");
   }
@@ -221,12 +229,13 @@ class LexisReportControllerTest {
         new LexisReportController(
             reportServiceProvider, provincialAuthorizationService, principalService);
 
-    controller.offerReport(
-        new LexisReportRequestDto(
-            Map.of(
-                "fromDate", " 07/01/2026 ",
-                "toDate", "07/12/2026"),
-            " csv "));
+    responseBody(
+        controller.offerReport(
+            new LexisReportRequestDto(
+                Map.of(
+                    "fromDate", " 07/01/2026 ",
+                    "toDate", "07/12/2026"),
+                " csv ")));
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -365,9 +374,9 @@ class LexisReportControllerTest {
         .when(provincialAuthorizationService)
         .requirePermit(authentication, 7000123L);
 
-    ResponseEntity<byte[]> exemptionResponse =
+    ResponseEntity<StreamingResponseBody> exemptionResponse =
         controller.approvedExemptionReport(approvedExemptionRequest(), authentication);
-    ResponseEntity<byte[]> permitResponse =
+    ResponseEntity<StreamingResponseBody> permitResponse =
         controller.permitReport(permitRequest(), authentication);
 
     assertThat(exemptionResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
@@ -415,13 +424,15 @@ class LexisReportControllerTest {
               return Optional.of(sampleGeneratedReport());
             });
 
-    ResponseEntity<byte[]> response = controller.offerReport(null);
+    ResponseEntity<StreamingResponseBody> response = controller.offerReport(null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    responseBody(response);
   }
 
   private void assertDelegatesTo(
-      String expectedReportAction, Function<LexisReportController, ResponseEntity<byte[]>> invoker) {
+      String expectedReportAction,
+      Function<LexisReportController, ResponseEntity<StreamingResponseBody>> invoker) {
     when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
     LexisReportController controller =
         new LexisReportController(
@@ -429,13 +440,64 @@ class LexisReportControllerTest {
     when(reportService.generateReport(eq(expectedReportAction), any(LexisReportRequestDto.class)))
         .thenReturn(Optional.of(sampleGeneratedReport()));
 
-    ResponseEntity<byte[]> response = invoker.apply(controller);
+    ResponseEntity<StreamingResponseBody> response = invoker.apply(controller);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PDF);
     assertThat(response.getHeaders().getContentDisposition().getFilename()).isEqualTo("lexis-report.pdf");
-    assertThat(response.getBody()).containsExactly(1, 2, 3);
+    assertThat(response.getHeaders().getContentLength()).isEqualTo(3L);
+    TemporaryReportStreamingBody stagedBody =
+        (TemporaryReportStreamingBody) response.getBody();
+    assertThat(stagedBody).isNotNull();
+    assertThat(Files.exists(stagedBody.temporaryFile())).isTrue();
+    assertThat(responseBody(response)).containsExactly(1, 2, 3);
+    assertThat(Files.exists(stagedBody.temporaryFile())).isFalse();
     verify(reportService).generateReport(eq(expectedReportAction), any(LexisReportRequestDto.class));
+  }
+
+  @Test
+  void streamedReportShouldDeleteTemporaryFileWhenClientTransferFails() {
+    when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
+    when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
+        .thenReturn(Optional.of(sampleGeneratedReport()));
+    LexisReportController controller =
+        new LexisReportController(
+            reportServiceProvider, provincialAuthorizationService, principalService);
+
+    ResponseEntity<StreamingResponseBody> response = controller.offerReport(sampleRequest());
+    TemporaryReportStreamingBody stagedBody =
+        (TemporaryReportStreamingBody) response.getBody();
+    assertThat(stagedBody).isNotNull();
+    assertThat(Files.exists(stagedBody.temporaryFile())).isTrue();
+    OutputStream failingOutput =
+        new OutputStream() {
+          @Override
+          public void write(int value) throws IOException {
+            throw new IOException("client disconnected");
+          }
+
+          @Override
+          public void write(byte[] bytes, int offset, int length) throws IOException {
+            throw new IOException("client disconnected");
+          }
+        };
+
+    assertThatThrownBy(() -> stagedBody.writeTo(failingOutput))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("client disconnected");
+    assertThat(Files.exists(stagedBody.temporaryFile())).isFalse();
+  }
+
+  private byte[] responseBody(ResponseEntity<StreamingResponseBody> response) {
+    if (response.getBody() == null) {
+      return new byte[0];
+    }
+    try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+      response.getBody().writeTo(outputStream);
+      return outputStream.toByteArray();
+    } catch (IOException exception) {
+      throw new AssertionError("Unable to read streamed report response", exception);
+    }
   }
 
   private LexisGeneratedReport sampleGeneratedReport() {

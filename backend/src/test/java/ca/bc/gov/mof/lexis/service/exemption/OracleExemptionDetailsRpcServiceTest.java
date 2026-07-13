@@ -1796,9 +1796,12 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void updateExemptionShouldSaveUpdateAndRevertApplicationsWhenCancelled() {
+  void updateExemptionShouldPreserveLegacyCancellationWithLivePermits() {
     ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
-    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = application("EXE", "EX-205", "P");
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord exemptedApplication =
+        application("EXE", "EX-205", "P");
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord permittedApplication =
+        application("PMT", "EX-205", "P");
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
     when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
         .thenReturn(true);
@@ -1806,8 +1809,13 @@ class OracleExemptionDetailsRpcServiceTest {
         .thenReturn(
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
-                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
-    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, 50.0d, 50.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(exemptedApplication));
+    when(repository.findApplicationLinkRecord(1000457L))
+        .thenReturn(Optional.of(permittedApplication));
     when(repository.updateApplicationExemption(any(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class)))
         .thenReturn(true);
 
@@ -1847,6 +1855,7 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(repository).updateApplicationExemption(applicationCaptor.capture());
     assertThat(applicationCaptor.getValue().exemptionNumber()).isEqualTo("EX-205");
     assertThat(applicationCaptor.getValue().applicationStatusCode()).isEqualTo("APP");
+    verify(repository, never()).findPermitsByExemptionNumber(any());
     verify(repository, never()).findExemptionRate("EX-205");
   }
 

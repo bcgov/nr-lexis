@@ -474,8 +474,7 @@ public class ProvincialAuthorizationService {
   }
 
   private boolean isOrgUnitRestricted(Set<String> roles, OrgUnitSurface surface) {
-    // Current FAM staff roles are global. Keep the surface-aware constraint plumbing so a future
-    // explicitly scoped identity model can be introduced without removing region business data.
+    // Current FAM staff roles are global and are not organization-unit restricted.
     return false;
   }
 

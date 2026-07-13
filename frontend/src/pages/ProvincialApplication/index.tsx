@@ -96,6 +96,8 @@ const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
   applicationStatus: '',
   productTypeCode: '',
   region: [],
+  receivedFromDate: '',
+  receivedToDate: '',
   listingFromDate: '',
   listingToDate: '',
   applicantClientNumber: '',
@@ -148,6 +150,8 @@ const buildSearchParams = (
     ['applicationStatus', filters.applicationStatus],
     ['productTypeCode', filters.productTypeCode],
     ['region', filters.region],
+    ['receivedFromDate', filters.receivedFromDate],
+    ['receivedToDate', filters.receivedToDate],
     ['listingFromDate', filters.listingFromDate],
     ['listingToDate', filters.listingToDate],
     ['applicantClientNumber', filters.applicantClientNumber],
@@ -196,6 +200,8 @@ const ProvincialApplicationPage = () => {
       applicationStatus: searchParams.get('applicationStatus') ?? '',
       productTypeCode: searchParams.get('productTypeCode') ?? '',
       region: parseCsvParam(searchParams.get('region')),
+      receivedFromDate: searchParams.get('receivedFromDate') ?? '',
+      receivedToDate: searchParams.get('receivedToDate') ?? '',
       listingFromDate: searchParams.get('listingFromDate') ?? '',
       listingToDate: searchParams.get('listingToDate') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
@@ -258,8 +264,18 @@ const ProvincialApplicationPage = () => {
       : undefined
 
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(filters.listingFromDate, filters.listingToDate)
-  }, [filters.listingFromDate, filters.listingToDate])
+    return hasInvalidIsoDateValue(
+      filters.receivedFromDate,
+      filters.receivedToDate,
+      filters.listingFromDate,
+      filters.listingToDate,
+    )
+  }, [
+    filters.receivedFromDate,
+    filters.receivedToDate,
+    filters.listingFromDate,
+    filters.listingToDate,
+  ])
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback((nextResults: ProvincialApplicationSearchResponse) => {
@@ -298,7 +314,14 @@ const ProvincialApplicationPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateValue(request.filters.listingFromDate, request.filters.listingToDate)) {
+      if (
+        hasInvalidIsoDateValue(
+          request.filters.receivedFromDate,
+          request.filters.receivedToDate,
+          request.filters.listingFromDate,
+          request.filters.listingToDate,
+        )
+      ) {
         setLoading(false)
         return
       }
@@ -597,6 +620,22 @@ const ProvincialApplicationPage = () => {
                   />
                 </>
               )}
+              <IsoDatePicker
+                id="receivedFromDate"
+                labelText="Received from date"
+                value={filters.receivedFromDate}
+                invalid={!isValidIsoDate(filters.receivedFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('receivedFromDate', value)}
+              />
+              <IsoDatePicker
+                id="receivedToDate"
+                labelText="Received to date"
+                value={filters.receivedToDate}
+                invalid={!isValidIsoDate(filters.receivedToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('receivedToDate', value)}
+              />
               <IsoDatePicker
                 id="listingFromDate"
                 labelText="Listing from date"

@@ -19,16 +19,16 @@ class OracleCanadianPermitInvoiceConfigurationTest {
           .withPropertyValues("spring.profiles.active=oracle");
 
   @Test
-  void shouldRemainDisabledByDefault() {
+  void shouldEnableCanadianInternalInvoicingByDefault() {
     contextRunner.run(
         context ->
             assertThat(context)
-                .doesNotHaveBean(OracleCanadianPermitInvoiceOrchestrationService.class)
-                .doesNotHaveBean(PermitInvoiceOrchestrationService.class));
+                .hasSingleBean(OracleCanadianPermitInvoiceOrchestrationService.class)
+                .hasSingleBean(PermitInvoiceOrchestrationService.class));
   }
 
   @Test
-  void shouldEnableOnlyTheCanadianInternalMode() {
+  void shouldEnableTheExplicitCanadianInternalMode() {
     contextRunner
         .withPropertyValues("lexis.permit-invoice.mode=canadian-internal")
         .run(
@@ -36,6 +36,17 @@ class OracleCanadianPermitInvoiceConfigurationTest {
                 assertThat(context)
                     .hasSingleBean(OracleCanadianPermitInvoiceOrchestrationService.class)
                     .hasSingleBean(PermitInvoiceOrchestrationService.class));
+  }
+
+  @Test
+  void shouldAllowAnExplicitOperationalDisable() {
+    contextRunner
+        .withPropertyValues("lexis.permit-invoice.mode=disabled")
+        .run(
+            context ->
+                assertThat(context)
+                    .doesNotHaveBean(OracleCanadianPermitInvoiceOrchestrationService.class)
+                    .doesNotHaveBean(PermitInvoiceOrchestrationService.class));
   }
 
   @Test

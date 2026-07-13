@@ -183,7 +183,7 @@ describe('create-submit-service', () => {
       packageNumber: 'PKG-9',
       offeringClientNumber: '00012345',
       companyName: 'Example Lumber',
-      contactName: 'Alex Example',
+      contactName: 'Sample Contact',
       offerVolume: '99.9',
       purchaseOfferAmount: '25000',
       teacReviewDate: '2026-01-15',
@@ -198,7 +198,7 @@ describe('create-submit-service', () => {
     expect(result.createdId).toBe('OP-900')
     const [, body] = postMock.mock.calls[0]
     expect(body.get('companyName')).toBe('Example Lumber')
-    expect(body.get('contactName')).toBe('Alex Example')
+    expect(body.get('contactName')).toBe('Sample Contact')
     expect(body.get('offerVolume')).toBe('99.9')
     expect(body.get('region')).toBeNull()
     expect(body.get('purchaseOfferDate')).toBeNull()
@@ -226,7 +226,7 @@ describe('create-submit-service', () => {
       packageNumber: 'PKG-9',
       offeringClientNumber: '00012345',
       companyName: 'Example Lumber',
-      contactName: 'Alex Example',
+      contactName: 'Sample Contact',
       offerVolume: '99.9',
       purchaseOfferAmount: '25000',
       teacReviewDate: '',
@@ -255,7 +255,7 @@ describe('create-submit-service', () => {
       packageNumber: 'PKG-9',
       offeringClientNumber: '00012345',
       companyName: 'Example Lumber',
-      contactName: 'Alex Example',
+      contactName: 'Sample Contact',
       region: '11',
       offerVolume: '99.9',
       purchaseOfferAmount: '25000',

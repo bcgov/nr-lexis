@@ -51,6 +51,7 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 | `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
 | `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
+| `LEXIS_PERMIT_INVOICE_MODE` | Enables Canadian internal invoicing. Non-Canadian GBMS invoice transitions are not implemented. | canadian-internal |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
 | `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
 

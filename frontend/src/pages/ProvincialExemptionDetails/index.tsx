@@ -52,6 +52,7 @@ import {
   removeExemptionDocument,
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
+import { createPermitFromExemption } from '@/service/provincial-permit-documents-invoices-service'
 import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -160,6 +161,10 @@ const ProvincialExemptionDetailsPage = () => {
   const [approvalConfirmationTarget, setApprovalConfirmationTarget] = useState<string | null>(null)
   const [approvalCertified, setApprovalCertified] = useState(false)
   const [approvalDate, setApprovalDate] = useState('')
+  const [permitCreationConfirmationOpen, setPermitCreationConfirmationOpen] = useState(false)
+  const [creatingPermit, setCreatingPermit] = useState(false)
+  const [permitCreationDestination, setPermitCreationDestination] = useState<string | null>(null)
+  const [permitCreationRequiresReload, setPermitCreationRequiresReload] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
   const [applicationNumberToAdd, setApplicationNumberToAdd] = useState('')
   const [applicationMutationNumber, setApplicationMutationNumber] = useState<string | null>(null)
@@ -199,11 +204,22 @@ const ProvincialExemptionDetailsPage = () => {
   )
 
   useEffect(() => {
+    if (creatingPermit || !permitCreationDestination) return
+
+    const destination = withCurrentSearch(permitCreationDestination)
+    navigate(destination)
+  }, [creatingPermit, navigate, permitCreationDestination, withCurrentSearch])
+
+  useEffect(() => {
     const load = async () => {
       setApprovalConfirmationOpen(false)
       setApprovalConfirmationTarget(null)
       setApprovalCertified(false)
       setApprovalDate('')
+      setPermitCreationConfirmationOpen(false)
+      setCreatingPermit(false)
+      setPermitCreationDestination(null)
+      setPermitCreationRequiresReload(false)
       setApplicationNumberToAdd('')
       setApplicationMutationNumber(null)
       const isLatestRequest = beginDetailRequest()
@@ -464,6 +480,16 @@ const ProvincialExemptionDetailsPage = () => {
     persistedStatusCode === 'NEW' &&
     !editing &&
     !exemptionEditLocked
+  const canCreateMinisterialPermit =
+    canPerform('createPermit') &&
+    isApplicationApprover &&
+    persistedTypeCode === 'M' &&
+    persistedStatusCode === 'ACT' &&
+    editContextLoaded &&
+    !exemptionEditLocked &&
+    !permitCreationRequiresReload &&
+    !editing &&
+    !isExemptionDirty
   const canLinkApplications =
     isApplicationApprover &&
     canSaveExemption &&
@@ -827,6 +853,51 @@ const ProvincialExemptionDetailsPage = () => {
       setApprovalDate('')
     }
   }, [approvalCertified, approving, detail, refreshEditableData])
+
+  const closePermitCreationConfirmation = useCallback(() => {
+    if (creatingPermit) return
+    setPermitCreationConfirmationOpen(false)
+  }, [creatingPermit])
+
+  const onCreatePermitFromExemption = useCallback(async () => {
+    if (!detail || !canCreateMinisterialPermit || creatingPermit) return
+
+    let newPermitPath: string | null = null
+    setCreatingPermit(true)
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    try {
+      const result = await createPermitFromExemption(detail.exemptionNumber)
+      if (!result.success) {
+        setActionErrorMessage(
+          result.errors.join(' ') || result.message || 'Unable to create the permit.',
+        )
+        return
+      }
+
+      const permitNumber = result.permitNumber.trim()
+      if (!/^[1-9]\d*$/.test(permitNumber)) {
+        setPermitCreationRequiresReload(true)
+        setActionErrorMessage(
+          'The permit response did not include a valid permit number. Reload before trying again.',
+        )
+        return
+      }
+
+      newPermitPath = `/provincial/permit/${encodeURIComponent(permitNumber)}`
+    } catch (error) {
+      console.error(error)
+      setPermitCreationRequiresReload(true)
+      setActionErrorMessage(
+        'The permit request outcome could not be confirmed. Reload this exemption and check Related permits before trying again.',
+      )
+    } finally {
+      setCreatingPermit(false)
+      setPermitCreationConfirmationOpen(false)
+    }
+
+    if (newPermitPath) setPermitCreationDestination(newPermitPath)
+  }, [canCreateMinisterialPermit, creatingPermit, detail])
 
   const onGenerateApprovedReport = useCallback(async () => {
     if (!detail || generatingReport) return
@@ -1544,6 +1615,18 @@ const ProvincialExemptionDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <h2 className="detail-tile-title">Related permits</h2>
+                        {canCreateMinisterialPermit && (
+                          <div className="legacy-search-actions">
+                            <Button
+                              kind="secondary"
+                              size="sm"
+                              disabled={creatingPermit}
+                              onClick={() => setPermitCreationConfirmationOpen(true)}
+                            >
+                              {creatingPermit ? 'Creating permit...' : 'Apply for new permit'}
+                            </Button>
+                          </div>
+                        )}
                         {detail.blanketOic && blanketOicTotalsErrorMessage && (
                           <AppNotification
                             kind="warning"
@@ -1919,11 +2002,34 @@ const ProvincialExemptionDetailsPage = () => {
           />
         </Modal>
       )}
+      {permitCreationConfirmationOpen && canCreateMinisterialPermit && detail && (
+        <Modal
+          open
+          modalHeading="Apply for new permit"
+          primaryButtonText={creatingPermit ? 'Creating...' : 'Create permit'}
+          secondaryButtonText="Cancel"
+          primaryButtonDisabled={creatingPermit}
+          aria-describedby="permit-creation-confirmation-description"
+          onRequestClose={closePermitCreationConfirmation}
+          onSecondarySubmit={closePermitCreationConfirmation}
+          onRequestSubmit={() => void onCreatePermitFromExemption()}
+        >
+          <p id="permit-creation-confirmation-description">
+            This creates a new active permit shell for Ministerial exemption{' '}
+            {detail.exemptionNumber}.
+          </p>
+          <p>
+            Applications are not attached automatically. Attach the required applications separately
+            from the new permit.
+          </p>
+        </Modal>
+      )}
       <UnsavedChangesGuard
         isDirty={isExemptionDirty}
         isBusy={
           saving ||
           approving ||
+          creatingPermit ||
           applicationMutationNumber !== null ||
           isRemovingDocumentId !== null ||
           documentUploadBusy

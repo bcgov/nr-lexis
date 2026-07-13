@@ -5,13 +5,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import java.io.ByteArrayOutputStream;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -331,6 +335,99 @@ class PermitRpcRepositoryTest {
         .containsExactly(1000999L, "EX-700", "Y");
     verify(callableStatement).setString(1, "1000999");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    verify(resultSet, never()).getString("END_USE_SORT");
+  }
+
+  @Test
+  void insertPermitDetailShouldBindTheCheckedInThirtySevenArgumentContract()
+      throws Exception {
+    String call =
+        "{ call LEXIS_GROUP_9.INSERT_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) }";
+    stubCursorProcedure(call, 37);
+    when(resultSet.next()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+    PermitMutationRow row =
+        new PermitMutationRow(
+            null,
+            "Destination",
+            "Transport",
+            LocalDate.of(2026, 4, 1),
+            "Other port",
+            LocalDate.of(2026, 4, 2),
+            LocalDate.of(2026, 4, 3),
+            null,
+            "R-1",
+            LocalDate.of(2026, 12, 31),
+            12.5d,
+            10L,
+            4L,
+            "FED-1",
+            "Remarks",
+            null,
+            null,
+            "TR",
+            "W",
+            "00000001",
+            "01",
+            "00000002",
+            "02",
+            "EX-700",
+            1835L,
+            "VA",
+            "ACT",
+            "S",
+            "US",
+            1.5d,
+            "Override",
+            99L,
+            100L,
+            20.5d,
+            "T");
+
+    assertThat(repository.insertPermitDetail(row, "idir\\jsmith")).isEmpty();
+
+    verify(callableStatement).setString(1, "Destination");
+    verify(callableStatement).setString(2, "Transport");
+    verify(callableStatement)
+        .setTimestamp(3, Timestamp.valueOf(LocalDate.of(2026, 4, 1).atStartOfDay()));
+    verify(callableStatement).setString(4, "Other port");
+    verify(callableStatement)
+        .setTimestamp(5, Timestamp.valueOf(LocalDate.of(2026, 4, 2).atStartOfDay()));
+    verify(callableStatement)
+        .setTimestamp(6, Timestamp.valueOf(LocalDate.of(2026, 4, 3).atStartOfDay()));
+    verify(callableStatement).setString(8, "R-1");
+    verify(callableStatement)
+        .setTimestamp(9, Timestamp.valueOf(LocalDate.of(2026, 12, 31).atStartOfDay()));
+    verify(callableStatement).setDouble(10, 12.5d);
+    verify(callableStatement).setLong(11, 10L);
+    verify(callableStatement).setLong(12, 4L);
+    verify(callableStatement).setString(13, "FED-1");
+    verify(callableStatement).setString(14, "Remarks");
+    verify(callableStatement).setString(15, "idir\\jsmith");
+    verify(callableStatement).setTimestamp(eq(16), any(Timestamp.class));
+    verify(callableStatement).setNull(17, Types.VARCHAR);
+    verify(callableStatement).setNull(18, Types.TIMESTAMP);
+    verify(callableStatement).setString(19, "TR");
+    verify(callableStatement).setString(20, "W");
+    verify(callableStatement).setString(21, "00000001");
+    verify(callableStatement).setString(22, "01");
+    verify(callableStatement).setString(23, "00000002");
+    verify(callableStatement).setString(24, "02");
+    verify(callableStatement).setString(25, "EX-700");
+    verify(callableStatement).setLong(26, 1835L);
+    verify(callableStatement).setString(27, "VA");
+    verify(callableStatement).setString(28, "ACT");
+    verify(callableStatement).setString(29, "US");
+    verify(callableStatement).setString(30, "S");
+    verify(callableStatement).setDouble(31, 1.5d);
+    verify(callableStatement).setString(32, "Override");
+    verify(callableStatement).setLong(33, 99L);
+    verify(callableStatement).setLong(34, 100L);
+    verify(callableStatement).setDouble(35, 20.5d);
+    verify(callableStatement).setString(36, "T");
+    verify(callableStatement).registerOutParameter(37, Types.REF_CURSOR);
+    verify(callableStatement, never()).setNull(37, Types.TIMESTAMP);
+    verify(callableStatement, never()).registerOutParameter(38, Types.REF_CURSOR);
   }
 
   @Test
@@ -397,6 +494,22 @@ class PermitRpcRepositoryTest {
     assertThat(repository.findPackagesByExemptionNumberRequired("EX-700")).isEmpty();
     verify(callableStatement).setString(1, "EX-700");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void packagesByExemptionShouldMapRowsWithoutPermitNumberColumns() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_EXMP(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(" PKG-901 ");
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .extracting("applicationNumber", "packageNumber")
+        .containsExactly(tuple(1000456L, "PKG-901"));
+    verify(resultSet, never()).getLong("EXPORT_PERMIT_DETAIL_NUMBER");
+    verify(resultSet, never()).getLong("EXPORT_PERMIT_NUMBER");
   }
 
   @Test

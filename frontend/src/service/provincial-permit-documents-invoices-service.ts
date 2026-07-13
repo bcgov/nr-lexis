@@ -107,6 +107,10 @@ export type PermitDetailMutationResult = AddPermitInvoiceResult & {
   permitReceiptNo?: string
 }
 
+export type CreatePermitFromExemptionResult = AddPermitInvoiceResult & {
+  permitNumber: string
+}
+
 export type PermitEmailResult = {
   success: boolean
   message: string
@@ -352,6 +356,23 @@ const parsePermitDetailMutationResponse = (
   }
 }
 
+const parseCreatePermitFromExemptionResponse = (
+  payload: unknown,
+): CreatePermitFromExemptionResult => {
+  const objectPayload = recordOrEmpty(payload)
+  const success = asBoolean(objectPayload.success ?? objectPayload.valid)
+  const message = asString(objectPayload.message)
+
+  return {
+    success,
+    message: message || (success ? 'Permit created successfully.' : 'Unable to create permit.'),
+    errors: asStringArray(objectPayload.errors),
+    warnings: asStringArray(objectPayload.warnings),
+    source: 'api',
+    permitNumber: asString(objectPayload.permitNumber),
+  }
+}
+
 export const addPermitInvoice = async (
   request: AddPermitInvoiceRequest,
 ): Promise<AddPermitInvoiceResult> => {
@@ -449,6 +470,20 @@ export const updatePermitDetail = async (
     normalizePermitDetailMutationPayload(request),
   )
   return parsePermitDetailMutationResponse(payload, 'api')
+}
+
+export const createPermitFromExemption = async (
+  exemptionNumber: string,
+): Promise<CreatePermitFromExemptionResult> => {
+  const normalizedExemptionNumber = exemptionNumber.trim()
+  if (!normalizedExemptionNumber) {
+    throw new Error('A valid exemption number is required to create a permit.')
+  }
+
+  const payload = await postFormData('/lexis/rpc/permit-details/create-from-exemption', {
+    exemptionNumber: normalizedExemptionNumber,
+  })
+  return parseCreatePermitFromExemptionResponse(payload)
 }
 
 export const updatePermitShipping = async (

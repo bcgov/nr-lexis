@@ -683,10 +683,10 @@ describe('Admin policy action states', () => {
     expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
   })
 
-  it('shows backend schedule guardrail messages without reloading the table', async () => {
+  it('shows backend schedule mutation guardrails without reloading the table', async () => {
     mockedCreateExportSchedule.mockResolvedValueOnce({
       success: false,
-      message: 'A schedule already exists for that advertising date.',
+      message: 'Export schedule is used by existing applications and cannot be changed.',
       schedule: null,
     })
 
@@ -729,7 +729,9 @@ describe('Admin policy action states', () => {
     })
     expect(await screen.findByText('Schedule error')).toBeInTheDocument()
     expect(
-      await screen.findByText('A schedule already exists for that advertising date.'),
+      await screen.findByText(
+        'Export schedule is used by existing applications and cannot be changed.',
+      ),
     ).toBeInTheDocument()
     expect(mockedFetchExportSchedulePage).toHaveBeenCalledTimes(1)
   })

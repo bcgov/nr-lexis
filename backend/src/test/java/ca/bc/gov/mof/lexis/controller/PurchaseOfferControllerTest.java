@@ -590,7 +590,7 @@ class PurchaseOfferControllerTest {
         null,
         null,
         "Example Lumber",
-        "Alex Example",
+        "Sample Contact",
         12500.25,
         LocalDate.of(2026, 3, 2),
         offerWithdrawalDate,

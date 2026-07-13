@@ -733,9 +733,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           setLongOrNull(cs, 34, row.oicRequestPieces());
           setDoubleOrNull(cs, 35, row.oicRequestVolume());
           cs.setString(36, trim(row.productTypeCode()));
-          cs.setNull(37, Types.TIMESTAMP);
         },
-        38,
+        37,
         this::mapPermitMutationRow)
         .filter(
             inserted ->
@@ -1105,7 +1104,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_NAME")),
                 getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
                 getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
-                getString(rs, "END_USE_SORT"),
+                // FIND_APPLICATION_BY_NUMBER does not project END_USE_SORT. The service derives it
+                // from the authoritative application end-use relationships when it is needed.
+                null,
                 getString(rs, "OWNER_CLIENT_NUMBER"),
                 getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
                 getString(rs, "AGENT_CLIENT_NUMBER"),
@@ -1355,15 +1356,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   private PackageCandidateRow mapPackageCandidateRow(ResultSet rs) {
-    Long exportPermitNumber = getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER");
-    if (exportPermitNumber == null) {
-      exportPermitNumber = getLong(rs, "EXPORT_PERMIT_NUMBER");
-    }
-
     return new PackageCandidateRow(
         getLong(rs, "APPLICATION_NUMBER"),
-        trim(getString(rs, "PACKAGE_NUMBER")),
-        exportPermitNumber);
+        trim(getString(rs, "PACKAGE_NUMBER")));
   }
 
   private PermitMutationRow mapPermitMutationRow(ResultSet rs) {
@@ -1665,10 +1660,13 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   public record EndUsePairRow(String speciesCode, String endUseCode) {}
 
-  public record PackageCandidateRow(
-      Long applicationNumber,
-      String packageNumber,
-      Long exportPermitNumber) {}
+  /**
+   * Package/application relationship returned by the legacy package cursors.
+   *
+   * <p>Those cursors do not return a provincial permit number. Provincial permit assignment is
+   * authoritative only on {@code EXPORT_SCALE_DETAIL.EXPORT_PERMIT_DETAIL_NUMBER}.
+   */
+  public record PackageCandidateRow(Long applicationNumber, String packageNumber) {}
 
   public record SalesInvoiceRow(
       String salesInvoiceNumber,

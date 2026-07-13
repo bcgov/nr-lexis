@@ -1,6 +1,6 @@
 Exemption #{{exemptionNumber}} has been approved.
 
-Application Number:
+Application number(s):
 {{applicationNumbers}}
 
-Do NOT reply to this e-mail.
+This is an automated notification; do not reply.

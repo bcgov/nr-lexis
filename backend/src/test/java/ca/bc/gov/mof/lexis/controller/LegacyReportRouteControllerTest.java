@@ -27,6 +27,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @ExtendWith(MockitoExtension.class)
 class LegacyReportRouteControllerTest {
@@ -43,7 +44,7 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/lexis/offerReport");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of("actionMapping", "view"),
             new LinkedMultiValueMap<>(Map.of("actionMapping", java.util.List.of("view"))),
@@ -59,14 +60,14 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/offerReport.do");
 
-    when(reportController.offerReport(any())).thenReturn(ResponseEntity.ok(new byte[] {1, 2, 3}));
+    when(reportController.offerReport(any())).thenReturn(streamingResponse(1, 2, 3));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("outputFormat", "PDF");
     multi.add("clientNumber", "123.4");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -92,13 +93,13 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/applicationReport.do");
 
-    when(reportController.applicationReport(any())).thenReturn(ResponseEntity.ok(new byte[] {1, 2}));
+    when(reportController.applicationReport(any())).thenReturn(streamingResponse(1, 2));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("clientNumber", "1234567");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -121,7 +122,7 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/teacReport");
 
-    when(reportController.teacReport(any())).thenReturn(ResponseEntity.ok(new byte[] {9, 9}));
+    when(reportController.teacReport(any())).thenReturn(streamingResponse(9, 9));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
@@ -129,7 +130,7 @@ class LegacyReportRouteControllerTest {
     multi.add("region", "1905");
     multi.add("exportSchedule", "12345");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -155,14 +156,14 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/offerReport.do");
 
-    when(reportController.offerReport(any())).thenReturn(ResponseEntity.ok(new byte[] {3, 4}));
+    when(reportController.offerReport(any())).thenReturn(streamingResponse(3, 4));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("outputFormat", "XLS");
     multi.add("region", "1904");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -186,7 +187,7 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
 
-    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {7, 7}));
+    when(reportController.tenureReport(any())).thenReturn(streamingResponse(7, 7));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generateTenureReport");
@@ -194,7 +195,7 @@ class LegacyReportRouteControllerTest {
     multi.add("reportingDistrict", "DSE");
     multi.add("clientNumber", "77881");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generateTenureReport",
@@ -221,14 +222,14 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
 
-    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {7, 7}));
+    when(reportController.tenureReport(any())).thenReturn(streamingResponse(7, 7));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generateFileReport");
     multi.add("outputFormat", "CSV");
     multi.add("forestFileId", "A12345");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generateFileReport",
@@ -254,13 +255,13 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
 
-    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {7, 8}));
+    when(reportController.tenureReport(any())).thenReturn(streamingResponse(7, 8));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generateMarkReport");
     multi.add("timberMark1", "TM001");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generateMarkReport",
@@ -311,7 +312,7 @@ class LegacyReportRouteControllerTest {
     MockHttpServletRequest request =
         new MockHttpServletRequest("POST", "/api/lexis/speciesGradeReport.do");
 
-    when(reportController.speciesGradeReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 1}));
+    when(reportController.speciesGradeReport(any())).thenReturn(streamingResponse(5, 1));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
@@ -319,7 +320,7 @@ class LegacyReportRouteControllerTest {
     multi.add("timberMark", "tm123");
     multi.add("forestFileId", "a12345");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -347,14 +348,14 @@ class LegacyReportRouteControllerTest {
     MockHttpServletRequest request =
         new MockHttpServletRequest("POST", "/api/lexis/permitLedgerReport.do");
 
-    when(reportController.permitLedgerReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 2}));
+    when(reportController.permitLedgerReport(any())).thenReturn(streamingResponse(5, 2));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("outputFormat", "PDF");
     multi.add("timberMark", "tm456");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -378,7 +379,7 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
 
-    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 3}));
+    when(reportController.tenureReport(any())).thenReturn(streamingResponse(5, 3));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generateMarkReport");
@@ -387,7 +388,7 @@ class LegacyReportRouteControllerTest {
     multi.add("timberMark1", "tm001");
     multi.add("forestFileId", "a12345");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generateMarkReport",
@@ -416,7 +417,7 @@ class LegacyReportRouteControllerTest {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
 
-    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 4}));
+    when(reportController.tenureReport(any())).thenReturn(streamingResponse(5, 4));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generateMarkReport");
@@ -424,7 +425,7 @@ class LegacyReportRouteControllerTest {
     multi.add("timberMark1", "tm001");
     multi.add("timberMark1", "tm002");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generateMarkReport",
@@ -449,13 +450,13 @@ class LegacyReportRouteControllerTest {
         new MockHttpServletRequest("POST", "/api/lexis/approvedExemptionReport.do");
 
     when(reportController.approvedExemptionReport(any(), eq(authentication)))
-        .thenReturn(ResponseEntity.ok(new byte[] {4, 2}));
+        .thenReturn(streamingResponse(4, 2));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("exemptionNumber", "E-12345");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -481,14 +482,14 @@ class LegacyReportRouteControllerTest {
         new MockHttpServletRequest("POST", "/api/lexis/approvedExemptionReport.do");
 
     when(reportController.approvedExemptionReport(any(), eq(authentication)))
-        .thenReturn(ResponseEntity.ok(new byte[] {4, 4}));
+        .thenReturn(streamingResponse(4, 4));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("outputFormat", "CSV");
     multi.add("exemptionNumber", "E-12345");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -515,13 +516,13 @@ class LegacyReportRouteControllerTest {
         new MockHttpServletRequest("POST", "/api/lexis/permitReport.do");
 
     when(reportController.permitReport(any(), eq(authentication)))
-        .thenReturn(ResponseEntity.ok(new byte[] {4, 3}));
+        .thenReturn(streamingResponse(4, 3));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("permitNumber", "900100");
 
-    ResponseEntity<byte[]> response =
+    ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -595,7 +596,7 @@ class LegacyReportRouteControllerTest {
     MultiValueMap<String, String> exemptionParameters = new LinkedMultiValueMap<>();
     exemptionParameters.add("actionMapping", "generate");
     exemptionParameters.add("exemptionNumber", "EX-205");
-    ResponseEntity<byte[]> exemptionResponse =
+    ResponseEntity<StreamingResponseBody> exemptionResponse =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -609,7 +610,7 @@ class LegacyReportRouteControllerTest {
     MultiValueMap<String, String> permitParameters = new LinkedMultiValueMap<>();
     permitParameters.add("actionMapping", "generate");
     permitParameters.add("permitNumber", "7000123");
-    ResponseEntity<byte[]> permitResponse =
+    ResponseEntity<StreamingResponseBody> permitResponse =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
@@ -628,6 +629,14 @@ class LegacyReportRouteControllerTest {
     return new LegacyReportRouteController(
         new LexisReportController(
             reportServiceProvider, provincialAuthorizationService, principalService));
+  }
+
+  private ResponseEntity<StreamingResponseBody> streamingResponse(int... content) {
+    byte[] bytes = new byte[content.length];
+    for (int index = 0; index < content.length; index++) {
+      bytes[index] = (byte) content[index];
+    }
+    return ResponseEntity.ok(outputStream -> outputStream.write(bytes));
   }
 
 }

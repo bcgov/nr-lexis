@@ -13,7 +13,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -26,18 +25,16 @@ public class LexisAdminScheduleService {
 
   private static final int DEFAULT_PAGE_SIZE = 100;
   private static final int MAX_PAGE_SIZE = 200;
-  private static final String DUPLICATE_ADVERTISING_DATE_MESSAGE =
-      "A schedule already exists for that advertising date.";
 
   private final LexisReportScheduleRepository repository;
   private final Clock clock;
   private final TransactionOperations transactionOperations;
 
   /*
-   * The business key is not protected by the checked-in Oracle schema. This process-local guard
-   * closes the check/write race only while deployment enforces one backend pod. The programmatic
-   * transaction remains inside the guard, so the guard is released only after commit or rollback.
-   * A database uniqueness rule is still required before backend scale-out.
+   * This process-local guard keeps the mutable-row usage check and write in one serialized
+   * transaction while deployment enforces one backend pod. It is not a distributed lock. Legacy
+   * Oracle permits more than one schedule for an advertising date, so this guard deliberately does
+   * not impose advertising-date uniqueness.
    */
   private final ReentrantLock scheduleMutationGuard = new ReentrantLock(true);
 
@@ -75,7 +72,7 @@ public class LexisAdminScheduleService {
   }
 
   public ExportScheduleMutationResultDto createSchedule(ExportScheduleCreateRequestDto request) {
-    return executeScheduleMutation(() -> createScheduleInTransaction(request), true);
+    return executeScheduleMutation(() -> createScheduleInTransaction(request));
   }
 
   private ExportScheduleMutationResultDto createScheduleInTransaction(
@@ -85,21 +82,13 @@ public class LexisAdminScheduleService {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
 
-    if (repository.advertisingDateExists(request.advertisingDate())) {
-      return new ExportScheduleMutationResultDto(
-          false,
-          DUPLICATE_ADVERTISING_DATE_MESSAGE,
-          null);
-    }
-
     ExportScheduleRowDto row = repository.insertExportSchedule(request);
     return new ExportScheduleMutationResultDto(true, "Export schedule added.", row);
   }
 
   public ExportScheduleMutationResultDto updateSchedule(
       long exportScheduleId, ExportScheduleCreateRequestDto request) {
-    return executeScheduleMutation(
-        () -> updateScheduleInTransaction(exportScheduleId, request), true);
+    return executeScheduleMutation(() -> updateScheduleInTransaction(exportScheduleId, request));
   }
 
   private ExportScheduleMutationResultDto updateScheduleInTransaction(
@@ -114,19 +103,12 @@ public class LexisAdminScheduleService {
       return new ExportScheduleMutationResultDto(false, rowValidationError, null);
     }
 
-    if (repository.advertisingDateExistsForOtherSchedule(
-        request.advertisingDate(), exportScheduleId)) {
-      return new ExportScheduleMutationResultDto(
-          false, DUPLICATE_ADVERTISING_DATE_MESSAGE, null);
-    }
-
     ExportScheduleRowDto row = repository.updateExportSchedule(exportScheduleId, request);
     return new ExportScheduleMutationResultDto(true, "Export schedule updated.", row);
   }
 
   public ExportScheduleMutationResultDto deleteSchedule(long exportScheduleId) {
-    return executeScheduleMutation(
-        () -> deleteScheduleInTransaction(exportScheduleId), false);
+    return executeScheduleMutation(() -> deleteScheduleInTransaction(exportScheduleId));
   }
 
   private ExportScheduleMutationResultDto deleteScheduleInTransaction(long exportScheduleId) {
@@ -142,24 +124,15 @@ public class LexisAdminScheduleService {
   }
 
   private ExportScheduleMutationResultDto executeScheduleMutation(
-      Supplier<ExportScheduleMutationResultDto> mutation,
-      boolean duplicateMeansAdvertisingDateCollision) {
+      Supplier<ExportScheduleMutationResultDto> mutation) {
     scheduleMutationGuard.lock();
     try {
-      try {
-        ExportScheduleMutationResultDto result =
-            transactionOperations.execute(status -> mutation.get());
-        if (result == null) {
-          throw new IllegalStateException("Export schedule transaction returned no result.");
-        }
-        return result;
-      } catch (DuplicateKeyException ex) {
-        if (!duplicateMeansAdvertisingDateCollision) {
-          throw ex;
-        }
-        return new ExportScheduleMutationResultDto(
-            false, DUPLICATE_ADVERTISING_DATE_MESSAGE, null);
+      ExportScheduleMutationResultDto result =
+          transactionOperations.execute(status -> mutation.get());
+      if (result == null) {
+        throw new IllegalStateException("Export schedule transaction returned no result.");
       }
+      return result;
     } finally {
       scheduleMutationGuard.unlock();
     }

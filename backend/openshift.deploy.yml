@@ -55,8 +55,8 @@ parameters:
     description: Maximum Oracle/Jasper report query duration before cancellation
     value: "120"
   - name: LEXIS_PERMIT_INVOICE_MODE
-    description: Keep disabled until Canadian internal invoicing passes Oracle rollback acceptance
-    value: disabled
+    description: Canadian-only internal invoicing mode; set disabled for operational rollback
+    value: canadian-internal
   - name: LEXIS_MAIL_ENABLED
     description: Enable outbound LEXIS workflow email
     value: "false"

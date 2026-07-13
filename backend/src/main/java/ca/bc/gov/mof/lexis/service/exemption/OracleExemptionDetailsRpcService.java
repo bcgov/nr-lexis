@@ -527,6 +527,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           List.of());
     }
 
+    // Deliberate legacy parity: cancellation leaves related permits unchanged and reverts only
+    // applications that are still exempted. Permitted applications remain permitted.
     if (statusChangedTo(current.exemptionStatusCode(), updateRecord.exemptionStatusCode(), EXEMPTION_STATUS_CANCELLED)) {
       if (!revertApplicationsToApproved(
           updateRecord.exemptionNumber(), updateRecord.updateUserId())) {

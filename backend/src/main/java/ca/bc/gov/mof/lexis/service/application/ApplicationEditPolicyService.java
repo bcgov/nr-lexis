@@ -107,9 +107,7 @@ public class ApplicationEditPolicyService {
     boolean canAddScales = false;
     boolean approved = LEGACY_APPROVED_STATUSES.contains(status);
 
-    // Do not reproduce the legacy manufacturing-exemption override here. Its primitive-array
-    // region checks never match and it can override every role denial. Any replacement needs a
-    // separately validated, role-scoped business rule.
+    // Manufacturing exemptions do not bypass role-based edit restrictions.
     if (!readOnly) {
       // The branch order is intentional: legacy treated a dual-role industry user as industry.
       if (industryUser) {

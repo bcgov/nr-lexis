@@ -873,8 +873,25 @@ const ProvincialApplicationDetailsPage = () => {
     canEditSummary || canEditPackages || canAddPackages || canAddScales
   const canUpdatePackageNumber = canEditPackages && !!detail?.canUpdatePackageNumber
   const canManageRemarks = canViewRemarks && !detail?.readOnly && !detail?.locked
+  const isProvincialSubmitter = hasProvincialSubmitterRole(capabilities?.roles)
   const requiresApplicationAccuracyAcknowledgement =
-    detail?.industryUser === true || hasProvincialSubmitterRole(capabilities?.roles)
+    detail?.industryUser === true || isProvincialSubmitter
+  const offerPackageNumbers = useMemo(
+    () =>
+      (detail?.packages ?? [])
+        .map((item) => item.packageNumber.trim())
+        .filter((packageNumber) => packageNumber.length > 0),
+    [detail?.packages],
+  )
+  const canCreateApplicationOffer = Boolean(
+    detail &&
+    canPerform('/offersSearch') &&
+    canPerform('createOffer') &&
+    detail.canCreateOffers &&
+    !detail.industryUser &&
+    !isProvincialSubmitter &&
+    offerPackageNumbers.length > 0,
+  )
   const canChangeApplicantType = canPerform('/changeApplicantType')
   const canReviewApplication = canPerform('/applicationsReview')
   const canViewReview = canViewRemarks && canReviewApplication
@@ -1752,6 +1769,19 @@ const ProvincialApplicationDetailsPage = () => {
     void loadReviewOptions()
   }, [canReviewApplication])
 
+  const onCreateOffer = useCallback(() => {
+    if (!detail || !canCreateApplicationOffer) {
+      return
+    }
+
+    const params = new URLSearchParams()
+    params.set('applicationNumber', String(detail.applicationNumber))
+    params.set('packageNumber', offerPackageNumbers[0])
+    params.set('packageNumbers', offerPackageNumbers.join(','))
+
+    navigate(`/provincial/offers/create?${params.toString()}`)
+  }, [canCreateApplicationOffer, detail, navigate, offerPackageNumbers])
+
   const refreshApplicationDocuments = useCallback(async () => {
     if (!applicationNumber) {
       return
@@ -2547,7 +2577,14 @@ const ProvincialApplicationDetailsPage = () => {
 
   const applicationOffersContent = detail ? (
     <Tile id="application-offers" className="application-detail-section">
-      <h2 className="detail-tile-title">Offers</h2>
+      <div className="detail-section-card__header">
+        <h2 className="detail-tile-title">Offers</h2>
+        {canCreateApplicationOffer && (
+          <Button kind="primary" size="sm" onClick={onCreateOffer}>
+            Create offer
+          </Button>
+        )}
+      </div>
       {detail.offers.length > 0 ? (
         <>
           <TextInput

@@ -2943,7 +2943,7 @@ public class ApplicationSubmissionImportService {
     private final String originalFileName;
 
     private InMemoryMultipartFile(byte[] bytes, String originalFileName) {
-      this.bytes = bytes == null ? new byte[0] : bytes.clone();
+      this.bytes = bytes == null ? new byte[0] : bytes;
       String normalizedFileName = trimToNull(originalFileName);
       this.originalFileName =
           normalizedFileName == null ? DEFAULT_ORIGINAL_FILE_NAME : normalizedFileName;

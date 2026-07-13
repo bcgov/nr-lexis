@@ -91,7 +91,7 @@ jobs:
       environment: prod
       target: prod
       tag: ${{ needs.init.outputs.pr }}
-      # JVM-local edit/scheduler locks require one backend until distributed locking is accepted.
+      # JVM-local edit and scheduler locks require one backend replica.
       backend_replicas: "1"
       frontend_replicas: "3"
 

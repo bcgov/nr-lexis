@@ -18,7 +18,7 @@ on:
         default: ""
         type: string
       backend_replicas:
-        description: Backend replica count (must remain 1 until distributed locking is implemented)
+        description: Backend replica count; only 1 is supported because locks are JVM-local
         default: "1"
         type: string
       frontend_replicas:
@@ -58,7 +58,7 @@ on:
         default: "128Mi"
         type: string
       expiry_enabled:
-        description: Enable the exemption expiry scheduler; only safe with one backend replica until distributed locking is implemented
+        description: Enable the exemption expiry scheduler; requires one backend replica
         default: false
         type: boolean
       tag:
@@ -128,7 +128,7 @@ jobs:
         if: ${{ inputs.backend_replicas != '1' }}
         shell: bash
         run: |
-          echo "::error title=Unsafe backend replica count::LEXIS edit and scheduler locks are JVM-local. Keep backend_replicas at 1 until a distributed lock design is implemented and accepted."
+          echo "::error title=Unsafe backend replica count::LEXIS edit and scheduler locks are JVM-local; backend_replicas must be 1."
           exit 1
 
       # DEV deployments are ephemeral PR previews; gateway client provisioning is TEST/PROD-only.
@@ -151,7 +151,7 @@ jobs:
           LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
           LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}
           LEXIS_REPORT_QUERY_TIMEOUT_SECONDS: ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}
-          LEXIS_PERMIT_INVOICE_MODE: ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'disabled' }}
+          LEXIS_PERMIT_INVOICE_MODE: ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'canadian-internal' }}
           LEXIS_MAIL_ENABLED: ${{ vars.LEXIS_MAIL_ENABLED || 'false' }}
           LEXIS_MAIL_NON_PRODUCTION: ${{ inputs.environment == 'prod' && 'false' || 'true' }}
           LEXIS_MAIL_FROM: ${{ vars.LEXIS_MAIL_FROM || 'Provincial.Log.Export.Analyst@gov.bc.ca' }}

@@ -537,6 +537,51 @@ public class PermitDetailsRpcController {
     return ResponseEntity.ok(response);
   }
 
+  @PostMapping("/create-from-exemption")
+  public ResponseEntity<PermitMutationRpcResponseDto> createPermitFromExemption(
+      @RequestParam(name = "exemptionNumber") String exemptionNumber,
+      Authentication authentication) {
+    if (!canCreatePermit(authentication) || !isPermitCreatorRole(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn(
+          "Permit RPC service unavailable - returning no content for create from exemption");
+      return ResponseEntity.noContent().build();
+    }
+
+    String normalizedExemptionNumber = normalizeExemptionNumber(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      return ResponseEntity.badRequest().build();
+    }
+    requireExemptionAccess(normalizedExemptionNumber, authentication);
+
+    PermitMutationRpcResponseDto response =
+        operationCoordinator.executeExemptionMutation(
+            List.of(normalizedExemptionNumber),
+            () -> service.getApplicationNumbersForExemptionMutation(normalizedExemptionNumber),
+            () ->
+                createPermitFromExemptionWhileSerialized(
+                    service, normalizedExemptionNumber, authentication));
+    return ResponseEntity.ok(response);
+  }
+
+  private PermitMutationRpcResponseDto createPermitFromExemptionWhileSerialized(
+      PermitDetailsRpcService service,
+      String exemptionNumber,
+      Authentication authentication) {
+    requireExemptionAccess(exemptionNumber, authentication);
+    List<MutationExemptionLock> exemptionLocks =
+        acquireMutationExemptionLocks(List.of(exemptionNumber), authentication);
+    try {
+      return service.createPermitFromExemption(exemptionNumber, userId(authentication));
+    } finally {
+      releaseMutationExemptionLocks(exemptionLocks);
+    }
+  }
+
   private PermitMutationRpcResponseDto addPermitWhileSerialized(
       PermitDetailsRpcService service,
       PermitMutationRequestDto mutationRequest,
@@ -1298,6 +1343,16 @@ public class PermitDetailsRpcController {
   private boolean canSavePermit(Authentication authentication) {
     return authorizationService.canPerformAction(
         sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_SAVE_PERMIT);
+  }
+
+  private boolean canCreatePermit(Authentication authentication) {
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication), "createPermit");
+  }
+
+  private boolean isPermitCreatorRole(Authentication authentication) {
+    List<String> roles = normalizedRoles(sessionService.parseRolesFromPrincipal(authentication));
+    return roles.contains(ROLE_ADMIN) || roles.contains(ROLE_APPLICATION_APPROVER);
   }
 
   private boolean canRemovePermitDocument(

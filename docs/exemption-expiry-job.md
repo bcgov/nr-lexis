@@ -13,15 +13,13 @@ Failed aggregates remain eligible for the next daily run. Logs report candidate,
 
 ## Deployment safety
 
-The scheduler has a JVM-local guard that prevents overlapping runs within one backend pod. It does not coordinate different pods.
-
-TEST runs one backend replica with the `Recreate` rollout strategy and enables expiry. The reusable deployment rejects more than one backend replica until distributed edit and scheduler locking is implemented and accepted.
+The scheduler has a JVM-local guard that prevents overlapping runs within one backend pod. It does not coordinate different pods. Expiry-enabled deployments require one backend replica. Deployment validation enforces the single-replica requirement.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LEXIS_EXPIRY_ENABLED` | `false` | Creates the scheduled job when true. The TEST deployment explicitly sets it to true while TEST has one backend replica. |
+| `LEXIS_EXPIRY_ENABLED` | `false` | Creates the scheduled job when true; requires one backend replica. |
 | `LEXIS_EXPIRY_CRON` | `30 0 0 * * *` | Spring six-field cron expression. |
 | `LEXIS_EXPIRY_ZONE` | `America/Vancouver` | Scheduler time zone. |
 

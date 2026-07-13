@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitSearchResponse } from '@/interfaces/ProvincialPermitSearch'
@@ -41,11 +41,24 @@ const permitSearchResponse = (
   },
 })
 
+const PermitSearchLocation = () => {
+  const location = useLocation()
+  return <output data-testid="permit-search-location">{location.search}</output>
+}
+
 const renderPage = (initialEntry = '/provincial/permit') => {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/provincial/permit" element={<ProvincialPermitPage />} />
+        <Route
+          path="/provincial/permit"
+          element={
+            <>
+              <ProvincialPermitPage />
+              <PermitSearchLocation />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -94,11 +107,64 @@ describe('Provincial Permit Search Actions', () => {
     expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
+          invoiceNumber: '',
           region: [],
         }),
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
+  })
+
+  it('persists the invoice number in URL-backed filters and clears it with the form', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+
+    renderPage(
+      '/provincial/permit?invoiceNumber=SI-99881&sortField=permitStatus&sortDirection=desc&page=3&pageSize=25',
+    )
+
+    const invoiceNumber = await screen.findByLabelText('Invoice number')
+    expect(invoiceNumber).toHaveValue('SI-99881')
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialPermits.mock.calls.some(
+          ([request]) => request.filters.invoiceNumber === 'SI-99881',
+        ),
+      ).toBe(true)
+    })
+
+    fireEvent.change(invoiceNumber, { target: { value: 'GBMS-4402' } })
+    await waitFor(() => {
+      const currentParams = new URLSearchParams(
+        screen.getByTestId('permit-search-location').textContent ?? '',
+      )
+      expect(currentParams.get('invoiceNumber')).toBe('GBMS-4402')
+      expect(currentParams.get('page')).toBe('1')
+    })
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialPermits.mock.calls.some(
+          ([request]) => request.filters.invoiceNumber === 'GBMS-4402',
+        ),
+      ).toBe(true)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+
+    expect(invoiceNumber).toHaveValue('')
+    await waitFor(() => {
+      const currentParams = new URLSearchParams(
+        screen.getByTestId('permit-search-location').textContent ?? '',
+      )
+      expect(currentParams.has('invoiceNumber')).toBe(false)
+      expect(currentParams.get('sortField')).toBe('permitNumber')
+      expect(currentParams.get('sortDirection')).toBe('asc')
+      expect(currentParams.get('page')).toBe('1')
+      expect(currentParams.get('pageSize')).toBe('10')
+    })
+    await waitFor(() => {
+      const lastRequest = mockedSearchProvincialPermits.mock.calls.at(-1)?.[0]
+      expect(lastRequest?.filters.invoiceNumber).toBe('')
+    })
   })
 
   it('reuses cached search results when the route remounts with the same URL state', async () => {

@@ -30,7 +30,7 @@ class AnalysisWorkflowSecurityTest {
     String resultsJob = workflow.substring(workflow.indexOf("  results:"));
 
     assertThat(resultsJob)
-        .contains("needs: [backend-tests, frontend-tests, clamav-startup, trivy]")
+        .contains("needs: [backend-tests, frontend-tests, clamav-daemon-detection, trivy]")
         .contains("contains(needs.*.result, 'cancelled')")
         .doesNotContain("contains(needs.*.result, 'canceled')");
   }

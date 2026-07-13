@@ -54,10 +54,11 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   private final TransactionOperations transactionOperations;
 
   /*
-   * This guard closes the business-key check/write race only because deployment currently enforces
-   * one backend pod. The programmatic transaction completes before the guard is released. It is not
-   * a distributed lock. Oracle uniqueness remains the durable defense for fee policies, and FIL
-   * needs an equivalent database constraint before backend scale-out.
+   * This guard closes add-time business-key check/write races only because deployment currently
+   * enforces one backend pod. The programmatic transaction completes before the guard is released.
+   * It is not a distributed lock. Oracle uniqueness remains the durable defense for fee policies.
+   * FIL deliberately preserves legacy's asymmetric rule: adds reject an existing date, while an
+   * update may move a row onto another row's date.
    */
   private final ReentrantLock policyMutationGuard = new ReentrantLock(true);
 
@@ -367,13 +368,6 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
     if (!errors.isEmpty()) {
       return failureResponse(errors);
-    }
-
-    Optional<LexisAdminPolicyRepository.FilPolicyRow> matchingPolicy =
-        repository.findFilPolicy(effectiveDate);
-    if (matchingPolicy.isPresent()
-        && !filPolicyId.equals(matchingPolicy.get().filPolicyId())) {
-      return failureResponse(List.of(FIL_POLICY_KEY_EXISTS_MESSAGE));
     }
 
     boolean updated;

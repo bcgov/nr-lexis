@@ -206,7 +206,7 @@ class PurchaseOfferOracleServiceTest {
             null,
             null,
             "Example Lumber",
-            "Alex Example",
+            "Sample Contact",
             12500.25,
             LocalDate.of(2026, 3, 2),
             null,
@@ -272,7 +272,7 @@ class PurchaseOfferOracleServiceTest {
                 null,
                 "No Packages",
                 " Example Lumber ",
-                " Alex Example ",
+                " Sample Contact ",
                 99_999.99d,
                 LocalDate.of(1999, 1, 1),
                 LocalDate.of(2026, 3, 12),
@@ -303,7 +303,7 @@ class PurchaseOfferOracleServiceTest {
     PurchaseOfferRepository.PurchaseOfferInsertRecord record = recordCaptor.getValue();
     assertThat(record.packageNumber()).isNull();
     assertThat(record.companyName()).isEqualTo("Example Lumber");
-    assertThat(record.contactName()).isEqualTo("Alex Example");
+    assertThat(record.contactName()).isEqualTo("Sample Contact");
     assertThat(record.purchaseOfferAmount()).isEqualTo(99_999.99d);
     assertThat(record.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 10));
     assertThat(record.offerWithdrawalDate()).isNull();
@@ -370,7 +370,7 @@ class PurchaseOfferOracleServiceTest {
                 null,
                 null,
                 "Example Lumber",
-                "Alex Example",
+                "Sample Contact",
                 Double.NaN,
                 null,
                 null,
@@ -617,7 +617,7 @@ class PurchaseOfferOracleServiceTest {
             null,
             null,
             "Example Lumber",
-            "Alex Example",
+            "Sample Contact",
             12500.25d,
             LocalDate.of(2026, 3, 2),
             null,
@@ -657,7 +657,7 @@ class PurchaseOfferOracleServiceTest {
                 null,
                 "No Packages",
                 "Example Lumber",
-                "Alex Example",
+                "Sample Contact",
                 12500.25d,
                 LocalDate.of(2026, 3, 2),
                 null,
@@ -920,7 +920,7 @@ class PurchaseOfferOracleServiceTest {
                     1000456L,
                     "PKG-903",
                     "Example Lumber",
-                    "Alex Example",
+                    "Sample Contact",
                     12500.25d,
                     LocalDate.of(2026, 3, 2),
                     null,
@@ -976,7 +976,7 @@ class PurchaseOfferOracleServiceTest {
     PurchaseOfferRepository.PurchaseOfferUpdateRecord record = recordCaptor.getValue();
     assertThat(record.exportPurchaseOfferNumber()).isEqualTo(81001L);
     assertThat(record.companyName()).isEqualTo("Example Lumber");
-    assertThat(record.contactName()).isEqualTo("Alex Example");
+    assertThat(record.contactName()).isEqualTo("Sample Contact");
     assertThat(record.purchaseOfferAmount()).isEqualTo(13000.0d);
     assertThat(record.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 3));
     assertThat(record.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 19));
@@ -1005,7 +1005,7 @@ class PurchaseOfferOracleServiceTest {
                     1000456L,
                     "PKG-903",
                     "Example Lumber",
-                    "Alex Example",
+                    "Sample Contact",
                     12500.25d,
                     LocalDate.of(2026, 3, 2),
                     null,
@@ -1074,7 +1074,7 @@ class PurchaseOfferOracleServiceTest {
                     1000456L,
                     "PKG-903",
                     "Example Lumber",
-                    "Alex Example",
+                    "Sample Contact",
                     12500.25d,
                     LocalDate.of(2026, 3, 2),
                     null,
@@ -1140,7 +1140,7 @@ class PurchaseOfferOracleServiceTest {
                     1000456L,
                     "PKG-903",
                     "Example Lumber",
-                    "Alex Example",
+                    "Sample Contact",
                     12500.25d,
                     LocalDate.of(2026, 3, 2),
                     null,
@@ -1210,7 +1210,7 @@ class PurchaseOfferOracleServiceTest {
         null,
         packageNumber,
         "Example Lumber",
-        "Alex Example",
+        "Sample Contact",
         12500.25d,
         LocalDate.of(2026, 3, 2),
         null,
@@ -1260,7 +1260,7 @@ class PurchaseOfferOracleServiceTest {
         applicationNumber,
         packageNumber,
         "Example Lumber",
-        "Alex Example",
+        "Sample Contact",
         12500.25d,
         LocalDate.of(2026, 3, 2),
         null,

@@ -102,6 +102,9 @@ public interface PermitDetailsRpcService {
       BigDecimal invoiceFeeInLieu,
       String userId);
 
+  PermitMutationRpcResponseDto createPermitFromExemption(
+      String exemptionNumber, String userId);
+
   PermitMutationRpcResponseDto addPermit(PermitMutationRequestDto request, String userId);
 
   PermitMutationRpcResponseDto updatePermit(PermitMutationRequestDto request, String userId);

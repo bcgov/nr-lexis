@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Security fixes are maintained on the current `main` branch while the modernized application moves through acceptance and production cutover. Older branches and unreleased snapshots are not supported.
+Only the current `main` branch is in scope for security updates. Older branches and unreleased snapshots are not supported.
 
 
 ## Reporting a Vulnerability

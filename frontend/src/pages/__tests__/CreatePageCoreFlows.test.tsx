@@ -1237,23 +1237,54 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
-  it('hides blanket OIC creation from pure exemption approvers', async () => {
+  it.each(['EXEMPTION_APPROVER', 'LEXIS_EXEMPTION_APPROVER'])(
+    'hides blanket OIC creation from pure %s identities',
+    async (role) => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({
+            principal: 'idir\\exemption-approver',
+            roles: [role],
+          }),
+        }),
+      )
+      mockedFetchProvincialExemptionOptions.mockResolvedValue({
+        exemptionTypes: [
+          { value: 'SECTION_1', label: 'Section 1' },
+          { value: 'B', label: 'Blanket OIC' },
+        ],
+        exemptionStatuses: [{ value: 'NEW', label: 'New' }],
+        regions: [{ value: '11', label: 'Cariboo' }],
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/create"
+              element={<ProvincialExemptionCreatePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
+      await userEvent.click(typeSelect)
+
+      expect(await screen.findByRole('option', { name: 'Section 1' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Blanket OIC' })).not.toBeInTheDocument()
+    },
+  )
+
+  it('retains blanket OIC creation for a mixed industry exemption approver identity', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
-          principal: 'idir\\exemption-approver',
-          roles: ['LEXIS_EXEMPTION_APPROVER'],
+          principal: 'bceid\\industry-approver',
+          roles: ['EXEMPTION_APPROVER', 'PROVINCIAL_SUBMITTER_00012345'],
         }),
       }),
     )
-    mockedFetchProvincialExemptionOptions.mockResolvedValue({
-      exemptionTypes: [
-        { value: 'SECTION_1', label: 'Section 1' },
-        { value: 'B', label: 'Blanket OIC' },
-      ],
-      exemptionStatuses: [{ value: 'NEW', label: 'New' }],
-      regions: [{ value: '11', label: 'Cariboo' }],
-    })
 
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>
@@ -1266,8 +1297,7 @@ describe('Create Page Core Flows', () => {
     const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
     await userEvent.click(typeSelect)
 
-    expect(await screen.findByRole('option', { name: 'Section 1' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Blanket OIC' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: 'Blanket OIC' })).toBeInTheDocument()
   })
 
   it('blocks provincial exemption submit when status is missing', async () => {
@@ -1398,7 +1428,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeInTheDocument()
     expect(screen.getByLabelText('Offer remarks')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Company'), 'Example Lumber')
-    await userEvent.type(screen.getByLabelText('Contact name'), 'Alex Example')
+    await userEvent.type(screen.getByLabelText('Contact name'), 'Sample Contact')
     await userEvent.type(screen.getByLabelText('Offer volume (m³)'), '99.9')
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
     await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
@@ -1418,7 +1448,7 @@ describe('Create Page Core Flows', () => {
         packageNumber: 'PKG-9',
         offeringClientNumber: '00099999',
         companyName: 'Example Lumber',
-        contactName: 'Alex Example',
+        contactName: 'Sample Contact',
         offerVolume: '99.9',
         purchaseOfferAmount: '25000',
         teacReviewDate: '',

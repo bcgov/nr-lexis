@@ -25,8 +25,8 @@ class OracleAuditUserIdTest {
 
   @Test
   void shouldDeterministicallyDistinguishLongPrincipalsWithTheSamePrefix() {
-    String first = "BCEID\\shared-external-identity-prefix-alex";
-    String second = "BCEID\\shared-external-identity-prefix-jamie";
+    String first = "BCEID\\shared-external-identity-prefix-test-user-a";
+    String second = "BCEID\\shared-external-identity-prefix-test-user-b";
 
     String firstEncoded = OracleAuditUserId.encode(first);
     String secondEncoded = OracleAuditUserId.encode(second);
