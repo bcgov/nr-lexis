@@ -151,7 +151,7 @@ jobs:
           LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
           LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}
           LEXIS_REPORT_QUERY_TIMEOUT_SECONDS: ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}
-          LEXIS_PERMIT_INVOICE_MODE: ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'canadian-internal' }}
+          LEXIS_PERMIT_INVOICE_MODE: ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}
           LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS: ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}
           LEXIS_MAIL_ENABLED: ${{ vars.LEXIS_MAIL_ENABLED || 'false' }}
           LEXIS_MAIL_NON_PRODUCTION: ${{ inputs.environment == 'prod' && 'false' || 'true' }}

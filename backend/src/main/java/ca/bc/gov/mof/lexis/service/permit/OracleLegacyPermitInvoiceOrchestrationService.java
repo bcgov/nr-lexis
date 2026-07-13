@@ -33,7 +33,8 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 @ConditionalOnProperty(
     name = "lexis.permit-invoice.mode",
-    havingValue = "legacy-best-effort")
+    havingValue = "legacy-best-effort",
+    matchIfMissing = true)
 public class OracleLegacyPermitInvoiceOrchestrationService
     implements PermitInvoiceOrchestrationService {
 

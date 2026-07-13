@@ -25,24 +25,24 @@ class OracleCanadianPermitInvoiceConfigurationTest {
           .withPropertyValues("spring.profiles.active=oracle");
 
   @Test
-  void shouldEnableCanadianInternalInvoicingByDefault() {
+  void shouldEnableLegacyBestEffortInvoicingByDefault() {
     contextRunner.run(
         context ->
             assertThat(context)
-                .hasSingleBean(OracleCanadianPermitInvoiceOrchestrationService.class)
-                .doesNotHaveBean(OracleLegacyPermitInvoiceOrchestrationService.class)
+                .hasSingleBean(OracleLegacyPermitInvoiceOrchestrationService.class)
+                .doesNotHaveBean(OracleCanadianPermitInvoiceOrchestrationService.class)
                 .hasSingleBean(PermitInvoiceOrchestrationService.class));
   }
 
   @Test
-  void shouldEnableTheExplicitLegacyBestEffortMode() {
+  void shouldAllowTheCanadianInternalRollbackMode() {
     contextRunner
-        .withPropertyValues("lexis.permit-invoice.mode=legacy-best-effort")
+        .withPropertyValues("lexis.permit-invoice.mode=canadian-internal")
         .run(
             context ->
                 assertThat(context)
-                    .hasSingleBean(OracleLegacyPermitInvoiceOrchestrationService.class)
-                    .doesNotHaveBean(OracleCanadianPermitInvoiceOrchestrationService.class)
+                    .hasSingleBean(OracleCanadianPermitInvoiceOrchestrationService.class)
+                    .doesNotHaveBean(OracleLegacyPermitInvoiceOrchestrationService.class)
                     .hasSingleBean(PermitInvoiceOrchestrationService.class));
   }
 

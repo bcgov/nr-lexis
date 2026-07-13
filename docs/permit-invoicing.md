@@ -9,8 +9,8 @@ non-Canadian permit invoices to the General Billing Management System (GBMS).
 
 | Mode | Behaviour |
 |---|---|
-| `canadian-internal` | Default staged-rollout mode. Processes Canadian internal invoices and rejects non-Canadian invoice transitions before changing the permit. |
-| `legacy-best-effort` | Processes Canadian internal invoices and the legacy-compatible non-Canadian GBMS flow. Enable explicitly after environment acceptance. |
+| `legacy-best-effort` | Default legacy-parity mode. Processes Canadian internal invoices and the legacy-compatible non-Canadian GBMS flow. |
+| `canadian-internal` | Rollback mode. Processes Canadian internal invoices and rejects non-Canadian invoice transitions before changing the permit. |
 | `disabled` | Operational stop. Rejects every permit transition that requires invoice work. |
 
 Both active modes read GBMS history before Canadian invoice mutations so a prior non-Canadian
@@ -69,17 +69,14 @@ that can prove whether the header was created.
 That hardening can be added without changing the successful permit workflow. Until then, unknown
 GBMS outcomes require manual reconciliation.
 
-## Staged rollout and TEST acceptance
+## TEST acceptance
 
-1. Keep `LEXIS_PERMIT_INVOICE_MODE=canadian-internal` outside the environment being tested.
-2. Set the TEST GitHub environment variable `LEXIS_PERMIT_INVOICE_MODE` to
-   `legacy-best-effort` and deploy.
-3. Use a controlled non-Canadian permit to verify creation, internal linkage, cancellation, and
+1. Use a controlled non-Canadian permit to verify creation, internal linkage, cancellation, and
    reissue/replacement.
-4. Repeat Canadian completion and cancellation to confirm that the internal-only path is
+2. Repeat Canadian completion and cancellation to confirm that the internal-only path is
    unchanged.
-5. Monitor structured warnings with `event=lexis_permit_invoice`; any event with
+3. Monitor structured warnings with `event=lexis_permit_invoice`; any event with
    `gbmsWriteStarted=true` requires reconciliation before retry. Operational monitoring should
-   alert on that condition before wider rollout.
-6. Set `LEXIS_PERMIT_INVOICE_MODE=canadian-internal` and redeploy to stop non-Canadian processing
-   without disabling Canadian permits.
+   alert on that condition before production use.
+4. Use `canadian-internal` to stop non-Canadian processing without disabling Canadian permits, or
+   `disabled` to stop all invoice-bearing transitions.

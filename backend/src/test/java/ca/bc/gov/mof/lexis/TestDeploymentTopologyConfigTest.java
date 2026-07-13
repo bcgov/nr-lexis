@@ -51,7 +51,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
-                + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'canadian-internal' }}")
+                + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")
         .contains("-p LEXIS_PERMIT_INVOICE_MODE=\"$LEXIS_PERMIT_INVOICE_MODE\"")
         .contains(
             "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:"
@@ -73,8 +73,8 @@ class TestDeploymentTopologyConfigTest {
         .contains("type: Recreate")
         .contains(
             "- name: LEXIS_PERMIT_INVOICE_MODE\n"
-                + "    description: Permit invoice coordinator; enable legacy-best-effort after environment acceptance\n"
-                + "    value: canadian-internal")
+                + "    description: Permit invoice coordinator; legacy-best-effort preserves the legacy workflow\n"
+                + "    value: legacy-best-effort")
         .contains("- name: LEXIS_PERMIT_INVOICE_MODE\n                  value: ${LEXIS_PERMIT_INVOICE_MODE}")
         .contains("- name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\n    description: Requested timeout for each isolated GBMS transaction\n    value: \"60\"")
         .contains("- name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\n                  value: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS}")
@@ -164,7 +164,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
-                + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'canadian-internal' }}")
+                + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}")

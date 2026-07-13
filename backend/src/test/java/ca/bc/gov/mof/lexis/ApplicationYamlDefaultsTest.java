@@ -31,6 +31,8 @@ class ApplicationYamlDefaultsTest {
             "lexis.permit-invoice.gbms-timeout-seconds",
             "${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:60}")
         .containsEntry(
+            "lexis.permit-invoice.mode", "${LEXIS_PERMIT_INVOICE_MODE:legacy-best-effort}")
+        .containsEntry(
             "lexis.mail.from", "${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}");
   }
 

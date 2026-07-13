@@ -25,8 +25,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 @ConditionalOnProperty(
     name = "lexis.permit-invoice.mode",
-    havingValue = "canadian-internal",
-    matchIfMissing = true)
+    havingValue = "canadian-internal")
 public class OracleCanadianPermitInvoiceOrchestrationService
     implements PermitInvoiceOrchestrationService {
 

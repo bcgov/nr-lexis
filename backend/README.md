@@ -52,7 +52,7 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
 | `LEXIS_EXPIRY_ENABLED` | Enables the daily exemption-expiry scheduler; only one backend replica may run it | false |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
-| `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | canadian-internal |
+| `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | legacy-best-effort |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Requested timeout in seconds for each isolated GBMS transaction (1-3600); cancellation can leave the outcome unknown | 60 |
 | `LEXIS_VIRUS_SCAN_ENABLED` | Enables ClamAV scanning. Deployed Oracle runtimes refuse to start when this is false. | false locally; true in OpenShift |
 | `LEXIS_VIRUS_SCAN_HOST` | ClamAV service hostname | localhost |
