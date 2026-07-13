@@ -216,4 +216,17 @@ describe('Provincial Offer Search Actions', () => {
       ).toBe(true)
     })
   })
+
+  it('shows a request failure instead of a no-results state', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedSearchProvincialOffers.mockRejectedValue(new Error('Oracle unavailable'))
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Offer search unavailable' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Unable to retrieve offer search results.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No offers found' })).not.toBeInTheDocument()
+  })
 })

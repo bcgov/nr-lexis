@@ -38,9 +38,10 @@ describe('admin-policy-service', () => {
         {
           policyId: 'fee-1',
           policyEffectiveDate: '2026-02-01',
-          regionCode: 'co',
-          regionName: 'Coast',
-          feeIncreasePercentage: '3.5',
+          orgUnitNo: 1904,
+          orgUnitCode: 'rco',
+          orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+          feeIncreasePercentage: '4',
           entryUser: 'idir\\admin',
           entryDateTime: '2026-02-01T00:00:00.000Z',
           updateUser: 'idir\\admin',
@@ -69,9 +70,10 @@ describe('admin-policy-service', () => {
       expect.objectContaining({
         id: 'fee-1',
         effectiveDate: '2026-02-01',
-        orgUnitCode: 'CO',
-        orgUnitName: 'Coast',
-        policyPercentage: '3.5',
+        orgUnitNo: '1904',
+        orgUnitCode: 'RCO',
+        orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+        policyPercentage: '4',
       }),
     ])
   })
@@ -83,8 +85,9 @@ describe('admin-policy-service', () => {
           {
             policyId: 'fee-1',
             policyEffectiveDate: '2026-02-01',
+            orgUnitNo: 1904,
             regionCode: 'co',
-            feeIncreasePercentage: '3.5',
+            feeIncreasePercentage: '4',
           },
         ],
         total: 42,
@@ -112,6 +115,7 @@ describe('admin-policy-service', () => {
       rows: [
         expect.objectContaining({
           id: 'fee-1',
+          orgUnitNo: '1904',
           orgUnitCode: 'CO',
         }),
       ],
@@ -143,7 +147,8 @@ describe('admin-policy-service', () => {
     expect(result).toEqual([
       expect.objectContaining({
         id: '15',
-        orgUnitCode: '1904',
+        orgUnitNo: '1904',
+        orgUnitCode: '',
         orgUnitName: 'Kootenay-Boundary Natural Resource Region',
         policyPercentage: '4',
       }),
@@ -238,15 +243,49 @@ describe('admin-policy-service', () => {
     await expect(fetchFeePolicies()).rejects.toBe(apiError)
   })
 
+  it('submits the numeric organization unit without conflating its display code', async () => {
+    postMock.mockResolvedValue({ data: { success: true } })
+    getCachedResponseMock.mockResolvedValue({ data: [] })
+
+    await upsertFeePolicy({
+      effectiveDate: '2026-08-01',
+      orgUnitNo: ' 1904 ',
+      policyPercentage: ' 5 ',
+    })
+
+    expect(postMock).toHaveBeenCalledWith('/lexis/admin/policies/fee', {
+      effectiveDate: '2026-08-01',
+      orgUnitNo: '1904',
+      policyPercentage: '5',
+    })
+  })
+
+  it('preserves the numeric organization unit for fee policy edits', async () => {
+    putMock.mockResolvedValue({ data: { success: true } })
+    getCachedResponseMock.mockResolvedValue({ data: [] })
+
+    await upsertFeePolicy({
+      id: '15',
+      effectiveDate: '2026-08-01',
+      orgUnitNo: '1904',
+      policyPercentage: '6',
+    })
+
+    expect(putMock).toHaveBeenCalledWith('/lexis/admin/policies/fee/15', {
+      effectiveDate: '2026-08-01',
+      orgUnitNo: '1904',
+      policyPercentage: '6',
+    })
+  })
+
   it('throws API errors when fee policy upsert fails', async () => {
     postMock.mockRejectedValue({ response: { status: 404 } })
 
     await expect(
       upsertFeePolicy({
         effectiveDate: '2026-04-01',
-        orgUnitCode: ' 12 ',
-        orgUnitName: ' Coast ',
-        policyPercentage: ' 5.0 ',
+        orgUnitNo: ' 1904 ',
+        policyPercentage: ' 5 ',
       }),
     ).rejects.toEqual({ response: { status: 404 } })
   })

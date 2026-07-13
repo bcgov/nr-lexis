@@ -1,15 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button, TextArea, TextInput } from '@carbon/react'
 import { ArrowRight } from '@carbon/icons-react'
 import { AppNotification } from '../AppNotification'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
+  DOCUMENT_UPLOAD_ACCEPT,
+  DOCUMENT_UPLOAD_GUIDANCE,
   DOCUMENT_UPLOAD_READY_MESSAGE,
   extractUploadErrorDetails,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   uploadQueueFileKey,
   validateDocumentUploadFile,
+  validateDocumentUploadDescription,
 } from './uploadQueueHelpers'
 import MultiFileDropZone from './MultiFileDropZone'
 import UploadQueuePreview from './UploadQueuePreview'
@@ -34,6 +37,8 @@ export type DetailDocumentUploadPanelProps = {
   disabled?: boolean
   disabledReason?: string
   initialInvoiceConversionRate?: string
+  onBusyChange?: (isBusy: boolean) => void
+  onDirtyChange?: (isDirty: boolean) => void
   onUploadComplete?: () => Promise<void> | void
 }
 
@@ -83,6 +88,8 @@ const DetailDocumentUploadPanel = ({
   disabled = false,
   disabledReason: disabledReasonProp,
   initialInvoiceConversionRate = '1.00',
+  onBusyChange,
+  onDirtyChange,
   onUploadComplete,
 }: DetailDocumentUploadPanelProps) => {
   const copy = UPLOAD_COPY[workflowType]
@@ -102,8 +109,8 @@ const DetailDocumentUploadPanel = ({
   const [showInvoiceValidationErrors, setShowInvoiceValidationErrors] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploadStep, setUploadStep] = useState<DetailDocumentUploadStep>('upload')
-  const invoiceConversionRate =
-    (invoiceConversionRateOverride ?? initialInvoiceConversionRate) || '1.00'
+  const invoiceConversionRateBaseline = initialInvoiceConversionRate || '1.00'
+  const invoiceConversionRate = invoiceConversionRateOverride ?? invoiceConversionRateBaseline
 
   const invalidUploadCount = useMemo(
     () =>
@@ -168,6 +175,7 @@ const DetailDocumentUploadPanel = ({
     'Invoice fee in lieu',
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
+  const descriptionError = validateDocumentUploadDescription(fileDescription)
   const uploadInvalidText =
     invalidUploadCount > 0
       ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from review.`
@@ -177,8 +185,39 @@ const DetailDocumentUploadPanel = ({
     !!targetNumber.trim() &&
     validatedUploadCount > 0 &&
     pendingValidationCount === 0 &&
+    !descriptionError &&
     invoiceValidationErrors.length === 0
   const canSubmit = canReviewUpload
+  const isDirty =
+    uploadQueue.some((item) => item.status !== 'complete') ||
+    fileDescription.trim().length > 0 ||
+    (workflowType === 'invoice' &&
+      (salesInvoiceNumber.trim().length > 0 ||
+        invoiceExportValue.trim().length > 0 ||
+        invoiceConversionRate.trim() !== invoiceConversionRateBaseline.trim() ||
+        invoiceFeeInLieu !== '1.00'))
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty)
+  }, [isDirty, onDirtyChange])
+
+  useEffect(
+    () => () => {
+      onDirtyChange?.(false)
+    },
+    [onDirtyChange],
+  )
+
+  useEffect(() => {
+    onBusyChange?.(isSubmitting)
+  }, [isSubmitting, onBusyChange])
+
+  useEffect(
+    () => () => {
+      onBusyChange?.(false)
+    },
+    [onBusyChange],
+  )
 
   function setQueueItemStatus(
     id: string,
@@ -288,6 +327,7 @@ const DetailDocumentUploadPanel = ({
     Array.from(files).forEach((file, index) => {
       const validationMessages = [
         validateDocumentUploadFile(file),
+        descriptionError,
         !targetNumber.trim()
           ? `${copy.targetLabel} number is required before validating documents.`
           : '',
@@ -589,16 +629,21 @@ const DetailDocumentUploadPanel = ({
               labelText="Document description"
               value={fileDescription}
               onChange={(event) => setFileDescription(event.target.value)}
+              helperText="Optional; US-ASCII and 250 bytes or fewer."
+              invalid={!!descriptionError}
+              invalidText={descriptionError}
+              maxCount={250}
               rows={2}
               disabled={disabled}
             />
 
             <MultiFileDropZone
               title="Upload documents"
-              description="Supported files: any document with a file extension"
+              description={DOCUMENT_UPLOAD_GUIDANCE}
               inputId={`${inputId}File`}
               inputKey={fileInputKey}
               inputLabel="Document File"
+              accept={DOCUMENT_UPLOAD_ACCEPT}
               invalidText={uploadInvalidText}
               disabled={disabled}
               disabledDescription={disabledReason}
@@ -635,10 +680,11 @@ const DetailDocumentUploadPanel = ({
           reviewSupplementalContent={
             <MultiFileDropZone
               title="Add more documents"
-              description="Supported files: any document with a file extension"
+              description={DOCUMENT_UPLOAD_GUIDANCE}
               inputId={`${inputId}ReviewFile`}
               inputKey={fileInputKey}
               inputLabel="Document File"
+              accept={DOCUMENT_UPLOAD_ACCEPT}
               invalidText={uploadInvalidText}
               disabled={disabled || isSubmitting}
               disabledDescription={isSubmitting ? 'Upload is submitting.' : disabledReason}

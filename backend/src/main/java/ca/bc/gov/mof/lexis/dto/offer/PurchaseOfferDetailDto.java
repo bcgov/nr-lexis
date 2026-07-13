@@ -31,7 +31,75 @@ public record PurchaseOfferDetailDto(
     boolean canEditScheduleDates,
     boolean canEditOfferRemarks,
     boolean canEditOfferDetails,
-    boolean canEditWithdrawFields) {
+    boolean canEditWithdrawFields,
+    boolean locked,
+    String lockedBy,
+    String lockMessage) {
+
+  public PurchaseOfferDetailDto(
+      Long offerNumber,
+      Long applicationNumber,
+      String packageNumber,
+      Double packageVolume,
+      String speciesGradeCode,
+      String companyName,
+      String contactName,
+      double purchaseOfferAmount,
+      LocalDate purchaseOfferDate,
+      LocalDate offerWithdrawalDate,
+      LocalDate teacReviewDate,
+      String approvalIndicator,
+      String validOfferIndicator,
+      String fairOfferIndicator,
+      String offerRemark,
+      String withdrawReason,
+      String exportJurisdictionCode,
+      String manufacturingFacilityInfo,
+      String offeringClientNumber,
+      String pickupLocation,
+      String offerCondition,
+      LocalDate advertisingDate,
+      LocalDate offerEndDate,
+      double offerVolume,
+      String region,
+      boolean canEditScheduleDates,
+      boolean canEditOfferRemarks,
+      boolean canEditOfferDetails,
+      boolean canEditWithdrawFields) {
+    this(
+        offerNumber,
+        applicationNumber,
+        packageNumber,
+        packageVolume,
+        speciesGradeCode,
+        companyName,
+        contactName,
+        purchaseOfferAmount,
+        purchaseOfferDate,
+        offerWithdrawalDate,
+        teacReviewDate,
+        approvalIndicator,
+        validOfferIndicator,
+        fairOfferIndicator,
+        offerRemark,
+        withdrawReason,
+        exportJurisdictionCode,
+        manufacturingFacilityInfo,
+        offeringClientNumber,
+        pickupLocation,
+        offerCondition,
+        advertisingDate,
+        offerEndDate,
+        offerVolume,
+        region,
+        canEditScheduleDates,
+        canEditOfferRemarks,
+        canEditOfferDetails,
+        canEditWithdrawFields,
+        false,
+        null,
+        null);
+  }
 
   public PurchaseOfferDetailDto(
       Long offerNumber,
@@ -88,7 +156,10 @@ public record PurchaseOfferDetailDto(
         false,
         false,
         false,
-        false);
+        false,
+        false,
+        null,
+        null);
   }
 
   public PurchaseOfferDetailDto withApplicationContext(
@@ -122,7 +193,10 @@ public record PurchaseOfferDetailDto(
         canEditScheduleDates,
         canEditOfferRemarks,
         canEditOfferDetails,
-        canEditWithdrawFields);
+        canEditWithdrawFields,
+        locked,
+        lockedBy,
+        lockMessage);
   }
 
   public PurchaseOfferDetailDto withEditPermissions(
@@ -130,6 +204,43 @@ public record PurchaseOfferDetailDto(
       boolean canEditOfferRemarks,
       boolean canEditOfferDetails,
       boolean canEditWithdrawFields) {
+    return new PurchaseOfferDetailDto(
+        offerNumber,
+        applicationNumber,
+        packageNumber,
+        packageVolume,
+        speciesGradeCode,
+        companyName,
+        contactName,
+        purchaseOfferAmount,
+        purchaseOfferDate,
+        offerWithdrawalDate,
+        teacReviewDate,
+        approvalIndicator,
+        validOfferIndicator,
+        fairOfferIndicator,
+        canEditOfferRemarks ? offerRemark : null,
+        withdrawReason,
+        exportJurisdictionCode,
+        manufacturingFacilityInfo,
+        offeringClientNumber,
+        pickupLocation,
+        offerCondition,
+        advertisingDate,
+        offerEndDate,
+        offerVolume,
+        region,
+        canEditScheduleDates,
+        canEditOfferRemarks,
+        canEditOfferDetails,
+        canEditWithdrawFields,
+        locked,
+        lockedBy,
+        lockMessage);
+  }
+
+  public PurchaseOfferDetailDto withEditLock(
+      boolean locked, String lockedBy, String lockMessage) {
     return new PurchaseOfferDetailDto(
         offerNumber,
         applicationNumber,
@@ -159,6 +270,9 @@ public record PurchaseOfferDetailDto(
         canEditScheduleDates,
         canEditOfferRemarks,
         canEditOfferDetails,
-        canEditWithdrawFields);
+        canEditWithdrawFields,
+        locked,
+        lockedBy,
+        lockMessage);
   }
 }

@@ -9,6 +9,11 @@ export type SearchResultsTableFrameProps = {
   totalItemsLabel?: string
 }
 
+export const formatSearchResultCount = (totalItems: number): string => {
+  const formattedTotal = new Intl.NumberFormat('en-CA').format(totalItems)
+  return `${formattedTotal} ${totalItems === 1 ? 'result' : 'results'} found`
+}
+
 function SearchResultsTableFrame({
   children,
   loading,
@@ -23,7 +28,7 @@ function SearchResultsTableFrame({
           <TableToolbar>
             <TableToolbarContent>
               <p className="legacy-search-result-count">
-                {totalItemsLabel ?? `${totalItems} results found`}
+                {totalItemsLabel ?? formatSearchResultCount(totalItems)}
               </p>
             </TableToolbarContent>
           </TableToolbar>
@@ -33,6 +38,9 @@ function SearchResultsTableFrame({
         className={
           loading ? 'legacy-search-table-content is-loading' : 'legacy-search-table-content'
         }
+        role="region"
+        aria-label="Search results table"
+        tabIndex={0}
       >
         {children}
       </div>

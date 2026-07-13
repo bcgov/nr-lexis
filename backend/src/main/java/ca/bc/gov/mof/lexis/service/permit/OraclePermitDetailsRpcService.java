@@ -1,12 +1,16 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
@@ -54,8 +58,17 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRow;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
+import ca.bc.gov.mof.lexis.service.ScaleDomainValidator;
+import ca.bc.gov.mof.lexis.service.ScaleDomainValidator.ScaleValues;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceDetail;
+import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceSnapshot;
+import ca.bc.gov.mof.lexis.service.permit.ProvincialPermitMutationValidator.ValidationResult;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -65,18 +78,30 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 @Service
 @Profile("oracle")
 public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(OraclePermitDetailsRpcService.class);
 
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
@@ -88,11 +113,30 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
   private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
+  private static final String EXPORT_PERMIT_STATUS_PAYMENT_PENDING = "PPD";
   private static final String EXPORT_PERMIT_STATUS_EXPIRED = "EXP";
   private static final String EXPORT_PERMIT_STATUS_CANCELLED = "CAN";
+  private static final Set<String> EFFECTIVE_EXPORT_PERMIT_STATUSES =
+      Set.of(
+          EXPORT_PERMIT_STATUS_ACTIVE,
+          EXPORT_PERMIT_STATUS_COMPLETE,
+          EXPORT_PERMIT_STATUS_PAYMENT_PENDING);
+  private static final Set<String> RECONCILABLE_EXPORT_PERMIT_STATUSES =
+      Set.of(
+          EXPORT_PERMIT_STATUS_ACTIVE,
+          EXPORT_PERMIT_STATUS_COMPLETE,
+          EXPORT_PERMIT_STATUS_PAYMENT_PENDING,
+          EXPORT_PERMIT_STATUS_EXPIRED,
+          EXPORT_PERMIT_STATUS_CANCELLED);
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
+  private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
   private static final String SPECIES_FIR = "FI";
   private static final int MAX_SALES_INVOICE_NUMBER_LENGTH = 9;
+  private static final long MAX_OIC_REQUEST_PIECES = 9_999_999_999L;
+  // THE.EXPORT_PERMIT_DETAIL.OIC_REQUEST_VOLUME is VARCHAR2(9), not a numeric column.
+  private static final int MAX_OIC_REQUEST_VOLUME_LENGTH = 9;
+  private static final Pattern OIC_REQUEST_VOLUME_PATTERN =
+      Pattern.compile("\\d+(?:\\.\\d{1,2})?");
   private static final long RCO_REGION_CODE = 1835L;
   private static final long RSK_REGION_CODE = 1908L;
   private static final long RSC_REGION_CODE = 1909L;
@@ -106,16 +150,208 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private final LexisApplicationService applicationService;
   private final ExemptionService exemptionService;
   private final ApplicationReviewRepository applicationReviewRepository;
+  private final ClientLookupService clientLookupService;
+  private final AuthoritativeClientEmailResolver clientEmailResolver;
+  private final PermitNotificationEmailService permitEmailService;
+  private final ApplicationDetailsRpcService applicationDetailsRpcService;
+  private final ProvincialPermitMutationValidator permitMutationValidator;
+  private final ObjectProvider<PermitInvoiceOrchestrationService>
+      permitInvoiceOrchestrationServiceProvider;
 
   public OraclePermitDetailsRpcService(
       PermitRpcRepository repository,
       LexisApplicationService applicationService,
       ExemptionService exemptionService,
-      ApplicationReviewRepository applicationReviewRepository) {
+      ApplicationReviewRepository applicationReviewRepository,
+      ClientLookupService clientLookupService,
+      AuthoritativeClientEmailResolver clientEmailResolver,
+      PermitNotificationEmailService permitEmailService,
+      ApplicationDetailsRpcService applicationDetailsRpcService,
+      ObjectProvider<PermitInvoiceOrchestrationService>
+          permitInvoiceOrchestrationServiceProvider) {
     this.repository = repository;
     this.applicationService = applicationService;
     this.exemptionService = exemptionService;
     this.applicationReviewRepository = applicationReviewRepository;
+    this.clientLookupService = clientLookupService;
+    this.clientEmailResolver = clientEmailResolver;
+    this.permitEmailService = permitEmailService;
+    this.applicationDetailsRpcService = applicationDetailsRpcService;
+    this.permitInvoiceOrchestrationServiceProvider =
+        permitInvoiceOrchestrationServiceProvider;
+    this.permitMutationValidator =
+        new ProvincialPermitMutationValidator(repository, clientLookupService);
+  }
+
+  @Override
+  @Transactional
+  public PermitEmailResult sendRequestPermitEmail(
+      Long permitNumber, String copyToAddress, String userId) {
+    Optional<PermitMutationRow> permitResult =
+        repository.findPermitMutationByPermitNumber(permitNumber);
+    if (permitResult.isEmpty()) {
+      return new PermitEmailResult(false, "Permit not found.");
+    }
+
+    PermitMutationRow permit = permitResult.get();
+    if (!isReviewRequestEligible(permit)) {
+      return new PermitEmailResult(
+          false,
+          "The permit is not ready for review. An active permit must have an application, package, and scale detail.");
+    }
+
+    boolean sent = permitEmailService.sendRequest(permitNumber, copyToAddress);
+    if (!sent) {
+      return new PermitEmailResult(false, "Permit review request email could not be queued.");
+    }
+
+    String requestDate = permit.receivedDate() == null ? null : permit.receivedDate().toString();
+    if (isBlanketOicPermit(permit) && permit.receivedDate() == null) {
+      LocalDate firstRequestDate = LexisBusinessTime.today();
+      if (!updateFirstBlanketOicRequestDate(permit, firstRequestDate, userId)) {
+        markRollbackOnly();
+        return new PermitEmailResult(
+            false,
+            "Permit review request email could not be queued because the first request date could not be recorded.",
+            null);
+      }
+      requestDate = firstRequestDate.toString();
+    }
+
+    return new PermitEmailResult(
+        true, "Permit review request email queued successfully.", requestDate);
+  }
+
+  private boolean isReviewRequestEligible(PermitMutationRow permit) {
+    if (permit == null
+        || permit.permitNumber() == null
+        || !EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(
+            nonNull(trimToNull(permit.permitStatusCode())))) {
+      return false;
+    }
+
+    boolean blanketOic = isBlanketOicPermit(permit);
+    boolean hasApplication =
+        blanketOic
+            ? isOicApplicationBoundToExemption(
+                permit.oicApplicationNumber(), permit.exemptionNumber())
+            : !repository
+                .findApplicationNumbersByPermitNumberRequired(permit.permitNumber())
+                .isEmpty();
+    boolean hasPackage =
+        blanketOic
+            ? !repository.findPackageNumbersByOicPermitNumber(permit.permitNumber()).isEmpty()
+            : !repository.findPackageNumbersByPermitNumberRequired(permit.permitNumber()).isEmpty();
+    boolean hasScale =
+        !repository.findScaleDetailsByPermitNumber(permit.permitNumber()).isEmpty();
+    return hasApplication && hasPackage && hasScale;
+  }
+
+  private boolean updateFirstBlanketOicRequestDate(
+      PermitMutationRow current, LocalDate requestDate, String userId) {
+    PermitMutationRow updated =
+        new PermitMutationRow(
+            current.permitNumber(),
+            current.destinationCompanyName(),
+            current.transportName(),
+            current.estimatedShippingDate(),
+            current.otherPortOfExport(),
+            requestDate,
+            requestDate,
+            current.permitIssueDate(),
+            current.receiptNumber(),
+            current.expiryDate(),
+            current.permitVolume(),
+            current.numberOfPieces(),
+            current.feeInLieuVolume(),
+            current.federalPermitNumber(),
+            current.remarks(),
+            current.entryUserId(),
+            current.entryTimestamp(),
+            current.transportTypeCode(),
+            current.scaleMethodCode(),
+            current.clientNumber(),
+            current.clientLocationCode(),
+            current.agentNumber(),
+            current.agentLocationCode(),
+            current.exemptionNumber(),
+            current.orgUnitNo(),
+            current.portOfExportCode(),
+            current.permitStatusCode(),
+            current.growthTypeCode(),
+            current.countryCode(),
+            current.overrideFee(),
+            current.overrideComment(),
+            current.oicApplicationNumber(),
+            current.oicRequestPieces(),
+            current.oicRequestVolume(),
+            current.productTypeCode());
+    return repository.updatePermitDetail(updated, trimToNull(userId), null);
+  }
+
+  @Override
+  public PermitEmailResult sendApprovalPermitEmail(
+      Long permitNumber, String clientEmailAddress) {
+    Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
+    if (permit.isEmpty()) {
+      return new PermitEmailResult(false, "Permit not found.");
+    }
+    String permitStatus = trimToNull(permit.get().permitStatusCode());
+    if (!EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(permitStatus)
+        && !EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equalsIgnoreCase(permitStatus)) {
+      return new PermitEmailResult(
+          false,
+          "Permit approval email is only available for completed or payment-pending permits.");
+    }
+    // Retain the legacy request parameter for wire compatibility, but resolve the recipient from
+    // the persisted permit every time.
+    String recipient = resolvePermitClientEmail(permit.get()).orElse(null);
+    if (recipient == null) {
+      return new PermitEmailResult(
+          false, "No valid email address is available for the permit applicant.");
+    }
+    boolean sent =
+        permitEmailService.sendApproval(
+            permitNumber,
+            permit.get().permitStatusCode(),
+            repository.findPackageNumbersByPermitNumberRequired(permitNumber),
+            recipient);
+    return new PermitEmailResult(
+        sent,
+        sent ? "Permit approval email queued successfully." : "Permit approval email could not be queued.");
+  }
+
+  private Optional<String> resolvePermitClientEmail(PermitMutationRow permit) {
+    String clientNumber = trimToNull(permit.agentNumber());
+    String locationCode = trimToNull(permit.agentLocationCode());
+    if (clientNumber == null) {
+      clientNumber = trimToNull(permit.clientNumber());
+      locationCode = trimToNull(permit.clientLocationCode());
+    }
+    if (clientNumber == null || locationCode == null) {
+      return Optional.empty();
+    }
+    return clientEmailResolver.resolve(clientNumber, locationCode);
+  }
+
+  @Override
+  public PermitEditContext getEditContext(Long permitNumber) {
+    return repository
+        .findPermitMutationByPermitNumber(permitNumber)
+        .map(
+            permit -> {
+              Double overrideFee = permit.overrideFee();
+              boolean overrideEnabled = overrideFee != null && overrideFee > 0.0d;
+              return new PermitEditContext(
+                  overrideEnabled,
+                  overrideEnabled
+                      ? BigDecimal.valueOf(overrideFee)
+                          .setScale(2, RoundingMode.HALF_UP)
+                          .toPlainString()
+                      : "",
+                  nonNull(permit.overrideComment()));
+            })
+        .orElseGet(() -> new PermitEditContext(false, "", ""));
   }
 
   @Override
@@ -397,7 +633,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     PackageDetailsRow packageDetails =
-        repository.findPackageDetailsByPackageNumber(normalizedPackageNumber).orElse(null);
+        repository.findPackageDetailsByPackageNumberRequired(normalizedPackageNumber).orElse(null);
     if (packageDetails == null) {
       return emptyPackageDetails();
     }
@@ -434,7 +670,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitPackageListRpcResponseDto getPackageList(Long permitNumber) {
-    List<String> packageList = repository.findPackageNumbersByPermitNumber(permitNumber);
+    List<String> packageList = repository.findPackageNumbersByPermitNumberRequired(permitNumber);
     if (packageList.isEmpty()) {
       return new PermitPackageListRpcResponseDto(List.of("No Packages"));
     }
@@ -452,14 +688,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitHasApplicationsRpcResponseDto getPermitHasApplications(Long permitNumber) {
-    boolean hasApplications = !repository.findPackageNumbersByPermitNumber(permitNumber).isEmpty();
+    boolean hasApplications =
+        !repository.findPackageNumbersByPermitNumberRequired(permitNumber).isEmpty();
     return new PermitHasApplicationsRpcResponseDto(hasApplications);
   }
 
   @Override
   public PermitCountryListRpcResponseDto getCountryList() {
     List<PermitCountryItemRpcResponseDto> countries =
-        repository.findAllCountryCodes().stream()
+        repository.findAllCountryCodesRequired().stream()
             .sorted(
                 Comparator.comparingLong((CountryCodeRow row) -> sortGroup(row.groupBy()))
                     .thenComparingLong(CountryCodeRow::orderBy)
@@ -479,13 +716,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
-  public PermitApplicationListRpcResponseDto getApplicationList(Long permitNumber) {
+  public PermitApplicationListRpcResponseDto getApplicationList(
+      Long permitNumber, Predicate<Long> applicationAccess) {
     if (permitNumber == null || permitNumber < 1) {
       return new PermitApplicationListRpcResponseDto(List.of());
     }
 
     List<String> applications =
-        repository.findApplicationNumbersByPermitNumber(permitNumber).stream()
+        repository.findApplicationNumbersByPermitNumberRequired(permitNumber).stream()
+            .filter(
+                applicationNumber ->
+                    applicationNumber != null
+                        && applicationNumber > 0
+                        && applicationAccess.test(applicationNumber))
             .map(String::valueOf)
             .toList();
     return new PermitApplicationListRpcResponseDto(applications);
@@ -493,7 +736,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitAvailableApplicationListRpcResponseDto getAvailableApplicationList(
-      String exemptionNumber, String selectedApplicationsCsv) {
+      String exemptionNumber,
+      String selectedApplicationsCsv,
+      Predicate<Long> applicationAccess) {
     String normalizedExemptionNumber = trimToNull(exemptionNumber);
     if (normalizedExemptionNumber == null) {
       return new PermitAvailableApplicationListRpcResponseDto(
@@ -502,8 +747,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     Set<String> selectedApplications = parseCsvSet(selectedApplicationsCsv);
     Map<Long, Boolean> hasUnassignedPermitByApplication = new LinkedHashMap<>();
-    for (PackageCandidateRow row : repository.findPackagesByExemptionNumber(normalizedExemptionNumber)) {
-      if (row.applicationNumber() == null || row.applicationNumber() < 1) {
+    Map<Long, Boolean> applicationAccessByNumber = new HashMap<>();
+    for (PackageCandidateRow row :
+        repository.findPackagesByExemptionNumberRequired(normalizedExemptionNumber)) {
+      if (!canAccessApplication(
+          row.applicationNumber(), applicationAccess, applicationAccessByNumber)) {
         continue;
       }
       boolean hasUnassignedPermit =
@@ -527,7 +775,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitAvailablePackageListRpcResponseDto getAvailablePackageList(
-      String exemptionNumber, String selectedPackagesCsv) {
+      String exemptionNumber,
+      String selectedPackagesCsv,
+      Predicate<Long> applicationAccess) {
     String normalizedExemptionNumber = trimToNull(exemptionNumber);
     if (normalizedExemptionNumber == null) {
       return new PermitAvailablePackageListRpcResponseDto(
@@ -535,8 +785,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     Set<String> selectedPackages = parseCsvSet(selectedPackagesCsv);
+    Map<Long, Boolean> applicationAccessByNumber = new HashMap<>();
     List<String> distinctPackages =
-        repository.findPackagesByExemptionNumber(normalizedExemptionNumber).stream()
+        repository.findPackagesByExemptionNumberRequired(normalizedExemptionNumber).stream()
+            .filter(
+                row ->
+                    canAccessApplication(
+                        row.applicationNumber(), applicationAccess, applicationAccessByNumber))
             .filter(row -> row.exportPermitNumber() == null || row.exportPermitNumber() < 1)
             .map(PackageCandidateRow::packageNumber)
             .map(TextUtils::trimToNull)
@@ -548,6 +803,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return new PermitAvailablePackageListRpcResponseDto(
         distinctPackages,
         distinctPackages.isEmpty() ? "No applications are currently available." : null);
+  }
+
+  private boolean canAccessApplication(
+      Long applicationNumber,
+      Predicate<Long> applicationAccess,
+      Map<Long, Boolean> applicationAccessByNumber) {
+    return applicationNumber != null
+        && applicationNumber > 0
+        && applicationAccessByNumber.computeIfAbsent(
+            applicationNumber, applicationAccess::test);
   }
 
   @Override
@@ -575,7 +840,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   @Override
   public List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
       String receiptNumber, Long permitNumber, boolean readOnlyUser) {
-    return repository.findGbmsInvoiceHistory(receiptNumber, permitNumber, readOnlyUser).stream()
+    return repository
+        .findGbmsInvoiceHistoryRequired(receiptNumber, permitNumber, readOnlyUser)
+        .stream()
         .map(this::toGbmsInvoiceHistoryItem)
         .toList();
   }
@@ -618,7 +885,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  @Transactional
   public PermitMutationRpcResponseDto addPermit(PermitMutationRequestDto request, String userId) {
+    if (request == null) {
+      return failureMutationResponse(List.of("Permit details are required."), null);
+    }
     String normalizedUserId = trimToNull(userId);
     List<String> errors = new ArrayList<>();
     if (normalizedUserId == null) {
@@ -630,12 +901,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       errors.add("A valid exemption number is required.");
     }
 
-    boolean blanketOic =
-        exemptionNumber != null
-            && exemptionService
-                .findByExemptionNumber(exemptionNumber)
-                .map(exemption -> exemption.blanketOic())
-                .orElse(false);
+    ValidatedExemptionBinding exemptionBinding =
+        exemptionNumber == null ? null : validateExemptionBinding(exemptionNumber, errors);
+    boolean blanketOic = exemptionBinding != null && exemptionBinding.blanketOic();
 
     Long orgUnitNumber =
         parsePositiveLong(blanketOic ? firstNonNull(request.oicRegion(), request.orgUnitNumber()) : request.orgUnitNumber());
@@ -643,17 +911,36 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       errors.add("A valid region is required.");
     }
 
-    String permitStatus = firstNonNull(trimToNull(request.permitStatus()), EXPORT_PERMIT_STATUS_ACTIVE);
+    String permitStatus =
+        normalizeCode(
+            firstNonNull(trimToNull(request.permitStatus()), EXPORT_PERMIT_STATUS_ACTIVE));
+    if (!EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(permitStatus)) {
+      errors.add("A new permit must have active status.");
+    }
     LocalDate submitDate = parseDate(request.permitSubmitDate());
     LocalDate issueDate = parseDate(request.permitIssueDate());
     LocalDate expiryDate = parseDate(request.permitExpiryDate());
     LocalDate receivedDate = blanketOic ? parseDate(request.permitRequestDate()) : submitDate;
     LocalDate estimatedShippingDate = parseDate(request.estimatedShippingDate());
-    Double permitVolume = firstNonNull(parseDouble(request.permitTotalVolume()), 0.0d);
+    Double submittedPermitVolume = parseDouble(request.permitTotalVolume());
+    Double permitVolume = firstNonNull(submittedPermitVolume, 0.0d);
     Long numberOfPieces = firstNonNull(parsePositiveLong(request.permitNumberOfPieces()), 0L);
     Long oicRequestPieces = parsePositiveLong(request.oicPermitTotalPieces());
     Double oicRequestVolume = parseDouble(request.oicPermitTotalVolume());
-    Long oicApplicationNumber = parsePositiveLong(request.oicApplicationNumber());
+    String submittedOicApplicationNumber = trimToNull(request.oicApplicationNumber());
+    Long oicApplicationNumber = null;
+    if (submittedOicApplicationNumber != null) {
+      errors.add(
+          "The OIC application relationship is assigned when the first Blanket OIC package is created.");
+    }
+    if (isInvalidSubmittedDouble(request.permitTotalVolume(), submittedPermitVolume)) {
+      errors.add("A valid permit volume is required.");
+    }
+    if (blanketOic
+        && isInvalidSubmittedDouble(request.oicPermitTotalVolume(), oicRequestVolume)) {
+      errors.add("A valid Permit Request Volume is required.");
+    }
+    validateSubmittedOicRequestLimits(request, blanketOic, errors);
 
     String growthTypeCode =
         firstNonNull(trimToNull(request.packageAgeClass()), trimToNull(request.permitGrowthType()));
@@ -663,6 +950,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String clientLocationCode = trimToNull(request.ownerClientLocation());
     String agentNumber = trimToNull(request.agentClientNumber());
     String agentLocationCode = trimToNull(request.agentClientLocation());
+
+    if (exemptionBinding != null) {
+      validateClientBinding(exemptionBinding, clientNumber, agentNumber, errors);
+    }
 
     if (!blanketOic && exemptionNumber != null) {
       List<Long> applicationNumbers = repository.findApplicationNumbersByExemptionNumber(exemptionNumber);
@@ -683,7 +974,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
 
       Optional<LocalDate> exemptionExpiryDate =
-          exemptionService.findByExemptionNumber(exemptionNumber).map(exemption -> exemption.expiryDate());
+          repository.findExemptionExpiryDate(exemptionNumber);
       if (exemptionExpiryDate.isPresent()) {
         expiryDate = exemptionExpiryDate.get();
       }
@@ -704,7 +995,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     Double overrideFee = parseDouble(request.overrideFee());
     String overrideComment = trimToNull(request.overrideComment());
-    if ("false".equalsIgnoreCase(trimToNull(request.overrideInd()))) {
+    String overrideIndicator = trimToNull(request.overrideInd());
+    if (isInvalidSubmittedDouble(request.overrideFee(), overrideFee)) {
+      return failureMutationResponse(List.of("Override fee must be greater than zero."), null);
+    }
+    if ("true".equalsIgnoreCase(overrideIndicator)
+        && (overrideFee == null || overrideFee <= 0.0d)) {
+      return failureMutationResponse(
+          List.of("Override fee must be greater than zero."), null);
+    }
+    if ("false".equalsIgnoreCase(overrideIndicator)) {
       overrideFee = null;
       overrideComment = null;
     }
@@ -747,8 +1047,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             oicRequestVolume,
             productTypeCode);
 
+    ValidationResult validation =
+        permitMutationValidator.validate(insertRow, exemptionBinding.detail());
+    if (!validation.valid()) {
+      return validationFailureResponse(validation, null);
+    }
+    insertRow = validation.permit();
+
     Optional<PermitMutationRow> inserted = repository.insertPermitDetail(insertRow, normalizedUserId);
-    if (inserted.isEmpty() || inserted.get().permitNumber() == null) {
+    PermitMutationRow expectedInsert = insertRow;
+    if (inserted.filter(row -> matchesInsertedPermit(row, expectedInsert)).isEmpty()) {
+      markRollbackOnly();
       return failureMutationResponse(List.of("Unable to save permit."), null);
     }
 
@@ -757,7 +1066,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         true,
         "The permit was saved successfully.",
         List.of(),
-        List.of(),
+        validation.warnings(),
         permit.permitNumber(),
         permit.permitStatusCode(),
         permit.receiptNumber(),
@@ -767,7 +1076,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  @Transactional
   public PermitMutationRpcResponseDto updatePermit(PermitMutationRequestDto request, String userId) {
+    if (request == null) {
+      return failureMutationResponse(List.of("Permit details are required."), null);
+    }
     String normalizedUserId = trimToNull(userId);
     Long permitNumber = parsePositiveLong(request.permitNumber());
     if (normalizedUserId == null) {
@@ -783,64 +1096,261 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     PermitMutationRow current = existing.get();
+    if (EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(current.permitStatusCode())) {
+      return failureMutationResponse(
+          List.of("Expired permits are read-only."), permitNumber);
+    }
+    String currentExemptionNumber = trimToNull(current.exemptionNumber());
+    boolean exemptionWasSubmitted = request.exemptionNumber() != null;
+    String requestedExemptionNumber = trimToNull(request.exemptionNumber());
+    if (exemptionWasSubmitted && requestedExemptionNumber == null) {
+      return failureMutationResponse(
+          List.of("A valid exemption number is required."), permitNumber);
+    }
+    String targetExemptionNumber =
+        exemptionWasSubmitted ? requestedExemptionNumber : currentExemptionNumber;
+    if (targetExemptionNumber == null) {
+      return failureMutationResponse(
+          List.of("A valid exemption number is required."), permitNumber);
+    }
+
+    boolean reparenting =
+        requestedExemptionNumber != null
+            && !requestedExemptionNumber.equalsIgnoreCase(currentExemptionNumber);
+    String submittedOicApplicationNumber = trimToNull(request.oicApplicationNumber());
+    Long requestedOicApplicationNumber = parsePositiveLong(submittedOicApplicationNumber);
+    List<String> exemptionErrors = new ArrayList<>();
+    if (submittedOicApplicationNumber != null && requestedOicApplicationNumber == null) {
+      exemptionErrors.add("A valid OIC application number is required.");
+    } else if (submittedOicApplicationNumber != null
+        && !java.util.Objects.equals(
+            requestedOicApplicationNumber, current.oicApplicationNumber())) {
+      exemptionErrors.add(
+          "The OIC application relationship cannot be changed through permit update.");
+    }
+    ValidatedExemptionBinding targetExemption =
+        validateExemptionBinding(targetExemptionNumber, exemptionErrors);
+    if (targetExemption != null) {
+      validateClientBinding(
+          targetExemption,
+          mergeSubmittedText(request.ownerClientNumber(), current.clientNumber()),
+          mergeSubmittedText(request.agentClientNumber(), current.agentNumber()),
+          exemptionErrors);
+      if (reparenting) {
+        validatePermitReparenting(
+            permitNumber,
+            targetExemption,
+            exemptionErrors);
+      }
+    }
+    if (!exemptionErrors.isEmpty()) {
+      return failureMutationResponse(exemptionErrors, permitNumber);
+    }
+
+    Double submittedPermitVolume = parseDouble(request.permitTotalVolume());
+    Double submittedOicRequestVolume = parseDouble(request.oicPermitTotalVolume());
+    List<String> numericErrors = new ArrayList<>();
+    if (isInvalidSubmittedDouble(request.permitTotalVolume(), submittedPermitVolume)) {
+      numericErrors.add("A valid permit volume is required.");
+    }
+    boolean targetBlanketOic = targetExemption != null && targetExemption.blanketOic();
+    if (targetBlanketOic
+        && isInvalidSubmittedDouble(
+            request.oicPermitTotalVolume(), submittedOicRequestVolume)) {
+      numericErrors.add("A valid Permit Request Volume is required.");
+    }
+    validateSubmittedOicRequestLimits(request, targetBlanketOic, numericErrors);
+    if (!numericErrors.isEmpty()) {
+      return failureMutationResponse(numericErrors, permitNumber);
+    }
+
     Double overrideFee = parseDouble(request.overrideFee());
     String overrideComment = trimToNull(request.overrideComment());
-    if ("false".equalsIgnoreCase(trimToNull(request.overrideInd()))) {
+    String overrideIndicator = trimToNull(request.overrideInd());
+    if (isInvalidSubmittedDouble(request.overrideFee(), overrideFee)) {
+      return failureMutationResponse(
+          List.of("Override fee must be greater than zero."), permitNumber);
+    }
+    if ("true".equalsIgnoreCase(overrideIndicator)
+        && (overrideFee == null || overrideFee <= 0.0d)) {
+      return failureMutationResponse(
+          List.of("Override fee must be greater than zero."), permitNumber);
+    }
+    if ("false".equalsIgnoreCase(overrideIndicator)) {
       overrideFee = null;
       overrideComment = null;
+    } else if ("true".equalsIgnoreCase(overrideIndicator)) {
+      overrideComment =
+          mergeSubmittedText(request.overrideComment(), current.overrideComment());
     } else {
       overrideFee = firstNonNull(overrideFee, current.overrideFee());
-      overrideComment = firstNonNull(overrideComment, current.overrideComment());
+      overrideComment =
+          mergeSubmittedText(request.overrideComment(), current.overrideComment());
     }
 
     PermitMutationRow updated =
         new PermitMutationRow(
             permitNumber,
-            firstNonNull(trimToNull(request.destinationCompanyName()), current.destinationCompanyName()),
-            firstNonNull(trimToNull(request.transportName()), current.transportName()),
-            firstNonNull(parseDate(request.estimatedShippingDate()), current.estimatedShippingDate()),
-            firstNonNull(trimToNull(request.otherPortOfExport()), current.otherPortOfExport()),
+            mergeSubmittedText(
+                request.destinationCompanyName(), current.destinationCompanyName()),
+            mergeSubmittedText(request.transportName(), current.transportName()),
+            mergeSubmittedDate(
+                request.estimatedShippingDate(), current.estimatedShippingDate()),
+            mergeSubmittedText(request.otherPortOfExport(), current.otherPortOfExport()),
             firstNonNull(parseDate(request.permitSubmitDate()), current.applicationDate()),
             firstNonNull(parseDate(firstNonNull(request.permitRequestDate(), request.permitSubmitDate())), current.receivedDate()),
             firstNonNull(parseDate(request.permitIssueDate()), current.permitIssueDate()),
-            firstNonNull(trimToNull(request.permitReceiptNo()), current.receiptNumber()),
+            mergeSubmittedText(request.permitReceiptNo(), current.receiptNumber()),
             firstNonNull(parseDate(request.permitExpiryDate()), current.expiryDate()),
-            firstNonNull(parseDouble(request.permitTotalVolume()), current.permitVolume()),
+            firstNonNull(submittedPermitVolume, current.permitVolume()),
             firstNonNull(parsePositiveLong(request.permitNumberOfPieces()), current.numberOfPieces()),
             firstNonNull(current.feeInLieuVolume(), 0L),
             current.federalPermitNumber(),
-            firstNonNull(trimToNull(request.permitRemarks()), current.remarks()),
+            mergeSubmittedText(request.permitRemarks(), current.remarks()),
             current.entryUserId(),
             current.entryTimestamp(),
-            firstNonNull(trimToNull(request.transportType()), current.transportTypeCode()),
+            mergeSubmittedText(request.transportType(), current.transportTypeCode()),
             firstNonNull(trimToNull(current.scaleMethodCode()), EXPORT_SCALE_METHOD_WEIGHT),
-            firstNonNull(trimToNull(request.ownerClientNumber()), current.clientNumber()),
-            firstNonNull(trimToNull(request.ownerClientLocation()), current.clientLocationCode()),
-            firstNonNull(trimToNull(request.agentClientNumber()), current.agentNumber()),
-            firstNonNull(trimToNull(request.agentClientLocation()), current.agentLocationCode()),
-            firstNonNull(trimToNull(request.exemptionNumber()), current.exemptionNumber()),
+            mergeSubmittedText(request.ownerClientNumber(), current.clientNumber()),
+            mergeSubmittedText(request.ownerClientLocation(), current.clientLocationCode()),
+            mergeSubmittedText(request.agentClientNumber(), current.agentNumber()),
+            mergeSubmittedText(request.agentClientLocation(), current.agentLocationCode()),
+            targetExemptionNumber,
             firstNonNull(parsePositiveLong(firstNonNull(request.orgUnitNumber(), request.oicRegion())), current.orgUnitNo()),
-            firstNonNull(trimToNull(request.portOfExport()), current.portOfExportCode()),
-            firstNonNull(trimToNull(request.permitStatus()), current.permitStatusCode()),
-            firstNonNull(trimToNull(firstNonNull(request.packageAgeClass(), request.permitGrowthType())), current.growthTypeCode()),
-            firstNonNull(trimToNull(request.destinationCountry()), current.countryCode()),
+            mergeSubmittedText(request.portOfExport(), current.portOfExportCode()),
+            normalizeCode(
+                mergeSubmittedText(request.permitStatus(), current.permitStatusCode())),
+            mergeSubmittedText(
+                firstNonNull(request.packageAgeClass(), request.permitGrowthType()),
+                current.growthTypeCode()),
+            mergeSubmittedText(request.destinationCountry(), current.countryCode()),
             overrideFee,
             overrideComment,
-            firstNonNull(parsePositiveLong(request.oicApplicationNumber()), current.oicApplicationNumber()),
+            current.oicApplicationNumber(),
             firstNonNull(parsePositiveLong(request.oicPermitTotalPieces()), current.oicRequestPieces()),
-            firstNonNull(parseDouble(request.oicPermitTotalVolume()), current.oicRequestVolume()),
-            firstNonNull(trimToNull(request.packageProductType()), current.productTypeCode()));
+            firstNonNull(submittedOicRequestVolume, current.oicRequestVolume()),
+            mergeSubmittedText(request.packageProductType(), current.productTypeCode()));
 
-    boolean saved = repository.updatePermitDetail(updated, normalizedUserId, null);
+    if (EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(updated.permitStatusCode())) {
+      return failureMutationResponse(
+          List.of("Permit expiry is managed by the expiry process."), permitNumber);
+    }
+
+    List<String> oicBindingErrors = new ArrayList<>();
+    validateOicApplicationBinding(
+        targetExemption, current.oicApplicationNumber(), true, oicBindingErrors);
+    if (!oicBindingErrors.isEmpty()) {
+      return failureMutationResponse(oicBindingErrors, permitNumber);
+    }
+
+    PermitMutationRow submittedPermit = updated;
+    String submittedPermitStatusCode = normalizeCode(submittedPermit.permitStatusCode());
+    ValidationResult validation =
+        permitMutationValidator.validate(submittedPermit, targetExemption.detail());
+    if (!validation.valid()) {
+      return validationFailureResponse(validation, permitNumber);
+    }
+    if (EXPORT_PERMIT_STATUS_COMPLETE.equals(submittedPermitStatusCode)
+        && isEnteringInvoiceStatus(
+            current.permitStatusCode(), submittedPermitStatusCode)) {
+      List<String> completionDateErrors =
+          permitMutationValidator.validateCompletionDateRelationships(
+              submittedPermit, targetExemption.detail());
+      if (!completionDateErrors.isEmpty()) {
+        return failureMutationResponse(completionDateErrors, permitNumber);
+      }
+    }
+    updated = validation.permit();
+    if (current.applicationDate() != null
+        && !java.util.Objects.equals(
+            current.applicationDate(), updated.applicationDate())) {
+      return failureMutationResponse(
+          List.of("The permit submit date cannot be changed after the permit is created."),
+          permitNumber);
+    }
+    if (!java.util.Objects.equals(current.orgUnitNo(), updated.orgUnitNo())
+        && !targetOrganizationMatchesLinkedApplications(updated)) {
+      return failureMutationResponse(
+          List.of("The permit organization must match every linked application."),
+          permitNumber);
+    }
+    if (isInvoicedPermitStatus(current.permitStatusCode())
+        && hasFeeOverrideDelta(current, updated)) {
+      return failureMutationResponse(
+          List.of("Fee overrides cannot be changed after permit invoicing."), permitNumber);
+    }
+    if (isInvoicedPermitStatus(current.permitStatusCode())
+        && hasInvoiceMaterialDelta(current, updated)) {
+      return failureMutationResponse(
+          List.of(
+              "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first."),
+          permitNumber);
+    }
+    if (EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(submittedPermitStatusCode)
+        && !EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equalsIgnoreCase(
+            current.permitStatusCode())) {
+      return failureMutationResponse(
+          List.of(
+              "Payment pending is assigned automatically when an interior permit is completed without a receipt."),
+          permitNumber);
+    }
+    if (isEnteringInvoiceStatus(
+            current.permitStatusCode(), updated.permitStatusCode())
+        && hasInvoicePolicyContextDelta(current, updated)) {
+      return failureMutationResponse(
+          List.of(
+              "Invoice policy and billing fields must be saved while the permit is active before it can be completed."),
+          permitNumber);
+    }
+
+    PermitInvoiceOrchestrationService invoiceOrchestrationService = null;
+    if (requiresInvoiceOrchestration(current.permitStatusCode(), updated.permitStatusCode())) {
+      invoiceOrchestrationService =
+          permitInvoiceOrchestrationServiceProvider == null
+              ? null
+              : permitInvoiceOrchestrationServiceProvider.getIfAvailable();
+      if (invoiceOrchestrationService == null
+          || !supportsInvoiceDestination(
+              invoiceOrchestrationService, updated.countryCode())) {
+        return failureMutationResponse(
+            List.of(
+                "This permit status change is unavailable until permit invoice processing is configured."),
+            permitNumber);
+      }
+    }
+
+    boolean saved =
+        repository.updatePermitDetail(updated, normalizedUserId, FEE_MASK_EFFECTIVE_DATE);
     if (!saved) {
       return failureMutationResponse(List.of("Unable to update permit."), permitNumber);
+    }
+    if (!synchronizePermitTransitionState(current, updated, normalizedUserId)) {
+      markRollbackOnly();
+      return failureMutationResponse(
+          List.of("Unable to synchronize linked application or package data."), permitNumber);
+    }
+    if (invoiceOrchestrationService != null
+        && !orchestrateInvoiceTransition(
+            invoiceOrchestrationService, current, updated, normalizedUserId)) {
+      markRollbackOnly();
+      return failureMutationResponse(
+          List.of("Unable to coordinate the permit invoice status change."), permitNumber);
+    }
+    if (!updateLinkedApplicationStatusesForPermitTransition(
+        permitNumber,
+        current.permitStatusCode(),
+        updated.permitStatusCode(),
+        normalizedUserId)) {
+      markRollbackOnly();
+      return failureMutationResponse(
+          List.of("Unable to update linked application statuses."), permitNumber);
     }
 
     return new PermitMutationRpcResponseDto(
         true,
         "The permit was updated successfully.",
         List.of(),
-        List.of(),
+        validation.warnings(),
         permitNumber,
         updated.permitStatusCode(),
         updated.receiptNumber(),
@@ -872,13 +1382,35 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     PermitMutationRow current = existing.get();
+    if (EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(current.permitStatusCode())) {
+      return failureMutationResponse(
+          List.of("Expired permits are read-only."), permitNumber);
+    }
+    if (EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(current.permitStatusCode())) {
+      return failureMutationResponse(
+          List.of("Cancelled permits must be reactivated before shipping details can be changed."),
+          permitNumber);
+    }
+    List<String> exemptionErrors = new ArrayList<>();
+    ValidatedExemptionBinding exemption =
+        validateExemptionBinding(current.exemptionNumber(), exemptionErrors);
+    if (exemption != null) {
+      validateClientBinding(
+          exemption, current.clientNumber(), current.agentNumber(), exemptionErrors);
+    }
+    if (!exemptionErrors.isEmpty()) {
+      return failureMutationResponse(exemptionErrors, permitNumber);
+    }
     PermitMutationRow updated =
         new PermitMutationRow(
             permitNumber,
-            firstNonNull(trimToNull(request.destinationCompanyName()), current.destinationCompanyName()),
-            firstNonNull(trimToNull(request.transportName()), current.transportName()),
-            firstNonNull(parsedShippingDate, current.estimatedShippingDate()),
-            firstNonNull(trimToNull(request.otherPortOfExport()), current.otherPortOfExport()),
+            mergeSubmittedText(
+                request.destinationCompanyName(), current.destinationCompanyName()),
+            mergeSubmittedText(request.transportName(), current.transportName()),
+            request.estimatedShippingDate() == null
+                ? current.estimatedShippingDate()
+                : parsedShippingDate,
+            mergeSubmittedText(request.otherPortOfExport(), current.otherPortOfExport()),
             current.applicationDate(),
             current.receivedDate(),
             current.permitIssueDate(),
@@ -891,7 +1423,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             current.remarks(),
             current.entryUserId(),
             current.entryTimestamp(),
-            firstNonNull(trimToNull(request.transportType()), current.transportTypeCode()),
+            mergeSubmittedText(request.transportType(), current.transportTypeCode()),
             firstNonNull(trimToNull(current.scaleMethodCode()), EXPORT_SCALE_METHOD_WEIGHT),
             current.clientNumber(),
             current.clientLocationCode(),
@@ -899,10 +1431,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             current.agentLocationCode(),
             current.exemptionNumber(),
             current.orgUnitNo(),
-            firstNonNull(trimToNull(request.portOfExport()), current.portOfExportCode()),
+            mergeSubmittedText(request.portOfExport(), current.portOfExportCode()),
             current.permitStatusCode(),
             current.growthTypeCode(),
-            firstNonNull(trimToNull(request.destinationCountry()), current.countryCode()),
+            mergeSubmittedText(request.destinationCountry(), current.countryCode()),
             current.overrideFee(),
             current.overrideComment(),
             current.oicApplicationNumber(),
@@ -910,7 +1442,22 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             current.oicRequestVolume(),
             current.productTypeCode());
 
-    boolean saved = repository.updatePermitDetail(updated, normalizedUserId, null);
+    if (isInvoicedPermitStatus(current.permitStatusCode())
+        && hasStringChanged(current.countryCode(), updated.countryCode())) {
+      return failureMutationResponse(
+          List.of("Destination country cannot be changed after permit invoicing."),
+          permitNumber);
+    }
+
+    ValidationResult validation =
+        permitMutationValidator.validate(updated, exemption.detail());
+    if (!validation.valid()) {
+      return validationFailureResponse(validation, permitNumber);
+    }
+    updated = validation.permit();
+
+    boolean saved =
+        repository.updatePermitDetail(updated, normalizedUserId, FEE_MASK_EFFECTIVE_DATE);
     if (!saved) {
       return failureMutationResponse(List.of("Unable to save permit."), permitNumber);
     }
@@ -919,7 +1466,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         true,
         "The permit was saved successfully.",
         List.of(),
-        List.of(),
+        validation.warnings(),
         permitNumber,
         updated.permitStatusCode(),
         updated.receiptNumber(),
@@ -929,6 +1476,70 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public String getExemptionNumberForPermitMutation(Long permitNumber) {
+    PermitMutationRow permit = requiredPermitMutationRow(permitNumber);
+    String exemptionNumber = trimToNull(permit.exemptionNumber());
+    if (exemptionNumber == null) {
+      throw new DataRetrievalFailureException(
+          "Permit " + permitNumber + " has no authoritative exemption relationship.");
+    }
+    return exemptionNumber;
+  }
+
+  @Override
+  public List<Long> getApplicationNumbersForPermitMutation(Long permitNumber) {
+    java.util.SortedSet<Long> applicationNumbers =
+        new java.util.TreeSet<>(
+            repository.findApplicationNumbersByPermitNumberRequired(permitNumber));
+    PermitMutationRow permit = requiredPermitMutationRow(permitNumber);
+    Long oicApplicationNumber = permit.oicApplicationNumber();
+    if (oicApplicationNumber != null) {
+      if (!isOicApplicationBoundToExemption(
+          oicApplicationNumber, permit.exemptionNumber())) {
+        throw new DataRetrievalFailureException(
+            "Permit " + permitNumber + " has an invalid OIC application relationship.");
+      }
+      applicationNumbers.add(oicApplicationNumber);
+    }
+    return List.copyOf(applicationNumbers);
+  }
+
+  @Override
+  public List<Long> getApplicationNumbersForExemptionMutation(String exemptionNumber) {
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      throw new DataRetrievalFailureException(
+          "A valid exemption relationship is required for permit mutation.");
+    }
+    return List.copyOf(
+        new java.util.TreeSet<>(
+            repository.findApplicationNumbersByExemptionNumberRequired(
+                normalizedExemptionNumber)));
+  }
+
+  private PermitMutationRow requiredPermitMutationRow(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      throw new DataRetrievalFailureException(
+          "A valid permit number is required for aggregate mutation.");
+    }
+    return repository
+        .findPermitMutationByPermitNumber(permitNumber)
+        .orElseThrow(
+            () ->
+                new DataRetrievalFailureException(
+                    "Permit " + permitNumber + " could not be loaded for mutation."));
+  }
+
+  @Override
+  public Optional<Long> getApplicationNumberForScaleMutation(String scaleDetailId) {
+    return repository
+        .findScaleMutationById(trimToNull(scaleDetailId))
+        .map(ScaleMutationRow::applicationNumber)
+        .filter(applicationNumber -> applicationNumber != null && applicationNumber > 0);
+  }
+
+  @Override
+  @Transactional
   public PermitPersistenceRpcResponseDto updateScaleAttachment(
       String scaleDetailId, Long permitNumber, boolean attachInd, String userId) {
     String normalizedUserId = trimToNull(userId);
@@ -947,9 +1558,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (permit.isEmpty()) {
       return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
     }
+    if (isBlanketOicPermit(permit.get())
+        && !isOicApplicationBoundToExemption(
+            permit.get().oicApplicationNumber(), permit.get().exemptionNumber())) {
+      return failurePersistenceResponse(
+          List.of("The hidden OIC application does not belong to this permit's exemption."),
+          permitNumber);
+    }
     if (isScaleAttachmentLockedStatus(permit.get().permitStatusCode())) {
       return failurePersistenceResponse(
-          List.of("Scale rows cannot be changed for a completed, expired, or cancelled permit."),
+          List.of(
+              "Scale rows cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
           permitNumber);
     }
 
@@ -959,12 +1578,43 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     ScaleMutationRow scale = existing.get();
+    Long applicationNumber = scale.applicationNumber();
+    if (applicationNumber == null || applicationNumber < 1) {
+      return failurePersistenceResponse(
+          List.of("Scale detail application could not be verified."), permitNumber);
+    }
+
     Long currentPermitNumber = scale.exportPermitDetailNumber();
     Long targetPermitNumber;
+    String attachSourceStatus = null;
     if (attachInd) {
       if (currentPermitNumber != null && !permitNumber.equals(currentPermitNumber)) {
         return failurePersistenceResponse(
             List.of("Scale detail is already assigned to another permit."), permitNumber);
+      }
+      if (!isScaleEligibleForPermit(scale, permit.get())) {
+        return failurePersistenceResponse(
+            List.of("Scale detail is not eligible for this permit."), permitNumber);
+      }
+      attachSourceStatus =
+          repository
+              .findApplicationStatusCodeByNumber(applicationNumber)
+              .map(this::normalizeCode)
+              .filter(status -> !status.isBlank())
+              .orElse(null);
+      if (attachSourceStatus == null) {
+        return failurePersistenceResponse(
+            List.of("Application " + applicationNumber + " status could not be verified."),
+            permitNumber);
+      }
+      if (!APPLICATION_STATUS_EXEMPTED.equals(attachSourceStatus)
+          && !APPLICATION_STATUS_PERMITTED.equals(attachSourceStatus)) {
+        return failurePersistenceResponse(
+            List.of(
+                "Application "
+                    + applicationNumber
+                    + " must be exempted or permitted before a scale can be added to a permit."),
+            permitNumber);
       }
       targetPermitNumber = permitNumber;
     } else {
@@ -989,9 +1639,33 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             scale.entryTimestamp());
 
     if (!repository.updateScaleDetail(updatedScale, normalizedUserId)) {
+      markRollbackOnly();
       return failurePersistenceResponse(List.of("Unable to update scale detail."), permitNumber);
     }
-    updatePermitTotals(permitNumber, normalizedUserId);
+    if (attachInd
+        && APPLICATION_STATUS_EXEMPTED.equals(attachSourceStatus)
+        && !transitionApplicationStatus(
+            applicationNumber,
+            APPLICATION_STATUS_EXEMPTED,
+            APPLICATION_STATUS_PERMITTED,
+            normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to reconcile application " + applicationNumber + " status."),
+          permitNumber);
+    }
+    if (!attachInd
+        && !synchronizeRemovedApplicationStatus(applicationNumber, normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to reconcile application " + applicationNumber + " status."),
+          permitNumber);
+    }
+    if (!updatePermitTotals(permitNumber, normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to recalculate permit totals."), permitNumber);
+    }
 
     return new PermitPersistenceRpcResponseDto(
         true,
@@ -1002,6 +1676,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  @Transactional
   public PermitPersistenceRpcResponseDto addApplicationsToPermit(
       Long permitNumber, String selectedApplicationsCsv, String userId) {
     String normalizedUserId = trimToNull(userId);
@@ -1017,34 +1692,73 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(validationErrors, permitNumber);
     }
 
-    List<String> errors = new ArrayList<>();
-    int attachedScaleCount = 0;
+    List<ApplicationScaleAttachmentPlan> attachmentPlans = new ArrayList<>();
     for (Long applicationNumber : applicationNumbers) {
-      boolean applicationHadScaleAttached = false;
-      for (ScaleMutationRow scale : repository.findScaleMutationDetailsByApplicationNumber(applicationNumber)) {
-        if (scale.exportPermitDetailNumber() != null) {
-          continue;
-        }
+      List<ScaleMutationRow> unassignedScales =
+          repository.findScaleMutationDetailsByApplicationNumber(applicationNumber).stream()
+              .filter(scale -> scale.exportPermitDetailNumber() == null)
+              .toList();
+      if (unassignedScales.isEmpty()) {
+        continue;
+      }
+
+      String sourceStatus =
+          repository
+              .findApplicationStatusCodeByNumber(applicationNumber)
+              .map(this::normalizeCode)
+              .filter(status -> !status.isBlank())
+              .orElse(null);
+      if (sourceStatus == null) {
+        return failurePersistenceResponse(
+            List.of("Application " + applicationNumber + " status could not be verified."),
+            permitNumber);
+      }
+      if (!APPLICATION_STATUS_EXEMPTED.equals(sourceStatus)
+          && !APPLICATION_STATUS_PERMITTED.equals(sourceStatus)) {
+        return failurePersistenceResponse(
+            List.of(
+                "Application "
+                    + applicationNumber
+                    + " must be exempted or permitted before it can be added to a permit."),
+            permitNumber);
+      }
+      attachmentPlans.add(
+          new ApplicationScaleAttachmentPlan(applicationNumber, sourceStatus, unassignedScales));
+    }
+
+    int attachedScaleCount = 0;
+    for (ApplicationScaleAttachmentPlan plan : attachmentPlans) {
+      for (ScaleMutationRow scale : plan.unassignedScales()) {
         if (!updateScalePermitAssignment(scale, permitNumber, normalizedUserId)) {
-          errors.add("Unable to add application " + applicationNumber + " to the permit.");
-          break;
+          markRollbackOnly();
+          return failurePersistenceResponse(
+              List.of("Unable to add application " + plan.applicationNumber() + " to the permit."),
+              permitNumber);
         }
-        applicationHadScaleAttached = true;
         attachedScaleCount++;
       }
 
-      if (applicationHadScaleAttached
-          && !applicationReviewRepository.updateStatus(
-              applicationNumber, APPLICATION_STATUS_PERMITTED, null, normalizedUserId)) {
-        errors.add("Unable to update application " + applicationNumber + " status.");
+      if (APPLICATION_STATUS_EXEMPTED.equals(plan.sourceStatus())
+          && !transitionApplicationStatus(
+              plan.applicationNumber(),
+              APPLICATION_STATUS_EXEMPTED,
+              APPLICATION_STATUS_PERMITTED,
+              normalizedUserId)) {
+        markRollbackOnly();
+        return failurePersistenceResponse(
+            List.of(
+                "Unable to reconcile application "
+                    + plan.applicationNumber()
+                    + " status."),
+            permitNumber);
       }
     }
 
-    if (!errors.isEmpty()) {
-      return failurePersistenceResponse(errors, permitNumber);
+    if (!updatePermitTotals(permitNumber, normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to recalculate permit totals."), permitNumber);
     }
-
-    updatePermitTotals(permitNumber, normalizedUserId);
     return new PermitPersistenceRpcResponseDto(
         true,
         attachedScaleCount == 1
@@ -1056,6 +1770,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  @Transactional
   public PermitPersistenceRpcResponseDto removeApplicationFromPermit(
       Long permitNumber, Long applicationNumber, String userId) {
     String normalizedUserId = trimToNull(userId);
@@ -1078,9 +1793,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(
           List.of("Application associations are not changed this way for Blanket OIC permits."), permitNumber);
     }
-    if (EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(trimToNull(permit.permitStatusCode()))) {
+    if (isScaleAttachmentLockedStatus(permit.permitStatusCode())) {
       return failurePersistenceResponse(
-          List.of("Applications cannot be changed for a completed permit."), permitNumber);
+          List.of(
+              "Applications cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
+          permitNumber);
     }
 
     int removedScaleCount = 0;
@@ -1089,13 +1806,26 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         continue;
       }
       if (!updateScalePermitAssignment(scale, null, normalizedUserId)) {
+        markRollbackOnly();
         return failurePersistenceResponse(
             List.of("Unable to remove application " + applicationNumber + " from the permit."), permitNumber);
       }
       removedScaleCount++;
     }
 
-    updatePermitTotals(permitNumber, normalizedUserId);
+    if (removedScaleCount > 0
+        && !synchronizeRemovedApplicationStatus(applicationNumber, normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to reconcile application " + applicationNumber + " status."),
+          permitNumber);
+    }
+
+    if (!updatePermitTotals(permitNumber, normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to recalculate permit totals."), permitNumber);
+    }
     return new PermitPersistenceRpcResponseDto(
         true,
         removedScaleCount == 1
@@ -1106,7 +1836,117 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         permitNumber);
   }
 
+  private boolean synchronizeRemovedApplicationStatus(
+      Long applicationNumber, String updateUserId) {
+    Optional<Boolean> effectivePermitRelationship =
+        resolveEffectivePermitRelationship(applicationNumber, null, null, false);
+    if (effectivePermitRelationship.isEmpty()) {
+      return false;
+    }
+
+    Optional<String> currentStatus =
+        repository.findApplicationStatusCodeByNumber(applicationNumber);
+    String normalizedCurrentStatus = normalizeCode(currentStatus.orElse(null));
+    if (normalizedCurrentStatus == null) {
+      return false;
+    }
+    String requiredStatus =
+        effectivePermitRelationship.get()
+            ? APPLICATION_STATUS_EXEMPTED
+            : APPLICATION_STATUS_PERMITTED;
+    String targetStatus =
+        effectivePermitRelationship.get()
+            ? APPLICATION_STATUS_PERMITTED
+            : APPLICATION_STATUS_EXEMPTED;
+    if (targetStatus.equals(normalizedCurrentStatus)) {
+      return true;
+    }
+    if (!requiredStatus.equals(normalizedCurrentStatus)) {
+      return false;
+    }
+
+    return transitionApplicationStatus(
+        applicationNumber,
+        requiredStatus,
+        targetStatus,
+        updateUserId);
+  }
+
+  private boolean transitionApplicationStatus(
+      Long applicationNumber,
+      String requiredStatus,
+      String targetStatus,
+      String updateUserId) {
+    ApplicationReviewRepository.ApplicationStatusTransitionRow transition =
+        applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            applicationNumber,
+            targetStatus,
+            null,
+            updateUserId,
+            List.of(requiredStatus));
+    return transition.applicationFound()
+        && transition.transitionAllowed()
+        && transition.updated();
+  }
+
+  private Optional<Boolean> resolveEffectivePermitRelationship(
+      Long applicationNumber,
+      Long transitioningPermitNumber,
+      String transitioningPermitStatus,
+      boolean requireTransitioningPermitRelationship) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+
+    Set<Long> permitNumbers = new HashSet<>();
+    for (ScaleMutationRow scale :
+        repository.findScaleMutationDetailsByApplicationNumber(applicationNumber)) {
+      if (scale == null) {
+        return Optional.empty();
+      }
+      Long linkedPermitNumber = scale.exportPermitDetailNumber();
+      if (linkedPermitNumber == null) {
+        continue;
+      }
+      if (linkedPermitNumber < 1) {
+        return Optional.empty();
+      }
+      permitNumbers.add(linkedPermitNumber);
+    }
+
+    boolean transitioningPermitFound = transitioningPermitNumber == null;
+    boolean effectiveRelationshipFound = false;
+    for (Long linkedPermitNumber : permitNumbers) {
+      String permitStatus;
+      if (linkedPermitNumber.equals(transitioningPermitNumber)) {
+        transitioningPermitFound = true;
+        permitStatus = normalizeCode(transitioningPermitStatus);
+      } else {
+        Optional<PermitMutationRow> linkedPermit =
+            repository.findPermitMutationByPermitNumber(linkedPermitNumber);
+        if (linkedPermit.isEmpty()) {
+          return Optional.empty();
+        }
+        permitStatus = normalizeCode(linkedPermit.get().permitStatusCode());
+      }
+
+      if (permitStatus == null
+          || !RECONCILABLE_EXPORT_PERMIT_STATUSES.contains(permitStatus)) {
+        return Optional.empty();
+      }
+      if (EFFECTIVE_EXPORT_PERMIT_STATUSES.contains(permitStatus)) {
+        effectiveRelationshipFound = true;
+      }
+    }
+
+    if (requireTransitioningPermitRelationship && !transitioningPermitFound) {
+      return Optional.empty();
+    }
+    return Optional.of(effectiveRelationshipFound);
+  }
+
   @Override
+  @Transactional
   public PermitPersistenceRpcResponseDto addBlanketOicScale(
       Long permitNumber,
       String packageNumber,
@@ -1142,12 +1982,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (normalizedGradeCode == null) {
       errors.add("A valid grade code is required.");
     }
-    if (scalePieces == null || scalePieces < 1) {
-      errors.add("A valid pieces count is required.");
-    }
-    if (normalizedVolume == null || normalizedVolume <= 0.0d) {
-      errors.add("A valid scale volume is required.");
-    }
+    errors.addAll(
+        ScaleDomainValidator.validateNumericValues(scalePieces, normalizedVolume, true));
     if (!errors.isEmpty()) {
       return failurePersistenceResponse(errors, permitNumber);
     }
@@ -1162,46 +1998,145 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(
           List.of("Scale rows can only be added here for Blanket OIC permits."), permitNumber);
     }
-    if (EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(trimToNull(current.permitStatusCode()))) {
+    if (isScaleAttachmentLockedStatus(current.permitStatusCode())) {
       return failurePersistenceResponse(
-          List.of("Scale rows cannot be changed for a completed permit."), permitNumber);
+          List.of(
+              "Scale rows cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
+          permitNumber);
     }
     if (current.oicApplicationNumber() == null || current.oicApplicationNumber() < 1) {
       return failurePersistenceResponse(
           List.of("The permit does not have an OIC application number."), permitNumber);
     }
+    Long applicationNumber = current.oicApplicationNumber();
     if (!repository.findPackageNumbersByOicPermitNumber(permitNumber).contains(normalizedPackageNumber)) {
       return failurePersistenceResponse(
           List.of("Package is not available for this Blanket OIC permit."), permitNumber);
     }
 
+    if (!repository.isValidBoicTimberMarkRequired(
+        normalizedTimberMark, current.exemptionNumber())) {
+      errors.add(
+          "Timber mark "
+              + normalizedTimberMark
+              + " is not valid for exemption "
+              + current.exemptionNumber()
+              + ".");
+    }
+    if (!repository.isSpeciesCodeValidRequired(normalizedSpeciesCode)) {
+      errors.add("Species code " + normalizedSpeciesCode + " does not exist.");
+    }
+    if (!repository.isGradeCodeValidRequired(normalizedGradeCode)) {
+      errors.add("Grade code " + normalizedGradeCode + " does not exist.");
+    }
+
+    ScaleValues candidate =
+        new ScaleValues(
+            normalizedTimberMark,
+            normalizedSpeciesCode,
+            normalizedGradeCode,
+            scalePieces,
+            normalizedVolume);
+    List<ScaleValues> packageScales =
+        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber).stream()
+            .map(this::toScaleValues)
+            .toList();
+    List<ScaleValues> permitScales =
+        repository.findScaleDetailsByPermitNumber(permitNumber).stream()
+            .map(this::toScaleValues)
+            .toList();
+
+    if (ScaleDomainValidator.containsCombination(packageScales, candidate)) {
+      errors.add(
+          "A scale with the same Timber Mark/Species/Grade combination already exists.");
+    }
+
+    Optional<PackageDetailsRow> packageDetails =
+        repository.findPackageDetailsByPackageNumberRequired(normalizedPackageNumber);
+    if (packageDetails.isEmpty()) {
+      errors.add("Package details are unavailable.");
+    } else if (ScaleDomainValidator.exceedsVolume(
+        packageScales, normalizedVolume, packageDetails.get().packageVolume())) {
+      errors.add("The total scale volume exceeds the package volume.");
+    }
+
+    if (current.oicRequestPieces() == null) {
+      errors.add("The permit request pieces limit is unavailable.");
+    } else if (ScaleDomainValidator.exceedsPieces(
+        permitScales, scalePieces, current.oicRequestPieces())) {
+      errors.add("The total scale pieces exceed the permit request pieces.");
+    }
+    if (current.oicRequestVolume() == null) {
+      errors.add("The permit request volume limit is unavailable.");
+    } else if (ScaleDomainValidator.exceedsVolume(
+        permitScales, normalizedVolume, current.oicRequestVolume())) {
+      errors.add("The total scale volume exceeds the permit request volume.");
+    }
+    if (!errors.isEmpty()) {
+      return failurePersistenceResponse(errors, permitNumber);
+    }
+    if (!isOicApplicationBoundToExemption(applicationNumber, current.exemptionNumber())) {
+      return failurePersistenceResponse(
+          List.of("The hidden OIC application does not belong to this permit's exemption."),
+          permitNumber);
+    }
+
+    String applicationStatus =
+        repository
+            .findApplicationStatusCodeByNumber(applicationNumber)
+            .map(this::normalizeCode)
+            .filter(status -> !status.isBlank())
+            .orElse(null);
+    if (!APPLICATION_STATUS_EXEMPTED.equals(applicationStatus)
+        && !APPLICATION_STATUS_PERMITTED.equals(applicationStatus)) {
+      return failurePersistenceResponse(
+          List.of("The hidden OIC application status could not be reconciled."), permitNumber);
+    }
+
     Double fixedExemptionRate =
         repository.findFixedExemptionRate(current.exemptionNumber()).map(BigDecimal::doubleValue).orElse(null);
-    Optional<PermitScaleDetailRow> inserted =
-        repository.insertBoicScaleDetail(
-            new BoicScaleMutationRecord(
-                normalizedTimberMark,
-                scalePieces,
-                normalizedVolume,
-                normalizedPackageNumber,
-                normalizedSpeciesCode,
-                normalizedGradeCode,
-                current.oicApplicationNumber(),
-                permitNumber,
-                fixedExemptionRate,
-                normalizedUserId,
-                new Timestamp(System.currentTimeMillis())));
+    BoicScaleMutationRecord scaleRecord =
+        new BoicScaleMutationRecord(
+            normalizedTimberMark,
+            scalePieces,
+            normalizedVolume,
+            normalizedPackageNumber,
+            normalizedSpeciesCode,
+            normalizedGradeCode,
+            applicationNumber,
+            permitNumber,
+            fixedExemptionRate,
+            normalizedUserId,
+            new Timestamp(System.currentTimeMillis()));
+    Optional<PermitScaleDetailRow> inserted = repository.insertBoicScaleDetail(scaleRecord);
 
-    if (inserted.isEmpty()) {
+    if (inserted.filter(row -> matchesInsertedBoicScale(row, scaleRecord)).isEmpty()) {
+      markRollbackOnly();
       return failurePersistenceResponse(List.of("Unable to add Blanket OIC scale detail."), permitNumber);
     }
 
-    updatePermitTotals(permitNumber, normalizedUserId);
+    if (APPLICATION_STATUS_EXEMPTED.equals(applicationStatus)
+        && !transitionApplicationStatus(
+            applicationNumber,
+            APPLICATION_STATUS_EXEMPTED,
+            APPLICATION_STATUS_PERMITTED,
+            normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to reconcile the hidden OIC application status."), permitNumber);
+    }
+
+    if (!updatePermitTotals(permitNumber, normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to recalculate permit totals."), permitNumber);
+    }
     return new PermitPersistenceRpcResponseDto(
         true, "Blanket OIC scale detail was added.", List.of(), List.of(), permitNumber);
   }
 
   @Override
+  @Transactional
   public PermitPersistenceRpcResponseDto deleteBlanketOicScale(
       String scaleDetailId, Long permitNumber, String userId) {
     String normalizedUserId = trimToNull(userId);
@@ -1226,9 +2161,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(
           List.of("Scale rows can only be removed here for Blanket OIC permits."), permitNumber);
     }
-    if (EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(trimToNull(currentPermit.permitStatusCode()))) {
+    if (isScaleAttachmentLockedStatus(currentPermit.permitStatusCode())) {
       return failurePersistenceResponse(
-          List.of("Scale rows cannot be changed for a completed permit."), permitNumber);
+          List.of(
+              "Scale rows cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
+          permitNumber);
     }
 
     Optional<ScaleMutationRow> existingScale = repository.findScaleMutationById(normalizedScaleDetailId);
@@ -1241,17 +2178,42 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(
           List.of("Scale detail is not assigned to this permit."), permitNumber);
     }
+    Long applicationNumber = existingScale.get().applicationNumber();
+    if (applicationNumber == null
+        || !applicationNumber.equals(currentPermit.oicApplicationNumber())) {
+      return failurePersistenceResponse(
+          List.of("Scale detail is not assigned to this permit's hidden OIC application."),
+          permitNumber);
+    }
+    if (!isOicApplicationBoundToExemption(
+        applicationNumber, currentPermit.exemptionNumber())) {
+      return failurePersistenceResponse(
+          List.of("The hidden OIC application does not belong to this permit's exemption."),
+          permitNumber);
+    }
 
     if (!repository.deleteScaleDetailById(normalizedScaleDetailId, normalizedUserId)) {
+      markRollbackOnly();
       return failurePersistenceResponse(List.of("Unable to remove Blanket OIC scale detail."), permitNumber);
     }
 
-    updatePermitTotals(permitNumber, normalizedUserId);
+    if (!synchronizeRemovedApplicationStatus(applicationNumber, normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to reconcile the hidden OIC application status."), permitNumber);
+    }
+
+    if (!updatePermitTotals(permitNumber, normalizedUserId)) {
+      markRollbackOnly();
+      return failurePersistenceResponse(
+          List.of("Unable to recalculate permit totals."), permitNumber);
+    }
     return new PermitPersistenceRpcResponseDto(
         true, "Blanket OIC scale detail was removed.", List.of(), List.of(), permitNumber);
   }
 
   @Override
+  @Transactional
   public PermitPersistenceRpcResponseDto addInvoice(
       Long permitNumber,
       String salesInvoiceNumber,
@@ -1287,6 +2249,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           false, "", errors, List.of(), permitNumber);
     }
 
+    Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
+    if (permit.isEmpty()) {
+      return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
+    }
+    if (!EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(
+        trimToNull(permit.get().permitStatusCode()))) {
+      return failurePersistenceResponse(
+          List.of("Invoices can only be added to active permits."), permitNumber);
+    }
+
     if (repository.findSalesInvoiceByNumberAndPermit(normalizedSalesInvoiceNumber, permitNumber).isPresent()) {
       return new PermitPersistenceRpcResponseDto(
           false,
@@ -1304,7 +2276,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             invoiceConversionRate,
             invoiceFeeInLieu,
             trimToNull(userId));
-    if (inserted.isEmpty()) {
+    if (inserted
+        .filter(
+            row ->
+                matchesInsertedSalesInvoice(
+                    row,
+                    normalizedSalesInvoiceNumber,
+                    invoiceExportValue,
+                    invoiceConversionRate,
+                    invoiceFeeInLieu))
+        .isEmpty()) {
+      markRollbackOnly();
       return new PermitPersistenceRpcResponseDto(
           false,
           "",
@@ -1323,7 +2305,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber) {
-    return new PermitInvoiceListRpcResponseDto(repository.findInvoiceNumbersByPermit(permitNumber));
+    return new PermitInvoiceListRpcResponseDto(
+        repository.findInvoiceNumbersByPermitRequired(permitNumber));
   }
 
   @Override
@@ -1349,8 +2332,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitConversionRateRpcResponseDto getConversionRate() {
-    Optional<Double> conversionRate = repository.findCurrencyConversionRateByDate(LocalDate.now(), "USD");
-    if (conversionRate.isEmpty()) {
+    Optional<Double> conversionRate =
+        repository.findCurrencyConversionRateByDate(LexisBusinessTime.today(), "USD");
+    if (conversionRate.isEmpty()
+        || !Double.isFinite(conversionRate.get())
+        || conversionRate.get() <= 0.0d) {
       return new PermitConversionRateRpcResponseDto(false, "");
     }
 
@@ -1375,40 +2361,123 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return List.of();
     }
 
-    List<DocumentRow> allDocuments = new ArrayList<>();
-    allDocuments.addAll(repository.findPermitDocumentDetailsByPermitNumber(permitNumber));
-
     List<Long> applicationNumbers =
-        repository.findApplicationNumbersByPermitNumber(permitNumber).stream()
+        repository.findApplicationNumbersByPermitNumberRequired(permitNumber).stream()
             .filter(applicationNumber -> applicationNumber != null && applicationNumber > 0)
             .distinct()
             .toList();
 
+    Map<String, String> attachmentTypeByCode = new LinkedHashMap<>();
+    List<PermitDocumentItemRpcResponseDto> documents = new ArrayList<>();
+    repository.findPermitDocumentDetailsByPermitNumber(permitNumber).stream()
+        .map(
+            row -> {
+              PermitDocumentProvenance provenance = permitDocumentProvenance(row);
+              return toDocumentItem(
+                  row,
+                  provenance.source(),
+                  null,
+                  permitNumber,
+                  provenance.deletable(),
+                  attachmentTypeByCode);
+            })
+        .forEach(documents::add);
+
     for (Long applicationNumber : applicationNumbers) {
-      allDocuments.addAll(repository.findApplicationDocumentDetailsByApplicationNumber(applicationNumber));
+      repository.findApplicationDocumentDetailsByApplicationNumber(applicationNumber).stream()
+          .map(
+              row ->
+                  toDocumentItem(
+                      row,
+                      "application",
+                      applicationNumber,
+                      null,
+                      false,
+                      attachmentTypeByCode))
+          .forEach(documents::add);
     }
 
-    Map<String, String> attachmentTypeByCode = new LinkedHashMap<>();
-    return allDocuments.stream()
-        .map(
-            row ->
-                new PermitDocumentItemRpcResponseDto(
-                    nonNull(row.fileName()),
-                    nonNull(row.description()),
-                    resolveAttachmentTypeDescription(row.attachmentTypeCode(), attachmentTypeByCode),
-                    nonNull(trimToNull(row.attachmentTypeCode())),
-                    row.id()))
-        .toList();
+    return List.copyOf(documents);
   }
 
+  private PermitDocumentItemRpcResponseDto toDocumentItem(
+      DocumentRow row,
+      String source,
+      Long sourceApplicationNumber,
+      Long sourcePermitNumber,
+      boolean deletable,
+      Map<String, String> attachmentTypeByCode) {
+    String typeCode = nonNull(trimToNull(row.attachmentTypeCode()));
+    return new PermitDocumentItemRpcResponseDto(
+        nonNull(row.fileName()),
+        nonNull(row.description()),
+        resolveAttachmentTypeDescription(typeCode, attachmentTypeByCode),
+        typeCode,
+        row.id(),
+        source,
+        sourceApplicationNumber,
+        sourcePermitNumber,
+        deletable);
+  }
+
+  private PermitDocumentProvenance permitDocumentProvenance(DocumentRow row) {
+    boolean permitRelationship = repository.isPermitFileAttachmentRequired(row.id());
+    String typeCode = nonNull(trimToNull(row.attachmentTypeCode())).toUpperCase(Locale.ROOT);
+    if (permitRelationship && "PMT".equals(typeCode)) {
+      return new PermitDocumentProvenance("permit", true);
+    }
+    if (!permitRelationship && "INV".equals(typeCode)) {
+      return new PermitDocumentProvenance("invoice", true);
+    }
+    LOGGER.warn(
+        "event=lexis_permit_attachment operation=resolve_provenance outcome=inconsistent attachmentFingerprint={} relationship={} type={}",
+        fingerprint(Long.toString(row.id())),
+        permitRelationship ? "permit" : "invoice",
+        controlSafe(typeCode));
+    return new PermitDocumentProvenance("unknown", false);
+  }
+
+  private record PermitDocumentProvenance(String source, boolean deletable) {}
+
   @Override
-  public Optional<DocumentContent> getDocument(Long fileId) {
-    return repository.findFileAttachmentBytes(fileId).map(DocumentContent::new);
+  public Optional<DocumentStreamer> streamDocument(Long fileId) {
+    if (fileId == null || fileId < 1) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        outputStream -> {
+          if (!repository.streamFileAttachment(fileId, outputStream)) {
+            throw new java.io.FileNotFoundException("Permit attachment was not found.");
+          }
+        });
   }
 
   @Override
   public boolean removePermitDocument(Long documentId) {
     return repository.deletePermitFile(documentId);
+  }
+
+  @Override
+  public Optional<Long> getApplicationNumberForDocumentMutation(
+      Long documentId, Long permitNumber) {
+    if (documentId == null || documentId < 1 || permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+    List<Long> matches =
+        repository.findApplicationNumbersByPermitNumberRequired(permitNumber).stream()
+            .filter(
+                applicationNumber ->
+                    repository
+                        .findApplicationDocumentDetailsByApplicationNumberRequired(
+                            applicationNumber)
+                        .stream()
+                        .anyMatch(document -> documentId.equals(document.id())))
+            .toList();
+    if (matches.size() > 1) {
+      throw new DataRetrievalFailureException(
+          "Application document ownership is ambiguous for document " + documentId + ".");
+    }
+    return matches.stream().findFirst();
   }
 
   @Override
@@ -1599,6 +2668,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         trimToNull(scale.exportPermitDetailNumber()) == null ? "" : permitNumber);
   }
 
+  private ScaleValues toScaleValues(PermitScaleDetailRow scale) {
+    return new ScaleValues(
+        scale.timberMark(),
+        scale.exportSpeciesCode(),
+        scale.exportGradeCode(),
+        scale.piecesCount(),
+        scale.speciesGradeVolume());
+  }
+
   private String resolveGrowthType(String packageNumber) {
     String normalizedPackageNumber = trimToNull(packageNumber);
     if (normalizedPackageNumber == null) {
@@ -1745,14 +2823,21 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     String scaleId = trimToNull(scale.exportScaleDetailId());
     if (scaleId == null) {
-      return BigDecimal.ZERO;
+      throw new DataRetrievalFailureException(
+          "A scale identifier is required to calculate average market value.");
     }
 
     if (context.amvByScaleId().containsKey(scaleId)) {
       return context.amvByScaleId().get(scaleId);
     }
 
-    BigDecimal amv = repository.findAverageMarketValueByScaleId(scaleId).orElse(BigDecimal.ZERO);
+    BigDecimal amv =
+        repository
+            .findAverageMarketValueByScaleId(scaleId)
+            .orElseThrow(
+                () ->
+                    new DataRetrievalFailureException(
+                        "Average market value was unavailable for scale " + scaleId + "."));
     context.amvByScaleId().put(scaleId, amv);
     return amv;
   }
@@ -1766,7 +2851,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private boolean isApplicationUnmanufactured(Long applicationNumber, FeeCalculationContext context) {
     if (applicationNumber == null || applicationNumber < 1) {
-      return false;
+      throw new DataRetrievalFailureException(
+          "An application number is required to determine the permit fee policy.");
     }
 
     if (context.unmanufacturedByApplicationNumber().containsKey(applicationNumber)) {
@@ -1856,9 +2942,192 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         new HashMap<>());
   }
 
+  private FeeCalculationContext buildFeeContext(PermitMutationRow permit) {
+    String exemptionNumber = trimToNull(permit.exemptionNumber());
+    String exemptionTypeCode =
+        exemptionNumber == null
+            ? null
+            : repository
+                .findExemptionTypeCode(exemptionNumber)
+                .orElseThrow(
+                    () ->
+                        new DataRetrievalFailureException(
+                            "The permit exemption type was unavailable for invoicing."));
+    BigDecimal fixedExemptionRate =
+        exemptionNumber == null
+            ? null
+            : repository.findFixedExemptionRate(exemptionNumber).orElse(null);
+    BigDecimal feePolicyPercentIncrease =
+        repository.findFeePolicyPercentIncrease(permit.applicationDate(), permit.orgUnitNo());
+
+    return new FeeCalculationContext(
+        permit.permitNumber(),
+        permit.orgUnitNo(),
+        permit.applicationDate(),
+        exemptionNumber,
+        trimToNull(exemptionTypeCode),
+        fixedExemptionRate,
+        feePolicyPercentIncrease == null ? BigDecimal.ZERO : feePolicyPercentIncrease,
+        trimToNull(permit.countryCode()),
+        permit.overrideFee() == null ? 0.0d : permit.overrideFee(),
+        new HashMap<>(),
+        new HashMap<>());
+  }
+
+  private ValidatedExemptionBinding validateExemptionBinding(
+      String exemptionNumber, List<String> errors) {
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      errors.add("A valid exemption number is required.");
+      return null;
+    }
+
+    Optional<ExemptionDetailDto> detailResult =
+        exemptionService.findByExemptionNumber(normalizedExemptionNumber);
+    Optional<String> repositoryTypeResult =
+        repository.findExemptionTypeCode(normalizedExemptionNumber);
+    if (detailResult.isEmpty() || repositoryTypeResult.isEmpty()) {
+      errors.add("A valid exemption number is required.");
+      return null;
+    }
+
+    ExemptionDetailDto detail = detailResult.get();
+    String detailNumber = trimToNull(detail.exemptionNumber());
+    String detailType = trimToNull(detail.exemptionTypeCode());
+    String repositoryType = trimToNull(repositoryTypeResult.get());
+    boolean supportedType =
+        EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(detailType)
+            || EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(detailType);
+    boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(detailType);
+    if (!normalizedExemptionNumber.equalsIgnoreCase(detailNumber)
+        || !supportedType
+        || !detailType.equalsIgnoreCase(repositoryType)
+        || detail.blanketOic() != blanketOic) {
+      errors.add("The exemption type or identity could not be verified.");
+      return null;
+    }
+
+    return new ValidatedExemptionBinding(detail, detailType, blanketOic);
+  }
+
+  private void validateClientBinding(
+      ValidatedExemptionBinding exemption,
+      String ownerClientNumber,
+      String agentClientNumber,
+      List<String> errors) {
+    if (exemption.blanketOic()) {
+      return;
+    }
+
+    String submittedOwner = trimToNull(ownerClientNumber);
+    String submittedAgent = trimToNull(agentClientNumber);
+    String exemptionOwner = trimToNull(exemption.detail().ownerClientNumber());
+    String exemptionAgent = trimToNull(exemption.detail().agentClientNumber());
+    if (submittedOwner != null && !submittedOwner.equals(exemptionOwner)) {
+      errors.add("The permit owner does not match the selected exemption.");
+    }
+    if (submittedAgent != null && !submittedAgent.equals(exemptionAgent)) {
+      errors.add("The permit agent does not match the selected exemption.");
+    }
+  }
+
+  private void validateOicApplicationBinding(
+      ValidatedExemptionBinding exemption,
+      Long oicApplicationNumber,
+      boolean rejectForMinisterial,
+      List<String> errors) {
+    if (oicApplicationNumber == null) {
+      return;
+    }
+    if (rejectForMinisterial && !exemption.blanketOic()) {
+      errors.add("An OIC application can only be linked to a Blanket OIC exemption.");
+      return;
+    }
+
+    if (!isOicApplicationBoundToExemption(
+        oicApplicationNumber, exemption.detail().exemptionNumber())) {
+      errors.add("The OIC application does not belong to the selected exemption.");
+    }
+  }
+
+  private boolean isOicApplicationBoundToExemption(
+      Long applicationNumber, String exemptionNumber) {
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
+    if (applicationNumber == null
+        || applicationNumber < 1
+        || normalizedExemptionNumber == null) {
+      return false;
+    }
+    return repository
+        .findApplicationInfoByNumber(applicationNumber)
+        .filter(
+            application ->
+                normalizedExemptionNumber.equalsIgnoreCase(
+                    trimToNull(application.exemptionNumber()))
+                    && "Y".equals(trimToNull(application.oicIndicator())))
+        .isPresent();
+  }
+
+  private void validatePermitReparenting(
+      Long permitNumber,
+      ValidatedExemptionBinding targetExemption,
+      List<String> errors) {
+    String exemptionNumber = targetExemption.detail().exemptionNumber();
+
+    List<Long> linkedApplications =
+        repository.findApplicationNumbersByPermitNumberRequired(permitNumber);
+    if (!linkedApplications.isEmpty()) {
+      Set<Long> targetApplications =
+          Set.copyOf(repository.findApplicationNumbersByExemptionNumber(exemptionNumber));
+      if (linkedApplications.stream().anyMatch(value -> !targetApplications.contains(value))) {
+        errors.add("The permit has applications that do not belong to the selected exemption.");
+      }
+    }
+
+    Set<String> linkedPackages =
+        java.util.stream.Stream.concat(
+                repository.findPackageNumbersByPermitNumberRequired(permitNumber).stream(),
+                repository.findPackageNumbersByOicPermitNumber(permitNumber).stream())
+            .map(this::normalizeIdentifier)
+            .filter(value -> value != null)
+            .collect(java.util.stream.Collectors.toSet());
+    if (!linkedPackages.isEmpty()) {
+      Set<String> targetPackages =
+          repository.findPackagesByExemptionNumberRequired(exemptionNumber).stream()
+              .map(PackageCandidateRow::packageNumber)
+              .map(this::normalizeIdentifier)
+              .filter(value -> value != null)
+              .collect(java.util.stream.Collectors.toSet());
+      if (!targetPackages.containsAll(linkedPackages)) {
+        errors.add("The permit has packages that do not belong to the selected exemption.");
+      }
+    }
+  }
+
+  private String normalizeIdentifier(String value) {
+    String normalized = trimToNull(value);
+    return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+  }
+
   private PermitMutationRpcResponseDto failureMutationResponse(List<String> errors, Long permitNumber) {
     return new PermitMutationRpcResponseDto(
         false, "", errors, List.of(), permitNumber, null, null, null, null, null);
+  }
+
+  private PermitMutationRpcResponseDto validationFailureResponse(
+      ValidationResult validation, Long permitNumber) {
+    PermitMutationRow permit = validation == null ? null : validation.permit();
+    return new PermitMutationRpcResponseDto(
+        false,
+        "",
+        validation == null ? List.of("Permit validation failed.") : validation.errors(),
+        validation == null ? List.of() : validation.warnings(),
+        permitNumber,
+        permit == null ? null : permit.permitStatusCode(),
+        permit == null ? null : permit.receiptNumber(),
+        false,
+        false,
+        null);
   }
 
   private PermitPersistenceRpcResponseDto failurePersistenceResponse(
@@ -1869,6 +3138,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private boolean isScaleAttachmentLockedStatus(String permitStatusCode) {
     String normalized = trimToNull(permitStatusCode);
     return EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(normalized)
+        || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equalsIgnoreCase(normalized)
         || EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(normalized)
         || EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(normalized);
   }
@@ -1897,10 +3167,71 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (isBlanketOicPermit(permit)) {
       return List.of("Application associations are not changed this way for Blanket OIC permits.");
     }
-    if (EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(trimToNull(permit.permitStatusCode()))) {
-      return List.of("Applications cannot be changed for a completed permit.");
+    if (isScaleAttachmentLockedStatus(permit.permitStatusCode())) {
+      return List.of(
+          "Applications cannot be changed for a completed, payment-pending, expired, or cancelled permit.");
+    }
+
+    String exemptionNumber = trimToNull(permit.exemptionNumber());
+    if (exemptionNumber == null) {
+      return List.of("Permit exemption is unavailable.");
+    }
+    Set<Long> eligibleApplicationNumbers =
+        repository.findPackagesByExemptionNumberRequired(exemptionNumber).stream()
+            .filter(
+                row ->
+                    row.applicationNumber() != null
+                        && row.applicationNumber() > 0
+                        && (row.exportPermitNumber() == null
+                            || row.exportPermitNumber() < 1
+                            || permitNumber.equals(row.exportPermitNumber())))
+            .map(PackageCandidateRow::applicationNumber)
+            .collect(java.util.stream.Collectors.toSet());
+    List<Long> ineligibleApplications =
+        applicationNumbers.stream()
+            .filter(applicationNumber -> !eligibleApplicationNumbers.contains(applicationNumber))
+            .toList();
+    if (!ineligibleApplications.isEmpty()) {
+      return List.of(
+          "Applications are not eligible for this permit: "
+              + ineligibleApplications.stream()
+                  .map(String::valueOf)
+                  .collect(java.util.stream.Collectors.joining(", "))
+              + ".");
     }
     return List.of();
+  }
+
+  private boolean isScaleEligibleForPermit(
+      ScaleMutationRow scale, PermitMutationRow permit) {
+    if (scale == null || permit == null || scale.applicationNumber() == null) {
+      return false;
+    }
+    String packageNumber = trimToNull(scale.packageNumber());
+    if (packageNumber == null) {
+      return false;
+    }
+    if (isBlanketOicPermit(permit)) {
+      return isOicApplicationBoundToExemption(
+              permit.oicApplicationNumber(), permit.exemptionNumber())
+          && scale.applicationNumber().equals(permit.oicApplicationNumber())
+          && repository.findPackageNumbersByOicPermitNumber(permit.permitNumber()).stream()
+              .map(TextUtils::trimToNull)
+              .anyMatch(packageNumber::equals);
+    }
+
+    String exemptionNumber = trimToNull(permit.exemptionNumber());
+    if (exemptionNumber == null) {
+      return false;
+    }
+    return repository.findPackagesByExemptionNumberRequired(exemptionNumber).stream()
+        .anyMatch(
+            row ->
+                scale.applicationNumber().equals(row.applicationNumber())
+                    && packageNumber.equals(trimToNull(row.packageNumber()))
+                    && (row.exportPermitNumber() == null
+                        || row.exportPermitNumber() < 1
+                        || permit.permitNumber().equals(row.exportPermitNumber())));
   }
 
   private boolean updateScalePermitAssignment(
@@ -1929,16 +3260,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     String exemptionNumber = trimToNull(permit.exemptionNumber());
     return exemptionNumber != null
-        && exemptionService
-            .findByExemptionNumber(exemptionNumber)
-            .map(exemption -> exemption.blanketOic())
+        && repository
+            .findExemptionTypeCode(exemptionNumber)
+            .map(EXEMPTION_TYPE_BLANKET_OIC::equalsIgnoreCase)
             .orElse(false);
   }
 
-  private void updatePermitTotals(Long permitNumber, String userId) {
+  private boolean updatePermitTotals(Long permitNumber, String userId) {
     Optional<PermitMutationRow> existing = repository.findPermitMutationByPermitNumber(permitNumber);
     if (existing.isEmpty()) {
-      return;
+      return false;
     }
 
     List<PermitScaleDetailRow> permitScales = repository.findScaleDetailsByPermitNumber(permitNumber);
@@ -1950,7 +3281,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     Double currentVolume = firstNonNull(current.permitVolume(), 0.0d);
     Long currentPieces = firstNonNull(current.numberOfPieces(), 0L);
     if (Double.compare(currentVolume, totalVolume) == 0 && currentPieces == totalPieces) {
-      return;
+      return true;
     }
 
     PermitMutationRow updated =
@@ -1990,11 +3321,570 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             current.oicRequestPieces(),
             current.oicRequestVolume(),
             current.productTypeCode());
-    repository.updatePermitDetail(updated, userId, null);
+    return repository.updatePermitDetail(updated, userId, null);
+  }
+
+  private boolean updateLinkedApplicationStatusesForPermitTransition(
+      Long permitNumber, String previousStatus, String targetStatus, String userId) {
+    String normalizedPrevious = normalizeCode(previousStatus);
+    String normalizedTarget = normalizeCode(targetStatus);
+    String requiredApplicationStatus;
+    String newApplicationStatus;
+    boolean deriveStatusFromEffectiveRelationships = false;
+
+    if (EFFECTIVE_EXPORT_PERMIT_STATUSES.contains(normalizedPrevious)
+        && EXPORT_PERMIT_STATUS_CANCELLED.equals(normalizedTarget)) {
+      requiredApplicationStatus = null;
+      newApplicationStatus = null;
+      deriveStatusFromEffectiveRelationships = true;
+    } else if (EXPORT_PERMIT_STATUS_CANCELLED.equals(normalizedPrevious)
+        && EFFECTIVE_EXPORT_PERMIT_STATUSES.contains(normalizedTarget)) {
+      requiredApplicationStatus = null;
+      newApplicationStatus = null;
+      deriveStatusFromEffectiveRelationships = true;
+    } else if (EXPORT_PERMIT_STATUS_ACTIVE.equals(normalizedPrevious)
+        && (EXPORT_PERMIT_STATUS_COMPLETE.equals(normalizedTarget)
+            || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(normalizedTarget))) {
+      requiredApplicationStatus = APPLICATION_STATUS_EXEMPTED;
+      newApplicationStatus = APPLICATION_STATUS_PERMITTED;
+    } else {
+      return true;
+    }
+
+    for (Long applicationNumber :
+        repository.findApplicationNumbersByPermitNumberRequired(permitNumber)) {
+      Optional<String> currentStatus =
+          repository.findApplicationStatusCodeByNumber(applicationNumber);
+      if (currentStatus.isEmpty()) {
+        return false;
+      }
+      String normalizedApplicationStatus = normalizeCode(currentStatus.get());
+      if (deriveStatusFromEffectiveRelationships) {
+        Optional<Boolean> effectivePermitRelationship =
+            resolveEffectivePermitRelationship(
+                applicationNumber, permitNumber, normalizedTarget, true);
+        if (effectivePermitRelationship.isEmpty()) {
+          return false;
+        }
+        requiredApplicationStatus =
+            effectivePermitRelationship.get()
+                ? APPLICATION_STATUS_EXEMPTED
+                : APPLICATION_STATUS_PERMITTED;
+        newApplicationStatus =
+            effectivePermitRelationship.get()
+                ? APPLICATION_STATUS_PERMITTED
+                : APPLICATION_STATUS_EXEMPTED;
+      }
+      if (newApplicationStatus.equals(normalizedApplicationStatus)) {
+        continue;
+      }
+      if (!requiredApplicationStatus.equals(normalizedApplicationStatus)) {
+        return false;
+      }
+      if (!transitionApplicationStatus(
+          applicationNumber,
+          requiredApplicationStatus,
+          newApplicationStatus,
+          userId)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean synchronizePermitTransitionState(
+      PermitMutationRow previous, PermitMutationRow target, String userId) {
+    if (isBlanketOicPermit(target)
+        && (!java.util.Objects.equals(
+                trimToNull(previous.clientNumber()), trimToNull(target.clientNumber()))
+            || !java.util.Objects.equals(
+                trimToNull(previous.clientLocationCode()),
+                trimToNull(target.clientLocationCode())))) {
+      Long applicationNumber = target.oicApplicationNumber();
+      if (applicationNumber == null
+          || applicationDetailsRpcService == null
+          || !applicationDetailsRpcService.synchronizeApplicationOwner(
+              applicationNumber,
+              target.clientNumber(),
+              target.clientLocationCode(),
+              userId)) {
+        return false;
+      }
+    }
+
+    String targetStatus = normalizeCode(target.permitStatusCode());
+    boolean volumeMayChange =
+        EXPORT_PERMIT_STATUS_ACTIVE.equals(targetStatus)
+            || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(targetStatus)
+            || EXPORT_PERMIT_STATUS_COMPLETE.equals(targetStatus);
+
+    List<String> packageNumbers =
+        repository.findPackageNumbersByPermitNumberRequired(target.permitNumber()).stream()
+            .filter(packageNumber -> trimToNull(packageNumber) != null)
+            .distinct()
+            .sorted()
+            .toList();
+    for (String packageNumber : packageNumbers) {
+      PackageInfoRow packageInfo =
+          repository.findPackageInfoByPackageNumber(packageNumber).orElse(null);
+      if (packageInfo == null || packageInfo.applicationNumber() == null) {
+        return false;
+      }
+      ApplicationInfoRow application =
+          repository.findApplicationInfoByNumber(packageInfo.applicationNumber()).orElse(null);
+      if (application == null || trimToNull(application.exemptionNumber()) == null) {
+        return false;
+      }
+      String exemptionType =
+          repository.findExemptionTypeCode(application.exemptionNumber()).orElse(null);
+      if (trimToNull(exemptionType) == null) {
+        return false;
+      }
+      boolean ministerial = EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemptionType);
+      boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(exemptionType);
+      boolean synchronizePackage =
+          ministerial
+              || (blanketOic && EXPORT_PERMIT_STATUS_COMPLETE.equals(targetStatus));
+      if (!synchronizePackage) {
+        continue;
+      }
+
+      if (applicationDetailsRpcService == null) {
+        return false;
+      }
+
+      Double derivedPackageVolume = null;
+      if (!ministerial || volumeMayChange) {
+        derivedPackageVolume =
+            repository.findScaleDetailsByPackageNumber(packageNumber).stream()
+                .filter(
+                    scale ->
+                        target.permitNumber().toString().equals(
+                            trimToNull(scale.exportPermitDetailNumber())))
+                .mapToDouble(PermitScaleDetailRow::speciesGradeVolume)
+                .sum();
+      }
+      boolean synchronizedPackage =
+          ministerial
+              ? applicationDetailsRpcService.synchronizePackageForPermitTransition(
+                  packageNumber,
+                  derivedPackageVolume,
+                  application.growthTypeCode(),
+                  application.productTypeCode(),
+                  userId)
+              : applicationDetailsRpcService.synchronizePackageVolumeForPermitTransition(
+                  packageNumber, derivedPackageVolume, userId);
+      if (!synchronizedPackage) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean requiresInvoiceOrchestration(String previousStatus, String targetStatus) {
+    return isEnteringInvoiceStatus(previousStatus, targetStatus)
+        || isLeavingInvoiceStatus(previousStatus, targetStatus);
+  }
+
+  private boolean isEnteringInvoiceStatus(String previousStatus, String targetStatus) {
+    String normalizedPrevious = normalizeCode(previousStatus);
+    String normalizedTarget = normalizeCode(targetStatus);
+    return (EXPORT_PERMIT_STATUS_CANCELLED.equals(normalizedPrevious)
+            || EXPORT_PERMIT_STATUS_ACTIVE.equals(normalizedPrevious))
+        && (EXPORT_PERMIT_STATUS_COMPLETE.equals(normalizedTarget)
+            || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(normalizedTarget));
+  }
+
+  private boolean isLeavingInvoiceStatus(String previousStatus, String targetStatus) {
+    String normalizedPrevious = normalizeCode(previousStatus);
+    String normalizedTarget = normalizeCode(targetStatus);
+    return (EXPORT_PERMIT_STATUS_COMPLETE.equals(normalizedPrevious)
+            || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(normalizedPrevious))
+        && (EXPORT_PERMIT_STATUS_CANCELLED.equals(normalizedTarget)
+            || EXPORT_PERMIT_STATUS_ACTIVE.equals(normalizedTarget));
+  }
+
+  private boolean isInvoicedPermitStatus(String status) {
+    String normalized = normalizeCode(status);
+    return EXPORT_PERMIT_STATUS_COMPLETE.equals(normalized)
+        || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(normalized);
+  }
+
+  private boolean hasFeeOverrideDelta(PermitMutationRow current, PermitMutationRow target) {
+    boolean currentEnabled = current.overrideFee() != null && current.overrideFee() > 0.0d;
+    boolean targetEnabled = target.overrideFee() != null && target.overrideFee() > 0.0d;
+    return currentEnabled != targetEnabled
+        || !java.util.Objects.equals(current.overrideFee(), target.overrideFee())
+        || !java.util.Objects.equals(current.overrideComment(), target.overrideComment());
+  }
+
+  private boolean hasInvoiceMaterialDelta(
+      PermitMutationRow current, PermitMutationRow target) {
+    boolean paymentPendingCompletion = isPaymentPendingCompletion(current, target);
+    return hasStringChanged(current.countryCode(), target.countryCode())
+        || hasStringChanged(current.exemptionNumber(), target.exemptionNumber())
+        || !java.util.Objects.equals(current.orgUnitNo(), target.orgUnitNo())
+        || !java.util.Objects.equals(current.applicationDate(), target.applicationDate())
+        || !java.util.Objects.equals(current.permitIssueDate(), target.permitIssueDate())
+        || (!paymentPendingCompletion
+            && hasStringChanged(current.receiptNumber(), target.receiptNumber()))
+        || !java.util.Objects.equals(current.permitVolume(), target.permitVolume())
+        || !java.util.Objects.equals(current.numberOfPieces(), target.numberOfPieces())
+        || hasStringChanged(current.clientNumber(), target.clientNumber())
+        || hasStringChanged(current.clientLocationCode(), target.clientLocationCode())
+        || hasStringChanged(current.agentNumber(), target.agentNumber())
+        || hasStringChanged(current.agentLocationCode(), target.agentLocationCode())
+        || hasStringChanged(current.growthTypeCode(), target.growthTypeCode())
+        || hasStringChanged(current.productTypeCode(), target.productTypeCode())
+        || !java.util.Objects.equals(
+            current.oicApplicationNumber(), target.oicApplicationNumber())
+        || !java.util.Objects.equals(current.oicRequestPieces(), target.oicRequestPieces())
+        || !java.util.Objects.equals(current.oicRequestVolume(), target.oicRequestVolume());
+  }
+
+  private boolean hasInvoicePolicyContextDelta(
+      PermitMutationRow current, PermitMutationRow target) {
+    return hasStringChanged(current.countryCode(), target.countryCode())
+        || hasStringChanged(current.exemptionNumber(), target.exemptionNumber())
+        || !java.util.Objects.equals(current.orgUnitNo(), target.orgUnitNo())
+        || !java.util.Objects.equals(current.applicationDate(), target.applicationDate())
+        || hasStringChanged(current.clientNumber(), target.clientNumber())
+        || hasStringChanged(current.clientLocationCode(), target.clientLocationCode())
+        || hasStringChanged(current.agentNumber(), target.agentNumber())
+        || hasStringChanged(current.agentLocationCode(), target.agentLocationCode());
+  }
+
+  private boolean targetOrganizationMatchesLinkedApplications(PermitMutationRow target) {
+    if (target == null || target.permitNumber() == null || target.orgUnitNo() == null) {
+      return false;
+    }
+    try {
+      java.util.SortedSet<Long> applicationNumbers =
+          new java.util.TreeSet<>(
+              repository.findApplicationNumbersByPermitNumberRequired(
+                  target.permitNumber()));
+      if (target.oicApplicationNumber() != null) {
+        if (target.oicApplicationNumber() < 1) {
+          return false;
+        }
+        applicationNumbers.add(target.oicApplicationNumber());
+      }
+      for (Long applicationNumber : applicationNumbers) {
+        ApplicationInfoRow application =
+            repository.findApplicationInfoByNumber(applicationNumber).orElse(null);
+        if (application == null
+            || !target.orgUnitNo().equals(application.orgUnitNo())
+            || !sameIgnoreCase(
+                target.exemptionNumber(), application.exemptionNumber())) {
+          return false;
+        }
+      }
+      return true;
+    } catch (RuntimeException ex) {
+      LOGGER.warn(
+          "event=lexis_permit_mutation operation=verify_linked_organizations outcome=failed permitFingerprint={} failureType={}",
+          fingerprint(Long.toString(target.permitNumber())),
+          exceptionType(ex));
+      return false;
+    }
+  }
+
+  private boolean isPaymentPendingCompletion(
+      PermitMutationRow current, PermitMutationRow target) {
+    return EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(
+            normalizeCode(current.permitStatusCode()))
+        && EXPORT_PERMIT_STATUS_COMPLETE.equals(normalizeCode(target.permitStatusCode()))
+        && trimToNull(current.receiptNumber()) == null
+        && trimToNull(target.receiptNumber()) != null
+        && java.util.Objects.equals(
+            current.permitIssueDate(), target.permitIssueDate());
+  }
+
+  private boolean orchestrateInvoiceTransition(
+      PermitInvoiceOrchestrationService service,
+      PermitMutationRow previous,
+      PermitMutationRow target,
+      String userId) {
+    try {
+      InternalInvoiceSnapshot internalInvoice =
+          isCanadaCountryCode(target.countryCode())
+                  && isEnteringInvoiceStatus(
+                      previous.permitStatusCode(), target.permitStatusCode())
+              ? buildCanadianInternalInvoiceSnapshot(target)
+              : null;
+      PermitInvoiceOrchestrationService.TransitionResult result =
+          service.orchestrate(
+              new PermitInvoiceOrchestrationService.Transition(
+                  target.permitNumber(),
+                  previous.permitStatusCode(),
+                  target.permitStatusCode(),
+                  target.countryCode(),
+                  target.exemptionNumber(),
+                  target.orgUnitNo(),
+                  target.clientNumber(),
+                  target.clientLocationCode(),
+                  target.receiptNumber(),
+                  internalInvoice),
+              userId);
+      if (result == null || !result.success()) {
+        LOGGER.warn(
+            "event=lexis_permit_invoice operation=orchestrate outcome=rejected permitFingerprint={} fromStatus={} toStatus={} resultState={}",
+            fingerprint(Long.toString(target.permitNumber())),
+            controlSafe(previous.permitStatusCode()),
+            controlSafe(target.permitStatusCode()),
+            result == null ? "missing" : "failed");
+        return false;
+      }
+      return true;
+    } catch (RuntimeException ex) {
+      LOGGER.warn(
+          "event=lexis_permit_invoice operation=orchestrate outcome=failed permitFingerprint={} fromStatus={} toStatus={} failureType={}",
+          fingerprint(Long.toString(target.permitNumber())),
+          controlSafe(previous.permitStatusCode()),
+          controlSafe(target.permitStatusCode()),
+          exceptionType(ex));
+      return false;
+    }
+  }
+
+  private boolean supportsInvoiceDestination(
+      PermitInvoiceOrchestrationService service, String countryCode) {
+    try {
+      return service.supportsCountry(countryCode);
+    } catch (RuntimeException ex) {
+      LOGGER.warn(
+          "event=lexis_permit_invoice operation=destination_check outcome=failed country={} failureType={}",
+          controlSafe(countryCode),
+          exceptionType(ex));
+      return false;
+    }
+  }
+
+  private InternalInvoiceSnapshot buildCanadianInternalInvoiceSnapshot(
+      PermitMutationRow permit) {
+    if (permit == null
+        || permit.permitNumber() == null
+        || permit.permitNumber() < 1
+        || permit.applicationDate() == null
+        || !isCanadaCountryCode(permit.countryCode())) {
+      throw new DataRetrievalFailureException(
+          "A valid Canadian permit is required for internal invoicing.");
+    }
+
+    List<PermitScaleDetailRow> scales =
+        repository.findScaleDetailsByPermitNumber(permit.permitNumber());
+    if (scales == null || scales.isEmpty()) {
+      throw new DataRetrievalFailureException(
+          "At least one permit scale is required for internal invoicing.");
+    }
+
+    FeeCalculationContext context = buildFeeContext(permit);
+    String expectedPermitNumber = permit.permitNumber().toString();
+    List<InternalInvoiceDetail> details = new ArrayList<>(scales.size());
+    Set<String> scaleIds = new HashSet<>();
+    Map<Long, ApplicationInfoRow> applicationByNumber = new HashMap<>();
+    BigDecimal total = BigDecimal.ZERO;
+    for (PermitScaleDetailRow scale : scales) {
+      String scaleId = scale == null ? null : trimToNull(scale.exportScaleDetailId());
+      if (scale == null
+          || !expectedPermitNumber.equals(trimToNull(scale.exportPermitDetailNumber()))
+          || scaleId == null
+          || !scaleIds.add(scaleId)
+          || trimToNull(scale.timberMark()) == null
+          || trimToNull(scale.exportSpeciesCode()) == null
+          || trimToNull(scale.exportGradeCode()) == null
+          || !Double.isFinite(scale.speciesGradeVolume())
+          || scale.speciesGradeVolume() <= 0.0d) {
+        throw new DataRetrievalFailureException(
+            "Oracle returned an invalid scale for internal permit invoicing.");
+      }
+      Long applicationNumber = scale.applicationNumber();
+      if (applicationNumber == null || applicationNumber < 1) {
+        throw new DataRetrievalFailureException(
+            "A scale application is required for internal permit invoicing.");
+      }
+      ApplicationInfoRow application =
+          applicationByNumber.computeIfAbsent(
+              applicationNumber,
+              key ->
+                  repository
+                      .findApplicationInfoByNumber(key)
+                      .orElseThrow(
+                          () ->
+                              new DataRetrievalFailureException(
+                                  "The scale application was unavailable for invoicing.")));
+      if (!java.util.Objects.equals(permit.orgUnitNo(), application.orgUnitNo())
+          || !sameIgnoreCase(permit.exemptionNumber(), application.exemptionNumber())) {
+        throw new DataRetrievalFailureException(
+            "The permit organization or exemption does not match its scale applications.");
+      }
+
+      BigDecimal amount = calculateRoundedFeeForScale(scale, context);
+      BigDecimal amvRate =
+          getAverageMarketValueForScale(scale, context).setScale(2, RoundingMode.HALF_UP);
+      BigDecimal feePolicyAdmin =
+          context.fixedExemptionRate() == null
+              ? context.feePolicyPercentIncrease()
+              : BigDecimal.ZERO;
+      BigDecimal feePercentage = invoiceFeePercentage(scale, context);
+      details.add(
+          new InternalInvoiceDetail(
+              trimToNull(scale.timberMark()),
+              normalizeCode(scale.exportSpeciesCode()),
+              normalizeCode(scale.exportGradeCode()),
+              BigDecimal.valueOf(scale.speciesGradeVolume()),
+              amount,
+              amvRate,
+              feePolicyAdmin,
+              feePercentage));
+      total = total.add(amount);
+    }
+
+    String billingClientNumber =
+        firstNonNull(trimToNull(permit.agentNumber()), trimToNull(permit.clientNumber()));
+    String billingClientLocationCode =
+        firstNonNull(
+            trimToNull(permit.agentLocationCode()), trimToNull(permit.clientLocationCode()));
+    if (billingClientNumber == null
+        || billingClientLocationCode == null
+        || permit.orgUnitNo() == null
+        || permit.orgUnitNo() < 1) {
+      throw new DataRetrievalFailureException(
+          "Permit billing client or organization data was unavailable for invoicing.");
+    }
+
+    BigDecimal invoiceTotal =
+        shouldMaskFees(permit.countryCode(), permit.applicationDate())
+            ? BigDecimal.ZERO
+            : total;
+    return new InternalInvoiceSnapshot(
+        invoiceTotal,
+        billingClientNumber,
+        billingClientLocationCode,
+        context.fixedExemptionRate() == null
+            ? BigDecimal.ZERO
+            : context.fixedExemptionRate(),
+        permit.overrideFee() == null ? BigDecimal.ZERO : BigDecimal.valueOf(permit.overrideFee()),
+        permit.orgUnitNo(),
+        permit.orgUnitNo(),
+        null,
+        details);
+  }
+
+  private BigDecimal invoiceFeePercentage(
+      PermitScaleDetailRow scale, FeeCalculationContext context) {
+    if (context.fixedExemptionRate() != null
+        || isApplicationUnmanufactured(scale.applicationNumber(), context)
+        || !isGeneralCoastalRegion(context.orgUnitNo())
+        || DECIDUOUS_SPECIES_CODES.contains(normalizeCode(scale.exportSpeciesCode()))) {
+      return BigDecimal.ZERO;
+    }
+    return rcoFeePercentage(scale.exportSpeciesCode(), scale.exportGradeCode());
+  }
+
+  private boolean matchesInsertedPermit(PermitMutationRow row, PermitMutationRow expected) {
+    return row != null
+        && row.permitNumber() != null
+        && row.permitNumber() > 0
+        && sameText(row.destinationCompanyName(), expected.destinationCompanyName())
+        && sameText(row.transportName(), expected.transportName())
+        && java.util.Objects.equals(
+            row.estimatedShippingDate(), expected.estimatedShippingDate())
+        && sameText(row.otherPortOfExport(), expected.otherPortOfExport())
+        && sameText(row.exemptionNumber(), expected.exemptionNumber())
+        && java.util.Objects.equals(row.oicApplicationNumber(), expected.oicApplicationNumber())
+        && sameText(row.clientNumber(), expected.clientNumber())
+        && sameText(row.clientLocationCode(), expected.clientLocationCode())
+        && sameText(row.agentNumber(), expected.agentNumber())
+        && sameText(row.agentLocationCode(), expected.agentLocationCode())
+        && java.util.Objects.equals(row.orgUnitNo(), expected.orgUnitNo())
+        && sameText(row.permitStatusCode(), expected.permitStatusCode())
+        && sameText(row.countryCode(), expected.countryCode())
+        && sameText(row.portOfExportCode(), expected.portOfExportCode())
+        && sameText(row.transportTypeCode(), expected.transportTypeCode())
+        && sameText(row.scaleMethodCode(), expected.scaleMethodCode())
+        && java.util.Objects.equals(row.applicationDate(), expected.applicationDate())
+        && java.util.Objects.equals(row.receivedDate(), expected.receivedDate())
+        && java.util.Objects.equals(row.permitIssueDate(), expected.permitIssueDate())
+        && java.util.Objects.equals(row.expiryDate(), expected.expiryDate())
+        && sameText(row.receiptNumber(), expected.receiptNumber())
+        && sameNumber(row.permitVolume(), expected.permitVolume())
+        && java.util.Objects.equals(row.numberOfPieces(), expected.numberOfPieces())
+        && java.util.Objects.equals(row.feeInLieuVolume(), expected.feeInLieuVolume())
+        && sameText(row.federalPermitNumber(), expected.federalPermitNumber())
+        && sameText(row.remarks(), expected.remarks())
+        && java.util.Objects.equals(row.oicRequestPieces(), expected.oicRequestPieces())
+        && sameNumber(row.oicRequestVolume(), expected.oicRequestVolume())
+        && sameNumber(row.overrideFee(), expected.overrideFee())
+        && sameText(row.overrideComment(), expected.overrideComment())
+        && sameText(row.growthTypeCode(), expected.growthTypeCode())
+        && sameText(row.productTypeCode(), expected.productTypeCode());
+  }
+
+  private boolean matchesInsertedBoicScale(
+      PermitScaleDetailRow row, BoicScaleMutationRecord expected) {
+    return row != null
+        && parsePositiveLong(row.exportScaleDetailId()) != null
+        && java.util.Objects.equals(row.applicationNumber(), expected.applicationNumber())
+        && java.util.Objects.equals(
+            parsePositiveLong(row.exportPermitDetailNumber()),
+            expected.exportPermitDetailNumber())
+        && sameText(row.packageNumber(), expected.packageNumber())
+        && sameText(row.timberMark(), expected.timberMark())
+        && sameText(row.exportSpeciesCode(), expected.exportSpeciesCode())
+        && sameText(row.exportGradeCode(), expected.exportGradeCode())
+        && expected.piecesCount() != null
+        && row.piecesCount() == expected.piecesCount()
+        && sameNumber(row.speciesGradeVolume(), expected.speciesGradeVolume());
+  }
+
+  private boolean matchesInsertedSalesInvoice(
+      SalesInvoiceRow row,
+      String expectedInvoiceNumber,
+      BigDecimal expectedExportValue,
+      BigDecimal expectedConversionRate,
+      BigDecimal expectedFeeInLieu) {
+    return row != null
+        && java.util.Objects.equals(
+            trimToNull(row.salesInvoiceNumber()), trimToNull(expectedInvoiceNumber))
+        && sameDecimal(row.exportValue(), expectedExportValue)
+        && sameDecimal(row.currencyConversionRate(), expectedConversionRate)
+        && sameDecimal(row.feeInLieu(), expectedFeeInLieu);
+  }
+
+  private boolean sameText(String actual, String expected) {
+    return java.util.Objects.equals(trimToNull(actual), trimToNull(expected));
+  }
+
+  private boolean sameNumber(Double actual, Double expected) {
+    if (actual == null || expected == null) {
+      return actual == null && expected == null;
+    }
+    return BigDecimal.valueOf(actual).compareTo(BigDecimal.valueOf(expected)) == 0;
+  }
+
+  private boolean sameDecimal(double actual, BigDecimal expected) {
+    return expected != null && BigDecimal.valueOf(actual).compareTo(expected) == 0;
+  }
+
+  private void markRollbackOnly() {
+    try {
+      TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+    } catch (NoTransactionException ignored) {
+      // Direct unit calls do not have a surrounding Spring transaction.
+    }
   }
 
   private boolean hasStringChanged(String stored, String formValue) {
     return !java.util.Objects.equals(trimToNull(stored), trimToNull(formValue));
+  }
+
+  private boolean sameIgnoreCase(String first, String second) {
+    String normalizedFirst = trimToNull(first);
+    String normalizedSecond = trimToNull(second);
+    return normalizedFirst == null
+        ? normalizedSecond == null
+        : normalizedSecond != null && normalizedFirst.equalsIgnoreCase(normalizedSecond);
   }
 
   private boolean hasDateChanged(LocalDate stored, LocalDate formValue) {
@@ -2014,6 +3904,54 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return Long.parseLong(normalized);
     } catch (NumberFormatException ex) {
       return 0L;
+    }
+  }
+
+  private String mergeSubmittedText(String submitted, String current) {
+    return submitted == null ? current : trimToNull(submitted);
+  }
+
+  private LocalDate mergeSubmittedDate(String submitted, LocalDate current) {
+    return submitted == null ? current : parseDate(submitted);
+  }
+
+  private boolean isInvalidSubmittedDouble(String submitted, Double parsed) {
+    return trimToNull(submitted) != null && parsed == null;
+  }
+
+  private void validateSubmittedOicRequestLimits(
+      PermitMutationRequestDto request, boolean blanketOic, List<String> errors) {
+    if (request == null) {
+      return;
+    }
+
+    String submittedPieces = trimToNull(request.oicPermitTotalPieces());
+    String submittedVolume = trimToNull(request.oicPermitTotalVolume());
+    if (!blanketOic) {
+      if (submittedPieces != null || submittedVolume != null) {
+        errors.add(
+            "Blanket OIC request limits can only be changed on Blanket OIC permits.");
+      }
+      return;
+    }
+
+    if (submittedPieces != null) {
+      Long pieces = parsePositiveLong(submittedPieces);
+      if (pieces == null || pieces > MAX_OIC_REQUEST_PIECES) {
+        errors.add(
+            "Permit Request Pieces must be a positive whole number no greater than 9999999999.");
+      }
+    }
+
+    Double volume = parseDouble(submittedVolume);
+    if (submittedVolume == null || volume == null) {
+      return;
+    }
+    if (volume <= 0.0d
+        || submittedVolume.length() > MAX_OIC_REQUEST_VOLUME_LENGTH
+        || !OIC_REQUEST_VOLUME_PATTERN.matcher(submittedVolume).matches()) {
+      errors.add(
+          "Permit Request Volume must be a positive number of 9 characters or fewer with no more than 2 decimal places.");
     }
   }
 
@@ -2054,7 +3992,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     try {
       return new BigDecimal(normalized);
     } catch (NumberFormatException ex) {
-      return null;
+      throw new DataRetrievalFailureException(
+          "Oracle returned a non-numeric permit fee factor.", ex);
     }
   }
 
@@ -2096,4 +4035,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       double overrideFee,
       Map<Long, Boolean> unmanufacturedByApplicationNumber,
       Map<String, BigDecimal> amvByScaleId) {}
+
+  private record ValidatedExemptionBinding(
+      ExemptionDetailDto detail, String exemptionTypeCode, boolean blanketOic) {}
+
+  private record ApplicationScaleAttachmentPlan(
+      Long applicationNumber, String sourceStatus, List<ScaleMutationRow> unassignedScales) {}
 }

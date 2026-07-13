@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -75,8 +75,27 @@ describe('Admin tool access smoke', () => {
     )
   })
 
+  it('renders shared page context and refreshes session capabilities', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ refresh }))
+
+    renderPage()
+
+    const pageHeader = screen.getByRole('banner', { name: 'Administration' })
+    expect(
+      within(pageHeader).getByText(
+        'Review session capabilities, verify IDIR identities, and open authorized administration tools.',
+      ),
+    ).toBeVisible()
+
+    await userEvent.click(within(pageHeader).getByRole('button', { name: 'Refresh Capabilities' }))
+    expect(refresh).toHaveBeenCalledOnce()
+  })
+
   it('opens policy and upload workflows when required actions are granted', async () => {
     renderPage()
+
+    expect(screen.getByRole('region', { name: 'Admin and upload tools table' })).toBeVisible()
 
     const policyRow = screen.getByText('Fee policy administration').closest('tr')
     expect(policyRow).not.toBeNull()
@@ -170,12 +189,15 @@ describe('Admin tool access smoke', () => {
 
     const adminRow = screen.getByText('LEXIS administration').closest('tr')
     expect(adminRow).not.toBeNull()
-    expect(within(adminRow as HTMLTableRowElement).getByText('Denied')).toBeInTheDocument()
-    expect(screen.queryByText('FAM user access lookup')).not.toBeInTheDocument()
+    expect(within(adminRow as HTMLTableRowElement).getByText('Denied')).toHaveAttribute(
+      'data-status-variant',
+      'negative',
+    )
+    expect(screen.queryByText('IDIR identity lookup')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Manage in FAM' })).not.toBeInTheDocument()
   })
 
-  it('searches FAM user access and renders identity results', async () => {
+  it('searches IDIR identities without implying role-assignment data', async () => {
     mockedSearchFamUserRoleAssignments.mockResolvedValue({
       results: [
         {
@@ -217,7 +239,7 @@ describe('Admin tool access smoke', () => {
     expect(manageLink).toHaveAttribute('target', '_blank')
 
     await userEvent.type(screen.getByLabelText('IDIR username'), 'smith')
-    await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search IDIR' }))
 
     expect(mockedSearchFamUserRoleAssignments).toHaveBeenCalledWith({
       search: 'smith',
@@ -229,6 +251,11 @@ describe('Admin tool access smoke', () => {
     expect(await screen.findByText('JSMITH')).toBeInTheDocument()
     expect(screen.getByText('Jane Smith')).toBeInTheDocument()
     expect(screen.getByText('jane.smith@gov.bc.ca')).toBeInTheDocument()
+    const resultsRegion = screen.getByRole('region', { name: 'Search results table' })
+    expect(within(resultsRegion).getByText('JSMITH')).toBeInTheDocument()
+    expect(screen.getByText('1 IDIR identity found')).toBeVisible()
+    expect(screen.queryByRole('columnheader', { name: 'Role' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Scope' })).not.toBeInTheDocument()
   })
 
   it('keeps FAM access management read-only and delegates changes to FAM', () => {
@@ -241,7 +268,9 @@ describe('Admin tool access smoke', () => {
     const manageLink = screen.getByRole('link', { name: 'Manage in FAM' })
     expect(manageLink).toHaveAttribute('href', 'https://fam-tst.nrs.gov.bc.ca/applications/lexis')
     expect(manageLink).toHaveAttribute('target', '_blank')
-    expect(screen.getByRole('button', { name: 'Search FAM Access' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Search IDIR' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Search IDIR identities' })).toBeVisible()
+    expect(screen.getByText(/This lookup does not display or change FAM roles/)).toBeVisible()
 
     for (const name of [
       /^Grant/i,
@@ -256,15 +285,57 @@ describe('Admin tool access smoke', () => {
     }
   })
 
-  it('validates FAM user access searches before calling the backend', async () => {
+  it('renders a clear empty state when an IDIR search has no matches', async () => {
+    renderPage()
+
+    await userEvent.type(screen.getByLabelText('IDIR username'), 'smith')
+    await userEvent.click(screen.getByRole('button', { name: 'Search IDIR' }))
+
+    expect(await screen.findByRole('heading', { name: 'No IDIR identities found' })).toBeVisible()
+    expect(screen.getByText('0 IDIR identities found')).toBeVisible()
+    expect(screen.getByText('No IDIR identities matched the current search.')).toBeVisible()
+  })
+
+  it('retains the workspace and shows progress while an IDIR search is loading', async () => {
+    let resolveSearch!: (value: Awaited<ReturnType<typeof searchFamUserRoleAssignments>>) => void
+    mockedSearchFamUserRoleAssignments.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSearch = resolve
+        }),
+    )
+    renderPage()
+
+    await userEvent.type(screen.getByLabelText('IDIR username'), 'smith')
+    await userEvent.click(screen.getByRole('button', { name: 'Search IDIR' }))
+
+    expect(screen.getByRole('button', { name: 'Search IDIR' })).toBeDisabled()
+    expect(screen.getByText('Loading IDIR identities...')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Search IDIR identities' })).toBeVisible()
+
+    resolveSearch({
+      results: [],
+      total: 0,
+      pageNumber: 1,
+      pageSize: 10,
+      pageCount: 0,
+      configured: true,
+      message: null,
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Search IDIR' })).toBeEnabled()
+    })
+  })
+
+  it('validates IDIR identity searches before calling the backend', async () => {
     renderPage()
 
     await userEvent.type(screen.getByLabelText('IDIR username'), 'ab')
-    await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search IDIR' }))
 
     expect(mockedSearchFamUserRoleAssignments).not.toHaveBeenCalled()
     expect(
-      screen.getByText('Enter at least 3 characters to search FAM user access.'),
+      screen.getByText('Enter at least 3 characters to search IDIR identities.'),
     ).toBeInTheDocument()
   })
 })

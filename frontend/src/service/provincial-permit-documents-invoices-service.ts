@@ -3,19 +3,16 @@ import {
   documentValueAsBoolean as asBoolean,
   documentValueAsString as asString,
   documentValueAsStringArray as asStringArray,
+  type DocumentRowBase,
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
 } from '@/service/document-service-utils'
 import { extractResponseFilename } from '@/service/http-response-utils'
 import { LEGACY_FORM_CONTENT_TYPE, toUrlEncodedParams } from '@/service/legacy-form-utils'
-import { recordOrEmpty } from '@/utils/record'
+import { isRecord, recordOrEmpty } from '@/utils/record'
 
-export type PermitDocumentRow = {
-  id: string
-  name: string
-  description: string
-  type: string
+export type PermitDocumentRow = DocumentRowBase & {
   typeCode: string
 }
 
@@ -70,7 +67,9 @@ export type PermitDetailMutationRequest = {
   permitRemarks: string
   permitTotalVolume: string
   permitNumberOfPieces: string
-  region: string
+  oicPermitTotalPieces: string
+  oicPermitTotalVolume: string
+  orgUnitNumber: string
   ownerClientNumber: string
   ownerClientLocation: string
   agentClientNumber: string
@@ -82,6 +81,17 @@ export type PermitDetailMutationRequest = {
   estimatedShippingDate: string
   portOfExport: string
   otherPortOfExport: string
+  overrideInd?: string
+  overrideFee?: string
+  overrideComment?: string
+}
+
+export type PermitFeeOverrideContext = {
+  overrideEnabled: boolean
+  overrideFee: string
+  overrideComment: string
+  locked: boolean
+  lockMessage: string
 }
 
 export type AddPermitInvoiceResult = {
@@ -92,7 +102,16 @@ export type AddPermitInvoiceResult = {
   source: PermitDocumentAndInvoiceSource
 }
 
-export type PermitDetailMutationResult = AddPermitInvoiceResult
+export type PermitDetailMutationResult = AddPermitInvoiceResult & {
+  permitStatus?: string
+  permitReceiptNo?: string
+}
+
+export type PermitEmailResult = {
+  success: boolean
+  message: string
+  permitRequestDate: string
+}
 
 export type RemovePermitDocumentResult = {
   success: boolean
@@ -106,7 +125,6 @@ type PermitInvoiceDetailsPayload = {
   value?: unknown
 }
 
-const DEFAULT_CONVERSION_RATE = '1.00'
 const PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS = 30_000
 
 const normalizeDocumentRow = (row: unknown, index: number): PermitDocumentRow => {
@@ -185,6 +203,7 @@ export const fetchPermitDocuments = async (
 export const openPermitDocument = async (
   fileId: string,
   fileName: string,
+  permitNumber: string,
 ): Promise<OpenPermitDocumentResult> => {
   const response = await apiService
     .getAxiosInstance()
@@ -192,6 +211,7 @@ export const openPermitDocument = async (
       params: {
         fileId,
         fileName,
+        permitNumber,
       },
       responseType: 'blob',
       headers: {
@@ -264,7 +284,16 @@ export const fetchPermitInvoiceConversionRate =
       ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS,
     })
 
-    const conversionRate = asString(response.data?.conversionRate) || DEFAULT_CONVERSION_RATE
+    const conversionRate = asString(response.data?.conversionRate).trim()
+    const numericRate = Number(conversionRate)
+    if (
+      !asBoolean(response.data?.success) ||
+      !conversionRate ||
+      !Number.isFinite(numericRate) ||
+      numericRate <= 0
+    ) {
+      throw new Error('A valid currency conversion rate is required to add an invoice.')
+    }
     return {
       conversionRate,
       source: 'api',
@@ -318,6 +347,8 @@ const parsePermitDetailMutationResponse = (
     errors,
     warnings,
     source,
+    permitStatus: asString(objectPayload.permitStatus),
+    permitReceiptNo: asString(objectPayload.permitReceiptNo),
   }
 }
 
@@ -338,30 +369,77 @@ export const addPermitInvoice = async (
 
 const normalizePermitDetailMutationPayload = (
   request: PermitDetailMutationRequest,
-): Record<string, string> => ({
-  permitNumber: request.permitNumber.trim(),
-  permitStatus: request.permitStatus.trim(),
-  permitIssueDate: request.permitIssueDate.trim(),
-  permitExpiryDate: request.permitExpiryDate.trim(),
-  permitRequestDate: request.permitRequestDate.trim(),
-  exemptionNumber: request.exemptionNumber.trim(),
-  permitReceiptNo: request.permitReceiptNo.trim(),
-  permitRemarks: request.permitRemarks.trim(),
-  permitTotalVolume: request.permitTotalVolume.trim(),
-  permitNumberOfPieces: request.permitNumberOfPieces.trim(),
-  region: request.region.trim(),
-  ownerClientNumber: request.ownerClientNumber.trim(),
-  ownerClientLocation: request.ownerClientLocation.trim(),
-  agentClientNumber: request.agentClientNumber.trim(),
-  agentClientLocation: request.agentClientLocation.trim(),
-  destinationCompanyName: request.destinationCompanyName.trim(),
-  destinationCountry: request.destinationCountry.trim(),
-  transportType: request.transportType.trim(),
-  transportName: request.transportName.trim(),
-  estimatedShippingDate: request.estimatedShippingDate.trim(),
-  portOfExport: request.portOfExport.trim(),
-  otherPortOfExport: request.otherPortOfExport.trim(),
-})
+): Record<string, string> => {
+  const portOfExport = request.portOfExport.trim().toUpperCase()
+  const payload: Record<string, string> = {
+    permitNumber: request.permitNumber.trim(),
+    permitStatus: request.permitStatus.trim(),
+    permitIssueDate: request.permitIssueDate.trim(),
+    permitExpiryDate: request.permitExpiryDate.trim(),
+    permitRequestDate: request.permitRequestDate.trim(),
+    exemptionNumber: request.exemptionNumber.trim(),
+    permitReceiptNo: request.permitReceiptNo.trim(),
+    permitRemarks: request.permitRemarks.trim(),
+    permitTotalVolume: request.permitTotalVolume.trim(),
+    permitNumberOfPieces: request.permitNumberOfPieces.trim(),
+    oicPermitTotalPieces: request.oicPermitTotalPieces.trim(),
+    oicPermitTotalVolume: request.oicPermitTotalVolume.trim(),
+    orgUnitNo: request.orgUnitNumber.trim(),
+    ownerClientNumber: request.ownerClientNumber.trim(),
+    ownerClientLocation: request.ownerClientLocation.trim(),
+    agentClientNumber: request.agentClientNumber.trim(),
+    agentClientLocation: request.agentClientLocation.trim(),
+    destinationCompanyName: request.destinationCompanyName.trim(),
+    destinationCountry: request.destinationCountry.trim().toUpperCase(),
+    transportType: request.transportType.trim().toUpperCase(),
+    transportName: request.transportName.trim(),
+    estimatedShippingDate: request.estimatedShippingDate.trim(),
+    portOfExport,
+    otherPortOfExport: portOfExport === 'OT' ? request.otherPortOfExport.trim() : '',
+  }
+  if (request.overrideInd !== undefined) {
+    payload.overrideInd = request.overrideInd.trim()
+    payload.overrideFee = request.overrideFee?.trim() ?? ''
+    payload.overrideComment = request.overrideComment?.trim() ?? ''
+  }
+  return payload
+}
+
+export const fetchPermitFeeOverrideContext = async (
+  permitNumber: string,
+): Promise<PermitFeeOverrideContext> => {
+  const response = await apiService.getCachedResponse<unknown>(
+    '/lexis/rpc/permit-details/edit-context',
+    { params: { permitNumber: permitNumber.trim() } },
+    { ttlMs: 0 },
+  )
+  if (
+    response.status === 204 ||
+    !isRecord(response.data) ||
+    typeof response.data.overrideEnabled !== 'boolean' ||
+    typeof response.data.locked !== 'boolean'
+  ) {
+    throw new Error('Unexpected permit edit context payload.')
+  }
+  const payload = response.data
+  return {
+    overrideEnabled: asBoolean(payload.overrideEnabled),
+    overrideFee: asString(payload.overrideFee),
+    overrideComment: asString(payload.overrideComment),
+    locked: asBoolean(payload.locked),
+    lockMessage: asString(payload.lockMessage),
+  }
+}
+
+export const releasePermitEditLock = async (permitNumber: string): Promise<void> => {
+  try {
+    await apiService.getAxiosInstance().post('/lexis/rpc/permit-details/release-lock', null, {
+      params: { permitNumber: permitNumber.trim() },
+    })
+  } catch {
+    // Best-effort cleanup only; the server expires abandoned locks.
+  }
+}
 
 export const updatePermitDetail = async (
   request: PermitDetailMutationRequest,
@@ -383,22 +461,54 @@ export const updatePermitShipping = async (
   return parsePermitDetailMutationResponse(payload, 'api')
 }
 
+const sendPermitEmail = async (
+  path: string,
+  permitNumber: string,
+  additionalPayload: Record<string, string> = {},
+): Promise<PermitEmailResult> => {
+  const payload = await postFormData(path, {
+    permitNumber: permitNumber.trim(),
+    ...additionalPayload,
+  })
+  const source = recordOrEmpty(payload)
+  return {
+    success: asBoolean(source.success),
+    message: asString(source.message),
+    permitRequestDate: asString(source.permitRequestDate),
+  }
+}
+
+export const sendPermitReviewRequestEmail = async (
+  permitNumber: string,
+  copyToEmailAddress = '',
+): Promise<PermitEmailResult> =>
+  sendPermitEmail('/lexis/rpc/permit-details/request-email', permitNumber, {
+    copyToEmailAddress: copyToEmailAddress.trim(),
+  })
+
+export const sendPermitApprovalEmail = async (
+  permitNumber: string,
+  clientEmailAddress: string,
+): Promise<PermitEmailResult> =>
+  sendPermitEmail('/lexis/rpc/permit-details/approval-email', permitNumber, {
+    clientEmailAddress: clientEmailAddress.trim(),
+  })
+
 const removeDocument = async (
   apiPath: string,
   documentId: string,
+  permitNumber: string,
 ): Promise<RemovePermitDocumentResult> => {
   const normalizedDocumentId = documentId.trim()
   const response = await apiService.getAxiosInstance().delete<unknown>(apiPath, {
     params: {
       documentId: normalizedDocumentId,
+      permitNumber: permitNumber.trim(),
     },
   })
 
-  if (response.status === 204) {
-    return {
-      success: true,
-      source: 'api',
-    }
+  if (response.status !== 200) {
+    throw new Error('Unexpected permit document removal response.')
   }
 
   return {
@@ -409,18 +519,21 @@ const removeDocument = async (
 
 export const removePermitDocument = async (
   documentId: string,
+  permitNumber: string,
 ): Promise<RemovePermitDocumentResult> => {
-  return removeDocument('/lexis/rpc/permit-details/document/permit', documentId)
+  return removeDocument('/lexis/rpc/permit-details/document/permit', documentId, permitNumber)
 }
 
 export const removePermitInvoiceDocument = async (
   documentId: string,
+  permitNumber: string,
 ): Promise<RemovePermitDocumentResult> => {
-  return removeDocument('/lexis/rpc/permit-details/document/invoice', documentId)
+  return removeDocument('/lexis/rpc/permit-details/document/invoice', documentId, permitNumber)
 }
 
 export const removePermitApplicationDocument = async (
   documentId: string,
+  permitNumber: string,
 ): Promise<RemovePermitDocumentResult> => {
-  return removeDocument('/lexis/rpc/permit-details/document/application', documentId)
+  return removeDocument('/lexis/rpc/permit-details/document/application', documentId, permitNumber)
 }

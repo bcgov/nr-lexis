@@ -79,6 +79,21 @@ final class RequestParameterUtils {
     return null;
   }
 
+  /** Returns a trimmed value while preserving an explicitly supplied blank as an empty string. */
+  static String firstPresent(MultiValueMap<String, String> parameters, String... names) {
+    if (parameters == null || names == null) {
+      return null;
+    }
+    for (String name : names) {
+      if (name == null || !parameters.containsKey(name)) {
+        continue;
+      }
+      String value = parameters.getFirst(name);
+      return value == null ? "" : value.trim();
+    }
+    return null;
+  }
+
   private static boolean isJsonRequest(HttpServletRequest request) {
     String contentType = request.getContentType();
     return contentType != null

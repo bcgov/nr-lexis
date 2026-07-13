@@ -2,7 +2,6 @@ package ca.bc.gov.mof.lexis.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -10,9 +9,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ca.bc.gov.mof.lexis.controller.ExemptionDetailsRpcController;
+import ca.bc.gov.mof.lexis.controller.OfferDetailsRpcController;
+import ca.bc.gov.mof.lexis.controller.PermitDetailsRpcController;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +30,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -37,6 +42,8 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
     properties = {
       "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.ca-central-1.amazonaws.com/test",
       "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
+      "spring.profiles.active=stub-reports,stub-services",
+      "lexis.federal-submission.create-enabled=true",
       "ALLOWED_ORIGINS=http://localhost:3000"
     })
 @AutoConfigureMockMvc
@@ -90,6 +97,87 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void shippingReferenceOptionsShouldRequireAProvincialOrFederalDetailAction() throws Exception {
+    String path = "/api/lexis/shipping-reference-options";
+
+    mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            get(path)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isServiceUnavailable());
+    mockMvc
+        .perform(
+            get(path)
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isServiceUnavailable());
+    mockMvc
+        .perform(
+            get(path)
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isServiceUnavailable());
+    mockMvc
+        .perform(
+            get(path)
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void federalRemarkRoutesShouldSeparateReadAndManageAuthority() throws Exception {
+    String remarksPath = "/api/lexis/federal/applications/9001/remarks";
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+    SimpleGrantedAuthority manager =
+        new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER");
+
+    mockMvc.perform(get(remarksPath)).andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(get(remarksPath).with(jwt().authorities(readOnly)))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(
+            post(remarksPath)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"remark\":\"Review note\"}")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            put(remarksPath + "/44")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"remark\":\"Updated note\"}")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post(remarksPath)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"remark\":\"Review note\"}")
+                .with(csrf())
+                .with(jwt().authorities(manager)))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(
+            put(remarksPath + "/44")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"remark\":\"Updated note\"}")
+                .with(csrf())
+                .with(jwt().authorities(manager)))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   @DisplayName("Known modern and legacy entry points resolve to expected authorization actions")
   void knownModernAndLegacyEntryPointsShouldResolveExpectedActions() {
     List.of(
@@ -97,6 +185,31 @@ class LexisRouteAuthorizationIntegrationTest {
             expected(HttpMethod.GET, "/api/lexis/applicationSearch.do", "view", "/applicationSearch"),
             expected(HttpMethod.GET, "/api/lexis/federal/applications/search", null, "/federalApplicationSearch"),
             expected(HttpMethod.GET, "/api/lexis/federal/applications/9001", null, "/federalApplicationDetails"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/federal/applications/9001/permit",
+                null,
+                "manageFederalApplication"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/federal/applications/9001/status",
+                null,
+                "manageFederalApplication"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/federal/applications/9001/remarks",
+                null,
+                "/federalApplicationDetails"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/federal/applications/9001/remarks",
+                null,
+                "manageFederalApplication"),
+            expected(
+                HttpMethod.PUT,
+                "/api/lexis/federal/applications/9001/remarks/44",
+                null,
+                "manageFederalApplication"),
             expected(HttpMethod.POST, "/api/lexis/application-submissions", null, "uploadApplicationSubmission"),
             expected(
                 HttpMethod.POST,
@@ -118,7 +231,52 @@ class LexisRouteAuthorizationIntegrationTest {
                 HttpMethod.POST,
                 "/api/lexis/applicationDetailsRPC.do",
                 "removeDocument",
-                "/fileApplicationUpload"),
+                "/applicationDetails"),
+            expected(
+                HttpMethod.DELETE,
+                "/api/lexis/rpc/application-details/document",
+                null,
+                "/applicationDetails"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/exemptionDetailsRPC",
+                "removeDocument",
+                "/exemptionDetails"),
+            expected(
+                HttpMethod.DELETE,
+                "/api/lexis/rpc/exemption-details/document",
+                null,
+                "/exemptionDetails"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/rpc/exemption-details/check-exemption-number",
+                null,
+                "saveExemption"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/exemptionDetailsRPC",
+                "checkExemptionNumber",
+                "saveExemption"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/permitDetailsRPC.do",
+                "removePermitDocument",
+                "/permitDetails"),
+            expected(
+                HttpMethod.DELETE,
+                "/api/lexis/rpc/permit-details/document/permit",
+                null,
+                "/permitDetails"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/rpc/application-details/remark",
+                null,
+                "/applicationRemarks"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/applicationDetailsRPC.do",
+                "getRemark",
+                "/applicationRemarks"),
             expected(
                 HttpMethod.POST,
                 "/api/lexis/permitDetailsRPC.do",
@@ -129,6 +287,26 @@ class LexisRouteAuthorizationIntegrationTest {
                 "/api/lexis/permitDetailsRPC.do",
                 "updateShipping",
                 "savePermit"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/rpc/permit-details/check-permit-number",
+                null,
+                "savePermit"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/permitDetailsRPC.do",
+                "checkPermitNumber",
+                "savePermit"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/offerDetails.do",
+                null,
+                "/offerDetails"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/permitDetails.do",
+                null,
+                "/permitDetails"),
             expected(HttpMethod.POST, "/api/lexis/lexisPolicyAdminRPC.do", null, "/lexisPolicyAdmin"),
             expected(HttpMethod.POST, "/api/lexis/lexisFILAdminRPC.do", null, "/lexisFILAdmin"),
             expected(HttpMethod.GET, "/api/lexis/offerReport.do", "view", "/offerReport"),
@@ -138,6 +316,14 @@ class LexisRouteAuthorizationIntegrationTest {
     assertThat(
             LexisApiAuthorizationRules.findRule(
                 HttpMethod.GET, "/api/lexis/biweeklyListing.do", "generateIndustryPDF"))
+        .isEmpty();
+    assertThat(
+            LexisApiAuthorizationRules.findRule(
+                HttpMethod.GET, "/api/lexis/feeDetails.do", null))
+        .isEmpty();
+    assertThat(
+            LexisApiAuthorizationRules.findRule(
+                HttpMethod.GET, "/api/lexis/fee-details/permits/7000123/summary", null))
         .isEmpty();
   }
 
@@ -169,6 +355,13 @@ class LexisRouteAuthorizationIntegrationTest {
             get("/actuator/health")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void orchestratorHealthProbesShouldBePublicAndNarrowlyScoped() throws Exception {
+    mockMvc.perform(get("/actuator/health/liveness")).andExpect(status().isOk());
+    mockMvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
+    mockMvc.perform(get("/actuator/info")).andExpect(status().isUnauthorized());
   }
 
   @Test
@@ -321,6 +514,46 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void applicationRemarkReadsShouldRejectRolesWithoutApplicationRemarksGrant()
+      throws Exception {
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+
+    mockMvc
+        .perform(
+            get("/api/lexis/rpc/application-details/remark")
+                .param("remarkId", "44")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            get("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "getRemark")
+                .param("remarkId", "44")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void applicationRemarkReadsShouldAllowApplicationApproverRole() throws Exception {
+    SimpleGrantedAuthority approver =
+        new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER");
+
+    mockMvc
+        .perform(
+            get("/api/lexis/rpc/application-details/remark")
+                .param("remarkId", "44")
+                .with(jwt().authorities(approver)))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(
+            get("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "getRemark")
+                .param("remarkId", "44")
+                .with(jwt().authorities(approver)))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void federalApplicationSearchShouldAllowReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/federal/applications/search")
@@ -349,13 +582,27 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyOfferDetailsRpcShouldAllowIndustryRole() throws Exception {
+  void legacyOfferDetailsRpcShouldAllowMatchingScopedIndustryRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerDetailsRPC")
+                .param("actionMapping", "getApplicationVolume")
+                .param("applicationNumber", "1000456")
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER_00077881"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void legacyOfferDetailsRpcShouldRejectIndustryRoleWithoutClientScope() throws Exception {
     mockMvc.perform(
             get("/api/lexis/offerDetailsRPC")
                 .param("actionMapping", "getApplicationVolume")
                 .param("applicationNumber", "1000456")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -389,6 +636,35 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void offerLockReleaseShouldRequireOfferDetailAccessAndReachTheControllerWhenAuthorized()
+      throws Exception {
+    String path = "/api/lexis/rpc/offer-details/release-lock";
+
+    mockMvc
+        .perform(
+            post(path)
+                .param("offerNumber", "3000123")
+                .with(csrf())
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post(path)
+                .param("offerNumber", "3000123")
+                .with(csrf())
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isForbidden())
+        .andExpect(handler().handlerType(OfferDetailsRpcController.class))
+        .andExpect(handler().methodName("releaseLock"));
+  }
+
+  @Test
   void legacyExemptionDetailsRpcShouldAllowClientLookupAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/exemptionDetailsRPC")
@@ -416,6 +692,42 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("exemptionNumber", "EX-100")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void exemptionNumberProbesShouldRequireSaveExemptionAuthority() throws Exception {
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+    SimpleGrantedAuthority exemptionApprover =
+        new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER");
+
+    mockMvc
+        .perform(
+            get("/api/lexis/rpc/exemption-details/check-exemption-number")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            get("/api/lexis/rpc/exemption-details/check-exemption-number")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(exemptionApprover)))
+        .andExpect(status().isNoContent())
+        .andExpect(handler().handlerType(ExemptionDetailsRpcController.class))
+        .andExpect(handler().methodName("checkExemptionNumber"));
+    mockMvc
+        .perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "checkExemptionNumber")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "checkExemptionNumber")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(exemptionApprover)))
+        .andExpect(status().isNoContent());
   }
 
   @Test
@@ -600,6 +912,15 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernApplicationSummaryReadShouldAllowReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/rpc/application-details/application-summary")
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void readOnlyRoleShouldRejectRepresentativeMutationRoutes() throws Exception {
     SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
 
@@ -727,6 +1048,42 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void permitNumberProbesShouldRequireSavePermitAuthority() throws Exception {
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+    SimpleGrantedAuthority applicationApprover =
+        new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER");
+
+    mockMvc
+        .perform(
+            get("/api/lexis/rpc/permit-details/check-permit-number")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            get("/api/lexis/rpc/permit-details/check-permit-number")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(applicationApprover)))
+        .andExpect(status().isNoContent())
+        .andExpect(handler().handlerType(PermitDetailsRpcController.class))
+        .andExpect(handler().methodName("checkPermitNumber"));
+    mockMvc
+        .perform(
+            post("/api/lexis/permitDetailsRPC.do")
+                .param("actionMapping", "checkPermitNumber")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/permitDetailsRPC.do")
+                .param("actionMapping", "checkPermitNumber")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(applicationApprover)))
+        .andExpect(status().isNoContent());
   }
 
   @Test
@@ -904,6 +1261,83 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyCompatibilityMutationActionsShouldRejectGetForAuthorizedUsers() throws Exception {
+    RequestPostProcessor admin =
+        jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"));
+
+    mockMvc
+        .perform(
+            get("/api/lexis/applicationsReview.do")
+                .param("actionMapping", "approve")
+                .param("applicationNumber", "1000123")
+                .with(admin))
+        .andExpect(status().isMethodNotAllowed());
+    mockMvc
+        .perform(
+            get("/api/lexis/offerDetailsRPC.do")
+                .param("actionMapping", "addOffer")
+                .param("applicationNumber", "1000123")
+                .with(admin))
+        .andExpect(status().isMethodNotAllowed());
+    mockMvc
+        .perform(
+            get("/api/lexis/permitDetailsRPC.do")
+                .param("actionMapping", "updatePermit")
+                .param("permitNumber", "7000123")
+                .with(admin))
+        .andExpect(status().isMethodNotAllowed());
+    mockMvc
+        .perform(
+            get("/api/lexis/lexisPolicyAdminRPC.do")
+                .param("actionMapping", "addPolicy")
+                .with(admin))
+        .andExpect(status().isMethodNotAllowed());
+    mockMvc
+        .perform(
+            get("/api/lexis/lexisFILAdminRPC.do")
+                .param("actionMapping", "deleteFILPolicy")
+                .with(admin))
+        .andExpect(status().isMethodNotAllowed());
+  }
+
+  @Test
+  void legacyCompatibilityReadActionsShouldRemainAvailableOverGet() throws Exception {
+    RequestPostProcessor admin =
+        jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"));
+
+    mockMvc
+        .perform(
+            get("/api/lexis/applicationsReview.do")
+                .param("actionMapping", "view")
+                .with(admin))
+        .andExpect(status().is2xxSuccessful());
+    mockMvc
+        .perform(
+            get("/api/lexis/offerDetailsRPC.do")
+                .param("actionMapping", "view")
+                .with(admin))
+        .andExpect(status().is2xxSuccessful());
+    mockMvc
+        .perform(
+            get("/api/lexis/permitDetailsRPC.do")
+                .param("actionMapping", "getCountryList")
+                .with(admin))
+        .andExpect(status().is2xxSuccessful());
+    mockMvc
+        .perform(
+            get("/api/lexis/lexisPolicyAdminRPC.do")
+                .param("actionMapping", "viewPolicies")
+                .with(admin))
+        .andExpect(status().is2xxSuccessful());
+    mockMvc
+        .perform(
+            get("/api/lexis/lexisFILAdminRPC.do")
+                .param("actionMapping", "updatePaging")
+                .with(admin))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
   void legacyAgentAdminShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/lexisAgentAdmin.do")
@@ -1039,7 +1473,8 @@ class LexisRouteAuthorizationIntegrationTest {
   @Test
   void adminApplicationUploadShouldAllowAdminRole() throws Exception {
     MockMultipartFile file =
-        new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
+        new MockMultipartFile(
+            "formFile", "application.pdf", "application/pdf", validPdfBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/admin/uploads/applications")
@@ -1071,7 +1506,8 @@ class LexisRouteAuthorizationIntegrationTest {
   @Test
   void adminApplicationUploadValidationShouldAllowAdminRole() throws Exception {
     MockMultipartFile file =
-        new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
+        new MockMultipartFile(
+            "formFile", "application.pdf", "application/pdf", validPdfBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/admin/uploads/applications/validation")
@@ -1097,7 +1533,7 @@ class LexisRouteAuthorizationIntegrationTest {
   @Test
   void adminPermitUploadValidationShouldAllowAdminRole() throws Exception {
     MockMultipartFile file =
-        new MockMultipartFile("formFile", "permit.pdf", "application/pdf", "content".getBytes());
+        new MockMultipartFile("formFile", "permit.pdf", "application/pdf", validPdfBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/admin/uploads/permits/validation")
@@ -1110,7 +1546,7 @@ class LexisRouteAuthorizationIntegrationTest {
   @Test
   void adminExemptionUploadValidationShouldAllowAdminRole() throws Exception {
     MockMultipartFile file =
-        new MockMultipartFile("formFile", "exemption.pdf", "application/pdf", "content".getBytes());
+        new MockMultipartFile("formFile", "exemption.pdf", "application/pdf", validPdfBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/admin/uploads/exemptions/validation")
@@ -1123,7 +1559,7 @@ class LexisRouteAuthorizationIntegrationTest {
   @Test
   void adminInvoiceUploadValidationShouldAllowAdminRole() throws Exception {
     MockMultipartFile file =
-        new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", "content".getBytes());
+        new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", validPdfBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/admin/uploads/invoices/validation")
@@ -1219,8 +1655,24 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             multipart("/api/lexis/application-submissions")
                 .file(file)
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
         .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void applicationSubmissionUploadShouldRejectSubmitterWithoutClientScope() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/application-submissions")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -1243,7 +1695,11 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             multipart("/api/lexis/admin/uploads/lexis-xml")
                 .file(file)
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
         .andExpect(status().isUnprocessableEntity());
   }
 
@@ -1278,6 +1734,7 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("userReference", "FED-REF-1")
                 .param("originalFileName", "federal-submission.xml")
                 .contentType(MediaType.APPLICATION_XML)
+                .header("X-Idempotency-Key", "AUTHORIZATION-INTEGRATION-1")
                 .content("<xml />")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
         .andExpect(status().isForbidden());
@@ -1302,6 +1759,7 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("userReference", "FED-REF-1")
                 .param("originalFileName", "federal-submission.xml")
                 .contentType(MediaType.APPLICATION_XML)
+                .header("X-Idempotency-Key", "AUTHORIZATION-INTEGRATION-2")
                 .content("<xml />")
                 .with(federalUploadScopeJwt()))
         .andExpect(status().isUnprocessableEntity());
@@ -1422,7 +1880,24 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationSubmissionValidationShouldAllowProvincialSubmitterRole() throws Exception {
+  void applicationSubmissionValidationShouldAllowScopedProvincialSubmitterRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/application-submissions/validation")
+                .file(file)
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void applicationSubmissionValidationShouldRejectSubmitterWithoutClientScope()
+      throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
@@ -1430,7 +1905,7 @@ class LexisRouteAuthorizationIntegrationTest {
             multipart("/api/lexis/application-submissions/validation")
                 .file(file)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isUnprocessableEntity());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -1737,11 +2212,19 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void reportOptionsShouldAllowKnownRoleWithoutTeacReportGrant() throws Exception {
+  void reportOptionsShouldRejectRoleWithoutReportAction() throws Exception {
     mockMvc.perform(
             get("/api/lexis/reports/options")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void reportOptionsShouldAuthorizeReportRoleAndFailClosedWithoutRepository() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/reports/options")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isServiceUnavailable());
   }
 
   @Test
@@ -1860,7 +2343,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   private static RequestPostProcessor federalUploadScopeJwt(String clientId) {
-    return jwt()
+    return machineJwt()
         .jwt(
             token ->
                 token
@@ -1870,13 +2353,26 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   private static RequestPostProcessor federalUploadDraftScopeJwt() {
-    return jwt()
+    return machineJwt()
         .jwt(
             token ->
                 token
                     .claim("client_id", "nexcol-service-client")
                     .claim("scope", "lexis/federalSubmission/submit"))
         .authorities(new SimpleGrantedAuthority("SCOPE_lexis/federalSubmission/submit"));
+  }
+
+  private static JwtRequestPostProcessor jwt() {
+    return SecurityMockMvcRequestPostProcessors.jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("custom:idp_name", "idir")
+                    .claim("custom:idp_username", "lexis-test-user"));
+  }
+
+  private static JwtRequestPostProcessor machineJwt() {
+    return SecurityMockMvcRequestPostProcessors.jwt();
   }
 
   private static String esfWrappedFederalLexisXml() {
@@ -1913,6 +2409,10 @@ class LexisRouteAuthorizationIntegrationTest {
 
   private static String xmlTextEscape(String value) {
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
+  private static byte[] validPdfBytes() {
+    return "%PDF-1.7\n%%EOF\n".getBytes();
   }
 
   private static String bareFederalLexisXml() {

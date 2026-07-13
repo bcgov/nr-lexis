@@ -71,6 +71,8 @@ services:
     container_name: caddy
     profiles: ["caddy"]
     build: ./frontend
+    env_file:
+      - ./frontend/.env
     environment:
       BACKEND_URL: http://backend:8080
       LOG_LEVEL: info

@@ -18,6 +18,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
+  getPageDataCacheGeneration,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -156,6 +157,7 @@ const ProvincialSummaryPage = () => {
 
   const loadSummary = useCallback(
     async (options: { force?: boolean } = {}) => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
       const pageCacheKey = buildPageDataCacheKey('provincial-summary', capabilities?.principal, {
         visibleMetrics: visibleMetrics.map((metric) => metric.key),
         canOpenReviewApplication,
@@ -316,8 +318,6 @@ const ProvincialSummaryPage = () => {
               },
               page: 0,
               pageSize: 1,
-              sortField: 'federalApplicationNumber',
-              sortDirection: 'asc',
             }),
           ),
         ])
@@ -331,7 +331,7 @@ const ProvincialSummaryPage = () => {
           federalApplications: federalApplications ?? 0,
         }
 
-        if (isLatestRequest()) {
+        if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
           const nextMetrics = INITIAL_METRICS.map((metric) => ({
             ...metric,
             total: totalsByKey[metric.key],
@@ -343,15 +343,21 @@ const ProvincialSummaryPage = () => {
             region: item.region,
           }))
 
-          setMetrics(nextMetrics)
-          setReviewPreview(nextReviewPreview)
-          setPageDataCache(pageCacheKey, {
-            metrics: nextMetrics,
-            reviewPreview: nextReviewPreview,
-          })
+          const cacheUpdated = setPageDataCache(
+            pageCacheKey,
+            {
+              metrics: nextMetrics,
+              reviewPreview: nextReviewPreview,
+            },
+            pageCacheGeneration,
+          )
+          if (cacheUpdated) {
+            setMetrics(nextMetrics)
+            setReviewPreview(nextReviewPreview)
+          }
         }
       } catch (error) {
-        if (isLatestRequest()) {
+        if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
           console.error(error)
           setErrorMessage('Unable to calculate provincial summary metrics.')
           setMetrics(INITIAL_METRICS)

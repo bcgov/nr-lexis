@@ -1,0 +1,1 @@
+Please be advised an Offer to Purchase #{{offerNumber}} has been made on Application #{{applicationNumber}}. Details can be found in LEXIS.

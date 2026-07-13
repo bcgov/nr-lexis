@@ -143,6 +143,22 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it('keeps authoritative filters disabled with a persistent warning when options fail', async () => {
+    mockedFetchProvincialApplicationOptions.mockRejectedValueOnce(new Error('private failure'))
+
+    renderPage()
+
+    expect(await screen.findByText('Options unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Application status' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Product type' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: /^Region/ })).toBeDisabled()
+    expect(screen.getByLabelText('Application number')).toBeEnabled()
+    expect(
+      screen.getByText('Options unavailable').closest('[role="status"]')?.querySelector('button'),
+    ).toBeNull()
+  })
+
   it('renders application search filters in the legacy order', async () => {
     renderPage()
     await screen.findByText('321')
@@ -169,6 +185,75 @@ describe('Provincial Application Search Actions', () => {
       'Listing from date',
       'Listing to date',
     ])
+  })
+
+  it('hides exemption-only filters, selection, action, and applicant column without permission', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+
+    renderPage()
+    await screen.findByText('321')
+
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Owner client number')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Select 321' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByText('11111111')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Owner client number' })).toBeInTheDocument()
+  })
+
+  it('renders legacy non-sortable application result headers as plain text', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    expect(screen.queryByRole('button', { name: 'Status' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Application volume (m³)' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Applicant client number', 'applicantClientNumber'],
+    ['Owner client number', 'displayOwnerClientNumber'],
+    ['Region', 'regionCode'],
+    ['Exemption number', 'exemptionNumber'],
+    ['Listing date', 'listingDate'],
+  ] as const)('dispatches the legacy %s sort key', async (header, expectedSortField) => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockClear()
+
+    await userEvent.click(screen.getByRole('button', { name: header }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialApplications.mock.calls.some(
+          ([request]) => request.sortField === expectedSortField && request.sortDirection === 'asc',
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it('toggles the default application sort to ascending', async () => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockClear()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Application (DESC)' }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialApplications.mock.calls.some(
+          ([request]) =>
+            request.sortField === 'applicationNumber' && request.sortDirection === 'asc',
+        ),
+      ).toBe(true)
+    })
   })
 
   it('shows validation when selected rows do not share client numbers', async () => {
@@ -402,5 +487,17 @@ describe('Provincial Application Search Actions', () => {
       expect(screen.queryByText('111')).not.toBeInTheDocument()
       expect(screen.getByText('222')).toBeInTheDocument()
     })
+  })
+
+  it('shows a request failure instead of a no-results state', async () => {
+    mockedSearchProvincialApplications.mockRejectedValue(new Error('Oracle unavailable'))
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Application search unavailable' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Unable to retrieve application search results.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No applications found' })).not.toBeInTheDocument()
   })
 })

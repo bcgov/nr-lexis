@@ -17,6 +17,9 @@ import {
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import PageHeader from '@/components/PageHeader'
+import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
+import ApplicationAccuracyConfirmation from '@/components/ApplicationAccuracyConfirmation'
 import {
   calculateApplicationTermDays,
   nonNegativeWholeNumberFieldError,
@@ -58,8 +61,10 @@ import {
   fetchApplicationRemainingSpecies,
   type ApplicationCodeOption,
 } from '@/service/provincial-application-items-service'
+import { useAuth } from '@/context/auth/useAuth'
+import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import IsoDatePicker from '../../components/IsoDatePicker'
-import { formatLocalIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
@@ -136,9 +141,9 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   productTypeCode: 'H',
   ageClass: '',
   exemptionType: 'S',
-  region: '1903',
+  region: '',
   applicationDate: '',
-  applicationTermDays: '',
+  applicationTermDays: '180',
   applicationTermMonths: '',
   applicationTermYears: '',
   receivedDate: '',
@@ -152,13 +157,22 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   comments: '',
 }
 
-const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicationCreateForm => {
-  const today = formatLocalIsoDate(new Date())
+const buildInitialFormFromQuery = (
+  query: URLSearchParams,
+  provincialSubmitterIdentityLocked: boolean,
+  authoritativeOwnerClientNumber: string,
+): ProvincialApplicationCreateForm => {
+  const today = formatBusinessIsoDate()
   return {
     ...INITIAL_FORM,
-    ownerClientNumber: query.get('ownerClientNumber') ?? '',
-    ownerClientLocationCode:
-      query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? '',
+    ownerClientNumber: provincialSubmitterIdentityLocked
+      ? authoritativeOwnerClientNumber
+      : (query.get('ownerClientNumber') ?? ''),
+    ownerClientLocationCode: provincialSubmitterIdentityLocked
+      ? authoritativeOwnerClientNumber
+        ? '00'
+        : ''
+      : (query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? ''),
     ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
     agentClientNumber: query.get('agentClientNumber') ?? query.get('applicantClientNumber') ?? '',
     agentClientLocationCode:
@@ -171,10 +185,15 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
       query.get('exemptionReason') ??
       query.get('exemptionReasonCode') ??
       INITIAL_FORM.exemptionType,
-    region: query.get('region') ?? query.get('orgUnitNumber') ?? INITIAL_FORM.region,
+    region: provincialSubmitterIdentityLocked
+      ? ''
+      : (query.get('region') ?? query.get('orgUnitNumber') ?? INITIAL_FORM.region),
     applicationDate: query.get('applicationDate') ?? today,
     applicationTermDays:
-      query.get('applicationTermDays') ?? query.get('exemptionTerm') ?? query.get('termDays') ?? '',
+      query.get('applicationTermDays') ??
+      query.get('exemptionTerm') ??
+      query.get('termDays') ??
+      INITIAL_FORM.applicationTermDays,
     applicationTermMonths: query.get('applicationTermMonths') ?? query.get('termMonths') ?? '',
     applicationTermYears: query.get('applicationTermYears') ?? query.get('termYears') ?? '',
     receivedDate: query.get('receivedDate') ?? today,
@@ -231,14 +250,26 @@ type PageStatus = {
 const ProvincialApplicationCreatePage = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { capabilities } = useAuth()
+  const provincialSubmitterIdentityLocked = hasProvincialSubmitterRole(capabilities.roles)
+  const authoritativeOwnerClientNumber = capabilities.forestClientNumber?.trim() ?? ''
+  const authoritativeOrgUnitNo = capabilities.orgUnitNo?.trim() ?? ''
+  const provincialSubmitterScopeUnavailable =
+    provincialSubmitterIdentityLocked && !authoritativeOwnerClientNumber
   const [form, setForm] = useState<ProvincialApplicationCreateForm>(() =>
-    buildInitialFormFromQuery(searchParams),
+    buildInitialFormFromQuery(
+      searchParams,
+      provincialSubmitterIdentityLocked,
+      authoritativeOwnerClientNumber,
+    ),
   )
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
   const [growthTypes, setGrowthTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
   const [regions, setRegions] = useState<SearchOption[]>([])
   const [currentSchedules, setCurrentSchedules] = useState<SearchOption[]>([])
+  const [optionsLoaded, setOptionsLoaded] = useState(false)
+  const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
   const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
@@ -259,27 +290,82 @@ const ProvincialApplicationCreatePage = () => {
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [accuracyConfirmationOpen, setAccuracyConfirmationOpen] = useState(false)
+  const [accuracyConfirmed, setAccuracyConfirmed] = useState(false)
   const [touchedFields, setTouchedFields] = useState<
     TouchedFields<ProvincialApplicationCreateField>
   >({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
-  const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState(
+  const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState<number>(
     APPLICATION_CREATE_TAB_INDEX.summary,
   )
 
   useEffect(() => {
     const loadOptions = async () => {
-      const options = await fetchProvincialApplicationOptions()
-      setProductTypes(options.productTypes)
-      setGrowthTypes(options.growthTypes)
-      setExemptionReasons(options.exemptionReasons)
-      setRegions(options.regions)
-      setCurrentSchedules(options.currentSchedules)
-      setForm((current) => applyScheduleDefaults(current, options.currentSchedules))
+      try {
+        const options = await fetchProvincialApplicationOptions()
+        setProductTypes(options.productTypes)
+        setGrowthTypes(options.growthTypes)
+        setExemptionReasons(options.exemptionReasons)
+        setRegions(options.regions)
+        setCurrentSchedules(options.currentSchedules)
+        setForm((current) => {
+          const withScheduleDefaults = applyScheduleDefaults(current, options.currentSchedules)
+          if (!provincialSubmitterIdentityLocked) {
+            return withScheduleDefaults
+          }
+
+          const defaultRegion = options.regions.some(
+            (option) => option.value === authoritativeOrgUnitNo,
+          )
+            ? authoritativeOrgUnitNo
+            : ''
+          return withScheduleDefaults.region === defaultRegion
+            ? withScheduleDefaults
+            : { ...withScheduleDefaults, region: defaultRegion }
+        })
+        setOptionsUnavailable(false)
+      } catch {
+        setOptionsUnavailable(true)
+      } finally {
+        setOptionsLoaded(true)
+      }
     }
 
     void loadOptions()
-  }, [])
+  }, [authoritativeOrgUnitNo, provincialSubmitterIdentityLocked])
+
+  useEffect(() => {
+    if (!provincialSubmitterIdentityLocked) {
+      return undefined
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (!isActive) {
+        return
+      }
+
+      setForm((current) => {
+        const ownerClientLocationCode = authoritativeOwnerClientNumber ? '00' : ''
+        if (
+          current.ownerClientNumber === authoritativeOwnerClientNumber &&
+          current.ownerClientLocationCode === ownerClientLocationCode
+        ) {
+          return current
+        }
+        return {
+          ...current,
+          ownerClientNumber: authoritativeOwnerClientNumber,
+          ownerClientLocationCode,
+        }
+      })
+    })
+
+    return () => {
+      isActive = false
+    }
+  }, [authoritativeOwnerClientNumber, provincialSubmitterIdentityLocked])
 
   useEffect(() => {
     if (exemptionReasons.length === 0) {
@@ -350,6 +436,12 @@ const ProvincialApplicationCreatePage = () => {
             return current
           }
 
+          if (provincialSubmitterIdentityLocked) {
+            return current.ownerClientLocationCode === '00'
+              ? current
+              : { ...current, ownerClientLocationCode: '00' }
+          }
+
           const nextOwnerClientLocationCode = resolveClientLocationCode(
             locations,
             current.ownerClientLocationCode,
@@ -368,7 +460,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.ownerClientNumber])
+  }, [form.ownerClientNumber, provincialSubmitterIdentityLocked])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -753,9 +845,21 @@ const ProvincialApplicationCreatePage = () => {
             ? null
             : 'Applicant type must be Owner or Agent.',
       ),
-      productTypeCode: requiredFieldError(form.productTypeCode, 'Product type') ?? undefined,
+      productTypeCode: firstValidationError(
+        () => requiredFieldError(form.productTypeCode, 'Product type'),
+        () =>
+          productTypes.some((option) => option.value === form.productTypeCode)
+            ? null
+            : 'Select a valid product type.',
+      ),
       ageClass: productTypeRequiresGrowthType(form.productTypeCode)
-        ? (requiredFieldError(form.ageClass, 'Age class') ?? undefined)
+        ? firstValidationError(
+            () => requiredFieldError(form.ageClass, 'Age class'),
+            () =>
+              growthTypes.some((option) => option.value === form.ageClass)
+                ? null
+                : 'Select a valid age class.',
+          )
         : undefined,
       speciesCodes:
         form.speciesCodes.length === 0
@@ -767,14 +871,24 @@ const ProvincialApplicationCreatePage = () => {
                 ? 'At least one application species is required, but no species are available for the selected region and product type.'
                 : 'At least one application species is required.'
           : undefined,
-      exemptionType:
-        requiredMaxLengthFieldError(
-          form.exemptionType,
-          1,
-          'Exemption reason code',
-          'Exemption reason',
-        ) ?? undefined,
-      region: requiredFieldError(form.region, 'Region') ?? undefined,
+      exemptionType: firstValidationError(
+        () =>
+          requiredMaxLengthFieldError(
+            form.exemptionType,
+            1,
+            'Exemption reason code',
+            'Exemption reason',
+          ),
+        () =>
+          exemptionReasons.some((option) => option.value === form.exemptionType)
+            ? null
+            : 'Select a valid exemption reason.',
+      ),
+      region: firstValidationError(
+        () => requiredFieldError(form.region, 'Region'),
+        () =>
+          regions.some((option) => option.value === form.region) ? null : 'Select a valid region.',
+      ),
       applicationDate: firstValidationError(
         () => requiredFieldError(form.applicationDate, 'Application date'),
         () => isoDateFieldError(form.applicationDate),
@@ -793,6 +907,11 @@ const ProvincialApplicationCreatePage = () => {
         () => requiredFieldError(form.receivedDate, 'Received date'),
         () => isoDateFieldError(form.receivedDate),
       ),
+      exportScheduleId:
+        !form.exportScheduleId ||
+        currentSchedules.some((option) => option.value === form.exportScheduleId)
+          ? undefined
+          : 'Select a valid listing date.',
       productLocation: requiredFieldError(form.productLocation, 'Location of logs') ?? undefined,
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
@@ -810,15 +929,27 @@ const ProvincialApplicationCreatePage = () => {
     [
       applicationSpeciesOptions.length,
       calculatedApplicationTermDays,
+      currentSchedules,
+      exemptionReasons,
       form,
+      growthTypes,
       isLoadingApplicationSpecies,
+      productTypes,
+      regions,
     ],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
     [fieldErrors],
   )
-  const missingRequiredOptions = productTypes.length === 0 && showMissingRequiredOptions
+  const requiredApplicationOptionsMissing =
+    optionsLoaded &&
+    !optionsUnavailable &&
+    (productTypes.length === 0 ||
+      exemptionReasons.length === 0 ||
+      regions.length === 0 ||
+      (productTypeRequiresGrowthType(form.productTypeCode) && growthTypes.length === 0))
+  const missingRequiredOptions = requiredApplicationOptionsMissing && showMissingRequiredOptions
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
@@ -920,7 +1051,18 @@ const ProvincialApplicationCreatePage = () => {
     (field) => !!fieldErrors[field],
   )
 
-  const onSave = async () => {
+  const onSave = async (accuracyAcknowledged = false) => {
+    if (provincialSubmitterIdentityLocked && !accuracyAcknowledged) {
+      return
+    }
+    if (
+      !optionsLoaded ||
+      optionsUnavailable ||
+      requiredApplicationOptionsMissing ||
+      provincialSubmitterScopeUnavailable
+    ) {
+      return
+    }
     if (hasValidationError) {
       if (firstInvalidField) {
         setSelectedApplicationTabIndex(
@@ -975,34 +1117,70 @@ const ProvincialApplicationCreatePage = () => {
     }
   }
 
+  const closeAccuracyConfirmation = () => {
+    setAccuracyConfirmationOpen(false)
+    setAccuracyConfirmed(false)
+  }
+
+  const onRequestSave = () => {
+    if (!provincialSubmitterIdentityLocked) {
+      void onSave()
+      return
+    }
+    setAccuracyConfirmed(false)
+    setAccuracyConfirmationOpen(true)
+  }
+
+  const onConfirmAccuracy = async () => {
+    if (!accuracyConfirmed || isSubmitting) return
+    await onSave(true)
+  }
+
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-application-create-page">
       <Column sm={4} md={8} lg={16}>
-        <div className="application-detail-title-row">
-          <h1>Create provincial application</h1>
-          <dl
-            className="application-detail-header-metrics"
-            role="group"
-            aria-label="New application state"
-          >
-            <div>
-              <dt>Application number</dt>
-              <dd>New</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>New</dd>
-            </div>
-          </dl>
-        </div>
+        <PageHeader
+          title="Create provincial application"
+          subtitle="Enter application details and save a new provincial application."
+          statusPlacement="end"
+          status={
+            <dl
+              className="application-detail-header-metrics"
+              role="group"
+              aria-label="New application state"
+            >
+              <div>
+                <dt>Application number</dt>
+                <dd>New</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>New</dd>
+              </div>
+            </dl>
+          }
+        />
       </Column>
+
+      {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
+
+      {provincialSubmitterScopeUnavailable && (
+        <Column sm={4} md={8} lg={16}>
+          <AppNotification
+            kind="error"
+            title="Forest client scope unavailable"
+            subtitle="Your Provincial Submitter access does not contain one authoritative forest client. Save is disabled."
+            lowContrast
+          />
+        </Column>
+      )}
 
       {missingRequiredOptions && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind="warning"
-            title="Required options unavailable"
-            subtitle="Product type values are unavailable. Save remains disabled until a valid product type is available."
+            title="Required options not configured"
+            subtitle="A required product type, exemption reason, growth type, or region list is empty. Save remains disabled."
             lowContrast
             autoDismissMs={undefined}
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
@@ -1044,8 +1222,14 @@ const ProvincialApplicationCreatePage = () => {
           </TabList>
           <TabPanels>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Application summary</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-summary-heading"
+              >
+                <h2 id="application-create-summary-heading" className="detail-tile-title">
+                  Application summary
+                </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <SearchableSelect
                     id="productTypeCode"
@@ -1055,6 +1239,7 @@ const ProvincialApplicationCreatePage = () => {
                     invalidText={fieldError('productTypeCode')}
                     placeholder="Select product type"
                     options={productTypes}
+                    disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('productTypeCode')}
                     onChange={(value) =>
                       setForm((current) => {
@@ -1075,7 +1260,11 @@ const ProvincialApplicationCreatePage = () => {
                     id="ageClass"
                     labelText="Age class"
                     value={form.ageClass}
-                    disabled={!productTypeRequiresGrowthType(form.productTypeCode)}
+                    disabled={
+                      !optionsLoaded ||
+                      optionsUnavailable ||
+                      !productTypeRequiresGrowthType(form.productTypeCode)
+                    }
                     invalid={!!fieldError('ageClass')}
                     invalidText={fieldError('ageClass')}
                     placeholder="Select age class"
@@ -1091,6 +1280,7 @@ const ProvincialApplicationCreatePage = () => {
                     invalidText={fieldError('exemptionType')}
                     placeholder="Select exemption reason"
                     options={exemptionReasons}
+                    disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('exemptionType')}
                     onChange={(value) =>
                       setForm((current) => ({ ...current, exemptionType: value }))
@@ -1104,6 +1294,7 @@ const ProvincialApplicationCreatePage = () => {
                     invalidText={fieldError('region')}
                     placeholder="Select region"
                     options={regions}
+                    disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('region')}
                     onChange={(value) =>
                       setForm((current) => {
@@ -1188,6 +1379,7 @@ const ProvincialApplicationCreatePage = () => {
                     labelText="Listing date"
                     value={form.exportScheduleId}
                     options={currentSchedules}
+                    disabled={!optionsLoaded || optionsUnavailable}
                     placeholder="Search listing date"
                     onBlur={() => markFieldTouched('exportScheduleId')}
                     onChange={(value) =>
@@ -1238,13 +1430,25 @@ const ProvincialApplicationCreatePage = () => {
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Clients</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-clients-heading"
+              >
+                <h2 id="application-create-clients-heading" className="detail-tile-title">
+                  Clients
+                </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <TextInput
                     id="ownerClientNumber"
                     labelText="Owner client number"
                     value={form.ownerClientNumber}
+                    readOnly={provincialSubmitterIdentityLocked}
+                    helperText={
+                      provincialSubmitterIdentityLocked
+                        ? 'Loaded from your authenticated forest client access.'
+                        : undefined
+                    }
                     invalid={!!fieldError('ownerClientNumber')}
                     invalidText={fieldError('ownerClientNumber')}
                     onBlur={() => markFieldTouched('ownerClientNumber')}
@@ -1259,7 +1463,11 @@ const ProvincialApplicationCreatePage = () => {
                     id="ownerClientLocationCode"
                     labelText="Owner client location"
                     value={form.ownerClientLocationCode}
-                    disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
+                    disabled={
+                      provincialSubmitterIdentityLocked ||
+                      !form.ownerClientNumber.trim() ||
+                      isLoadingOwnerClientLocations
+                    }
                     invalid={!!fieldError('ownerClientLocationCode')}
                     invalidText={fieldError('ownerClientLocationCode')}
                     placeholder={ownerClientLocationPlaceholder}
@@ -1429,8 +1637,14 @@ const ProvincialApplicationCreatePage = () => {
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Packages / Scales</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-packages-heading"
+              >
+                <h2 id="application-create-packages-heading" className="detail-tile-title">
+                  Packages / Scales
+                </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <div className="legacy-field-stack">
                     <SearchableSelect
@@ -1495,24 +1709,42 @@ const ProvincialApplicationCreatePage = () => {
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Permits</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-permits-heading"
+              >
+                <h2 id="application-create-permits-heading" className="detail-tile-title">
+                  Permits
+                </h2>
                 <p className="detail-empty-message">
                   Permits are available after the application is saved.
                 </p>
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Offers</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-offers-heading"
+              >
+                <h2 id="application-create-offers-heading" className="detail-tile-title">
+                  Offers
+                </h2>
                 <p className="detail-empty-message">
                   Offers are available after the application is saved.
                 </p>
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Documents</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-documents-heading"
+              >
+                <h2 id="application-create-documents-heading" className="detail-tile-title">
+                  Documents
+                </h2>
                 <DetailDocumentUploadPanel
                   workflowType="application"
                   targetNumber=""
@@ -1523,8 +1755,14 @@ const ProvincialApplicationCreatePage = () => {
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Remarks</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-remarks-heading"
+              >
+                <h2 id="application-create-remarks-heading" className="detail-tile-title">
+                  Remarks
+                </h2>
                 <div className="legacy-search-actions create-form-comments">
                   <TextArea
                     id="applicationComments"
@@ -1539,24 +1777,51 @@ const ProvincialApplicationCreatePage = () => {
             </TabPanel>
           </TabPanels>
         </Tabs>
-        <div className="legacy-search-actions application-create-actions">
+        <div
+          className="legacy-search-actions application-create-actions"
+          role="group"
+          aria-label="Application form actions"
+        >
           <Button
+            type="button"
+            kind="secondary"
+            onClick={() => {
+              closeAccuracyConfirmation()
+              navigate('/provincial/application')
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
             kind="primary"
-            onClick={() => void onSave()}
+            onClick={onRequestSave}
             disabled={
-              missingRequiredOptions ||
+              !optionsLoaded ||
+              optionsUnavailable ||
+              requiredApplicationOptionsMissing ||
               isSubmitting ||
               isLoadingOwnerClientLocations ||
-              isLoadingAgentClientLocations
+              isLoadingAgentClientLocations ||
+              provincialSubmitterScopeUnavailable
             }
           >
             Save
           </Button>
-          <Button kind="secondary" onClick={() => navigate('/provincial/application')}>
-            Cancel
-          </Button>
         </div>
       </Column>
+      {accuracyConfirmationOpen && (
+        <ApplicationAccuracyConfirmation
+          open
+          confirmed={accuracyConfirmed}
+          busy={isSubmitting}
+          confirmLabel="Save application"
+          pendingLabel="Saving application…"
+          onConfirmedChange={setAccuracyConfirmed}
+          onConfirm={onConfirmAccuracy}
+          onClose={closeAccuracyConfirmation}
+        />
+      )}
     </Grid>
   )
 }

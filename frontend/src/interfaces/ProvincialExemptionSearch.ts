@@ -24,8 +24,6 @@ export type ProvincialExemptionSearchSortField =
   | 'region'
 
 export type ProvincialExemptionSearchItem = {
-  applicationNumber: string
-  packageNumber: string
   exemptionNumber: string
   type: string
   typeCode: string

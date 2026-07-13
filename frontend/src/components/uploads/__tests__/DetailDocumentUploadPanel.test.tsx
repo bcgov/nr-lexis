@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
@@ -307,5 +307,71 @@ describe('DetailDocumentUploadPanel', () => {
       )
     })
     expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports queued-upload dirty and submission busy state to its parent', async () => {
+    let resolveSubmit: ((result: { status: string; message: string }) => void) | undefined
+    mockedSubmitAdminUpload.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSubmit = resolve
+      }),
+    )
+    const onDirtyChange = vi.fn()
+    const onBusyChange = vi.fn()
+    const file = new File(['document upload'], 'queued-document.pdf', {
+      type: 'application/pdf',
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        onDirtyChange={onDirtyChange}
+        onBusyChange={onBusyChange}
+      />,
+    )
+
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+    expect(onBusyChange).toHaveBeenLastCalledWith(false)
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(true))
+
+    await act(async () => {
+      resolveSubmit?.({
+        status: 'success',
+        message: 'Application document upload submitted.',
+      })
+    })
+
+    await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(false))
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
+  it('returns invoice conversion-rate dirty state to its displayed baseline', async () => {
+    const onDirtyChange = vi.fn()
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="invoice"
+        targetNumber="777"
+        inputId="invoiceDocuments"
+        initialInvoiceConversionRate="1.25"
+        onDirtyChange={onDirtyChange}
+      />,
+    )
+
+    const conversionRate = screen.getByLabelText('Upload invoice conversion rate')
+    expect(conversionRate).toHaveValue('1.25')
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+    await userEvent.clear(conversionRate)
+    await userEvent.type(conversionRate, '1.30')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+    await userEvent.clear(conversionRate)
+    await userEvent.type(conversionRate, '1.25')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
   })
 })

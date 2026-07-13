@@ -136,14 +136,30 @@ identifiers when available.
 | `401` | Missing, expired or invalid token |
 | `403` | Required scope is absent |
 | `404` | Gateway route or method is unavailable |
+| `409` | The idempotency key is already in flight or is bound to different payload bytes |
 | `422` | XML or business validation failed |
-| `503` | LEXIS processing dependency is unavailable |
+| `503` | Submission creation is disabled or a LEXIS processing dependency is unavailable |
 
-A successful submission includes an `applicationNumber` and, when available, a relative
-`Location` header. Processing is synchronous; there is no submission-status polling endpoint.
+A successful submission includes the generated internal LEXIS `APPLICATION_NUMBER` as
+`applicationNumber` and, when available, a relative `Location` header that uses that identifier.
+The submitted `FED_APPLICATION_NUMBER` is returned as
+`submissionSummary.federalApplicationNumber`; it is display and search metadata, is not guaranteed
+to be unique, and must not be used as a detail or mutation identifier. Processing is synchronous;
+there is no submission-status polling endpoint.
 
-For a transport timeout or `503`, retries use the original idempotency key. Durable response replay
-and duplicate suppression are required before automated submission retries are enabled.
+Dedicated submission creation is disabled by default and must be explicitly enabled for controlled
+testing. Enabling CREATE also makes `X-Idempotency-Key` mandatory, regardless of the optional
+compatibility setting for that header. When enabled on a single backend pod, LEXIS provides bounded,
+in-JVM duplicate suppression:
+the idempotency key is scoped to the authenticated caller, bound to the XML payload SHA-256, and a
+completed non-5xx response is replayed while its cache entry remains available. An in-flight `409`
+includes `Retry-After` guidance and must be retried with the same key and identical payload. A
+different-payload `409` must not be retried with that key.
+
+This safeguard is per JVM only. It does not coordinate across pods, survive a restart, or provide a
+durable submission ledger. It therefore does not permit multi-pod CREATE traffic or automated
+submission retries. Oracle-backed claim and response replay is still required before either is
+enabled. Validation remains available while CREATE is disabled.
 
 ## ESF Migration Mapping
 

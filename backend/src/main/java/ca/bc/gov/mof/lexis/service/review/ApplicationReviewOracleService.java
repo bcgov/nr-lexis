@@ -15,13 +15,16 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
-import jakarta.mail.internet.AddressException;
-import jakarta.mail.internet.InternetAddress;
+import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
+import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
+import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalStatusMutationRequest;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Slice;
-import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,17 +35,29 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
   private static final List<String> EMAIL_SUPPORTED_STATUS_CODES = List.of("REJ", "WDN");
-  private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN");
-  private static final int MAX_EMAIL_ADDRESS_LENGTH = 254;
+  private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN", "EXP");
+  private static final List<String> REVIEW_STATUS_UPDATE_CODES = List.of("REJ", "WDN", "EXP");
+  private static final List<String> REVIEW_STATUS_SOURCE_CODES = List.of("NEW", "PND");
+  private static final String FEDERAL_JURISDICTION = "F";
+  private static final String PROVINCIAL_JURISDICTION = "P";
 
   private final ApplicationReviewRepository repository;
   private final ApplicationReviewStatusEmailSender emailSender;
+  private final ApplicationApprovalEligibilityService approvalEligibilityService;
+  private final AuthoritativeClientEmailResolver clientEmailResolver;
+  private final FederalApplicationService federalApplicationService;
 
   public ApplicationReviewOracleService(
       ApplicationReviewRepository repository,
-      ApplicationReviewStatusEmailSender emailSender) {
+      ApplicationReviewStatusEmailSender emailSender,
+      ApplicationApprovalEligibilityService approvalEligibilityService,
+      AuthoritativeClientEmailResolver clientEmailResolver,
+      FederalApplicationService federalApplicationService) {
     this.repository = repository;
     this.emailSender = emailSender;
+    this.approvalEligibilityService = approvalEligibilityService;
+    this.clientEmailResolver = clientEmailResolver;
+    this.federalApplicationService = federalApplicationService;
   }
 
   @Override
@@ -107,8 +122,76 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Application number must be a positive value.");
     }
 
-    boolean updated = repository.approve(applicationNumber, defaultMutationUser(updateUserId));
-    if (updated) {
+    Optional<String> jurisdiction = authoritativeJurisdiction(applicationNumber);
+    if (jurisdiction.isEmpty()) {
+      return statusUpdateResult(
+          false,
+          false,
+          "APP",
+          null,
+          null,
+          null,
+          "Application jurisdiction could not be verified.");
+    }
+    if (FEDERAL_JURISDICTION.equals(jurisdiction.get())) {
+      return updateFederalStatus(applicationNumber, "APP", null, null, updateUserId);
+    }
+    if (!PROVINCIAL_JURISDICTION.equals(jurisdiction.get())) {
+      return statusUpdateResult(
+          false,
+          false,
+          "APP",
+          null,
+          null,
+          null,
+          "Application jurisdiction is not supported for application review.");
+    }
+
+    ApplicationApprovalEligibilityService.Eligibility eligibility =
+        approvalEligibilityService.evaluate(applicationNumber);
+    if (!eligibility.eligible()) {
+      return statusUpdateResult(
+          false,
+          false,
+          null,
+          null,
+          null,
+          null,
+          eligibility.message());
+    }
+
+    ApplicationReviewRepository.ApplicationStatusTransitionRow updateRow =
+        repository.updateStatusWithRemarkFromAllowedSources(
+            applicationNumber,
+            "APP",
+            null,
+            defaultMutationUser(updateUserId),
+            REVIEW_STATUS_SOURCE_CODES);
+    if (!updateRow.applicationFound()) {
+      return statusUpdateResult(
+          false,
+          false,
+          "APP",
+          null,
+          null,
+          null,
+          "Application was not found.");
+    }
+    if (!updateRow.transitionAllowed()) {
+      String currentStatus =
+          updateRow.currentStatus() == null ? "unknown" : updateRow.currentStatus();
+      return statusUpdateResult(
+          false,
+          false,
+          "APP",
+          null,
+          null,
+          null,
+          "Application approval can only occur from NEW or PND; current status is "
+              + currentStatus
+              + ".");
+    }
+    if (updateRow.updated()) {
       return statusUpdateResult(
           true,
           true,
@@ -145,6 +228,9 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Application number must be a positive value.");
     }
     String statusCode = request == null ? null : trimToNull(request.statusCode());
+    if (statusCode != null) {
+      statusCode = statusCode.toUpperCase(java.util.Locale.ROOT);
+    }
     if (statusCode == null) {
       return statusUpdateResult(
           false,
@@ -154,6 +240,16 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           null,
           null,
           "Status code is required.");
+    }
+    if (!REVIEW_STATUS_UPDATE_CODES.contains(statusCode)) {
+      return statusUpdateResult(
+          false,
+          false,
+          statusCode,
+          request == null ? null : trimToNull(request.clientEmailAddress()),
+          null,
+          null,
+          "Application review status must be REJ, WDN, or EXP; use the approval action for APP.");
     }
 
     String remark = request == null ? null : trimToNull(request.remark());
@@ -165,12 +261,67 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           request == null ? null : trimToNull(request.clientEmailAddress()),
           null,
           null,
-          "Remark is required when rejecting or withdrawing an application.");
+          "Remark is required when rejecting, withdrawing, or expiring an application.");
     }
 
     String clientEmail = request == null ? null : trimToNull(request.clientEmailAddress());
-    ApplicationReviewRepository.ApplicationStatusUpdateRow updateRow =
-        repository.updateStatusWithRemark(applicationNumber, statusCode, remark, defaultMutationUser(updateUserId));
+    Optional<String> jurisdiction = authoritativeJurisdiction(applicationNumber);
+    if (jurisdiction.isEmpty()) {
+      return statusUpdateResult(
+          false,
+          false,
+          statusCode,
+          clientEmail,
+          remark,
+          null,
+          "Application jurisdiction could not be verified.");
+    }
+    if (FEDERAL_JURISDICTION.equals(jurisdiction.get())) {
+      return updateFederalStatus(
+          applicationNumber, statusCode, remark, clientEmail, updateUserId);
+    }
+    if (!PROVINCIAL_JURISDICTION.equals(jurisdiction.get())) {
+      return statusUpdateResult(
+          false,
+          false,
+          statusCode,
+          clientEmail,
+          remark,
+          null,
+          "Application jurisdiction is not supported for application review.");
+    }
+    ApplicationReviewRepository.ApplicationStatusTransitionRow updateRow =
+        repository.updateStatusWithRemarkFromAllowedSources(
+            applicationNumber,
+            statusCode,
+            remark,
+            defaultMutationUser(updateUserId),
+            REVIEW_STATUS_SOURCE_CODES);
+
+    if (!updateRow.applicationFound()) {
+      return statusUpdateResult(
+          false,
+          false,
+          statusCode,
+          clientEmail,
+          remark,
+          null,
+          "Application was not found.");
+    }
+    if (!updateRow.transitionAllowed()) {
+      String currentStatus =
+          updateRow.currentStatus() == null ? "unknown" : updateRow.currentStatus();
+      return statusUpdateResult(
+          false,
+          false,
+          statusCode,
+          clientEmail,
+          remark,
+          null,
+          "Application review status can only change from NEW or PND; current status is "
+              + currentStatus
+              + ".");
+    }
 
     if (updateRow.updated()) {
       if (remark != null && updateRow.remark() == null) {
@@ -201,6 +352,44 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
         remark,
         null,
         "Application status update did not persist.");
+  }
+
+  private Optional<String> authoritativeJurisdiction(Long applicationNumber) {
+    return repository.findAuthoritativeJurisdictionCode(applicationNumber)
+        .map(String::trim)
+        .filter(value -> !value.isEmpty())
+        .map(value -> value.toUpperCase(Locale.ROOT));
+  }
+
+  private ApplicationReviewStatusUpdateResultDto updateFederalStatus(
+      Long applicationNumber,
+      String statusCode,
+      String remark,
+      String clientEmail,
+      String updateUserId) {
+    FederalMutationResult result =
+        federalApplicationService.updateStatus(
+            applicationNumber,
+            new FederalStatusMutationRequest(statusCode, remark),
+            defaultMutationUser(updateUserId));
+    String message = result.message();
+    if (!result.success() && (message == null || message.isBlank())) {
+      message = String.join(" ", safeList(result.errors()));
+    }
+    if (message == null || message.isBlank()) {
+      message =
+          result.success()
+              ? "Federal application status updated."
+              : "Federal application status could not be updated.";
+    }
+    return statusUpdateResult(
+        result.success(),
+        result.success(),
+        statusCode,
+        clientEmail,
+        remark,
+        null,
+        message);
   }
 
   private ApplicationReviewStatusUpdateResultDto statusUpdateResult(
@@ -234,16 +423,13 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     }
 
     String statusCode = request == null ? null : trimToNull(request.statusCode());
-    String clientEmail = request == null ? null : trimToNull(request.clientEmailAddress());
-    if (statusCode == null || clientEmail == null) {
-      return new ApplicationReviewStatusEmailResultDto(
-          false,
-          "Status code and client email are required.");
+    if (statusCode != null) {
+      statusCode = statusCode.toUpperCase(java.util.Locale.ROOT);
     }
-    if (!isValidEmailAddress(clientEmail)) {
+    if (statusCode == null) {
       return new ApplicationReviewStatusEmailResultDto(
           false,
-          "Client email must be a valid email address.");
+          "Status code is required.");
     }
 
     if (!EMAIL_SUPPORTED_STATUS_CODES.contains(statusCode)) {
@@ -252,32 +438,81 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Status email is only supported for rejected or withdrawn applications.");
     }
 
+    ApplicationReviewRepository.AuthoritativeApplicantStatusContext context =
+        repository.findAuthoritativeApplicantStatusContext(applicationNumber).orElse(null);
+    if (context == null) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Application status and applicant details could not be verified.");
+    }
+    if (!statusCode.equals(context.statusCode())) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Application status no longer matches the requested email status.");
+    }
+
+    String clientEmail =
+        clientEmailResolver
+            .resolve(context.clientNumber(), context.locationCode())
+            .orElse(null);
+    if (clientEmail == null) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "No valid email address is available for the application applicant.");
+    }
+
+    String requestedRemark = request == null ? null : trimToNull(request.remark());
+    ApplicationReviewRepository.ReviewRemarkRow authoritativeRemark =
+        repository.findLatestAuthoritativeRemark(applicationNumber).orElse(null);
+    String persistedRemark =
+        authoritativeRemark == null ? null : trimToNull(authoritativeRemark.remark());
+    if (persistedRemark == null) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Application status remark could not be verified.");
+    }
+    if (!persistedRemark.equals(requestedRemark)) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Application status remark no longer matches the persisted status remark.");
+    }
+
+    ApplicationReviewRepository.AuthoritativeApplicantStatusContext confirmedContext =
+        repository.findAuthoritativeApplicantStatusContext(applicationNumber).orElse(null);
+    if (!context.equals(confirmedContext)
+        || !statusCode.equals(confirmedContext.statusCode())) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Application status or applicant changed before the email could be sent.");
+    }
+    ApplicationReviewRepository.ReviewRemarkRow confirmedRemark =
+        repository.findLatestAuthoritativeRemark(applicationNumber).orElse(null);
+    if (!authoritativeRemark.equals(confirmedRemark)) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Application status remark changed before the email could be sent.");
+    }
+
     boolean staged =
         repository.sendStatusEmail(
             applicationNumber,
             statusCode,
             clientEmail,
-            request == null ? null : trimToNull(request.remark()));
+            persistedRemark);
     if (!staged) {
       return new ApplicationReviewStatusEmailResultDto(
           false,
           "Application status email could not be prepared.");
     }
 
-    try {
-      emailSender.sendStatusEmail(
-          applicationNumber,
-          statusCode,
-          clientEmail,
-          request == null ? null : trimToNull(request.remark()));
-      return new ApplicationReviewStatusEmailResultDto(
-          true,
-          "Application status email sent.");
-    } catch (MailException ex) {
-      return new ApplicationReviewStatusEmailResultDto(
-          false,
-          "Application status email failed to send.");
-    }
+    emailSender.sendStatusEmail(
+        applicationNumber,
+        statusCode,
+        clientEmail,
+        persistedRemark);
+    return new ApplicationReviewStatusEmailResultDto(
+        true,
+        "Application status email queued.");
   }
 
   private ApplicationReviewSearchCriteria normalizeCriteria(ApplicationReviewSearchCriteria input) {
@@ -301,46 +536,6 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
 
   private String defaultMutationUser(String userId) {
     return defaultSystemUser(userId);
-  }
-
-  private static boolean isValidEmailAddress(String value) {
-    if (!hasValidEmailAddressShape(value)) {
-      return false;
-    }
-    try {
-      InternetAddress[] addresses = InternetAddress.parse(value, true);
-      return addresses.length == 1 && value.equals(addresses[0].getAddress());
-    } catch (AddressException ex) {
-      return false;
-    }
-  }
-
-  private static boolean hasValidEmailAddressShape(String value) {
-    if (value == null || value.isBlank() || value.length() > MAX_EMAIL_ADDRESS_LENGTH) {
-      return false;
-    }
-
-    int atIndex = -1;
-    int dotAfterAt = -1;
-    for (int index = 0; index < value.length(); index += 1) {
-      char character = value.charAt(index);
-      if (Character.isWhitespace(character) || Character.isISOControl(character)) {
-        return false;
-      }
-      if (character == '@') {
-        if (atIndex >= 0) {
-          return false;
-        }
-        atIndex = index;
-      } else if (character == '.' && atIndex >= 0) {
-        dotAfterAt = index;
-      }
-    }
-
-    return atIndex > 0
-        && atIndex < value.length() - 1
-        && dotAfterAt > atIndex + 1
-        && dotAfterAt < value.length() - 1;
   }
 
   private void markRollbackOnly() {

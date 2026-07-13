@@ -51,6 +51,17 @@ class LexisJasperReportDefinitionTest {
   }
 
   @Test
+  void resolveFilenameShouldKeepXlsAndXlsxDistinct() {
+    assertThat(LexisJasperReportDefinition.OFFER_REPORT.resolveFilename(LexisReportFormat.XLS))
+        .isEqualTo("offerReport.xls");
+    assertThat(LexisJasperReportDefinition.OFFER_REPORT.resolveFilename(LexisReportFormat.XLSX))
+        .isEqualTo("offerReport.xlsx");
+    assertThat(LexisReportFormat.XLS.mediaType()).isEqualTo("application/vnd.ms-excel");
+    assertThat(LexisReportFormat.XLSX.mediaType())
+        .isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  }
+
+  @Test
   void resolveFilenameShouldUseLegacyCsvNamesWithCurrentDate() {
     String today = LocalDate.now().toString();
 

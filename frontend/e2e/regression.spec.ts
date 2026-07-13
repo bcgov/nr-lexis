@@ -1222,8 +1222,8 @@ test.describe('TEST IDIR admin regression', () => {
         species: 'BA',
         grade,
         growthIndicator,
-        retrievalDate: '2026-07-09',
-        updateDate: '2026-07-09',
+        retrievalDate: '2026-07-01',
+        updateDate: '2026-07-01',
         currentValue: 10 + gradeIndex,
         newValue: 10 + gradeIndex,
         returnCode: '0',
@@ -1245,27 +1245,36 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expect(
-      page.getByText('Maintain average monthly values directly in the table.'),
+      page.getByText(
+        'Maintain one monthly value for each physical species, grade, and growth type.',
+      ),
     ).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Upload' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Download template' })).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toHaveCount(0)
-    await expect(page.getByLabel('Effective date')).toBeVisible()
+    await expect(page.getByLabel('Effective month')).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'Old growth' })).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Second growth' })).not.toBeChecked()
     await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
 
-    const table = page.getByRole('table', { name: 'Average monthly value table' })
+    const table = page.getByRole('table', { name: 'Old growth average monthly value table' })
     await expect(table).toBeVisible()
-    await expect(table.getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
-    await expect(table.getByRole('columnheader', { name: 'Pine' })).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Balsam (BA)' })).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Western white pine (WH)' })).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Lodgepole pine (LO)' })).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Yellow pine (YE)' })).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: 'Pine' })).toHaveCount(0)
     await expect(
-      page.getByText('Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.'),
+      page.getByText(
+        'Editing old growth. Each cell maps to one physical species, grade, growth type, and month.',
+      ),
     ).toBeVisible()
-    const balsamGradeA = page.getByLabel('Balsam grade A')
-    const balsamGradeB = page.getByLabel('Balsam grade B')
+    const balsamGradeA = page.getByLabel('Balsam (BA) grade A, Old growth')
+    const balsamGradeB = page.getByLabel('Balsam (BA) grade B, Old growth')
     await expect(balsamGradeA).toBeVisible()
     await expect(balsamGradeB).toBeVisible()
 
@@ -1330,10 +1339,10 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expect(page.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
-    await expect(page.getByText(/These values are not saved/)).toBeVisible()
+    await expect(page.getByText(/Prefilled from January 2000/)).toBeVisible()
 
-    const balsamGradeA = page.getByLabel('Balsam grade A')
-    const cedarGradeA = page.getByLabel('Cedar grade A')
+    const balsamGradeA = page.getByLabel('Balsam (BA) grade A, Old growth')
+    const cedarGradeA = page.getByLabel('Cedar (CE) grade A, Old growth')
     await expect(balsamGradeA).toHaveValue('10.25')
     await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/is-dirty/)
     await expect(balsamGradeA.locator('xpath=ancestor::td')).not.toHaveClass(/has-warning/)
@@ -1361,11 +1370,12 @@ test.describe('TEST IDIR admin regression', () => {
     const warningBackground = await cedarCell.evaluate(
       (element) => getComputedStyle(element).backgroundColor,
     )
-    const effectiveDate = page.getByLabel('Effective date')
-    await effectiveDate.fill('2099-07-14')
-    await effectiveDate.press('Tab')
+    await page.getByRole('button', { name: 'Reset' }).click()
+    const effectiveMonth = page.getByLabel('Effective month')
+    await effectiveMonth.fill('2099-07')
+    await effectiveMonth.press('Tab')
 
-    await expect(page.getByText('Future date selected')).toBeVisible()
+    await expect(page.getByText('Viewing future month July 2099')).toBeVisible()
     await expect(cedarGradeA).toHaveValue('')
     await expect(cedarCell).not.toHaveClass(/has-warning/)
     await expect(page.getByRole('heading', { name: 'Warnings' })).toHaveCount(0)
@@ -1410,7 +1420,7 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
 
-    const balsamGradeA = page.getByLabel('Balsam grade A')
+    const balsamGradeA = page.getByLabel('Balsam (BA) grade A, Old growth')
     await balsamGradeA.fill('123.45')
     await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/has-warning/)
     expect(await balsamGradeA.evaluate((element) => getComputedStyle(element).borderColor)).toBe(
@@ -1423,23 +1433,15 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByText(/Balsam grade A is outside the allowed range/)).toBeVisible()
     await expect(balsamGradeA).toHaveValue('123.45')
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
-    await expect.poll(() => saveRequests.length).toBe(2)
-    expect(saveRequests).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          species: 'BA',
-          grade: 'A',
-          growthIndicator: 'O',
-          newValue: 123.45,
-        }),
-        expect.objectContaining({
-          species: 'BA',
-          grade: 'A',
-          growthIndicator: 'S',
-          newValue: 123.45,
-        }),
-      ]),
-    )
+    await expect.poll(() => saveRequests.length).toBe(1)
+    expect(saveRequests).toEqual([
+      expect.objectContaining({
+        species: 'BA',
+        grade: 'A',
+        growthIndicator: 'O',
+        newValue: 123.45,
+      }),
+    ])
   })
 
   test('shows selected natural resource region names across search filters', async () => {
@@ -2047,7 +2049,6 @@ test.describe('TEST IDIR admin regression', () => {
     const rtmSearchText = await rtmSearchResponse.text()
     expect(rtmSearchResponse.status(), redactedTextSnippet(rtmSearchText)).toBe(200)
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
-
   })
 
   test('rejects ClamAV test payloads on application document and submission uploads', async () => {

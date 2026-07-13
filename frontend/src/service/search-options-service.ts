@@ -1,9 +1,19 @@
 import apiService from '@/service/api-service'
 import { isRecord, mapRecordArray, stringField } from '@/utils/record'
+import { SEARCH_OPTIONS_UNAVAILABLE_MESSAGE } from '@/constants/search-options'
+
+export { SEARCH_OPTIONS_UNAVAILABLE_MESSAGE } from '@/constants/search-options'
 
 export type SearchOption = {
   value: string
   label: string
+}
+
+export class SearchOptionsUnavailableError extends Error {
+  constructor() {
+    super(SEARCH_OPTIONS_UNAVAILABLE_MESSAGE)
+    this.name = 'SearchOptionsUnavailableError'
+  }
 }
 
 const NATURAL_RESOURCE_REGION_CODES = new Set([
@@ -19,6 +29,44 @@ const NATURAL_RESOURCE_REGION_CODES = new Set([
 
 const DISALLOWED_APPLICATION_STATUS_CODE = 'DAL'
 const DISALLOWED_APPLICATION_STATUS_LABEL = 'disallowed'
+type RequiredOptionField = {
+  name: string
+  allowEmptyCode?: boolean
+}
+
+const REPORT_OPTION_ARRAY_FIELDS: readonly RequiredOptionField[] = [
+  { name: 'currentSchedules', allowEmptyCode: true },
+  { name: 'regions' },
+  { name: 'reportJurisdictions', allowEmptyCode: true },
+  { name: 'biweeklyJurisdictions', allowEmptyCode: true },
+  { name: 'teacJurisdictions' },
+  { name: 'exemptionTypes', allowEmptyCode: true },
+  { name: 'tenureExemptionTypes', allowEmptyCode: true },
+  { name: 'exemptionReasons', allowEmptyCode: true },
+  { name: 'exemptionStatuses', allowEmptyCode: true },
+  { name: 'growthTypes', allowEmptyCode: true },
+  { name: 'permitStatuses', allowEmptyCode: true },
+  { name: 'destinationCountries', allowEmptyCode: true },
+  { name: 'allDestinationCountries' },
+  { name: 'portsOfExport', allowEmptyCode: true },
+]
+
+const isValidOptionArray = (input: unknown, allowEmptyCode = false): boolean =>
+  Array.isArray(input) &&
+  input.every(
+    (item) =>
+      isRecord(item) &&
+      typeof item.code === 'string' &&
+      (allowEmptyCode || item.code.trim().length > 0) &&
+      typeof item.name === 'string' &&
+      item.name.trim().length > 0,
+  )
+
+const hasValidOptionFields = (
+  data: Record<string, unknown>,
+  requiredFields: readonly RequiredOptionField[],
+): boolean =>
+  requiredFields.every((field) => isValidOptionArray(data[field.name], field.allowEmptyCode))
 
 const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] => {
   return mapRecordArray(input, (item) => {
@@ -45,21 +93,38 @@ const parseApplicationStatusOptions = (input: unknown): SearchOption[] =>
       option.label.trim().toLowerCase() !== DISALLOWED_APPLICATION_STATUS_LABEL,
   )
 
-const fetchOptions = async (path: string): Promise<Record<string, unknown> | null> => {
+const fetchOptions = async (
+  path: string,
+  requiredArrayFields: readonly RequiredOptionField[],
+): Promise<Record<string, unknown>> => {
   try {
     const data = await apiService.getCachedData<unknown>(path, undefined, {
       cacheKey: `search-options:${path}`,
       ttlMs: 5 * 60_000,
     })
-    if (!isRecord(data)) {
-      return null
+    if (!isRecord(data) || !hasValidOptionFields(data, requiredArrayFields)) {
+      throw new SearchOptionsUnavailableError()
     }
 
     return data
   } catch (error) {
-    console.warn(`Unable to load search options from ${path}.`, error)
-    return null
+    if (error instanceof SearchOptionsUnavailableError) {
+      throw error
+    }
+    throw new SearchOptionsUnavailableError()
   }
+}
+
+const fetchRequiredOptions = async (path: string): Promise<Record<string, unknown>> => {
+  const data = await apiService.getCachedData<unknown>(path, undefined, {
+    cacheKey: `search-options:${path}`,
+    ttlMs: 5 * 60_000,
+  })
+  if (!isRecord(data)) {
+    throw new Error(`Search options response from ${path} is unavailable.`)
+  }
+
+  return data
 }
 
 export const fetchProvincialApplicationOptions = async (): Promise<{
@@ -71,18 +136,15 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
   regions: SearchOption[]
   currentSchedules: SearchOption[]
 }> => {
-  const data = await fetchOptions('/lexis/applications/search/options')
-  if (!data) {
-    return {
-      exemptionTypes: [],
-      exemptionReasons: [],
-      applicationStatuses: [],
-      productTypes: [],
-      growthTypes: [],
-      regions: [],
-      currentSchedules: [],
-    }
-  }
+  const data = await fetchOptions('/lexis/applications/search/options', [
+    { name: 'exemptionTypes' },
+    { name: 'exemptionReasons' },
+    { name: 'applicationStatuses' },
+    { name: 'productTypes' },
+    { name: 'growthTypes' },
+    { name: 'regions' },
+    { name: 'currentSchedules', allowEmptyCode: true },
+  ])
 
   return {
     exemptionTypes: parseOptions(data.exemptionTypes),
@@ -100,14 +162,11 @@ export const fetchProvincialExemptionOptions = async (): Promise<{
   exemptionStatuses: SearchOption[]
   regions: SearchOption[]
 }> => {
-  const data = await fetchOptions('/lexis/exemptions/search/options')
-  if (!data) {
-    return {
-      exemptionTypes: [],
-      exemptionStatuses: [],
-      regions: [],
-    }
-  }
+  const data = await fetchOptions('/lexis/exemptions/search/options', [
+    { name: 'exemptionTypes' },
+    { name: 'exemptionStatuses' },
+    { name: 'regions' },
+  ])
 
   return {
     exemptionTypes: parseOptions(data.exemptionTypes),
@@ -120,13 +179,10 @@ export const fetchProvincialPermitOptions = async (): Promise<{
   permitStatuses: SearchOption[]
   regions: SearchOption[]
 }> => {
-  const data = await fetchOptions('/lexis/permits/search/options')
-  if (!data) {
-    return {
-      permitStatuses: [],
-      regions: [],
-    }
-  }
+  const data = await fetchOptions('/lexis/permits/search/options', [
+    { name: 'permitStatuses' },
+    { name: 'regions' },
+  ])
 
   return {
     permitStatuses: parseOptions(data.permitStatuses),
@@ -151,33 +207,23 @@ export const fetchReportOptions = async (): Promise<{
   allDestinationCountries: SearchOption[]
   portsOfExport: SearchOption[]
 }> => {
-  const data = await fetchOptions('/lexis/reports/options')
-  if (!data) {
-    return {
-      currentSchedules: [],
-      defaultRegion: '',
-      regions: [],
-      reportJurisdictions: [],
-      biweeklyJurisdictions: [],
-      teacJurisdictions: [],
-      exemptionTypes: [],
-      tenureExemptionTypes: [],
-      exemptionReasons: [],
-      exemptionStatuses: [],
-      growthTypes: [],
-      permitStatuses: [],
-      destinationCountries: [],
-      allDestinationCountries: [],
-      portsOfExport: [],
-    }
+  const data = await fetchRequiredOptions('/lexis/reports/options')
+  const defaultRegion = data.defaultRegion
+  if (
+    !hasValidOptionFields(data, REPORT_OPTION_ARRAY_FIELDS) ||
+    (defaultRegion !== null && defaultRegion !== undefined && typeof defaultRegion !== 'string')
+  ) {
+    throw new Error('Search options response from /lexis/reports/options is unavailable.')
   }
 
   const regions = parseRegionOptions(data.regions)
-  const defaultRegion = stringField(data, 'defaultRegion')
+  const normalizedDefaultRegion = stringField(data, 'defaultRegion')
 
   return {
     currentSchedules: parseOptions(data.currentSchedules, true),
-    defaultRegion: regions.some((region) => region.value === defaultRegion) ? defaultRegion : '',
+    defaultRegion: regions.some((region) => region.value === normalizedDefaultRegion)
+      ? normalizedDefaultRegion
+      : '',
     regions,
     reportJurisdictions: parseOptions(data.reportJurisdictions, true),
     biweeklyJurisdictions: parseOptions(data.biweeklyJurisdictions, true),
@@ -197,12 +243,7 @@ export const fetchReportOptions = async (): Promise<{
 export const fetchProvincialOfferOptions = async (): Promise<{
   regions: SearchOption[]
 }> => {
-  const data = await fetchOptions('/lexis/purchase-offers/search/options')
-  if (!data) {
-    return {
-      regions: [],
-    }
-  }
+  const data = await fetchOptions('/lexis/purchase-offers/search/options', [{ name: 'regions' }])
 
   return {
     regions: parseRegionOptions(data.regions),
@@ -212,12 +253,9 @@ export const fetchProvincialOfferOptions = async (): Promise<{
 export const fetchFederalApplicationOptions = async (): Promise<{
   applicationStatuses: SearchOption[]
 }> => {
-  const data = await fetchOptions('/lexis/federal/applications/search/options')
-  if (!data) {
-    return {
-      applicationStatuses: [],
-    }
-  }
+  const data = await fetchOptions('/lexis/federal/applications/search/options', [
+    { name: 'applicationStatuses' },
+  ])
 
   return {
     applicationStatuses: parseApplicationStatusOptions(data.applicationStatuses),
@@ -229,14 +267,11 @@ export const fetchApplicationReviewOptions = async (): Promise<{
   regions: SearchOption[]
   reviewStatuses: SearchOption[]
 }> => {
-  const data = await fetchOptions('/lexis/application-reviews/search/options')
-  if (!data) {
-    return {
-      productTypes: [],
-      regions: [],
-      reviewStatuses: [],
-    }
-  }
+  const data = await fetchOptions('/lexis/application-reviews/search/options', [
+    { name: 'productTypes' },
+    { name: 'regions' },
+    { name: 'reviewStatuses' },
+  ])
 
   return {
     productTypes: parseOptions(data.productTypes),

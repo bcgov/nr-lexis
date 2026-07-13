@@ -10,12 +10,14 @@ import {
   Tile,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
+import EmptyState from '@/components/EmptyState'
+import PageHeader from '@/components/PageHeader'
 import SearchableSelect from '../../components/SearchableSelect'
 import { setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
-import { formatLocalIsoDate } from '@/utils/date'
+import { businessDateParts, formatIsoDateParts, formatLocalIsoDate } from '@/utils/date'
 import { parseJsonValue } from '@/utils/json'
 import { isRecord } from '@/utils/record'
 import {
@@ -64,6 +66,33 @@ type ReportOptionSources = {
   report: Awaited<ReturnType<typeof fetchReportOptions>>
 }
 
+const REPORT_OPTION_KEYS = new Set([
+  'applicationRegions',
+  'biweeklyJurisdictions',
+  'destinationCountry',
+  'exemptionReason',
+  'exemptionStatus',
+  'exemptionType',
+  'exemptionTypeCode',
+  'exportSchedule',
+  'growthType',
+  'jurisdiction',
+  'orgUnitNumber',
+  'permitStatus',
+  'portOfExport',
+  'region',
+  'reportJurisdictions',
+  'status',
+  'teacJurisdictions',
+  'tenureExemptionTypes',
+])
+
+const REPORT_OPTIONS_UNAVAILABLE_MESSAGE =
+  'Authoritative report options could not be loaded. Affected controls and report generation are disabled. Reload the page to try again.'
+
+const getReportOptionSource = (field: ReportFieldDefinition): ReportOptionSource | null =>
+  REPORT_OPTION_KEYS.has(field.optionKey ?? field.key) ? 'report' : null
+
 const OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
   key: 'outputFormat',
   label: 'Output format',
@@ -78,7 +107,7 @@ const TENURE_OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
   ...OUTPUT_FORMAT_FIELD,
   options: [
     { value: 'PDF', label: 'PDF' },
-    { value: 'CSV', label: 'XLS' },
+    { value: 'XLSX', label: 'XLSX' },
   ],
 }
 
@@ -87,10 +116,6 @@ const TEAC_JURISDICTION_FIELD: ReportFieldDefinition = {
   label: 'Jurisdiction',
   type: 'select',
   optionKey: 'teacJurisdictions',
-  options: [
-    { value: 'P', label: 'Provincial' },
-    { value: 'F', label: 'Federal' },
-  ],
 }
 
 const BIWEEKLY_JURISDICTION_FIELD: ReportFieldDefinition = {
@@ -98,11 +123,6 @@ const BIWEEKLY_JURISDICTION_FIELD: ReportFieldDefinition = {
   label: 'Jurisdiction',
   type: 'select',
   optionKey: 'biweeklyJurisdictions',
-  options: [
-    { value: '', label: 'All' },
-    { value: 'P', label: 'Provincial' },
-    { value: 'F', label: 'Federal' },
-  ],
 }
 
 const REPORT_JURISDICTION_FIELD: ReportFieldDefinition = {
@@ -110,11 +130,6 @@ const REPORT_JURISDICTION_FIELD: ReportFieldDefinition = {
   label: 'Jurisdiction',
   type: 'select',
   optionKey: 'reportJurisdictions',
-  options: [
-    { value: '', label: 'All' },
-    { value: 'P', label: 'Provincial' },
-    { value: 'F', label: 'Federal' },
-  ],
 }
 
 const TRANSPORT_JURISDICTION_FIELD: ReportFieldDefinition = {
@@ -591,13 +606,11 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
         key: 'fromDate',
         label: 'Listing from date',
         type: 'date',
-        optionKey: 'currentScheduleDates',
       },
       {
         key: 'toDate',
         label: 'Listing to date',
         type: 'date',
-        optionKey: 'currentScheduleDates',
       },
       OUTPUT_FORMAT_FIELD,
     ],
@@ -606,14 +619,24 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
 
 const BLANK_SCHEDULE_DATE_VALUE = '__blank_schedule_date__'
 
+type CurrentAdvertisingPeriod = {
+  fromDate: string
+  toDate: string
+}
+
 function getLegacyTenureDefaultFromDate(): string {
-  const today = new Date()
-  return formatLocalIsoDate(new Date(today.getFullYear() - 1, today.getMonth(), 1))
+  const today = businessDateParts()
+  return formatIsoDateParts(today.year - 1, today.month, 1)
 }
 
 function getLegacyTenureDefaultToDate(): string {
-  const today = new Date()
-  return formatLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 0))
+  const today = businessDateParts()
+  const previousMonth = new Date(Date.UTC(today.year, today.month - 1, 0))
+  return formatIsoDateParts(
+    previousMonth.getUTCFullYear(),
+    previousMonth.getUTCMonth() + 1,
+    previousMonth.getUTCDate(),
+  )
 }
 
 function getLegacyTenureToDateFromFromDate(fromDate: string): string {
@@ -647,35 +670,50 @@ const mergeOptions = (...optionGroups: SearchOption[][]): SearchOption[] => {
   return Array.from(byCode.values())
 }
 
-const toScheduleDateOptions = (options: SearchOption[]): SearchOption[] => {
-  return options.map((option) => ({
-    value: option.value ? option.label : BLANK_SCHEDULE_DATE_VALUE,
-    label: option.label,
-  }))
+const resolveCurrentAdvertisingPeriod = (
+  options: SearchOption[],
+): CurrentAdvertisingPeriod | null => {
+  const advertisingDates = options
+    .map((option) => option.label.trim())
+    .filter((label) => /^\d{4}-\d{2}-\d{2}$/.test(label))
+    .slice(0, 2)
+
+  if (advertisingDates.length < 2) {
+    return null
+  }
+
+  const [fromDate, nextAdvertisingDate] = advertisingDates
+  const [year, month, day] = nextAdvertisingDate.split('-').map(Number)
+  const nextDate = new Date(Date.UTC(year, month - 1, day))
+  if (
+    nextDate.getUTCFullYear() !== year ||
+    nextDate.getUTCMonth() !== month - 1 ||
+    nextDate.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  nextDate.setUTCDate(nextDate.getUTCDate() - 1)
+  const toDate = formatIsoDateParts(
+    nextDate.getUTCFullYear(),
+    nextDate.getUTCMonth() + 1,
+    nextDate.getUTCDate(),
+  )
+  if (toDate < fromDate) {
+    return null
+  }
+
+  return { fromDate, toDate }
 }
 
 const getRequiredReportOptionSources = (report: ReportDefinition): ReportOptionSource[] => {
-  const fieldKeys = new Set(report.fields.map((field) => field.key))
   const sources = new Set<ReportOptionSource>()
-
-  if (
-    fieldKeys.has('exportSchedule') ||
-    fieldKeys.has('exportJurisdictionCode') ||
-    fieldKeys.has('jurisdiction') ||
-    fieldKeys.has('region') ||
-    fieldKeys.has('orgUnitNumber') ||
-    fieldKeys.has('exemptionType') ||
-    fieldKeys.has('exemptionTypeCode') ||
-    fieldKeys.has('exemptionReason') ||
-    fieldKeys.has('exemptionStatus') ||
-    fieldKeys.has('growthType') ||
-    fieldKeys.has('permitStatus') ||
-    fieldKeys.has('status') ||
-    fieldKeys.has('destinationCountry') ||
-    fieldKeys.has('portOfExport')
-  ) {
-    sources.add('report')
-  }
+  report.fields.forEach((field) => {
+    const source = getReportOptionSource(field)
+    if (source) {
+      sources.add(source)
+    }
+  })
 
   return Array.from(sources)
 }
@@ -735,7 +773,9 @@ const appendSelectedOptionLabels = (
       return
     }
 
-    const options = optionsByKey[field.optionKey ?? field.key] ?? field.options ?? []
+    const options =
+      optionsByKey[field.optionKey ?? field.key] ??
+      (getReportOptionSource(field) ? [] : (field.options ?? []))
     if (options.length === 0) {
       return
     }
@@ -790,7 +830,9 @@ const buildEffectiveReportValues = (
       return
     }
 
-    const options = optionsByKey[field.optionKey ?? field.key] ?? field.options ?? []
+    const options =
+      optionsByKey[field.optionKey ?? field.key] ??
+      (getReportOptionSource(field) ? [] : (field.options ?? []))
     if (options.length > 0 && options[0].value !== '') {
       effectiveValues[field.key] = options[0].value
     }
@@ -957,6 +999,9 @@ const ReportsPage = () => {
   const [reportOptionSourcesByKey, setReportOptionSourcesByKey] = useState<
     Partial<ReportOptionSources>
   >({})
+  const [reportOptionFailuresByKey, setReportOptionFailuresByKey] = useState<
+    Partial<Record<ReportOptionSource, string>>
+  >({})
   const [expandedDestinationCountryReports, setExpandedDestinationCountryReports] = useState<
     Record<string, boolean>
   >({})
@@ -1002,7 +1047,11 @@ const ReportsPage = () => {
     )
 
     return {
-      applicationRegions: [{ value: '0', label: 'All' }, ...(reportOptions?.regions ?? [])],
+      ...(reportOptions
+        ? {
+            applicationRegions: [{ value: '0', label: 'All' }, ...reportOptions.regions],
+          }
+        : {}),
       ...(exemptionTypeOptions.length > 0
         ? {
             exemptionType: exemptionTypeOptions,
@@ -1051,7 +1100,6 @@ const ReportsPage = () => {
       ...(reportOptions?.currentSchedules.length
         ? {
             exportSchedule: reportOptions.currentSchedules,
-            currentScheduleDates: toScheduleDateOptions(reportOptions.currentSchedules),
           }
         : {}),
       ...(reportOptions?.reportJurisdictions.length
@@ -1075,7 +1123,19 @@ const ReportsPage = () => {
     }
   }, [expandedDestinationCountryReports, reportOptionSourcesByKey, selectedReport.id])
 
+  const requiredReportOptionsFailed = requiredReportOptionSources.some((source) =>
+    Boolean(reportOptionFailuresByKey[source]),
+  )
+  const requiredReportOptionsLoading = requiredReportOptionSources.some(
+    (source) => !reportOptionSourcesByKey[source] && !reportOptionFailuresByKey[source],
+  )
+  const reportGenerationDisabled = requiredReportOptionsLoading || requiredReportOptionsFailed
+
   const defaultReportRegion = reportOptionSourcesByKey.report?.defaultRegion ?? ''
+  const currentAdvertisingPeriod = useMemo(
+    () => resolveCurrentAdvertisingPeriod(reportOptionSourcesByKey.report?.currentSchedules ?? []),
+    [reportOptionSourcesByKey.report?.currentSchedules],
+  )
 
   useEffect(() => {
     const nextReport = resolveReportById(requestedReportId)
@@ -1143,7 +1203,7 @@ const ReportsPage = () => {
   useEffect(() => {
     const loadReportFieldOptions = async () => {
       const missingSources = requiredReportOptionSources.filter(
-        (source) => !reportOptionSourcesByKey[source],
+        (source) => !reportOptionSourcesByKey[source] && !reportOptionFailuresByKey[source],
       )
       if (missingSources.length === 0) {
         beginReportOptionsRequest()
@@ -1153,8 +1213,8 @@ const ReportsPage = () => {
       const isLatestRequest = beginReportOptionsRequest()
       const loadedSources: Partial<ReportOptionSources> = {}
 
-      try {
-        for (const source of missingSources) {
+      for (const source of missingSources) {
+        try {
           if (source === 'application') {
             loadedSources.application = await fetchProvincialApplicationOptions()
           } else if (source === 'exemption') {
@@ -1168,21 +1228,32 @@ const ReportsPage = () => {
           if (!isLatestRequest()) {
             return
           }
-        }
-
-        setReportOptionSourcesByKey((current) => ({
-          ...current,
-          ...loadedSources,
-        }))
-      } catch (error) {
-        if (isLatestRequest()) {
+        } catch (error) {
+          if (!isLatestRequest()) {
+            return
+          }
           console.warn('Unable to load report field options.', error)
+          setReportOptionFailuresByKey((current) => ({
+            ...current,
+            [source]: REPORT_OPTIONS_UNAVAILABLE_MESSAGE,
+          }))
+          return
         }
       }
+
+      setReportOptionSourcesByKey((current) => ({
+        ...current,
+        ...loadedSources,
+      }))
     }
 
     void loadReportFieldOptions()
-  }, [beginReportOptionsRequest, reportOptionSourcesByKey, requiredReportOptionSources])
+  }, [
+    beginReportOptionsRequest,
+    reportOptionFailuresByKey,
+    reportOptionSourcesByKey,
+    requiredReportOptionSources,
+  ])
 
   const onUpdateField = (fieldKey: string, value: string): void => {
     const clearsSpeciesForestFile =
@@ -1212,8 +1283,28 @@ const ReportsPage = () => {
     setLaunchErrorMessage('')
   }
 
+  const onUseCurrentAdvertisingPeriod = (): void => {
+    if (!currentAdvertisingPeriod || selectedReport.id !== 'biweeklyListing') {
+      return
+    }
+    setReportValuesById((current) => ({
+      ...current,
+      [selectedReport.id]: {
+        ...current[selectedReport.id],
+        ...currentAdvertisingPeriod,
+      },
+    }))
+    setLaunchErrorMessage('')
+  }
+
   const onOpenReportRequest = async (): Promise<void> => {
     setLaunchErrorMessage('')
+
+    if (reportGenerationDisabled) {
+      setLaunchErrorMessage(REPORT_OPTIONS_UNAVAILABLE_MESSAGE)
+      return
+    }
+
     setIsGenerating(true)
 
     try {
@@ -1264,15 +1355,34 @@ const ReportsPage = () => {
   return (
     <Grid fullWidth className="default-grid reports-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>{hasSelectedReportAccess ? selectedReport.title : 'Reports'}</h1>
+        <PageHeader
+          headingId="selected-report-title"
+          title={hasSelectedReportAccess ? selectedReport.title : 'Reports'}
+          subtitle={
+            hasSelectedReportAccess
+              ? selectedReport.description
+              : 'Generate and download the reports available to your session.'
+          }
+        />
       </Column>
 
       <Column sm={4} md={8} lg={16} className="report-parameter-panel">
-        <Tile>
-          {hasSelectedReportAccess ? (
+        {hasSelectedReportAccess ? (
+          <Tile
+            className="report-config-panel"
+            role="region"
+            aria-labelledby="selected-report-title"
+          >
             <>
-              <p>{selectedReport.description}</p>
-              <div className="legacy-search-grid report-parameter-grid">
+              {requiredReportOptionsFailed && (
+                <AppNotification
+                  kind="error"
+                  title="Report options unavailable"
+                  subtitle={REPORT_OPTIONS_UNAVAILABLE_MESSAGE}
+                  lowContrast
+                />
+              )}
+              <div className="legacy-search-grid report-parameter-grid report-config-fields">
                 {selectedReport.actionMappings.length > 1 && (
                   <SearchableSelect
                     id="reportActionMapping"
@@ -1299,8 +1409,27 @@ const ReportsPage = () => {
                       : field.defaultValue) ??
                     (defaultMultiselectValue || (field.key === 'outputFormat' ? 'PDF' : ''))
                   const dynamicOptions = reportFieldOptionsByKey[field.optionKey ?? field.key] ?? []
-                  const selectOptions =
-                    dynamicOptions.length > 0 ? dynamicOptions : (field.options ?? [])
+                  const optionSource = getReportOptionSource(field)
+                  const optionSourceLoaded =
+                    !optionSource || Boolean(reportOptionSourcesByKey[optionSource])
+                  const optionSourceFailed = optionSource
+                    ? Boolean(reportOptionFailuresByKey[optionSource])
+                    : false
+                  const optionControlDisabled =
+                    Boolean(optionSource) &&
+                    (!optionSourceLoaded || optionSourceFailed || dynamicOptions.length === 0)
+                  const selectOptions = optionSource
+                    ? dynamicOptions
+                    : dynamicOptions.length > 0
+                      ? dynamicOptions
+                      : (field.options ?? [])
+                  const optionPlaceholder = optionSourceFailed
+                    ? 'Options unavailable'
+                    : !optionSourceLoaded
+                      ? 'Loading options...'
+                      : optionControlDisabled
+                        ? 'No options available'
+                        : undefined
                   const resolvedCurrentValue =
                     field.type === 'select' &&
                     field.key !== 'outputFormat' &&
@@ -1311,7 +1440,7 @@ const ReportsPage = () => {
                       ? selectOptions[0].value
                       : currentValue
 
-                  if (field.type === 'multiselect' && dynamicOptions.length > 0) {
+                  if (field.type === 'multiselect') {
                     const selectedValues = new Set(
                       resolvedCurrentValue
                         .split(',')
@@ -1333,9 +1462,10 @@ const ReportsPage = () => {
                         titleText={field.label}
                         items={dynamicOptions}
                         itemToString={(item) => (item ? item.label : '')}
-                        placeholder="Select region(s)"
+                        placeholder={optionPlaceholder ?? 'Select region(s)'}
                         helperText={selectedItemsHelperText}
                         selectedItems={selectedItems}
+                        disabled={optionControlDisabled}
                         onChange={(event) => {
                           const nextSelected = (event.selectedItems ?? []) as SearchOption[]
                           onUpdateField(
@@ -1347,23 +1477,20 @@ const ReportsPage = () => {
                     )
                   }
 
-                  const shouldRenderSelect = field.type === 'select' || dynamicOptions.length > 0
+                  const shouldRenderSelect = field.type === 'select'
 
                   if (shouldRenderSelect) {
                     const canExpandDestinationCountries =
                       field.key === 'destinationCountry' &&
                       Boolean(reportOptionSourcesByKey.report?.allDestinationCountries.length) &&
                       !expandedDestinationCountryReports[selectedReport.id]
-                    const providedOptions =
-                      selectOptions.length > 0
-                        ? selectOptions
-                        : [{ value: '', label: 'Select an option' }]
+                    const providedOptions = selectOptions
                     const hasCurrentValue = providedOptions.some(
                       (option) => option.value === resolvedCurrentValue,
                     )
                     const resolvedOptions = hasCurrentValue
                       ? providedOptions
-                      : resolvedCurrentValue
+                      : resolvedCurrentValue && (!optionSource || providedOptions.length > 0)
                         ? [
                             ...providedOptions,
                             {
@@ -1377,14 +1504,17 @@ const ReportsPage = () => {
                         <SearchableSelect
                           id={`${selectedReport.id}-${field.key}`}
                           labelText={field.label}
-                          value={resolvedCurrentValue}
+                          value={optionControlDisabled ? '' : resolvedCurrentValue}
                           options={resolvedOptions}
+                          placeholder={optionPlaceholder}
+                          disabled={optionControlDisabled}
                           onChange={(value) => onUpdateField(field.key, value)}
                         />
                         {canExpandDestinationCountries && (
                           <Button
                             kind="ghost"
                             size="sm"
+                            disabled={optionControlDisabled}
                             onClick={() =>
                               setExpandedDestinationCountryReports((current) => ({
                                 ...current,
@@ -1435,16 +1565,25 @@ const ReportsPage = () => {
                   )
                 })}
               </div>
-              <div className="legacy-search-actions">
+              <div
+                className="legacy-search-actions report-config-actions"
+                role="group"
+                aria-label="Report actions"
+              >
+                <Button kind="tertiary" onClick={onResetFields}>
+                  Reset Fields
+                </Button>
+                {selectedReport.id === 'biweeklyListing' && currentAdvertisingPeriod && (
+                  <Button kind="tertiary" onClick={onUseCurrentAdvertisingPeriod}>
+                    Use current advertising period
+                  </Button>
+                )}
                 <Button
                   kind="primary"
                   onClick={() => void onOpenReportRequest()}
-                  disabled={isGenerating}
+                  disabled={isGenerating || reportGenerationDisabled}
                 >
                   {isGenerating ? 'Generating Report...' : 'Generate Report'}
-                </Button>
-                <Button kind="ghost" onClick={onResetFields}>
-                  Reset Fields
                 </Button>
               </div>
               {launchErrorMessage && (
@@ -1457,13 +1596,13 @@ const ReportsPage = () => {
                 />
               )}
             </>
-          ) : (
-            <>
-              <h2 className="dashboard-title">No reports available</h2>
-              <p>No report actions are available for the current session.</p>
-            </>
-          )}
-        </Tile>
+          </Tile>
+        ) : (
+          <EmptyState
+            title="No reports available"
+            description="No report actions are available for the current session."
+          />
+        )}
       </Column>
     </Grid>
   )

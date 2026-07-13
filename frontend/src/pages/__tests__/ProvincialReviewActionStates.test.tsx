@@ -64,7 +64,7 @@ const reviewResponse = {
       volume: 95,
       speciesEndUse: 'LUM',
       listingDate: '2026-02-26',
-      status: 'REV',
+      status: 'PND',
       region: '12',
       showInfoIcon: false,
     },
@@ -202,7 +202,7 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
-  it('keeps bulk status controls out and only enables single-row rejection for NEW rows', async () => {
+  it('enables review actions and select-all for mixed NEW and PND rows', async () => {
     renderPage()
     await screen.findByText('1000123')
 
@@ -214,21 +214,82 @@ describe('Provincial Review Action State Smoke', () => {
     ).not.toBeInTheDocument()
 
     const newRowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000123' })
-    const reviewedRowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000456' })
+    const pendingRowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000456' })
     expect(newRowCheckbox).toBeEnabled()
-    expect(reviewedRowCheckbox).toBeDisabled()
+    expect(pendingRowCheckbox).toBeEnabled()
 
     const rejectButtons = screen.getAllByRole('button', { name: 'Reject' })
     expect(rejectButtons[0]).toBeEnabled()
-    expect(rejectButtons[1]).toBeDisabled()
+    expect(rejectButtons[1]).toBeEnabled()
 
-    await userEvent.click(newRowCheckbox)
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
 
+    expect(newRowCheckbox).toBeChecked()
+    expect(pendingRowCheckbox).toBeChecked()
     expect(approveButton).toBeEnabled()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
   })
 
-  it('rejects a single NEW row with editable client-account email', async () => {
+  it('renders legacy non-sortable review result headers as plain text', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    expect(screen.queryByRole('button', { name: 'Status' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Volume (m³)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Species / end use' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Listing date', 'listingDate'],
+    ['Region', 'regionCode'],
+  ] as const)('dispatches the legacy review %s sort key', async (header, expectedSortField) => {
+    renderPage()
+    await screen.findByText('1000123')
+    mockedSearchApplicationReviews.mockClear()
+
+    await userEvent.click(screen.getByRole('button', { name: header }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchApplicationReviews.mock.calls.some(
+          ([request]) => request.sortField === expectedSortField && request.sortDirection === 'asc',
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it('toggles the default review application sort to ascending', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+    mockedSearchApplicationReviews.mockClear()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Application (DESC)' }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchApplicationReviews.mock.calls.some(
+          ([request]) =>
+            request.sortField === 'applicationNumber' && request.sortDirection === 'asc',
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it('approves a selected PND application', async () => {
+    renderPage()
+    await screen.findByText('1000456')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000456' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+
+    await waitFor(() => {
+      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+      expect(mockedApproveApplicationReview).toHaveBeenCalledWith('1000456')
+    })
+    expect(await screen.findByText('Approved 1 application(s).')).toBeInTheDocument()
+  })
+
+  it('rejects a single NEW row with a read-only authoritative client email preview', async () => {
     renderPage()
     await screen.findByText('1000123')
 
@@ -243,10 +304,18 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Rejected')
     expect(screen.getByRole('checkbox', { name: 'Send status email' })).toBeChecked()
+    expect(screen.getByLabelText('Client email address')).toHaveAttribute('readonly')
+    expect(
+      screen.getByText(
+        'This read-only preview is loaded from client data and revalidated from the authoritative client account at send time.',
+      ),
+    ).toBeInTheDocument()
 
-    await userEvent.clear(screen.getByLabelText('Client email address'))
-    await userEvent.type(screen.getByLabelText('Client email address'), 'edited@example.com')
+    fireEvent.change(screen.getByLabelText('Client email address'), {
+      target: { value: 'attacker@example.com' },
+    })
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
+    expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
     await waitFor(() => {
@@ -255,7 +324,7 @@ describe('Provincial Review Action State Smoke', () => {
         expect.objectContaining({
           statusCode: 'REJ',
           remark: 'Rejected from review queue',
-          clientEmailAddress: 'edited@example.com',
+          clientEmailAddress: 'client@example.com',
         }),
       )
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
@@ -263,12 +332,55 @@ describe('Provincial Review Action State Smoke', () => {
         expect.objectContaining({
           statusCode: 'REJ',
           remark: 'Rejected from review queue',
-          clientEmailAddress: 'edited@example.com',
+          clientEmailAddress: 'client@example.com',
         }),
       )
     })
     expect(
-      await screen.findByText('Updated application 1000123 and sent email.'),
+      await screen.findByText('Updated application 1000123 and queued email.'),
+    ).toBeInTheDocument()
+  }, 15000)
+
+  it('rejects a single PND row through the same review workflow', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummary,
+      applicationNumber: '1000456',
+      applicationStatusCode: 'PND',
+    })
+
+    renderPage()
+    await screen.findByText('1000456')
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[1])
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000456')
+      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
+    })
+
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Pending application rejected')
+    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+        '1000456',
+        expect.objectContaining({
+          statusCode: 'REJ',
+          remark: 'Pending application rejected',
+          clientEmailAddress: 'client@example.com',
+        }),
+      )
+      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
+        '1000456',
+        expect.objectContaining({
+          statusCode: 'REJ',
+          remark: 'Pending application rejected',
+          clientEmailAddress: 'client@example.com',
+        }),
+      )
+    })
+    expect(
+      await screen.findByText('Updated application 1000456 and queued email.'),
     ).toBeInTheDocument()
   }, 15000)
 
@@ -379,7 +491,7 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(
       await screen.findByText(
-        'No client email was found for this application. Enter one before sending email or clear Send status email.',
+        'No valid client email address is available. Update the authoritative client account or deselect Send status email.',
       ),
     ).toBeInTheDocument()
 
@@ -387,7 +499,9 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
     expect(
-      await screen.findByText('Enter a valid client email address before sending email.'),
+      await screen.findByText(
+        'No valid client email address is available. Update the authoritative client account or deselect Send status email.',
+      ),
     ).toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
@@ -403,7 +517,7 @@ describe('Provincial Review Action State Smoke', () => {
     )
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
-    expect(screen.getByLabelText('Client email address')).toBeDisabled()
+    expect(screen.getByLabelText('Client email address')).toHaveAttribute('readonly')
 
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected without notification')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
@@ -614,5 +728,21 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByRole('checkbox', { name: 'Select all rows on this page' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
     expect(screen.getAllByRole('button', { name: 'Reject' })[0]).toBeDisabled()
+  })
+
+  it('shows a request failure instead of a no-results state', async () => {
+    mockedSearchApplicationReviews.mockRejectedValue(new Error('Oracle unavailable'))
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Review queue unavailable' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Unable to retrieve application review search results.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'No review records found' }),
+    ).not.toBeInTheDocument()
   })
 })

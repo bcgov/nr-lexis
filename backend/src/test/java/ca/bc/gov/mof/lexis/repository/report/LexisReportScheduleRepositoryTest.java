@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementSetter;
@@ -164,7 +166,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void destinationCountryOptionsShouldFallbackWhenCodePackageReturnsEmpty() throws Exception {
+  void destinationCountryOptionsShouldPreserveEmptyCodePackageResultWithoutStaticCountries()
+      throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_GROUP(?,?) }", 2);
     when(resultSet.next()).thenReturn(false);
 
@@ -174,14 +177,33 @@ class LexisReportScheduleRepositoryTest {
 
     assertThat(options)
         .extracting("code", "name")
-        .containsExactly(
-            tuple("", "All"),
-            tuple("US", "United States"),
-            tuple("JP", "Japan"),
-            tuple("CN", "China"),
-            tuple("NZ", "New Zealand"));
+        .containsExactly(tuple("", "All"));
     verify(callableStatement).setInt(1, 1);
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void reportCodeOptionsShouldPropagateOracleFailureInsteadOfReturningStaticChoices() {
+    when(jdbcTemplate.execute(
+            eq("{ call LEXIS_CODES.FIND_ALL_EXEMPTION_TYPE_CODES(?) }"),
+            any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadReportExemptionTypeOptions)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void reportCodeOptionsShouldPreserveLegitimatelyEmptyCursor() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
+    when(resultSet.next()).thenReturn(false);
+
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.loadTeacJurisdictionOptions()).isEmpty();
   }
 
   @Test
@@ -255,7 +277,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void findCurrentSchedulesShouldUseLegacyCursorProcedureForReportListDates() throws Exception {
+  void findCurrentSchedulesRequiredShouldUseLegacyCursorProcedureForReportListDates()
+      throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_CURRENT_SCHEDULES(?) }");
     when(resultSet.next()).thenReturn(true, true, false);
     when(resultSet.getLong("EXPORT_SCHEDULE_ID")).thenReturn(1001L, 1002L);
@@ -265,7 +288,7 @@ class LexisReportScheduleRepositoryTest {
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
-    var schedules = repository.findCurrentSchedules();
+    var schedules = repository.findCurrentSchedulesRequired();
 
     assertThat(schedules)
         .extracting("exportScheduleId", "advertisingDate")
@@ -273,6 +296,20 @@ class LexisReportScheduleRepositoryTest {
             tuple(1001L, LocalDate.of(2026, 7, 2)),
             tuple(1002L, LocalDate.of(2026, 7, 8)));
     verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void findCurrentSchedulesRequiredShouldPropagateOracleFailure() {
+    when(jdbcTemplate.execute(
+            eq("{ call LEXIS_CODES.FIND_CURRENT_SCHEDULES(?) }"),
+            any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::findCurrentSchedulesRequired)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
   }
 
   @Test
@@ -296,7 +333,7 @@ class LexisReportScheduleRepositoryTest {
     verify(jdbcTemplate)
         .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sqlCaptor.getValue())
-        .contains("WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)")
+        .contains("SYSTIMESTAMP AT TIME ZONE 'America/Vancouver'")
         .contains("ORDER BY ES.ADVERTISING_DATE ASC")
         .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
     verify(preparedStatement).setInt(1, 100);

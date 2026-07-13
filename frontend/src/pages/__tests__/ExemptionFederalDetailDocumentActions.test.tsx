@@ -1,6 +1,13 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import {
+  createMemoryRouter,
+  Link,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+} from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { FederalApplicationDetail, ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
@@ -9,18 +16,38 @@ import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
 import {
   fetchFederalApplicationDetail,
   fetchProvincialExemptionDetail,
+  releaseApplicationEditLock,
 } from '@/service/lexis-detail-service'
 import {
   fetchFederalApplicationDocuments,
   openFederalApplicationDocument,
   removeFederalApplicationDocument,
 } from '@/service/federal-application-documents-service'
+import { fetchApplicationPackageScales } from '@/service/provincial-application-items-service'
+import {
+  fetchFederalApplicationRemarks,
+  saveFederalApplicationRemark,
+} from '@/service/federal-application-remarks-service'
 import {
   fetchExemptionDocuments,
   openExemptionDocument,
   removeExemptionDocument,
 } from '@/service/provincial-exemption-documents-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import {
+  fetchExemptionApplications,
+  fetchExemptionBlanketOicTotals,
+  fetchExemptionEditContext,
+  fetchExemptionPermits,
+  releaseExemptionEditLock,
+  updateExemption,
+} from '@/service/provincial-exemption-detail-service'
+import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
+import {
+  saveFederalPermit,
+  updateFederalApplicationStatus,
+} from '@/service/federal-application-mutation-service'
+import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -29,6 +56,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchFederalApplicationDetail: vi.fn(),
   fetchProvincialExemptionDetail: vi.fn(),
+  releaseApplicationEditLock: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-exemption-documents-service', () => ({
@@ -37,27 +65,106 @@ vi.mock('@/service/provincial-exemption-documents-service', () => ({
   removeExemptionDocument: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-exemption-detail-service', () => ({
+  addApplicationToExemption: vi.fn(),
+  approveExemptions: vi.fn(),
+  fetchExemptionApplications: vi.fn(),
+  fetchExemptionBlanketOicTotals: vi.fn(),
+  fetchExemptionEditContext: vi.fn(),
+  fetchExemptionPermits: vi.fn(),
+  releaseExemptionEditLock: vi.fn(),
+  removeApplicationFromExemption: vi.fn(),
+  sendExemptionApprovalEmails: vi.fn(),
+  updateExemption: vi.fn(),
+}))
+
+vi.mock('@/service/search-options-service', () => ({
+  fetchProvincialExemptionOptions: vi.fn(),
+}))
+
 vi.mock('@/service/federal-application-documents-service', () => ({
   fetchFederalApplicationDocuments: vi.fn(),
   openFederalApplicationDocument: vi.fn(),
   removeFederalApplicationDocument: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-application-items-service', () => ({
+  fetchApplicationPackageScales: vi.fn(),
+}))
+
+vi.mock('@/service/federal-application-remarks-service', () => ({
+  fetchFederalApplicationRemarks: vi.fn(),
+  saveFederalApplicationRemark: vi.fn(),
+}))
+
+vi.mock('@/service/federal-application-mutation-service', () => ({
+  saveFederalPermit: vi.fn(),
+  updateFederalApplicationStatus: vi.fn(),
+}))
+
+vi.mock('@/service/shipping-reference-service', () => ({
+  fetchShippingReferenceOptions: vi.fn(),
+  formatShippingReferenceOption: (option: { code: string; name: string }) =>
+    `${option.name} (${option.code})`,
+  shippingReferenceLabel: (
+    options: Array<{ code: string; name: string }> | undefined,
+    code: string | null | undefined,
+  ) => {
+    const normalizedCode = code?.trim().toUpperCase() ?? ''
+    const option = options?.find((candidate) => candidate.code === normalizedCode)
+    return option ? `${option.name} (${option.code})` : normalizedCode
+  },
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchFederalApplicationDetail = vi.mocked(fetchFederalApplicationDetail)
 const mockedFetchProvincialExemptionDetail = vi.mocked(fetchProvincialExemptionDetail)
+const mockedReleaseApplicationEditLock = vi.mocked(releaseApplicationEditLock)
 const mockedFetchFederalApplicationDocuments = vi.mocked(fetchFederalApplicationDocuments)
 const mockedOpenFederalApplicationDocument = vi.mocked(openFederalApplicationDocument)
 const mockedRemoveFederalApplicationDocument = vi.mocked(removeFederalApplicationDocument)
+const mockedFetchApplicationPackageScales = vi.mocked(fetchApplicationPackageScales)
+const mockedFetchFederalApplicationRemarks = vi.mocked(fetchFederalApplicationRemarks)
+const mockedSaveFederalApplicationRemark = vi.mocked(saveFederalApplicationRemark)
+const mockedSaveFederalPermit = vi.mocked(saveFederalPermit)
+const mockedUpdateFederalApplicationStatus = vi.mocked(updateFederalApplicationStatus)
+const mockedFetchShippingReferenceOptions = vi.mocked(fetchShippingReferenceOptions)
 const mockedFetchExemptionDocuments = vi.mocked(fetchExemptionDocuments)
 const mockedOpenExemptionDocument = vi.mocked(openExemptionDocument)
 const mockedRemoveExemptionDocument = vi.mocked(removeExemptionDocument)
+const mockedFetchExemptionApplications = vi.mocked(fetchExemptionApplications)
+const mockedFetchExemptionBlanketOicTotals = vi.mocked(fetchExemptionBlanketOicTotals)
+const mockedFetchExemptionEditContext = vi.mocked(fetchExemptionEditContext)
+const mockedFetchExemptionPermits = vi.mocked(fetchExemptionPermits)
+const mockedReleaseExemptionEditLock = vi.mocked(releaseExemptionEditLock)
+const mockedUpdateExemption = vi.mocked(updateExemption)
+const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 
 const selectDetailTab = async (name: string) => {
   const tab = await screen.findByRole('tab', { name })
   if (tab.getAttribute('aria-selected') !== 'true') {
     await userEvent.click(tab)
   }
+}
+
+const renderFederalDataRouter = () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/federal/:applicationNumber',
+        element: (
+          <>
+            <FederalApplicationDetailsPage />
+            <Link to="/elsewhere">Leave federal application</Link>
+          </>
+        ),
+      },
+      { path: '/elsewhere', element: <h1>Elsewhere</h1> },
+    ],
+    { initialEntries: ['/federal/888'] },
+  )
+  render(<RouterProvider router={router} />)
+  return router
 }
 
 const exemptionDetail: ProvincialExemptionDetail = {
@@ -88,14 +195,34 @@ const federalDetail: FederalApplicationDetail = {
   statusDescription: 'Submitted',
   ownerClientNumber: '00021234',
   ownerClientLocationCode: '01',
-  ownerApplicantType: 'Owner',
+  ownerApplicantType: 'A',
   ownerContactName: 'Owner Contact',
   ownerCompanyName: 'Owner Company',
+  ownerClientContext: {
+    address: '1 Owner Road',
+    city: 'Victoria',
+    province: 'BC',
+    postalCode: 'V8V 1V1',
+    country: 'Canada',
+    phone: '250-555-0101',
+    fax: '250-555-0102',
+    email: 'owner@example.test',
+  },
   agentClientNumber: '00011234',
   agentClientLocationCode: '01',
-  agentApplicantType: 'Agent',
+  agentApplicantType: 'A',
   agentContactName: 'Agent Contact',
   agentCompanyName: 'Agent Company',
+  agentClientContext: {
+    address: '2 Agent Avenue',
+    city: 'Nanaimo',
+    province: 'BC',
+    postalCode: 'V9R 1R1',
+    country: 'Canada',
+    phone: '250-555-0201',
+    fax: '250-555-0202',
+    email: 'agent@example.test',
+  },
   exemptionNumber: 'EX-555',
   exemptionType: 'Section 1',
   exemptionReason: 'Economic',
@@ -112,17 +239,27 @@ const federalDetail: FederalApplicationDetail = {
   endUse: 'HE/PL',
   author: 'IDIR\\TESTER',
   readOnly: false,
+  locked: false,
+  lockHeldByCurrentUser: true,
+  lockedBy: null,
+  lockMessage: null,
   packages: ['PKG-1'],
   remarks: ['Remark'],
-  offers: ['OFF-1'],
+  offers: [
+    {
+      offerNumber: '81001',
+      companyName: 'Federal Buyer',
+      receivedDate: '2026-01-13',
+    },
+  ],
   federalPermit: {
     permitNumber: 90001,
     permitIssueDate: '2026-02-01',
-    destinationCountry: 'United States',
-    transportType: 'TRUCK',
+    destinationCountry: 'US',
+    transportType: 'S',
     transportName: 'Truck',
     shippingDate: '2026-02-10',
-    portOfExport: 'Vancouver',
+    portOfExport: 'VA',
     otherPortOfExport: null,
   },
 }
@@ -133,13 +270,100 @@ describe('Exemption and Federal Detail Document Actions', () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialExemptionDetail.mockResolvedValue(exemptionDetail)
     mockedFetchFederalApplicationDetail.mockResolvedValue(federalDetail)
+    mockedReleaseApplicationEditLock.mockResolvedValue(undefined)
     mockedFetchExemptionDocuments.mockResolvedValue({
       rows: [],
       source: 'api',
     })
+    mockedFetchExemptionApplications.mockResolvedValue({
+      applications: [],
+      containsUnmanu: false,
+      ownerNumber: '00055566',
+    })
+    mockedFetchExemptionPermits.mockResolvedValue([
+      {
+        permitNumber: 'P1',
+        permitVolume: '25.5',
+        permitStatus: 'Active',
+        permitIssueDate: '12-Jul-2026',
+        canViewPermit: true,
+      },
+    ])
+    mockedFetchExemptionBlanketOicTotals.mockResolvedValue({
+      requestedVolume: '500.0',
+      completedVolume: '125.5',
+    })
+    mockedFetchExemptionEditContext.mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: [],
+      locked: false,
+      lockMessage: '',
+    })
+    mockedReleaseExemptionEditLock.mockResolvedValue(undefined)
+    mockedFetchProvincialExemptionOptions.mockResolvedValue({
+      exemptionTypes: [{ value: 'TYPE1', label: 'Type 1' }],
+      exemptionStatuses: [{ value: 'ACTIVE', label: 'Active' }],
+      regions: [],
+    })
     mockedFetchFederalApplicationDocuments.mockResolvedValue({
       rows: [],
       source: 'api',
+    })
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: false,
+        timberMark: 'TM-1',
+        species: 'Fir',
+        pieces: 12,
+        grade: 'A',
+        volume: '34.5',
+        id: 'SCALE-1',
+        cascadeSplitCode: '',
+      },
+    ])
+    mockedFetchFederalApplicationRemarks.mockResolvedValue([
+      {
+        remarkId: 44,
+        remark: 'Review note',
+        user: 'idir\\reviewer',
+        date: '2026-07-10T20:00:00Z',
+      },
+    ])
+    mockedSaveFederalApplicationRemark.mockResolvedValue({
+      success: true,
+      message: 'Federal application remark saved.',
+      remark: {
+        remarkId: 45,
+        remark: 'New note',
+        user: 'idir\\approver',
+        date: '2026-07-10T21:00:00Z',
+      },
+      errors: [],
+    })
+    mockedSaveFederalPermit.mockResolvedValue({
+      success: true,
+      message: 'Federal permit updated.',
+      errors: [],
+    })
+    mockedUpdateFederalApplicationStatus.mockResolvedValue({
+      success: true,
+      message: 'Federal application status updated.',
+      errors: [],
+    })
+    mockedFetchShippingReferenceOptions.mockResolvedValue({
+      countries: [
+        { code: 'CA', name: 'Canada' },
+        { code: 'US', name: 'United States' },
+      ],
+      transportTypes: [
+        { code: 'S', name: 'Ship' },
+        { code: 'T', name: 'Truck' },
+      ],
+      ports: [
+        { code: 'OT', name: 'Other' },
+        { code: 'VA', name: 'Vancouver' },
+      ],
     })
     mockedOpenExemptionDocument.mockResolvedValue({
       source: 'api',
@@ -161,7 +385,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
   })
 
-  it('shows the embedded exemption upload panel on the documents tab without header actions', async () => {
+  it('shows the embedded exemption upload panel with the exemption detail header', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
         <Routes>
@@ -176,11 +400,27 @@ describe('Exemption and Federal Detail Document Actions', () => {
     for (const tabName of ['Summary', 'Permits', 'Documents', 'Remarks']) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    const exemptionHeading = screen.getByRole('heading', {
+      name: 'Exemption EX-777',
+      level: 1,
+    })
+    const exemptionHeader = exemptionHeading.closest('header')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(exemptionHeader).toBeTruthy()
+    expect(
+      within(exemptionHeader as HTMLElement).getByText(
+        'Check and manage this provincial exemption',
+      ),
+    ).toBeInTheDocument()
+    expect(within(exemptionHeader as HTMLElement).getByText('Active')).toHaveAttribute(
+      'data-status-variant',
+      'positive',
+    )
     const exemptionHighlights = screen.getByLabelText('Exemption highlights')
-    expect(within(exemptionHighlights).getByText('Status')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('Active')).toBeInTheDocument()
     expect(within(exemptionHighlights).getByText('Type')).toBeInTheDocument()
     expect(within(exemptionHighlights).getByText('Type 1')).toBeInTheDocument()
+    expect(within(exemptionHighlights).getByText('Remaining volume (m³)')).toBeInTheDocument()
+    expect(within(exemptionHighlights).getByText('94')).toBeInTheDocument()
     expect(within(exemptionHighlights).getByText('Permits')).toBeInTheDocument()
     expect(within(exemptionHighlights).getByText('1')).toBeInTheDocument()
     const exemptionSummaryTile = screen
@@ -210,6 +450,221 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders semantic empty states for empty exemption detail collections', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      permitNumbers: [],
+      remarks: [],
+    })
+    mockedFetchExemptionPermits.mockResolvedValue([])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Exemption EX-777', level: 1 })
+
+    await selectDetailTab('Applications')
+    expect(
+      await screen.findByRole('heading', { name: 'No applications found', level: 3 }),
+    ).toBeInTheDocument()
+
+    await selectDetailTab('Permits')
+    expect(
+      await screen.findByRole('heading', { name: 'No permits found', level: 3 }),
+    ).toBeInTheDocument()
+
+    await selectDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
+    ).toBeInTheDocument()
+
+    await selectDetailTab('Remarks')
+    expect(
+      await screen.findByRole('heading', { name: 'No remarks found', level: 3 }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders authoritative permit metadata and omits rows without record access', async () => {
+    mockedFetchExemptionPermits.mockResolvedValue([
+      {
+        permitNumber: '900101',
+        permitVolume: '25.5',
+        permitStatus: 'Active',
+        permitIssueDate: '12-Jul-2026',
+        canViewPermit: true,
+      },
+      {
+        permitNumber: '900102',
+        permitVolume: '14.0',
+        permitStatus: 'Complete',
+        permitIssueDate: '10-Jul-2026',
+        canViewPermit: false,
+      },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Permits')
+    expect(
+      await screen.findByRole('region', { name: 'Related exemption permits' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByRole('columnheader', { name: 'Volume (m³)' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Issue date' })).toBeInTheDocument()
+    expect(screen.getByText('900101')).toBeInTheDocument()
+    expect(screen.getByText('25.5')).toBeInTheDocument()
+    expect(screen.getByText('12-Jul-2026')).toBeInTheDocument()
+    expect(screen.queryByText('900102')).not.toBeInTheDocument()
+    expect(screen.queryByText('10-Jul-2026')).not.toBeInTheDocument()
+  })
+
+  it('shows Blanket OIC requested and completed permit volume totals', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'B',
+      exemptionTypeDescription: 'Blanket Order in Council',
+      blanketOic: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Permits')
+    const totals = await screen.findByLabelText('Blanket OIC permit volume totals')
+    expect(within(totals).getByText('Requested permit volume (m³)')).toBeInTheDocument()
+    expect(within(totals).getByText('500.0')).toBeInTheDocument()
+    expect(within(totals).getByText('Completed permit volume (m³)')).toBeInTheDocument()
+    expect(within(totals).getByText('125.5')).toBeInTheDocument()
+    expect(mockedFetchExemptionBlanketOicTotals).toHaveBeenCalledWith('EX-777')
+  })
+
+  it('keeps application and fee eligibility unavailable when associated applications fail', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+        canPerform: () => true,
+      }),
+    )
+    mockedFetchExemptionApplications.mockRejectedValue(new Error('Oracle unavailable'))
+    mockedFetchExemptionEditContext.mockResolvedValue({
+      rateOverrideEnabled: true,
+      fixedFeeRate: '12.50',
+      regionNumbers: [],
+      locked: false,
+      lockMessage: '',
+    })
+    mockedUpdateExemption.mockResolvedValue({
+      success: true,
+      message: 'The exemption was updated successfully.',
+      exemptionNumber: 'EX-777',
+      errors: [],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Associated applications unavailable')).toBeInTheDocument()
+    expect(
+      screen.getAllByText('Unable to retrieve applications associated with this exemption.'),
+    ).not.toHaveLength(0)
+
+    await selectDetailTab('Applications')
+    expect(
+      await screen.findByRole('heading', { name: 'Applications unavailable', level: 3 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'No applications found', level: 3 }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
+
+    await selectDetailTab('Fees')
+    expect(
+      await screen.findByRole('heading', { name: 'Fee eligibility unavailable', level: 3 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'No fee rate override', level: 3 }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+    await waitFor(() => expect(mockedUpdateExemption).toHaveBeenCalledTimes(1))
+    expect(mockedUpdateExemption).toHaveBeenCalledWith(
+      expect.objectContaining({ manageFeeRate: false }),
+    )
+  })
+
+  it('keeps exemption document lookup failure distinct after its warning is dismissed', async () => {
+    mockedFetchExemptionDocuments.mockRejectedValue(new Error('Oracle unavailable'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findAllByText('Documents unavailable')).not.toHaveLength(0)
+    const highlights = screen.getByLabelText('Exemption highlights')
+    const documentMetric = within(highlights).getByText('Documents').closest('div')
+    expect(documentMetric).toBeTruthy()
+    expect(within(documentMetric as HTMLElement).getByText('Unavailable')).toBeInTheDocument()
+    expect(within(documentMetric as HTMLElement).queryByText('0')).not.toBeInTheDocument()
+
+    await selectDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { name: 'Documents unavailable', level: 3 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'No documents found', level: 3 }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
+    expect(
+      screen.getByRole('heading', { name: 'Documents unavailable', level: 3 }),
+    ).toBeInTheDocument()
   })
 
   it('opens exemption document from API response', async () => {
@@ -247,7 +702,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(openDocumentButton)
 
     await waitFor(() => {
-      expect(mockedOpenExemptionDocument).toHaveBeenCalledWith('700', 'exemption-doc.pdf')
+      expect(mockedOpenExemptionDocument).toHaveBeenCalledWith('700', 'exemption-doc.pdf', 'EX-777')
     })
     expect(openSpy).not.toHaveBeenCalled()
   })
@@ -291,13 +746,49 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(deleteButton)
 
     await waitFor(() => {
-      expect(mockedRemoveExemptionDocument).toHaveBeenCalledWith('700')
+      expect(mockedRemoveExemptionDocument).toHaveBeenCalledWith('700', 'EX-777')
       expect(mockedFetchExemptionDocuments).toHaveBeenCalledTimes(2)
       expect(screen.queryByText('exemption-doc.pdf')).not.toBeInTheDocument()
     })
   })
 
-  it('disables exemption upload and delete without file upload permission', async () => {
+  it('keeps linked application documents read-only on the exemption aggregate', async () => {
+    mockedFetchExemptionDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '704',
+          name: 'application-doc.pdf',
+          description: 'linked application copy',
+          type: 'Application document',
+          source: 'application',
+          deletable: false,
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    const documentRow = (await screen.findByText('application-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(within(documentRow as HTMLElement).getByText('Application')).toBeInTheDocument()
+    expect(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    ).toBeDisabled()
+    expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
+  })
+
+  it('keeps exemption delete available to admins without file upload permission', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action !== '/fileExemptionUpload',
@@ -335,8 +826,83 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
       name: 'Delete',
     })
-    expect(deleteButton).toBeDisabled()
+    expect(deleteButton).toBeEnabled()
     expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
+  })
+
+  it('denies exemption document delete to exemption approvers', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
+        canPerform: () => true,
+      }),
+    )
+    mockedFetchExemptionDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '702',
+          name: 'approver-exemption-doc.pdf',
+          description: 'role controlled',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    const documentRow = (await screen.findByText('approver-exemption-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    ).toBeDisabled()
+  })
+
+  it('denies exemption document delete after expiry', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionStatusCode: 'EXP',
+      exemptionStatusDescription: 'Expired',
+    })
+    mockedFetchExemptionDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '703',
+          name: 'expired-exemption-doc.pdf',
+          description: 'expired',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    const documentRow = (await screen.findByText('expired-exemption-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    ).toBeDisabled()
   })
 
   it('renders federal application details with the legacy tab structure', async () => {
@@ -361,18 +927,484 @@ describe('Exemption and Federal Detail Document Actions', () => {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
 
+    const federalHeading = screen.getByRole('heading', {
+      name: 'LEXIS application 888',
+      level: 1,
+    })
+    const federalHeader = federalHeading.closest('header')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(federalHeader).toBeTruthy()
+    expect(
+      within(federalHeader as HTMLElement).getByText('Check and manage this federal application'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Federal application search' })).toHaveAttribute(
+      'href',
+      '/federal',
+    )
+    expect(within(federalHeader as HTMLElement).getByText('Submitted')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Back to Federal Search results' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open Provincial Application' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(screen.queryByText('Read only')).not.toBeInTheDocument()
     expect(await screen.findByText('Owner Contact')).toBeInTheDocument()
+    expect(screen.getByText('1 Owner Road')).toBeInTheDocument()
+    expect(screen.getByText('250-555-0101')).toBeInTheDocument()
+    expect(screen.getByText('250-555-0102')).toBeInTheDocument()
+    expect(screen.getByText('owner@example.test')).toBeInTheDocument()
+    const ownerTile = screen.getByRole('heading', { name: 'Owner', level: 2 }).closest('.cds--tile')
+    expect(ownerTile).toBeTruthy()
+    const ownerApplicantTypeField = within(ownerTile as HTMLElement)
+      .getByText('Applicant type')
+      .closest('.detail-field-item')
+    expect(ownerApplicantTypeField).toBeTruthy()
+    expect(within(ownerApplicantTypeField as HTMLElement).getByText('Agent')).toBeInTheDocument()
+
+    await selectDetailTab('Agent')
+    expect(await screen.findByText('2 Agent Avenue')).toBeInTheDocument()
+    expect(screen.getByText('250-555-0201')).toBeInTheDocument()
+    expect(screen.getByText('250-555-0202')).toBeInTheDocument()
+    expect(screen.getByText('agent@example.test')).toBeInTheDocument()
+    const agentTile = screen.getByRole('heading', { name: 'Agent', level: 2 }).closest('.cds--tile')
+    expect(agentTile).toBeTruthy()
+    const agentApplicantTypeField = within(agentTile as HTMLElement)
+      .getByText('Applicant type')
+      .closest('.detail-field-item')
+    expect(agentApplicantTypeField).toBeTruthy()
+    expect(within(agentApplicantTypeField as HTMLElement).getByText('Agent')).toBeInTheDocument()
 
     await selectDetailTab('Application')
     expect(await screen.findByText('IDIR\\TESTER')).toBeInTheDocument()
 
+    await selectDetailTab('Items')
+    expect(await screen.findByRole('heading', { name: 'Summary of scale' })).toBeInTheDocument()
+    expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
+    expect(await screen.findByText('TM-1')).toBeInTheDocument()
+
     await selectDetailTab('Documents')
     expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not invent an agent party for owner-filed federal applications', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      ownerApplicantType: 'O',
+      agentClientNumber: null,
+      agentClientLocationCode: null,
+      agentApplicantType: 'O',
+      agentContactName: null,
+      agentCompanyName: null,
+      agentClientContext: null,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    const ownerTile = screen.getByRole('heading', { name: 'Owner', level: 2 }).closest('.cds--tile')
+    expect(ownerTile).toBeTruthy()
+    expect(within(ownerTile as HTMLElement).queryByText('O')).not.toBeInTheDocument()
+  })
+
+  it('shows the federal lock warning and suppresses every mutation and document control', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode: 'NEW',
+      statusDescription: 'New',
+      locked: true,
+      lockHeldByCurrentUser: false,
+      lockedBy: 'Reviewer One',
+      lockMessage:
+        'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
+    })
+    mockedFetchFederalApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: 'locked-800',
+          name: 'locked-federal-doc.pdf',
+          description: 'Locked document',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(/currently locked for editing by Reviewer One/i),
+    ).toBeInTheDocument()
+
+    await selectDetailTab('Application')
+    expect(screen.queryByRole('heading', { name: 'Update federal status' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+
+    await selectDetailTab('Remarks')
+    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+
+    await selectDetailTab('Documents')
+    const documentRow = (await screen.findByText('locked-federal-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
+    expect(
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
+    expect(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' })).toBeEnabled()
+
+    await selectDetailTab('Shipping Details')
+    expect(screen.queryByRole('heading', { name: 'Update federal permit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
+    expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
+    expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
+  })
+
+  it('releases the held federal application lock when the detail page unmounts', async () => {
+    const rendered = render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByRole('heading', { name: 'LEXIS application 888', level: 1 })
+
+    rendered.unmount()
+
+    await waitFor(() => {
+      expect(mockedReleaseApplicationEditLock).toHaveBeenCalledWith('888')
+    })
+  })
+
+  it.each([
+    {
+      draft: 'status',
+      arrange: () =>
+        mockedFetchFederalApplicationDetail.mockResolvedValue({
+          ...federalDetail,
+          statusCode: 'NEW',
+          statusDescription: 'New',
+        }),
+      edit: async () => {
+        await selectDetailTab('Application')
+        await userEvent.type(screen.getByLabelText('Remark'), 'Status draft')
+      },
+    },
+    {
+      draft: 'remark',
+      arrange: () => undefined,
+      edit: async () => {
+        await selectDetailTab('Remarks')
+        await userEvent.type(screen.getByLabelText('Federal application remark'), 'Remark draft')
+      },
+    },
+    {
+      draft: 'permit',
+      arrange: () => undefined,
+      edit: async () => {
+        await selectDetailTab('Shipping Details')
+        await userEvent.clear(screen.getByLabelText('Transport name'))
+        await userEvent.type(screen.getByLabelText('Transport name'), 'Changed transport')
+      },
+    },
+  ])('blocks navigation for an unsaved federal $draft draft', async ({ arrange, edit }) => {
+    arrange()
+    const router = renderFederalDataRouter()
+    await screen.findByRole('heading', { name: 'LEXIS application 888', level: 1 })
+    await edit()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+    expect(screen.getByText(/unsaved changes to this federal application/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Discard and leave' }))
+    expect(await screen.findByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/elsewhere')
+  })
+
+  it('blocks navigation while a federal document remains queued', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    renderFederalDataRouter()
+    await screen.findByRole('heading', { name: 'LEXIS application 888', level: 1 })
+    await selectDetailTab('Documents')
+    await user.upload(
+      screen.getByLabelText('Document File'),
+      new File(['unsupported'], 'evidence.exe'),
+    )
+
+    await user.click(screen.getByRole('link', { name: 'Leave federal application' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+    expect(
+      screen.getByText(/Finish or reset the queued document uploads before leaving/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
+  })
+
+  it('uses shared shipping selectors, descriptions, and conditional Other Port', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Shipping Details')
+    expect(await screen.findAllByText('United States (US)')).not.toHaveLength(0)
+    expect(screen.getAllByText('Ship (S)')).not.toHaveLength(0)
+    expect(screen.getAllByText('Vancouver (VA)')).not.toHaveLength(0)
+    expect(screen.queryByLabelText('Other port of export')).not.toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText('Port of export'), 'OT')
+    await userEvent.type(screen.getByLabelText('Other port of export'), 'Boundary Bay')
+    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
+
+    await waitFor(() => {
+      expect(mockedSaveFederalPermit).toHaveBeenCalledWith(
+        '888',
+        expect.objectContaining({ portOfExport: 'OT', otherPortOfExport: 'Boundary Bay' }),
+        true,
+      )
+    })
+  })
+
+  it('disables federal permit save when shipping references fail', async () => {
+    mockedFetchShippingReferenceOptions.mockRejectedValueOnce(new Error('Oracle unavailable'))
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Shipping reference options could not be loaded. Federal permit changes are unavailable.',
+      ),
+    ).toBeInTheDocument()
+    await selectDetailTab('Shipping Details')
+    expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+  })
+
+  it('disables federal permit save when shipping text exceeds the schema width', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValueOnce({
+      ...federalDetail,
+      federalPermit: {
+        ...federalDetail.federalPermit!,
+        transportName: 'A'.repeat(27),
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Shipping Details')
+    expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+  })
+
+  it('offers only approval from a new federal application', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode: 'NEW',
+      statusDescription: 'New',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Application')
+    const statusSelect = await screen.findByLabelText('Status')
+    expect(within(statusSelect).getByRole('option', { name: 'Approved' })).toBeInTheDocument()
+    expect(within(statusSelect).queryByRole('option', { name: 'Rejected' })).not.toBeInTheDocument()
+    expect(
+      within(statusSelect).queryByRole('option', { name: 'Withdrawn' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers only listing-day outcomes from an approved federal application', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode: 'APP',
+      statusDescription: 'Approved',
+      listingDate: '2999-12-31',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Application')
+    const statusSelect = await screen.findByLabelText('Status')
+    expect(within(statusSelect).queryByRole('option', { name: 'Approved' })).not.toBeInTheDocument()
+    expect(within(statusSelect).getByRole('option', { name: 'Rejected' })).toBeInTheDocument()
+    expect(within(statusSelect).getByRole('option', { name: 'Withdrawn' })).toBeInTheDocument()
+  })
+
+  it('renders terminal federal status as read only without a mutation form', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode: 'REJ',
+      statusDescription: 'Rejected',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Application')
+    expect(await screen.findByText('No status changes are available from REJ.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+  })
+
+  it('renders semantic empty states for empty federal detail collections', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      packages: [],
+      offers: [],
+    })
+    mockedFetchFederalApplicationRemarks.mockResolvedValue([])
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'LEXIS application 888', level: 1 })
+
+    await selectDetailTab('Items')
+    expect(
+      await screen.findByRole('heading', { name: 'No packages found', level: 3 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'No scale details found', level: 3 }),
+    ).toBeInTheDocument()
+
+    await selectDetailTab('Offers')
+    expect(
+      await screen.findByRole('heading', { name: 'No offers found', level: 3 }),
+    ).toBeInTheDocument()
+
+    await selectDetailTab('Remarks')
+    expect(
+      await screen.findByRole('heading', { name: 'No remarks found', level: 3 }),
+    ).toBeInTheDocument()
+
+    await selectDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders structured federal offers and opens the selected offer', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/federal/:applicationNumber',
+          element: <FederalApplicationDetailsPage />,
+        },
+        {
+          path: '/provincial/offers/:offerNumber',
+          element: <h1>Offer detail</h1>,
+        },
+      ],
+      { initialEntries: ['/federal/888'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    await selectDetailTab('Offers')
+    expect(
+      await screen.findByRole('region', { name: 'Federal application offers' }),
+    ).toBeInTheDocument()
+    const offerRow = (await screen.findByText('Federal Buyer')).closest('tr')
+    expect(offerRow).toBeTruthy()
+    expect(within(offerRow as HTMLElement).getByText('81001')).toBeInTheDocument()
+    expect(within(offerRow as HTMLElement).getByText('2026-01-13')).toBeInTheDocument()
+
+    await userEvent.click(within(offerRow as HTMLElement).getByRole('button', { name: 'Open' }))
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/provincial/offers/81001')
+    })
+  })
+
+  it('does not present federal document or remark lookup failures as empty collections', async () => {
+    mockedFetchFederalApplicationDocuments.mockRejectedValue(new Error('Documents unavailable'))
+    mockedFetchFederalApplicationRemarks.mockRejectedValue(new Error('Remarks unavailable'))
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findAllByText('Documents unavailable')).not.toHaveLength(0)
+    expect(
+      screen.getAllByText('Unable to retrieve federal application documents.'),
+    ).not.toHaveLength(0)
+    expect(screen.getAllByText('Remarks unavailable')).not.toHaveLength(0)
+    expect(screen.getAllByText('Unable to retrieve federal application remarks.')).not.toHaveLength(
+      0,
+    )
+
+    await selectDetailTab('Remarks')
+    expect(
+      await screen.findByRole('heading', { name: 'Remarks unavailable', level: 3 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'No remarks found', level: 3 }),
+    ).not.toBeInTheDocument()
+
+    await selectDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { name: 'Documents unavailable', level: 3 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'No documents found', level: 3 }),
+    ).not.toBeInTheDocument()
   })
 
   it('opens federal document from API response', async () => {
@@ -407,9 +1439,94 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(openDocumentButton)
 
     await waitFor(() => {
-      expect(mockedOpenFederalApplicationDocument).toHaveBeenCalledWith('800', 'federal-doc.pdf')
+      expect(mockedOpenFederalApplicationDocument).toHaveBeenCalledWith(
+        '800',
+        'federal-doc.pdf',
+        '888',
+      )
     })
     expect(openSpy).not.toHaveBeenCalled()
+  })
+
+  it('lists, adds, and updates structured federal remarks for approvers', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Remarks')
+    expect(await screen.findByText('Review note')).toBeInTheDocument()
+    expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Federal application remark'), 'New note')
+    await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
+
+    await waitFor(() => {
+      expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'New note', undefined)
+      expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledTimes(2)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const remarkInput = screen.getByLabelText('Federal application remark')
+    await userEvent.clear(remarkInput)
+    await userEvent.type(remarkInput, 'Updated note')
+    await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
+
+    await waitFor(() => {
+      expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'Updated note', 44)
+    })
+  })
+
+  it('shows federal scale details as unavailable when a package lookup fails', async () => {
+    mockedFetchApplicationPackageScales.mockRejectedValue(new Error('Oracle unavailable'))
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Items')
+    expect(await screen.findByText('Scale details unavailable')).toBeInTheDocument()
+    expect(
+      screen.getByText('Unable to retrieve federal application scale details.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('No scale details found.')).not.toBeInTheDocument()
+  })
+
+  it('shows federal remarks read-only without federal management authorization', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
+        canPerform: (action: string) =>
+          action === '/federalApplicationDetails' || action === 'viewFederalApplication',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Federal application search' }),
+    ).not.toBeInTheDocument()
+    await selectDetailTab('Remarks')
+    expect(await screen.findByText('Review note')).toBeInTheDocument()
+    expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
+    expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
+    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
 
   it('removes federal documents and refreshes rows', async () => {
@@ -454,7 +1571,55 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
   })
 
-  it('disables federal upload and delete without file upload permission', async () => {
+  it('distinguishes the internal LEXIS key from the external federal application number', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'LEXIS application 888', level: 1 }),
+    ).toBeInTheDocument()
+    await selectDetailTab('Application')
+    expect(screen.getByText('Federal application number')).toBeInTheDocument()
+    expect(screen.getByText('FED-888')).toBeInTheDocument()
+  })
+
+  it('does not offer delete for inherited read-only federal documents', async () => {
+    mockedFetchFederalApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '803',
+          name: 'inherited-permit-doc.pdf',
+          description: 'permit context',
+          type: 'Permit',
+          source: 'permit',
+          deletable: false,
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    const documentRow = (await screen.findByText('inherited-permit-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps federal delete available to admins without file upload permission', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action !== '/fileApplicationUpload',
@@ -488,8 +1653,52 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
       name: 'Delete',
     })
-    expect(deleteButton).toBeDisabled()
+    expect(deleteButton).toBeEnabled()
     expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
+  })
+
+  it('denies federal application document delete to read-only users', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
+        canPerform: () => true,
+      }),
+    )
+    mockedFetchFederalApplicationDetail.mockResolvedValue({ ...federalDetail, readOnly: true })
+    mockedFetchFederalApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '802',
+          name: 'readonly-federal-doc.pdf',
+          description: 'read only',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    const documentRow = (await screen.findByText('readonly-federal-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    ).toBeDisabled()
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
+
+    await selectDetailTab('Application')
+    expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+    await selectDetailTab('Remarks')
+    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    await selectDetailTab('Shipping Details')
+    expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
   })
 
   it('shows detail error contract when exemption detail endpoint fails', async () => {

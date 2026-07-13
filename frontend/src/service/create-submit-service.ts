@@ -11,6 +11,7 @@ import {
   payloadValueAsStringList as asStringArray,
 } from '@/service/payload-utils'
 import { getConfiguredString, isEnabledConfig } from '@/service/service-config-utils'
+import { isRecord } from '@/utils/record'
 
 export type CreateSubmissionResult = {
   success: boolean
@@ -24,6 +25,7 @@ type LegacyCreateResponse = {
   success?: boolean
   valid?: boolean
   message?: string
+  detail?: string
   errors?: unknown
   warnings?: unknown
   applicationNumber?: unknown
@@ -104,13 +106,19 @@ const buildFailureResult = (
   defaultMessage: string,
   error: unknown,
   unavailableMessage?: string,
+  conflictMessage?: string,
 ): CreateSubmissionResult => {
   if (axios.isAxiosError(error)) {
     const payload = error.response?.data as LegacyCreateResponse | undefined
     const status = error.response?.status
     const message =
       asString(payload?.message) ??
-      (status === 404 && unavailableMessage ? unavailableMessage : defaultMessage)
+      asString(payload?.detail) ??
+      (status === 409 && conflictMessage
+        ? conflictMessage
+        : status === 404 && unavailableMessage
+          ? unavailableMessage
+          : defaultMessage)
 
     return {
       success: false,
@@ -238,14 +246,111 @@ export const submitProvincialApplicationCreate = async (
 export type ProvincialExemptionCreateSubmission = {
   applicationNumber: string
   linkedApplicationNumbers: string[]
+  exemptionNumber: string
   exemptionTypeCode: string
   exemptionStatusCode: string
-  ownerClientNumber: string
-  applicantClientNumber: string
   approvalDate: string
   expiryDate: string
   approvedVolume: string
+  enableRateOverride: boolean
+  feeRate: string
+  regionNumbers: string[]
   otherConditions: string
+}
+
+export type ProvincialExemptionCreatePreview = {
+  exemptionTypeCode: string
+  exemptionStatusCode: string
+  approvedVolume: string
+  expiryDate: string
+  applicationNumbers: string[]
+}
+
+const parseCreatePreviewApplicationNumbers = (value: unknown): string[] | null => {
+  if (!Array.isArray(value)) {
+    return null
+  }
+  const applicationNumbers = value.map((entry) => asString(entry)?.trim() ?? '')
+  return applicationNumbers.every((entry) => /^[1-9]\d*$/.test(entry)) ? applicationNumbers : null
+}
+
+export const fetchProvincialExemptionCreatePreview = async (
+  selectedApplicationNumbers: string[],
+): Promise<ProvincialExemptionCreatePreview> => {
+  const applicationNumbers = Array.from(
+    new Set(selectedApplicationNumbers.map((value) => value.trim())),
+  )
+  if (
+    applicationNumbers.length === 0 ||
+    applicationNumbers.some((value) => !/^[1-9]\d*$/.test(value))
+  ) {
+    throw new Error('Valid selected application numbers are required to prepare the exemption.')
+  }
+
+  const params = new URLSearchParams()
+  applicationNumbers.forEach((value) => params.append('applicationNumbers', value))
+
+  try {
+    const response = await apiService
+      .getAxiosInstance()
+      .get<unknown>('/lexis/rpc/exemption-details/create-preview', { params })
+    if (!isRecord(response.data)) {
+      throw new Error('LEXIS returned an invalid exemption preview.')
+    }
+
+    const errors = asStringArray(response.data.errors)
+    if (response.data.valid !== true) {
+      throw new Error(errors[0] ?? 'The selected applications are not eligible for an exemption.')
+    }
+
+    const exemptionTypeCode = asString(response.data.exemptionTypeCode)
+    const exemptionStatusCode = asString(response.data.exemptionStatusCode)
+    const approvedVolume = asString(response.data.approvedVolume)
+    const expiryDate = asString(response.data.expiryDate)
+    const previewApplicationNumbers = parseCreatePreviewApplicationNumbers(
+      response.data.applicationNumbers,
+    )
+    const volume = approvedVolume == null ? Number.NaN : Number(approvedVolume)
+    const expiryTimestamp = Date.parse(`${expiryDate}T00:00:00Z`)
+    const validExpiryDate =
+      /^\d{4}-\d{2}-\d{2}$/.test(expiryDate ?? '') &&
+      !Number.isNaN(expiryTimestamp) &&
+      new Date(expiryTimestamp).toISOString().slice(0, 10) === expiryDate
+    if (
+      exemptionTypeCode !== 'M' ||
+      exemptionStatusCode !== 'NEW' ||
+      !approvedVolume ||
+      !/^\d+(?:\.\d)?$/.test(approvedVolume) ||
+      !Number.isFinite(volume) ||
+      volume <= 0 ||
+      !validExpiryDate ||
+      previewApplicationNumbers == null ||
+      previewApplicationNumbers.length !== applicationNumbers.length ||
+      previewApplicationNumbers.some((value, index) => value !== applicationNumbers[index])
+    ) {
+      throw new Error('LEXIS returned an invalid exemption preview.')
+    }
+
+    return {
+      exemptionTypeCode,
+      exemptionStatusCode,
+      approvedVolume,
+      expiryDate: expiryDate ?? '',
+      applicationNumbers: previewApplicationNumbers,
+    }
+  } catch (error) {
+    if (error instanceof Error && !axios.isAxiosError(error)) {
+      throw error
+    }
+    if (axios.isAxiosError(error)) {
+      const payload = error.response?.data
+      const detail = isRecord(payload) ? asString(payload.detail) : undefined
+      throw new Error(
+        detail ?? 'LEXIS could not prepare the exemption. Please try again before saving.',
+      )
+    }
+    throw new Error('LEXIS could not prepare the exemption. Please try again before saving.')
+  }
 }
 
 export const submitProvincialExemptionCreate = async (
@@ -257,14 +362,15 @@ export const submitProvincialExemptionCreate = async (
       withCreateActionMapping('addExemption', {
         applicationNumber: form.applicationNumber,
         applications: form.linkedApplicationNumbers.join(','),
+        exemptionNumber: form.exemptionNumber,
         exemptionTypeCode: form.exemptionTypeCode,
         exemptionStatusCode: form.exemptionStatusCode,
-        ownerClientNumber: form.ownerClientNumber,
-        applicantClientNumber: form.applicantClientNumber,
-        agentClientNumber: form.applicantClientNumber,
         approvalDate: form.approvalDate,
         expiryDate: form.expiryDate,
         approvedVolume: form.approvedVolume,
+        enableRateOverride: form.enableRateOverride ? 'true' : undefined,
+        feeRate: form.enableRateOverride ? form.feeRate : undefined,
+        region: form.regionNumbers.join(','),
         otherConditions: form.otherConditions,
       }),
     )
@@ -283,12 +389,8 @@ export type ProvincialOfferCreateSubmission = {
   offeringClientNumber: string
   companyName: string
   contactName: string
-  region: string
   offerVolume: string
   purchaseOfferAmount: string
-  purchaseOfferDate: string
-  offerWithdrawalDate: string
-  withdrawReason: string
   teacReviewDate: string
   fairOfferIndicator: string
   validOfferIndicator: string
@@ -300,6 +402,10 @@ export type ProvincialOfferCreateSubmission = {
 
 export type ProvincialOfferUpdateSubmission = ProvincialOfferCreateSubmission & {
   offerNumber: string
+  region: string
+  purchaseOfferDate: string
+  offerWithdrawalDate: string
+  withdrawReason: string
 }
 
 const buildProvincialOfferPayload = (form: ProvincialOfferCreateSubmission): LegacyFormPayload => ({
@@ -309,19 +415,15 @@ const buildProvincialOfferPayload = (form: ProvincialOfferCreateSubmission): Leg
   contactName: form.contactName,
   offeringClientNumber: form.offeringClientNumber,
   clientNumber: form.offeringClientNumber,
-  region: form.region,
   offerVolume: form.offerVolume,
   purchaseOfferAmount: form.purchaseOfferAmount,
-  purchaseOfferDate: form.purchaseOfferDate,
-  offerWithdrawalDate: form.offerWithdrawalDate,
-  withdrawReason: form.withdrawReason,
   teacReviewDate: form.teacReviewDate,
   fairOfferIndicator: form.fairOfferIndicator,
   validOfferIndicator: form.validOfferIndicator,
   approvalIndicator: form.approvalIndicator,
   pickupLocation: form.pickupLocation,
   offerCondition: form.offerCondition,
-  offerRemark: form.offerRemark || form.offerCondition,
+  offerRemark: form.offerRemark,
 })
 
 export const submitProvincialOfferCreate = async (
@@ -349,6 +451,9 @@ export const submitProvincialOfferUpdate = async (
       withQueryParam(getProvincialOfferCreatePath(), 'actionMapping', 'updateOffer'),
       withCreateActionMapping('updateOffer', {
         ...buildProvincialOfferPayload(form),
+        purchaseOfferDate: form.purchaseOfferDate,
+        offerWithdrawalDate: form.offerWithdrawalDate,
+        withdrawReason: form.withdrawReason,
         exportPurchaseOfferNumber: form.offerNumber,
         offerNumber: form.offerNumber,
       }),
@@ -358,6 +463,8 @@ export const submitProvincialOfferUpdate = async (
     return buildFailureResult(
       'Offer update failed. Please review the form and try again. If the problem persists, contact support.',
       error,
+      undefined,
+      'The offer edit lock has expired or is held by another user. Close and re-open the offer before saving again.',
     )
   }
 }

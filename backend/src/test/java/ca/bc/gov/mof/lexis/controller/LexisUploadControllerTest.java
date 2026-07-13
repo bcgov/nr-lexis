@@ -1,11 +1,14 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -14,10 +17,15 @@ import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
+import ca.bc.gov.mof.lexis.service.upload.DocumentUploadMutationPolicy;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -28,15 +36,22 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -46,12 +61,18 @@ import org.springframework.web.multipart.MultipartFile;
 @DisplayName("Unit Test | LexisUploadController")
 class LexisUploadControllerTest {
 
+  private static final OrgUnitConstraint UNRESTRICTED_ORG_UNITS =
+      new OrgUnitConstraint(false, List.of());
+
   @Mock private ObjectProvider<LexisUploadService> uploadServiceProvider;
   @Mock private ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider;
   @Mock private ObjectProvider<MeterRegistry> meterRegistryProvider;
   @Mock private LexisUploadService uploadService;
   @Mock private ApplicationSubmissionImportService applicationSubmissionImportService;
   @Mock private ApplicationEditLockService applicationEditLockService;
+  @Mock private ProvincialAuthorizationService provincialAuthorizationService;
+  @Mock private DocumentUploadMutationPolicy documentUploadMutationPolicy;
+  @Mock private HttpServletRequest httpServletRequest;
 
   @Test
   void uploadShouldReturnBadRequestForEmptyFile() {
@@ -90,7 +111,7 @@ class LexisUploadControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("application", "application.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadApplication(file, 7000123L, "App file", "jsmith"))
+    when(uploadService.uploadApplication(file, 7000123L, "App file", "idir\\jsmith"))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -98,7 +119,10 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadApplication(file, 7000123L, "App file", "jsmith");
+    verify(documentUploadMutationPolicy).requireApplicationMutable(7000123L);
+    verify(applicationEditLockService)
+        .acquire(7000123L, "idir\\jsmith", "idir\\jsmith", false);
+    verify(uploadService).uploadApplication(file, 7000123L, "App file", "idir\\jsmith");
   }
 
   @Test
@@ -204,7 +228,8 @@ class LexisUploadControllerTest {
     MultipartFile file = sampleFile("application.pdf");
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
-    when(applicationEditLockService.snapshot(7000123L, "idir\\jsmith", false))
+    when(applicationEditLockService.acquire(
+            7000123L, "idir\\jsmith", "idir\\jsmith", false))
         .thenReturn(
             new ApplicationEditLockDto(
                 true,
@@ -224,6 +249,27 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void fileApplicationUploadShouldRejectExpiredCanonicalTargetBeforeLock() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleFile("application.pdf");
+    doThrow(new AccessDeniedException("Expired applications are read-only."))
+        .when(documentUploadMutationPolicy)
+        .requireApplicationMutable(7000123L);
+
+    assertThatThrownBy(
+            () ->
+                controller.fileApplicationUpload(
+                    file, null, 7000123L, "App file", null, null))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("Expired applications are read-only.");
+
+    verify(provincialAuthorizationService, times(2))
+        .requireApplication(null, 7000123L);
+    verifyNoInteractions(applicationEditLockService, uploadService);
+    verify(uploadServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
   void filePermitUploadShouldDelegateToService() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();
@@ -232,7 +278,7 @@ class LexisUploadControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("permit", "permit.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadPermit(file, 7000123L, "Permit file", "jsmith"))
+    when(uploadService.uploadPermit(file, 7000123L, "Permit file", "idir\\jsmith"))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -240,7 +286,79 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadPermit(file, 7000123L, "Permit file", "jsmith");
+    verify(documentUploadMutationPolicy).requirePermitMutable(7000123L);
+    verify(applicationEditLockService)
+        .acquirePermit(7000123L, "idir\\jsmith", "idir\\jsmith", false);
+    verify(uploadService).uploadPermit(file, 7000123L, "Permit file", "idir\\jsmith");
+  }
+
+  @Test
+  void filePermitUploadShouldRejectWhenPermitLockedByAnotherUser() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleFile("permit.pdf");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(applicationEditLockService.acquirePermit(
+            7000123L, "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                null,
+                "This permit is currently locked for editing by another user.",
+                null));
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.filePermitUpload(file, null, 7000123L, "Permit file", null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("This permit is currently locked for editing by another user.");
+    verify(uploadServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void permitAndInvoiceUploadsShouldRejectExpiredCanonicalTargetBeforeLock() {
+    LexisUploadController controller = controller();
+    MultipartFile permitFile = sampleFile("permit.pdf");
+    MultipartFile invoiceFile = sampleFile("invoice.pdf");
+    doThrow(new AccessDeniedException("Expired permits are read-only."))
+        .when(documentUploadMutationPolicy)
+        .requirePermitMutable(7000123L);
+    doThrow(new AccessDeniedException("Invoices can only be added to active permits."))
+        .when(documentUploadMutationPolicy)
+        .requireInvoicePermitActive(7000123L);
+
+    assertThatThrownBy(
+            () ->
+                controller.filePermitUpload(
+                    permitFile, null, 7000123L, "Permit file", null, null))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("Expired permits are read-only.");
+    assertThatThrownBy(
+            () ->
+                controller.fileInvoiceUpload(
+                    invoiceFile,
+                    null,
+                    7000123L,
+                    "INV-1001",
+                    "Invoice INV-1001",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("Invoices can only be added to active permits.");
+
+    verify(documentUploadMutationPolicy).requirePermitMutable(7000123L);
+    verify(documentUploadMutationPolicy).requireInvoicePermitActive(7000123L);
+    verify(applicationEditLockService, never()).acquirePermit(any(), any(), any(), anyBoolean());
+    verify(uploadServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -252,7 +370,7 @@ class LexisUploadControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("exemption", "exemption.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadExemption(file, "E-123", "Exemption file", "jsmith"))
+    when(uploadService.uploadExemption(file, "E-123", "Exemption file", "idir\\jsmith"))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -260,7 +378,58 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadExemption(file, "E-123", "Exemption file", "jsmith");
+    verify(documentUploadMutationPolicy).requireExemptionMutable("E-123");
+    verify(applicationEditLockService)
+        .acquireExemption("E-123", "idir\\jsmith", "idir\\jsmith", false);
+    verify(uploadService).uploadExemption(file, "E-123", "Exemption file", "idir\\jsmith");
+  }
+
+  @Test
+  void fileExemptionUploadShouldRejectWhenExemptionLockedByAnotherUser() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleFile("exemption.pdf");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(applicationEditLockService.acquireExemption(
+            "E-123", "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                null,
+                "This exemption is currently locked for editing by another user.",
+                null));
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileExemptionUpload(
+            file, null, "E-123", "Exemption file", null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("This exemption is currently locked for editing by another user.");
+    verify(uploadServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void fileExemptionUploadShouldRejectExpiredCanonicalTargetBeforeLock() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleFile("exemption.pdf");
+    doThrow(new AccessDeniedException("Expired exemptions are read-only."))
+        .when(documentUploadMutationPolicy)
+        .requireExemptionMutable("E-123");
+
+    assertThatThrownBy(
+            () ->
+                controller.fileExemptionUpload(
+                    file, null, "E-123", "Exemption file", null, null))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("Expired exemptions are read-only.");
+
+    verify(provincialAuthorizationService, times(2)).requireExemption(null, "E-123");
+    verify(applicationEditLockService, never())
+        .acquireExemption(any(), any(), any(), anyBoolean());
+    verify(uploadServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -281,7 +450,7 @@ class LexisUploadControllerTest {
                 BigDecimal.valueOf(1234.56),
                 BigDecimal.valueOf(1.25),
                 BigDecimal.valueOf(55.0),
-                "jsmith"))
+                "idir\\jsmith"))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -302,6 +471,9 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
+    verify(documentUploadMutationPolicy).requireInvoicePermitActive(7000123L);
+    verify(applicationEditLockService)
+        .acquirePermit(7000123L, "idir\\jsmith", "idir\\jsmith", false);
     verify(uploadService)
         .uploadInvoice(
             file,
@@ -311,7 +483,78 @@ class LexisUploadControllerTest {
             BigDecimal.valueOf(1234.56),
             BigDecimal.valueOf(1.25),
             BigDecimal.valueOf(55.0),
-            "jsmith");
+            "idir\\jsmith");
+  }
+
+  @Test
+  void fileInvoiceUploadShouldRejectWhenPermitLockedByAnotherUser() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleFile("invoice.pdf");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(applicationEditLockService.acquirePermit(
+            7000123L, "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                null,
+                "This permit is currently locked for editing by another user.",
+                null));
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileInvoiceUpload(
+            file,
+            null,
+            7000123L,
+            "INV-1001",
+            "Invoice INV-1001",
+            null,
+            BigDecimal.valueOf(1234.56),
+            null,
+            BigDecimal.valueOf(1.25),
+            null,
+            BigDecimal.valueOf(55.0),
+            null,
+            authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("This permit is currently locked for editing by another user.");
+    verify(uploadServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void fileInvoiceUploadShouldRejectNonActivePermitBeforeLock() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleFile("invoice.pdf");
+    doThrow(new AccessDeniedException("Invoices can only be added to active permits."))
+        .when(documentUploadMutationPolicy)
+        .requireInvoicePermitActive(7000123L);
+
+    assertThatThrownBy(
+            () ->
+                controller.fileInvoiceUpload(
+                    file,
+                    null,
+                    7000123L,
+                    "INV-1001",
+                    "Invoice INV-1001",
+                    null,
+                    BigDecimal.valueOf(1234.56),
+                    null,
+                    BigDecimal.valueOf(1.25),
+                    null,
+                    BigDecimal.valueOf(55.0),
+                    null,
+                    null))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("Invoices can only be added to active permits.");
+
+    verify(applicationEditLockService, never())
+        .acquirePermit(any(), any(), any(), anyBoolean());
+    verify(uploadServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -348,10 +591,17 @@ class LexisUploadControllerTest {
   @Test
   void applicationSubmissionUploadShouldDelegateToImportService() {
     when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    when(provincialAuthorizationService.scopedForestClientNumber(any()))
+        .thenReturn("00001234");
     LexisUploadController controller = controller();
     MultipartFile file = sampleXmlFile();
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    OrgUnitConstraint orgUnitConstraint = new OrgUnitConstraint(true, List.of(1909L));
+    when(
+            provincialAuthorizationService.resolveOrgUnitConstraint(
+                authentication, OrgUnitSurface.APPLICATION_WRITE))
+        .thenReturn(orgUnitConstraint);
     ApplicationSubmissionImportResultDto payload =
         new ApplicationSubmissionImportResultDto(
             "applicationSubmission",
@@ -364,14 +614,27 @@ class LexisUploadControllerTest {
             3,
             List.of(),
             List.of());
-    when(applicationSubmissionImportService.importApplicationSubmission(file, "jsmith", "CLIENT-REF-1")).thenReturn(payload);
+    when(
+            applicationSubmissionImportService.importApplicationSubmission(
+                file,
+                "idir\\jsmith",
+                "CLIENT-REF-1",
+                "00001234",
+                orgUnitConstraint))
+        .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
         controller.applicationSubmissionUpload(file, null, "CLIENT-REF-1", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(applicationSubmissionImportService).importApplicationSubmission(file, "jsmith", "CLIENT-REF-1");
+    verify(applicationSubmissionImportService)
+        .importApplicationSubmission(
+            file,
+            "idir\\jsmith",
+            "CLIENT-REF-1",
+            "00001234",
+            orgUnitConstraint);
   }
 
   @Test
@@ -397,21 +660,26 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
         controller.federalApplicationSubmissionUpload(
-            "FED-REF-1", "federal-direct.xml", submissionData, "REQ-1", null, authentication);
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     assertThat(response.getHeaders().getLocation())
         .isEqualTo(URI.create("/api/lexis/federal/applications/9001"));
     assertThat(response.getBody())
-        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+        .isEqualTo(withTrace(payload, "REQ-1", "IDEMP-1", submissionData, "lexis-submission"));
     verify(applicationSubmissionImportService)
         .importDedicatedFederalApplicationSubmission(
-            submissionData, "federal-direct.xml", "federal-user", "FED-REF-1");
+            submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1");
   }
 
   @Test
@@ -436,7 +704,7 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -463,7 +731,7 @@ class LexisUploadControllerTest {
                 "lexis-submission"));
     verify(applicationSubmissionImportService)
         .importDedicatedFederalApplicationSubmission(
-            submissionData, "federal-direct.xml", "federal-user", "FED-REF-1");
+            submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1");
   }
 
   @Test
@@ -487,7 +755,7 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -514,7 +782,7 @@ class LexisUploadControllerTest {
                 "lexis-submission"));
     verify(applicationSubmissionImportService)
         .importDedicatedFederalApplicationSubmission(
-            submissionData, "federal-direct.xml", "federal-user", "FED-REF-1");
+            submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1");
   }
 
   @Test
@@ -538,7 +806,7 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -547,13 +815,13 @@ class LexisUploadControllerTest {
             "federal-direct.xml",
             submissionData,
             "REQ-1",
-            null,
+            "IDEMP-1",
             new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     assertThat(response.getHeaders().getLocation()).isNull();
     assertThat(response.getBody())
-        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+        .isEqualTo(withTrace(payload, "REQ-1", "IDEMP-1", submissionData, "lexis-submission"));
   }
 
   @Test
@@ -577,7 +845,7 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -586,13 +854,217 @@ class LexisUploadControllerTest {
             "federal-direct.xml",
             submissionData,
             "REQ-1",
-            null,
+            "IDEMP-1",
             new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     assertThat(response.getHeaders().getLocation()).isNull();
     assertThat(response.getBody())
-        .isEqualTo(withTrace(payload, "REQ-1", null, submissionData, "lexis-submission"));
+        .isEqualTo(withTrace(payload, "REQ-1", "IDEMP-1", submissionData, "lexis-submission"));
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldReplayCompletedResponseForNormalizedKey() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable())
+        .thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        acceptedFederalPayload("federal-direct.xml", submissionData.length);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("nexcol-service-client", "n/a");
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData,
+                "federal-direct.xml",
+                "nexcol-service-client",
+                "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> first =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "  IDEMP-1  ",
+            authentication);
+    ResponseEntity<ApplicationSubmissionImportResultDto> replay =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-2",
+            "IDEMP-1",
+            authentication);
+
+    assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(first.getHeaders().getLocation())
+        .isEqualTo(URI.create("/api/lexis/federal/applications/9001"));
+    assertThat(replay.getStatusCode()).isEqualTo(first.getStatusCode());
+    assertThat(replay.getHeaders()).isEqualTo(first.getHeaders());
+    assertThat(replay.getBody()).isEqualTo(first.getBody());
+    assertThat(replay.getBody()).isNotNull();
+    assertThat(replay.getBody().requestId()).isEqualTo("REQ-1");
+    verify(applicationSubmissionImportService, times(1))
+        .importDedicatedFederalApplicationSubmission(
+            submissionData,
+            "federal-direct.xml",
+            "nexcol-service-client",
+            "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRejectKeyReusedForDifferentPayload() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable())
+        .thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] firstPayload =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    byte[] differentPayload =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\" version=\"2\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        acceptedFederalPayload("federal-direct.xml", firstPayload.length);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("nexcol-service-client", "n/a");
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                firstPayload,
+                "federal-direct.xml",
+                "nexcol-service-client",
+                "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> first =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            firstPayload,
+            "REQ-1",
+            "IDEMP-1",
+            authentication);
+    ResponseEntity<ApplicationSubmissionImportResultDto> conflict =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            differentPayload,
+            "REQ-2",
+            "IDEMP-1",
+            authentication);
+
+    assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(conflict.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(conflict.getBody()).isNotNull();
+    assertThat(conflict.getBody().errors())
+        .containsExactly(
+            "X-Idempotency-Key has already been used by this caller for a different payload. Use a new idempotency key for a different submission; do not retry it with this key.");
+    assertThat(conflict.getBody().payloadSha256()).isEqualTo(sha256Hex(differentPayload));
+    verify(applicationSubmissionImportService, times(1))
+        .importDedicatedFederalApplicationSubmission(
+            firstPayload,
+            "federal-direct.xml",
+            "nexcol-service-client",
+            "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldReleaseClaimAfterTransientFailure() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable())
+        .thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        acceptedFederalPayload("federal-direct.xml", submissionData.length);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("nexcol-service-client", "n/a");
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData,
+                "federal-direct.xml",
+                "nexcol-service-client",
+                "FED-REF-1"))
+        .thenThrow(new IllegalStateException("database unavailable"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> unavailable =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            authentication);
+    ResponseEntity<ApplicationSubmissionImportResultDto> retry =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-2",
+            "IDEMP-1",
+            authentication);
+
+    assertThat(unavailable.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(retry.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(retry.getBody()).isNotNull();
+    assertThat(retry.getBody().requestId()).isEqualTo("REQ-2");
+    verify(applicationSubmissionImportService, times(2))
+        .importDedicatedFederalApplicationSubmission(
+            submissionData,
+            "federal-direct.xml",
+            "nexcol-service-client",
+            "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldNamespaceKeyByAuthenticatedCaller() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable())
+        .thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        acceptedFederalPayload("federal-direct.xml", submissionData.length);
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "client-a", "FED-REF-1"))
+        .thenReturn(payload);
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "client-b", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> firstCaller =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("client-a", "n/a"));
+    ResponseEntity<ApplicationSubmissionImportResultDto> secondCaller =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-2",
+            "IDEMP-1",
+            new TestingAuthenticationToken("client-b", "n/a"));
+
+    assertThat(firstCaller.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(secondCaller.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "client-a", "FED-REF-1");
+    verify(applicationSubmissionImportService)
+        .importDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "client-b", "FED-REF-1");
   }
 
   @Test
@@ -605,6 +1077,7 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -672,12 +1145,13 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
         .thenThrow(new IllegalStateException("database unavailable"));
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -899,7 +1373,30 @@ class LexisUploadControllerTest {
         .containsExactly("Federal LEXIS submission service is unavailable. Try again later.");
     verify(applicationSubmissionImportService)
         .importDedicatedFederalApplicationSubmission(
-            submissionData, "federal-direct.xml", "federal-user", "FED-REF-1");
+            submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldRequireIdempotencyKeyWheneverCreateIsEnabled() {
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            null,
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().errors())
+        .containsExactly("X-Idempotency-Key header is required for federal create submissions.");
+    verifyNoInteractions(applicationSubmissionImportService);
   }
 
   @Test
@@ -938,6 +1435,7 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -976,6 +1474,7 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -1047,6 +1546,7 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     controller.setRequireFederalRequestId(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
@@ -1165,6 +1665,7 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     controller.setRequireFederalCreateUserReference(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
@@ -1235,6 +1736,7 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -1252,7 +1754,7 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -1312,6 +1814,7 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -1329,7 +1832,7 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "federal-user", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -1545,19 +2048,86 @@ class LexisUploadControllerTest {
             1,
             List.of(),
             List.of());
-    when(applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(file, "jsmith", "FED-REF-1"))
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                file, "idir\\jsmith", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
         controller.federalApplicationSubmissionMultipartUpload(
-            "FED-REF-1", file, null, "REQ-1", null, authentication);
+            "FED-REF-1", file, null, "REQ-1", "IDEMP-1", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     assertThat(response.getHeaders().getLocation())
         .isEqualTo(URI.create("/api/lexis/federal/applications/9001"));
-    assertThat(response.getBody()).isEqualTo(withTrace(payload, "REQ-1", null, file, "esf-submission"));
+    assertThat(response.getBody())
+        .isEqualTo(withTrace(payload, "REQ-1", "IDEMP-1", file, "esf-submission"));
     verify(applicationSubmissionImportService)
-        .importDedicatedFederalApplicationSubmission(file, "jsmith", "FED-REF-1");
+        .importDedicatedFederalApplicationSubmission(file, "idir\\jsmith", "FED-REF-1");
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldRejectInFlightDuplicateAndThenReplay()
+      throws Exception {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable())
+        .thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    ApplicationSubmissionImportResultDto payload =
+        acceptedFederalPayload("submission.xml", file.getSize());
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("nexcol-service-client", "n/a");
+    CountDownLatch serviceStarted = new CountDownLatch(1);
+    CountDownLatch releaseService = new CountDownLatch(1);
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                file, "nexcol-service-client", "FED-REF-1"))
+        .thenAnswer(
+            invocation -> {
+              serviceStarted.countDown();
+              if (!releaseService.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting to release test import.");
+              }
+              return payload;
+            });
+
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    try {
+      Future<ResponseEntity<ApplicationSubmissionImportResultDto>> firstFuture =
+          executor.submit(
+              () ->
+                  controller.federalApplicationSubmissionMultipartUpload(
+                      "FED-REF-1", file, null, "REQ-1", "IDEMP-1", authentication));
+      assertThat(serviceStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+      ResponseEntity<ApplicationSubmissionImportResultDto> inFlight =
+          controller.federalApplicationSubmissionMultipartUpload(
+              "FED-REF-1", file, null, "REQ-2", "IDEMP-1", authentication);
+      assertThat(inFlight.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+      assertThat(inFlight.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("60");
+      assertThat(inFlight.getBody()).isNotNull();
+      assertThat(inFlight.getBody().errors())
+          .containsExactly(
+              "X-Idempotency-Key has already been used for a federal submission that is still processing. Retry with the same key and identical payload after the Retry-After interval.");
+
+      releaseService.countDown();
+      ResponseEntity<ApplicationSubmissionImportResultDto> first =
+          firstFuture.get(5, TimeUnit.SECONDS);
+      ResponseEntity<ApplicationSubmissionImportResultDto> replay =
+          controller.federalApplicationSubmissionMultipartUpload(
+              "FED-REF-1", file, null, "REQ-3", "IDEMP-1", authentication);
+
+      assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+      assertThat(replay.getStatusCode()).isEqualTo(first.getStatusCode());
+      assertThat(replay.getHeaders()).isEqualTo(first.getHeaders());
+      assertThat(replay.getBody()).isEqualTo(first.getBody());
+      verify(applicationSubmissionImportService, times(1))
+          .importDedicatedFederalApplicationSubmission(
+              file, "nexcol-service-client", "FED-REF-1");
+    } finally {
+      releaseService.countDown();
+      executor.shutdownNow();
+    }
   }
 
   @Test
@@ -1580,7 +2150,7 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                file, "federal-user", "FED-REF-1"))
+                file, "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -1606,7 +2176,7 @@ class LexisUploadControllerTest {
                 "FEDERAL-SYSTEM",
                 "esf-submission"));
     verify(applicationSubmissionImportService)
-        .importDedicatedFederalApplicationSubmission(file, "federal-user", "FED-REF-1");
+        .importDedicatedFederalApplicationSubmission(file, "bceid\\federal-user", "FED-REF-1");
   }
 
   @Test
@@ -1628,7 +2198,7 @@ class LexisUploadControllerTest {
             List.of());
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                file, "federal-user", "FED-REF-1"))
+                file, "bceid\\federal-user", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -1654,7 +2224,7 @@ class LexisUploadControllerTest {
                 "FEDERAL-HEADER",
                 "esf-submission"));
     verify(applicationSubmissionImportService)
-        .importDedicatedFederalApplicationSubmission(file, "federal-user", "FED-REF-1");
+        .importDedicatedFederalApplicationSubmission(file, "bceid\\federal-user", "FED-REF-1");
   }
 
   @Test
@@ -2055,6 +2625,103 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void federalApplicationSubmissionRawUploadShouldFailClosedWhenCreateIsDisabled() {
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService);
+    controller.setFederalSubmissionRetryAfterSeconds(120L);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionRawUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            httpServletRequest,
+            "REQ-1",
+            "IDEMP-1",
+            "NEXCOL",
+            null,
+            new TestingAuthenticationToken("nexcol-service-client", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("120");
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().errors())
+        .containsExactly(
+            "Federal LEXIS submission creation is disabled. Retry only after the integration has been explicitly enabled.");
+    verifyNoInteractions(httpServletRequest, applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionMultipartUploadShouldFailClosedWhenCreateIsDisabled() {
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService);
+    MultipartFile file = sampleXmlFile();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionMultipartUpload(
+            "FED-REF-1",
+            file,
+            null,
+            "REQ-1",
+            "IDEMP-1",
+            null,
+            null,
+            new TestingAuthenticationToken("nexcol-service-client", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("60");
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().errors())
+        .containsExactly(
+            "Federal LEXIS submission creation is disabled. Retry only after the integration has been explicitly enabled.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void federalApplicationSubmissionValidationShouldRemainAvailableWhenCreateIsDisabled() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable())
+        .thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
+            "federal-direct.xml",
+            submissionData.length,
+            "validated",
+            "validated",
+            null,
+            "FED-1",
+            1,
+            List.of(),
+            List.of());
+    when(
+            applicationSubmissionImportService.validateDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "FED-REF-1"))
+        .thenReturn(payload);
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionValidation(
+            "FED-REF-1", "federal-direct.xml", submissionData, "REQ-1", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(applicationSubmissionImportService)
+        .validateDedicatedFederalApplicationSubmission(
+            submissionData, "federal-direct.xml", "FED-REF-1");
+  }
+
+  @Test
   void federalApplicationSubmissionUploadShouldRejectMissingRawXml() {
     LexisUploadController controller = controller();
 
@@ -2069,6 +2736,42 @@ class LexisUploadControllerTest {
     assertThat(response.getBody().payloadSha256()).isNull();
     assertThat(response.getBody().payloadRootType()).isNull();
     assertThat(response.getBody().errors()).containsExactly("Submission data is required.");
+    verifyNoInteractions(applicationSubmissionImportService);
+  }
+
+  @Test
+  void rawFederalRoutesShouldRejectDeclaredOversizedBodiesBeforeReadingThem() throws Exception {
+    when(httpServletRequest.getContentLengthLong())
+        .thenReturn(ApplicationSubmissionImportService.MAX_IMPORT_BYTES + 1L);
+    LexisUploadController controller = controller();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> createResponse =
+        controller.federalApplicationSubmissionRawUpload(
+            "FED-REF-1",
+            "oversized.xml",
+            httpServletRequest,
+            "REQ-1",
+            "IDEMPOTENCY-1",
+            null,
+            null,
+            null);
+    ResponseEntity<ApplicationSubmissionImportResultDto> validateResponse =
+        controller.federalApplicationSubmissionRawValidation(
+            "FED-REF-1",
+            "oversized.xml",
+            httpServletRequest,
+            "REQ-1",
+            null,
+            null,
+            null,
+            null);
+
+    assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+    assertThat(validateResponse.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+    assertThat(createResponse.getBody()).isNotNull();
+    assertThat(createResponse.getBody().errors())
+        .containsExactly("The LEXIS application submission file must be 20 MiB or smaller.");
+    verify(httpServletRequest, never()).getInputStream();
     verifyNoInteractions(applicationSubmissionImportService);
   }
 
@@ -2125,6 +2828,7 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
+    controller.setFederalCreateEnabled(true);
     byte[] submissionData = "{\"type\":\"FeatureCollection\"}".getBytes(StandardCharsets.UTF_8);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -2228,7 +2932,10 @@ class LexisUploadControllerTest {
             0,
             List.of("Invalid XML"),
             List.of());
-    when(applicationSubmissionImportService.importApplicationSubmission(file, null, null)).thenReturn(payload);
+    when(
+            applicationSubmissionImportService.importApplicationSubmission(
+                file, null, null, null, UNRESTRICTED_ORG_UNITS))
+        .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
         controller.applicationSubmissionUpload(file, null, null, null);
@@ -2240,8 +2947,17 @@ class LexisUploadControllerTest {
   @Test
   void applicationSubmissionValidationShouldDelegateToValidationService() {
     when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    when(provincialAuthorizationService.scopedForestClientNumber(any()))
+        .thenReturn("00001234");
     LexisUploadController controller = controller();
     MultipartFile file = sampleXmlFile();
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    OrgUnitConstraint orgUnitConstraint = new OrgUnitConstraint(true, List.of(1909L));
+    when(
+            provincialAuthorizationService.resolveOrgUnitConstraint(
+                authentication, OrgUnitSurface.APPLICATION_WRITE))
+        .thenReturn(orgUnitConstraint);
     ApplicationSubmissionImportResultDto payload =
         new ApplicationSubmissionImportResultDto(
             "applicationSubmission",
@@ -2254,14 +2970,23 @@ class LexisUploadControllerTest {
             3,
             List.of(),
             List.of());
-    when(applicationSubmissionImportService.validateApplicationSubmission(file, "CLIENT-REF-1")).thenReturn(payload);
+    when(
+            applicationSubmissionImportService.validateApplicationSubmission(
+                file, "CLIENT-REF-1", "00001234", orgUnitConstraint))
+        .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
-        controller.applicationSubmissionValidation(file, null, "CLIENT-REF-1", null);
+        controller.applicationSubmissionValidation(
+            file, null, "CLIENT-REF-1", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(applicationSubmissionImportService).validateApplicationSubmission(file, "CLIENT-REF-1");
+    verify(provincialAuthorizationService).scopedForestClientNumber(authentication);
+    verify(provincialAuthorizationService)
+        .resolveOrgUnitConstraint(authentication, OrgUnitSurface.APPLICATION_WRITE);
+    verify(applicationSubmissionImportService)
+        .validateApplicationSubmission(
+            file, "CLIENT-REF-1", "00001234", orgUnitConstraint);
   }
 
   @Test
@@ -2281,7 +3006,10 @@ class LexisUploadControllerTest {
             0,
             List.of("Invalid XML"),
             List.of());
-    when(applicationSubmissionImportService.validateApplicationSubmission(file, null)).thenReturn(payload);
+    when(
+            applicationSubmissionImportService.validateApplicationSubmission(
+                file, null, null, UNRESTRICTED_ORG_UNITS))
+        .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
         controller.applicationSubmissionValidation(file, null, null, null);
@@ -2296,6 +3024,21 @@ class LexisUploadControllerTest {
         fileName,
         "text/csv",
         "col1,col2\nvalue1,value2\n".getBytes(StandardCharsets.UTF_8));
+  }
+
+  private ApplicationSubmissionImportResultDto acceptedFederalPayload(
+      String fileName, long fileSize) {
+    return new ApplicationSubmissionImportResultDto(
+        "applicationSubmission",
+        fileName,
+        fileSize,
+        "accepted",
+        "created",
+        9001L,
+        "FED-1",
+        1,
+        List.of(),
+        List.of());
   }
 
   private MultipartFile sampleXmlFile() {
@@ -2350,13 +3093,27 @@ class LexisUploadControllerTest {
 
   private LexisUploadController controller() {
     lenient()
-        .when(applicationEditLockService.snapshot(any(), any(), anyBoolean()))
-        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+        .when(
+            provincialAuthorizationService.resolveOrgUnitConstraint(
+                any(), eq(OrgUnitSurface.APPLICATION_WRITE)))
+        .thenReturn(UNRESTRICTED_ORG_UNITS);
+    lenient()
+        .when(applicationEditLockService.acquire(any(), any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient()
+        .when(applicationEditLockService.acquirePermit(any(), any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient()
+        .when(applicationEditLockService.acquireExemption(any(), any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
     LexisUploadController controller =
         new LexisUploadController(
             uploadServiceProvider,
             applicationSubmissionImportServiceProvider,
             applicationEditLockService);
+    controller.setFederalCreateEnabled(true);
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    controller.setDocumentUploadMutationPolicy(documentUploadMutationPolicy);
     return controller;
   }
 

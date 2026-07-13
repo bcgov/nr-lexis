@@ -30,6 +30,9 @@ const renderWithPath = (path: string) => {
   render(<RouterProvider router={router} />)
 }
 
+const findLazyPageHeading = (name: string) =>
+  screen.findByRole('heading', { name }, { timeout: 5000 })
+
 describe('Protected route guard access', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -67,7 +70,7 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/admin/uploads?type=application')
 
-    expect(await screen.findByRole('heading', { name: 'Data Upload' })).toBeInTheDocument()
+    expect(await findLazyPageHeading('Data Upload')).toBeInTheDocument()
   })
 
   it('does not allow generic data upload route for create application only users', async () => {
@@ -105,9 +108,7 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(
-      await screen.findByRole('heading', { name: 'Upload Application Submission' }),
-    ).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload Application Submission')).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
@@ -127,9 +128,7 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(
-      await screen.findByRole('heading', { name: 'Upload Application Submission' }),
-    ).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload Application Submission')).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
@@ -180,9 +179,7 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(
-      await screen.findByRole('heading', { name: 'Upload Application Submission' }),
-    ).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload Application Submission')).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 

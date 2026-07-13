@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -37,7 +38,7 @@ public class OracleLexisApplicationService implements LexisApplicationService {
   @Autowired
   public OracleLexisApplicationService(
       LexisApplicationRepository repository, LexisReportScheduleRepository scheduleRepository) {
-    this(repository, scheduleRepository, Clock.systemDefaultZone());
+    this(repository, scheduleRepository, LexisBusinessTime.systemClock());
   }
 
   OracleLexisApplicationService(
@@ -46,7 +47,7 @@ public class OracleLexisApplicationService implements LexisApplicationService {
       Clock clock) {
     this.repository = repository;
     this.scheduleRepository = scheduleRepository;
-    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
+    this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
   }
 
   @Override
@@ -127,7 +128,7 @@ public class OracleLexisApplicationService implements LexisApplicationService {
   private LexisApplicationSearchCriteria normalizeCriteria(LexisApplicationSearchCriteria input) {
     if (input == null) {
       return new LexisApplicationSearchCriteria(
-          null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
+          null, null, null, null, null, null, null, null, null, null, null, null, List.of(), false, null, 0, 25);
     }
 
     return new LexisApplicationSearchCriteria(
@@ -144,6 +145,7 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         input.listingFromDate(),
         input.listingToDate(),
         positiveDistinctLongs(input.regionNumbers()),
+        input.broadClientMatch(),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));

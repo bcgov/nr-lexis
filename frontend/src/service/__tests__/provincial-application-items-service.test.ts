@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addApplicationScaleToPackage,
   checkApplicationVolumeUsage,
+  deleteApplicationPackage,
   deleteApplicationScale,
   fetchApplicationPackageStatusCodes,
   fetchApplicationSummarySnapshot,
@@ -67,6 +68,21 @@ describe('provincial-application-items-service', () => {
       undefined,
       { ttlMs: 30000 },
     )
+  })
+
+  it.each([
+    null,
+    {},
+    [{ code: '', description: 'Missing code' }],
+    [{ code: 1, description: 'Numeric code' }],
+    [
+      { code: 'ACT', description: 'Active' },
+      { code: 'act', description: 'Duplicate' },
+    ],
+  ])('rejects malformed authoritative package status payloads', async (payload) => {
+    getCachedResponseMock.mockResolvedValue({ data: payload })
+
+    await expect(fetchApplicationPackageStatusCodes()).rejects.toThrow('Authoritative code options')
   })
 
   it('checks application volume usage without cached GET data', async () => {
@@ -254,7 +270,7 @@ describe('provincial-application-items-service', () => {
       },
     })
 
-    const result = await updateApplicationSummary({
+    const request = {
       applicationNumber: '321',
       applicationDate: '2026-01-01',
       receivedDate: '2026-01-02',
@@ -268,18 +284,17 @@ describe('provincial-application-items-service', () => {
       agentClientLocationCode: '01',
       ownerClientNumber: '00011122',
       ownerClientLocationCode: '00',
-      applicationStatusCode: 'NEW',
       applicantTypeCode: 'A',
       orgUnitNumber: '12',
       productTypeCode: 'H',
-      jurisdictionCode: 'P',
       growthTypeCode: 'O',
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Contact',
       oicIndicator: 'N',
       endUseCode: 'LU',
       speciesCodes: ['FI', 'CE'],
-    })
+    }
+    const result = await updateApplicationSummary(request)
 
     expect(result).toEqual({
       valid: true,
@@ -309,17 +324,22 @@ describe('provincial-application-items-service', () => {
     expect(body.get('agentClientLocationCode')).toBe('01')
     expect(body.get('ownerClientNumber')).toBe('00011122')
     expect(body.get('ownerClientLocationCode')).toBe('00')
-    expect(body.get('applicationStatusCode')).toBe('NEW')
+    expect(body.has('applicationStatusCode')).toBe(false)
     expect(body.get('applicantType')).toBe('A')
     expect(body.get('orgUnitNumber')).toBe('12')
     expect(body.get('productTypeCode')).toBe('H')
-    expect(body.get('jurisdictionCode')).toBe('P')
+    expect(body.has('jurisdictionCode')).toBe(false)
     expect(body.get('growthTypeCode')).toBe('O')
     expect(body.get('agentContactName')).toBe('Agent Contact')
     expect(body.get('ownerContactName')).toBe('Owner Contact')
     expect(body.get('oicIndicator')).toBe('N')
     expect(body.get('applicationEndUseCode')).toBe('LU')
     expect(body.get('applicationSelectedSpecies')).toBe('FI,CE')
+
+    await updateApplicationSummary({ ...request, applicantTypeCode: undefined })
+    const omittedApplicantTypeBody = postMock.mock.calls[1][1]
+    expect(omittedApplicantTypeBody).toBeInstanceOf(URLSearchParams)
+    expect(omittedApplicantTypeBody.has('applicantType')).toBe(false)
   })
 
   it('loads editable application summary snapshot fields', async () => {
@@ -391,5 +411,38 @@ describe('provincial-application-items-service', () => {
         scaleId: '55',
       },
     })
+  })
+
+  it('rejects an unavailable scale deletion instead of treating 204 as success', async () => {
+    deleteMock.mockResolvedValue({ status: 204, data: undefined })
+
+    await expect(deleteApplicationScale('55', '321')).rejects.toThrow(
+      'Unexpected application scale deletion response.',
+    )
+  })
+
+  it('requires an explicit package deletion success response', async () => {
+    deleteMock.mockResolvedValue({
+      status: 200,
+      data: {
+        success: true,
+      },
+    })
+
+    await expect(deleteApplicationPackage('PKG-1', '321')).resolves.toEqual({ success: true })
+    expect(deleteMock).toHaveBeenCalledWith('/lexis/rpc/application-details/package', {
+      params: {
+        applicationNumber: '321',
+        packageNumber: 'PKG-1',
+      },
+    })
+  })
+
+  it('rejects an unavailable package deletion instead of treating 204 as success', async () => {
+    deleteMock.mockResolvedValue({ status: 204, data: undefined })
+
+    await expect(deleteApplicationPackage('PKG-1', '321')).rejects.toThrow(
+      'Unexpected application package deletion response.',
+    )
   })
 })

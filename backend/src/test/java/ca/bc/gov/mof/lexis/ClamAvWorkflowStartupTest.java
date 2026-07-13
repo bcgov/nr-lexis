@@ -29,7 +29,7 @@ class ClamAvWorkflowStartupTest {
         .contains("clamav-startup:")
         .contains("name: ClamAV Startup")
         .contains("bash .github/scripts/check-clamav-startup.sh")
-        .contains("needs: [backend-tests, frontend-tests, clamav-startup]");
+        .contains("needs: [backend-tests, frontend-tests, clamav-startup, trivy]");
   }
 
   @Test

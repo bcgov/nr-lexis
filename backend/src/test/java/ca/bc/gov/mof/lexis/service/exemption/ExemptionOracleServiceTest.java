@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -26,6 +27,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ExemptionOracleService")
@@ -104,6 +106,15 @@ class ExemptionOracleServiceTest {
   }
 
   @Test
+  void detailShouldPropagateRepositoryFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(repository.findByExemptionNumber("EX-205")).thenThrow(failure);
+
+    assertThatThrownBy(() -> service.findByExemptionNumber("EX-205")).isSameAs(failure);
+  }
+
+  @Test
   void searchShouldQueryRepositoryWhenRegionNotSelected() {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
@@ -117,6 +128,37 @@ class ExemptionOracleServiceTest {
     assertThat(response.results()).extracting(ExemptionSearchResultDto::exemptionNumber)
         .containsExactly("EX-001");
     verify(repository).search(any(ExemptionSearchCriteria.class));
+  }
+
+  @Test
+  void searchShouldPreserveBlanketOicExclusionDuringNormalization() {
+    ExemptionSearchCriteria criteria =
+        new ExemptionSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(76L),
+            false,
+            true,
+            0,
+            25);
+    when(repository.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(page(List.of(), 0));
+
+    service.search(criteria);
+
+    ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    verify(repository).search(criteriaCaptor.capture());
+    assertThat(criteriaCaptor.getValue().excludeBlanketOic()).isTrue();
   }
 
   @Test
@@ -189,12 +231,15 @@ class ExemptionOracleServiceTest {
         exemptionNumber,
         "Ministerial",
         "New",
+        "00054321",
         "00012345",
         1000123L,
         approvalDate,
         LocalDate.of(2026, 1, 10),
+        LocalDate.of(2027, 1, 10),
         "R1",
         50.0,
+        42.0,
         false);
   }
 

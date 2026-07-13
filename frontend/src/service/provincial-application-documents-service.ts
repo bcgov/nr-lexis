@@ -63,6 +63,7 @@ export const fetchApplicationDocuments = async (
 export const openApplicationDocument = async (
   fileId: string,
   fileName: string,
+  applicationNumber: string,
 ): Promise<OpenApplicationDocumentResult> => {
   const response = await apiService
     .getAxiosInstance()
@@ -70,6 +71,7 @@ export const openApplicationDocument = async (
       params: {
         fileId,
         fileName,
+        applicationNumber,
       },
       responseType: 'blob',
       headers: {
@@ -103,11 +105,8 @@ export const removeApplicationDocument = async (
       },
     })
 
-  if (response.status === 204) {
-    return {
-      success: true,
-      source: 'api',
-    }
+  if (response.status !== 200) {
+    throw new Error('Unexpected application document removal response.')
   }
 
   return {

@@ -4,7 +4,11 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -16,6 +20,8 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -54,6 +60,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_PERMIT_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_FILE_DETAILS(?,?)";
+  private static final String FIND_PERMIT_FILE_ATTACHMENT =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_FILE_ATTACHMENT(?,?)";
   private static final String FIND_APPLICATION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
   private static final String FIND_INVOICE_BY_ID = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICE_BY_ID(?,?,?)";
@@ -90,6 +98,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_PACKAGE_STATUS_CODE =
       LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)";
   private static final String FIND_PRODUCT_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)";
+  private static final String FIND_VALID_BOIC_TIMBER_MARK =
+      LEXIS_CODES_PACKAGE + "FIND_VALID_BOIC_TIMBER_MARK(?,?,?)";
   private static final String FIND_CANDIDATE_EXCOL_VALUES =
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_RATE_BY_EXEMPTION = LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
@@ -97,10 +107,19 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_CONVERSION_FOR_DATE =
       LEXIS_CODES_PACKAGE + "FIND_CONVERSION_FOR_DATE(?,?,?)";
   private static final String FIND_ALL_COUNTRY_CODES = LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
+  private static final String FIND_COUNTRY_CODE = LEXIS_CODES_PACKAGE + "FIND_COUNTRY_CODE(?,?)";
+  private static final String FIND_PORT_CODE = LEXIS_CODES_PACKAGE + "FIND_PORT_CODE(?,?)";
+  private static final String FIND_PERMIT_STATUS_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_PERMIT_STATUS_CODE(?,?)";
+  private static final String FIND_SCALE_METHOD_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_SCALE_METHOD_CODE(?,?)";
+  private static final String FIND_TRANSPORT_TYPE_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_TRANSPORT_TYPE_CODE(?,?)";
   private static final String FIND_ALL_ATTACHMENT_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_ATTACH_CODES(?)";
   private static final String FIND_ATTACHMENT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
+  private static final String IS_PERMIT_MU44 = LEXIS_GROUP_5_PACKAGE + "IS_PERMIT_MU44(?,?)";
 
   public PermitRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -110,11 +129,64 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     if (permitNumber == null || permitNumber < 1) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_PERMIT,
         cs -> cs.setString(1, permitNumber.toString()),
         2,
         this::mapPermitScaleDetailRow);
+  }
+
+  public boolean hasApplicationForPermitCompletionRequired(Long permitNumber) {
+    return !findApplicationNumbersByPermitNumberRequired(permitNumber).isEmpty();
+  }
+
+  public boolean hasPackageForPermitCompletionRequired(
+      Long permitNumber, boolean blanketOic) {
+    List<String> packageNumbers =
+        blanketOic
+            ? findPackageNumbersByOicPermitNumber(permitNumber)
+            : findPackageNumbersByPermitNumberRequired(permitNumber);
+    return !packageNumbers.isEmpty();
+  }
+
+  public boolean hasScaleForPermitCompletionRequired(Long permitNumber) {
+    return !findScaleDetailsByPermitNumber(permitNumber).isEmpty();
+  }
+
+  public boolean isPermitMu44Required(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return false;
+    }
+    return queryCursorSingleRequired(
+            IS_PERMIT_MU44,
+            cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            rs -> getLong(rs, "RESULTS_COUNT"))
+        .map(value -> value > 0)
+        .orElseThrow(
+            () ->
+                new DataRetrievalFailureException(
+                    "Oracle MU44 permit lookup returned no result"));
+  }
+
+  public boolean isPermitStatusCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_PERMIT_STATUS_CODE, code);
+  }
+
+  public boolean isCountryCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_COUNTRY_CODE, code);
+  }
+
+  public boolean isPortCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_PORT_CODE, code);
+  }
+
+  public boolean isScaleMethodCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_SCALE_METHOD_CODE, code);
+  }
+
+  public boolean isTransportTypeCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_TRANSPORT_TYPE_CODE, code);
   }
 
   public Optional<ScaleMutationRow> findScaleMutationById(String scaleDetailId) {
@@ -123,7 +195,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_SCALE_DETAIL_BY_ID,
         cs -> cs.setString(1, normalizedScaleDetailId),
         2,
@@ -135,7 +207,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
@@ -150,7 +222,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
 
     Timestamp now = new Timestamp(System.currentTimeMillis());
-    return executeProcedure(
+    executeProcedureRequired(
         UPDATE_SCALE,
         cs -> {
           cs.setLong(1, normalizedScaleDetailId);
@@ -166,6 +238,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           cs.setString(11, auditUserOrDefault(normalizedUpdateUserId));
           cs.setTimestamp(12, now);
         });
+    return true;
   }
 
   public Optional<PermitScaleDetailRow> insertBoicScaleDetail(BoicScaleMutationRecord record) {
@@ -173,7 +246,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         INSERT_SCALE_DETAIL,
         cs -> {
           cs.setString(1, trim(record.timberMark()));
@@ -190,7 +263,20 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           setDoubleOrNull(cs, 12, record.exemptionOverrideRate());
         },
         13,
-        this::mapPermitScaleDetailRow);
+        this::mapPermitScaleDetailRow)
+        .filter(
+            row ->
+                ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong(
+                        row.exportScaleDetailId())
+                    != null
+                    && java.util.Objects.equals(
+                        row.applicationNumber(), record.applicationNumber())
+                    && java.util.Objects.equals(
+                        ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong(
+                            row.exportPermitDetailNumber()),
+                        record.exportPermitDetailNumber())
+                    && java.util.Objects.equals(
+                        trim(row.packageNumber()), trim(record.packageNumber())));
   }
 
   public boolean deleteScaleDetailById(String scaleDetailId, String userId) {
@@ -199,24 +285,42 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return false;
     }
 
-    return executeProcedure(
+    executeProcedureRequired(
         DELETE_SCALE_DETAIL,
         cs -> {
           cs.setString(1, normalizedScaleDetailId);
           cs.setString(2, auditUserOrDefault(userId));
         });
+    return true;
   }
 
   public List<String> findPackageNumbersByPermitNumber(Long permitNumber) {
+    return findPackageNumbersByPermitNumber(permitNumber, false);
+  }
+
+  public List<String> findPackageNumbersByPermitNumberRequired(Long permitNumber) {
+    return findPackageNumbersByPermitNumber(permitNumber, true);
+  }
+
+  private List<String> findPackageNumbersByPermitNumber(
+      Long permitNumber, boolean required) {
     if (permitNumber == null || permitNumber < 1) {
       return List.of();
     }
 
-    return queryCursorProcedure(
-            FIND_PACKAGES_BY_PERMIT,
-            cs -> cs.setString(1, permitNumber.toString()),
-            2,
-            rs -> getString(rs, "PACKAGE_NUMBER"))
+    List<String> packageNumbers =
+        required
+            ? queryCursorProcedureRequired(
+                FIND_PACKAGES_BY_PERMIT,
+                cs -> cs.setString(1, permitNumber.toString()),
+                2,
+                rs -> getString(rs, "PACKAGE_NUMBER"))
+            : queryCursorProcedure(
+                FIND_PACKAGES_BY_PERMIT,
+                cs -> cs.setString(1, permitNumber.toString()),
+                2,
+                rs -> getString(rs, "PACKAGE_NUMBER"));
+    return packageNumbers
         .stream()
         .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
         .distinct()
@@ -229,7 +333,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
             FIND_PACKAGES_BY_OIC_PERMIT,
             cs -> cs.setString(1, oicPermitNumber.toString()),
             2,
@@ -242,20 +346,33 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public List<Long> findApplicationNumbersByPermitNumber(Long permitNumber) {
+    return findApplicationNumbersByPermitNumber(permitNumber, false);
+  }
+
+  public List<Long> findApplicationNumbersByPermitNumberRequired(Long permitNumber) {
+    return findApplicationNumbersByPermitNumber(permitNumber, true);
+  }
+
+  private List<Long> findApplicationNumbersByPermitNumber(
+      Long permitNumber, boolean required) {
     if (permitNumber == null || permitNumber < 1) {
       return List.of();
     }
 
-    return queryCursorProcedure(
-            FIND_PACKAGES_BY_PERMIT,
-            cs -> cs.setString(1, permitNumber.toString()),
-            2,
-            rs -> getLong(rs, "APPLICATION_NUMBER"))
-        .stream()
-        .filter(applicationNumber -> applicationNumber != null && applicationNumber > 0)
-        .distinct()
-        .sorted()
-        .toList();
+    List<Long> applicationNumbers =
+        required
+            ? queryCursorProcedureRequired(
+                FIND_PACKAGES_BY_PERMIT,
+                cs -> cs.setString(1, permitNumber.toString()),
+                2,
+                rs -> getLong(rs, "APPLICATION_NUMBER"))
+            : queryCursorProcedure(
+                FIND_PACKAGES_BY_PERMIT,
+                cs -> cs.setString(1, permitNumber.toString()),
+                2,
+                rs -> getLong(rs, "APPLICATION_NUMBER"));
+    return normalizeApplicationRelationships(
+        applicationNumbers, required, "permit " + permitNumber);
   }
 
   public List<PackageCandidateRow> findPackagesByApplicationNumber(Long applicationNumber) {
@@ -271,30 +388,71 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public List<PackageCandidateRow> findPackagesByExemptionNumber(String exemptionNumber) {
+    return findPackagesByExemptionNumber(exemptionNumber, false);
+  }
+
+  public List<PackageCandidateRow> findPackagesByExemptionNumberRequired(
+      String exemptionNumber) {
+    return findPackagesByExemptionNumber(exemptionNumber, true);
+  }
+
+  private List<PackageCandidateRow> findPackagesByExemptionNumber(
+      String exemptionNumber, boolean required) {
     String normalizedExemptionNumber = trim(exemptionNumber);
     if (normalizedExemptionNumber == null) {
       return List.of();
     }
 
-    return queryCursorProcedure(
-        FIND_PACKAGES_BY_EXEMPTION,
-        cs -> cs.setString(1, normalizedExemptionNumber),
-        2,
-        this::mapPackageCandidateRow);
+    return required
+        ? queryCursorProcedureRequired(
+            FIND_PACKAGES_BY_EXEMPTION,
+            cs -> cs.setString(1, normalizedExemptionNumber),
+            2,
+            this::mapPackageCandidateRow)
+        : queryCursorProcedure(
+            FIND_PACKAGES_BY_EXEMPTION,
+            cs -> cs.setString(1, normalizedExemptionNumber),
+            2,
+            this::mapPackageCandidateRow);
   }
 
   public List<Long> findApplicationNumbersByExemptionNumber(String exemptionNumber) {
+    return findApplicationNumbersByExemptionNumber(exemptionNumber, false);
+  }
+
+  public List<Long> findApplicationNumbersByExemptionNumberRequired(
+      String exemptionNumber) {
+    return findApplicationNumbersByExemptionNumber(exemptionNumber, true);
+  }
+
+  private List<Long> findApplicationNumbersByExemptionNumber(
+      String exemptionNumber, boolean strictRelationships) {
     String normalizedExemptionNumber = trim(exemptionNumber);
     if (normalizedExemptionNumber == null) {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    List<Long> applicationNumbers =
+        queryCursorProcedureRequired(
             FIND_APPLICATION_BY_EXEMPTION,
             cs -> cs.setString(1, normalizedExemptionNumber),
             2,
-            rs -> getLong(rs, "APPLICATION_NUMBER"))
-        .stream()
+            rs -> getLong(rs, "APPLICATION_NUMBER"));
+    return normalizeApplicationRelationships(
+        applicationNumbers,
+        strictRelationships,
+        "exemption " + normalizedExemptionNumber);
+  }
+
+  private List<Long> normalizeApplicationRelationships(
+      List<Long> applicationNumbers, boolean strictRelationships, String aggregateDescription) {
+    if (strictRelationships
+        && applicationNumbers.stream()
+            .anyMatch(applicationNumber -> applicationNumber == null || applicationNumber < 1)) {
+      throw new DataRetrievalFailureException(
+          "An invalid application relationship was returned for " + aggregateDescription + ".");
+    }
+    return applicationNumbers.stream()
         .filter(applicationNumber -> applicationNumber != null && applicationNumber > 0)
         .distinct()
         .sorted()
@@ -306,74 +464,134 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_PERMIT_FILE_DETAILS,
         cs -> cs.setLong(1, permitNumber),
         2,
         this::mapDocumentRow);
   }
 
+  /** Verifies the subtype-table relationship used by the permit delete procedure. */
+  public boolean isPermitFileAttachmentRequired(Long documentId) {
+    if (documentId == null || documentId < 1) {
+      return false;
+    }
+    String call = "{ call " + FIND_PERMIT_FILE_ATTACHMENT + " }";
+    Boolean result =
+        jdbcTemplate.execute(
+            call,
+            (CallableStatementCallback<Boolean>)
+                cs -> {
+                  cs.setLong(1, documentId);
+                  cs.registerOutParameter(2, Types.REF_CURSOR);
+                  cs.execute();
+                  Object cursor = cs.getObject(2);
+                  if (cursor == null) {
+                    throw new DataAccessResourceFailureException(
+                        "Oracle returned no permit attachment cursor.");
+                  }
+                  if (!(cursor instanceof ResultSet rs)) {
+                    throw new DataAccessResourceFailureException(
+                        "Oracle returned an invalid permit attachment cursor.");
+                  }
+                  try (rs) {
+                    if (!rs.next()) {
+                      return false;
+                    }
+                    if (rs.next()) {
+                      throw new DataRetrievalFailureException(
+                          "Oracle returned duplicate permit attachment rows for " + documentId + ".");
+                    }
+                    return true;
+                  }
+                });
+    if (result == null) {
+      throw new DataAccessResourceFailureException(
+          "Oracle returned no permit attachment relationship result.");
+    }
+    return result;
+  }
+
   public List<DocumentRow> findApplicationDocumentDetailsByApplicationNumber(Long applicationNumber) {
+    return findApplicationDocumentDetailsByApplicationNumber(applicationNumber, false);
+  }
+
+  public List<DocumentRow> findApplicationDocumentDetailsByApplicationNumberRequired(
+      Long applicationNumber) {
+    return findApplicationDocumentDetailsByApplicationNumber(applicationNumber, true);
+  }
+
+  private List<DocumentRow> findApplicationDocumentDetailsByApplicationNumber(
+      Long applicationNumber, boolean required) {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
-
-    return queryCursorProcedure(
-        FIND_APPLICATION_FILE_DETAILS,
-        cs -> cs.setLong(1, applicationNumber),
-        2,
-        this::mapDocumentRow);
+    return required
+        ? queryCursorProcedureRequired(
+            FIND_APPLICATION_FILE_DETAILS,
+            cs -> cs.setLong(1, applicationNumber),
+            2,
+            this::mapDocumentRow)
+        : queryCursorProcedureFailClosed(
+            FIND_APPLICATION_FILE_DETAILS,
+            cs -> cs.setLong(1, applicationNumber),
+            2,
+            this::mapDocumentRow);
   }
 
-  public Optional<byte[]> findFileAttachmentBytes(Long fileId) {
-    if (fileId == null || fileId < 1) {
-      return Optional.empty();
+  public boolean streamFileAttachment(Long fileId, OutputStream outputStream) throws IOException {
+    if (fileId == null || fileId < 1 || outputStream == null) {
+      return false;
     }
-
     String call = "{ call " + FIND_FILE_ATTACHMENT + " }";
     try {
-      return jdbcTemplate.execute(
-          call,
-          (CallableStatementCallback<Optional<byte[]>>)
-              cs -> {
-                cs.setLong(1, fileId);
-                cs.registerOutParameter(2, Types.REF_CURSOR);
-                cs.execute();
-
-                try (ResultSet rs = (ResultSet) cs.getObject(2)) {
-                  if (rs == null || !rs.next()) {
-                    return Optional.empty();
-                  }
-                  InputStream input = rs.getBinaryStream(1);
-                  if (input == null) {
-                    return Optional.empty();
-                  }
-                  try {
-                    return Optional.of(input.readAllBytes());
-                  } catch (java.io.IOException ex) {
-                    logger.warn(
-                        "Oracle file attachment read failed [{}]: {}",
-                        FIND_FILE_ATTACHMENT,
-                        ex.getMessage());
-                    return Optional.empty();
-                  } finally {
-                    try {
-                      input.close();
-                    } catch (java.io.IOException ignored) {
-                      // Ignore stream close exceptions for read-only attachment lookups.
+      Boolean streamed =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatementCallback<Boolean>)
+                  cs -> {
+                    cs.setLong(1, fileId);
+                    cs.registerOutParameter(2, Types.REF_CURSOR);
+                    cs.execute();
+                    Object cursor = cs.getObject(2);
+                    if (cursor == null) {
+                      throw new DataAccessResourceFailureException(
+                          "Oracle returned no permit attachment stream cursor.");
                     }
-                  }
-                }
-              });
+                    if (!(cursor instanceof ResultSet rs)) {
+                      throw new DataRetrievalFailureException(
+                          "Oracle returned an invalid permit attachment stream cursor.");
+                    }
+                    try (rs) {
+                      if (!rs.next()) {
+                        return false;
+                      }
+                      try (InputStream input = rs.getBinaryStream(1)) {
+                        if (input == null) {
+                          throw new DataRetrievalFailureException(
+                              "Oracle returned a permit attachment row without file content.");
+                        }
+                        input.transferTo(outputStream);
+                        return true;
+                      } catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                      }
+                    }
+                  });
+      if (streamed == null) {
+        throw new DataAccessResourceFailureException(
+            "Oracle returned no permit attachment stream result.");
+      }
+      return streamed;
+    } catch (UncheckedIOException ex) {
+      throw ex.getCause();
     } catch (DataAccessException ex) {
-      logger.warn("Oracle file attachment lookup failed [{}]: {}", FIND_FILE_ATTACHMENT, ex.getMessage());
-      return Optional.empty();
+      throw new IOException("Oracle permit attachment stream failed", ex);
     }
   }
 
-  public List<CountryCodeRow> findAllCountryCodes() {
-    List<CountryCodeRow> rows =
-        queryCursorProcedure(
+  public List<CountryCodeRow> findAllCountryCodesRequired() {
+    return queryCursorProcedureRequired(
             FIND_ALL_COUNTRY_CODES,
             null,
             1,
@@ -386,14 +604,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .stream()
         .filter(row -> row.code() != null && row.description() != null)
         .toList();
-    if (!rows.isEmpty()) {
-      return rows;
-    }
-    return fallbackCountryCodeRows();
   }
 
   public List<AttachmentTypeRow> findAllAttachmentTypes() {
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
             FIND_ALL_ATTACHMENT_TYPE_CODES,
             null,
             1,
@@ -414,7 +628,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
             FIND_ATTACHMENT_TYPE_CODE,
             cs -> cs.setString(1, normalized),
             2,
@@ -429,7 +643,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_INVOICE_BY_ID,
         cs -> {
           cs.setString(1, normalizedSalesInvoiceNumber);
@@ -444,12 +658,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 coalesce(getDouble(rs, "FEE_IN_LIEU"), 0.0d)));
   }
 
-  public List<String> findInvoiceNumbersByPermit(Long permitNumber) {
+  public List<String> findInvoiceNumbersByPermitRequired(Long permitNumber) {
     if (permitNumber == null || permitNumber < 1) {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
             FIND_INVOICES_BY_PERMIT,
             cs -> cs.setString(1, permitNumber.toString()),
             2,
@@ -466,7 +680,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_PERMIT_DETAIL_BY_ID,
         cs -> cs.setString(1, permitNumber.toString()),
         2,
@@ -480,7 +694,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
 
     Timestamp now = new Timestamp(System.currentTimeMillis());
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         INSERT_PERMIT_DETAIL,
         cs -> {
           cs.setString(1, trim(row.destinationCompanyName()));
@@ -522,7 +736,20 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           cs.setNull(37, Types.TIMESTAMP);
         },
         38,
-        this::mapPermitMutationRow);
+        this::mapPermitMutationRow)
+        .filter(
+            inserted ->
+                inserted.permitNumber() != null
+                    && inserted.permitNumber() > 0
+                    && java.util.Objects.equals(
+                        trim(inserted.exemptionNumber()), trim(row.exemptionNumber()))
+                    && java.util.Objects.equals(
+                        inserted.oicApplicationNumber(), row.oicApplicationNumber())
+                    && java.util.Objects.equals(
+                        trim(inserted.clientNumber()), trim(row.clientNumber()))
+                    && java.util.Objects.equals(
+                        trim(inserted.clientLocationCode()),
+                        trim(row.clientLocationCode())));
   }
 
   public boolean updatePermitDetail(
@@ -533,7 +760,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
 
     Timestamp now = new Timestamp(System.currentTimeMillis());
-    return executeProcedure(
+    executeProcedureRequired(
         UPDATE_PERMIT_DETAIL,
         cs -> {
           cs.setLong(1, row.permitNumber());
@@ -575,6 +802,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           cs.setString(37, trim(row.productTypeCode()));
           setDateOrNull(cs, 38, twoElevenImplementDate);
         });
+    return true;
   }
 
   public Optional<SalesInvoiceRow> insertSalesInvoice(
@@ -596,7 +824,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
 
     Timestamp now = new Timestamp(System.currentTimeMillis());
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         INSERT_SALES_INVOICE,
         cs -> {
           cs.setString(1, normalizedSalesInvoiceNumber);
@@ -615,43 +843,79 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 nonNull(getString(rs, "EXPORT_SALES_INVOICE_NUMBER")),
                 coalesce(getDouble(rs, "EXPORT_VALUE"), 0.0d),
                 coalesce(getDouble(rs, "CURRENCY_CONVERSION_RATE"), 0.0d),
-                coalesce(getDouble(rs, "FEE_IN_LIEU"), 0.0d)));
+                coalesce(getDouble(rs, "FEE_IN_LIEU"), 0.0d)))
+        .filter(
+            row ->
+                java.util.Objects.equals(
+                        trim(row.salesInvoiceNumber()), normalizedSalesInvoiceNumber)
+                    && BigDecimal.valueOf(row.exportValue()).compareTo(exportValue) == 0
+                    && BigDecimal.valueOf(row.currencyConversionRate())
+                            .compareTo(currencyConversionRate)
+                        == 0
+                    && BigDecimal.valueOf(row.feeInLieu()).compareTo(feeInLieu) == 0);
   }
 
-  public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistory(
+  /** Loads mutable GBMS history without converting an Oracle failure into an empty history. */
+  public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistoryRequired(
+      String receiptNumber, Long permitNumber) {
+    return findGbmsInvoiceHistoryRequired(receiptNumber, permitNumber, false);
+  }
+
+  /**
+   * Loads GBMS history from the caller-appropriate package without converting an Oracle failure
+   * into an empty history.
+   *
+   * <p>Mutation decisions use the mutable package through the two-argument overload. Read-only
+   * report users use this overload so they retain the legacy package boundary while report
+   * rendering still fails closed when invoice history cannot be loaded.
+   */
+  public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistoryRequired(
       String receiptNumber, Long permitNumber, boolean readOnlyUser) {
+    if (permitNumber == null || permitNumber < 1) {
+      throw new IllegalArgumentException("Permit number must be positive.");
+    }
     String normalizedReceiptNumber = trim(receiptNumber);
-    String normalizedPermitNumber =
-        permitNumber == null || permitNumber < 1 ? null : permitNumber.toString();
+    String normalizedPermitNumber = permitNumber.toString();
     String procedure =
         readOnlyUser ? FIND_GBMS_INVOICE_HISTORY_READ_ONLY : FIND_GBMS_INVOICE_HISTORY;
 
-    return queryCursorProcedure(
-        procedure,
-        cs -> {
-          cs.setString(1, normalizedReceiptNumber);
-          cs.setString(2, normalizedPermitNumber);
-        },
-        3,
-        rs ->
-            new GbmsInvoiceHistoryRow(
-                getString(rs, "INVOICE_NUMBER"),
-                getString(rs, "CANCELLED_BY_INVOICE"),
-                getString(rs, "REPLACED_BY_INVOICE"),
-                coalesce(getDouble(rs, "INVOICE_AMOUNT"), 0.0d),
-                getLocalDate(rs, "PRINTED_DATE"),
-                getLocalDate(rs, "ENTRY_TIMESTAMP"),
-                getLocalDate(rs, "UPDATE_TIMESTAMP")));
+    return filterGbmsHistoryForPermit(
+        queryCursorProcedureRequired(
+            procedure,
+            cs -> {
+              cs.setString(1, normalizedReceiptNumber);
+              cs.setString(2, normalizedPermitNumber);
+            },
+            3,
+            rs ->
+                new GbmsInvoiceHistoryRow(
+                    getString(rs, "INVOICE_NUMBER"),
+                    getString(rs, "CANCELLED_BY_INVOICE"),
+                    getString(rs, "REPLACED_BY_INVOICE"),
+                    getLong(rs, "LEXIS_PERMIT_NUMBER"),
+                    coalesce(getDouble(rs, "INVOICE_AMOUNT"), 0.0d),
+                    getLocalDate(rs, "PRINTED_DATE"),
+                    getLocalDate(rs, "ENTRY_TIMESTAMP"),
+                    getLocalDate(rs, "UPDATE_TIMESTAMP"))),
+        permitNumber);
+  }
+
+  private List<GbmsInvoiceHistoryRow> filterGbmsHistoryForPermit(
+      List<GbmsInvoiceHistoryRow> rows, Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+    return rows.stream().filter(row -> permitNumber.equals(row.permitNumber())).toList();
   }
 
   public Optional<Double> findCurrencyConversionRateByDate(LocalDate applicationDate, String countryCode) {
-    LocalDate normalizedDate = applicationDate == null ? LocalDate.now() : applicationDate;
+    LocalDate normalizedDate = applicationDate == null ? LexisBusinessTime.today() : applicationDate;
     String normalizedCountryCode = trim(countryCode);
     if (normalizedCountryCode == null) {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_CONVERSION_FOR_DATE,
         cs -> {
           cs.setString(1, normalizedCountryCode);
@@ -665,21 +929,25 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     if (documentId == null || documentId < 1) {
       return false;
     }
-    return executeProcedure(DELETE_PERMIT_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    executeProcedureRequired(DELETE_PERMIT_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    return true;
   }
 
   public boolean deleteApplicationFile(Long documentId) {
     if (documentId == null || documentId < 1) {
       return false;
     }
-    return executeProcedure(DELETE_APPLICATION_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    executeProcedureRequired(
+        DELETE_APPLICATION_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    return true;
   }
 
   public boolean deleteInvoiceFile(Long documentId) {
     if (documentId == null || documentId < 1) {
       return false;
     }
-    return executeProcedure(DELETE_INVOICE_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    executeProcedureRequired(DELETE_INVOICE_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    return true;
   }
 
   public List<PermitScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {
@@ -687,7 +955,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_PACKAGE,
         cs -> cs.setString(1, normalized),
         2,
@@ -713,7 +981,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_PERMIT_DETAIL_BY_ID,
         cs -> cs.setString(1, permitNumber.toString()),
         2,
@@ -733,12 +1001,25 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
             FIND_EXEMPTION_BY_NUMBER,
             cs -> cs.setString(1, normalized),
             2,
             rs -> trim(rs.getString("EXPORT_EXEMPTION_TYPE_CODE")))
         .filter(value -> value != null && !value.isBlank());
+  }
+
+  public Optional<LocalDate> findExemptionExpiryDate(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingleRequired(
+        FIND_EXEMPTION_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs -> getLocalDate(rs, "EXPIRY_DATE"));
   }
 
   public Optional<PackageInfoRow> findPackageInfoByPackageNumber(String packageNumber) {
@@ -747,7 +1028,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_PACKAGE_BY_NUMBER,
         cs -> cs.setString(1, normalized),
         2,
@@ -784,12 +1065,35 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 getString(rs, "EXPORT_GROWTH_TYPE_CODE")));
   }
 
+  public Optional<PackageDetailsRow> findPackageDetailsByPackageNumberRequired(
+      String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingleRequired(
+        FIND_PACKAGE_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new PackageDetailsRow(
+                getString(rs, "PACKAGE_NUMBER"),
+                coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
+                coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
+                coalesce(getDouble(rs, "AVERAGE_DIAMETER"), 0.0d),
+                getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
+                getString(rs, "COMMENTS"),
+                getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
+                getString(rs, "EXPORT_GROWTH_TYPE_CODE")));
+  }
+
   public Optional<ApplicationInfoRow> findApplicationInfoByNumber(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_APPLICATION_BY_NUMBER,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
@@ -805,7 +1109,20 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 getString(rs, "OWNER_CLIENT_NUMBER"),
                 getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
                 getString(rs, "AGENT_CLIENT_NUMBER"),
-                getString(rs, "AGENT_CLIENT_LOCATION_CODE")));
+                getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
+                getString(rs, "OIC_INDICATOR")));
+  }
+
+  public Optional<String> findApplicationStatusCodeByNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingleRequired(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs -> getString(rs, "EXPORT_APPLICATION_STATUS_CODE"));
   }
 
   public List<EndUsePairRow> findEndUsesByApplicationNumber(Long applicationNumber) {
@@ -813,7 +1130,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
             FIND_END_USE_BY_APP,
             cs -> cs.setString(1, applicationNumber.toString()),
             2,
@@ -829,7 +1146,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
             FIND_END_USE_BY_PACK,
             cs -> cs.setString(1, normalized),
             2,
@@ -843,8 +1160,34 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return findCodeDescription(FIND_SPECIES_CODE, speciesCode);
   }
 
+  public boolean isSpeciesCodeValidRequired(String speciesCode) {
+    return codeExistsRequired(FIND_SPECIES_CODE, speciesCode);
+  }
+
   public Optional<String> findGradeDescription(String gradeCode) {
     return findCodeDescription(FIND_GRADE_CODE, gradeCode);
+  }
+
+  public boolean isGradeCodeValidRequired(String gradeCode) {
+    return codeExistsRequired(FIND_GRADE_CODE, gradeCode);
+  }
+
+  public boolean isValidBoicTimberMarkRequired(
+      String timberMark, String exemptionNumber) {
+    String normalizedTimberMark = trim(timberMark);
+    String normalizedExemptionNumber = trim(exemptionNumber);
+    if (normalizedTimberMark == null || normalizedExemptionNumber == null) {
+      return false;
+    }
+    return queryCursorSingleRequired(
+            FIND_VALID_BOIC_TIMBER_MARK,
+            cs -> {
+              cs.setString(1, normalizedTimberMark);
+              cs.setString(2, normalizedExemptionNumber);
+            },
+            3,
+            rs -> Boolean.TRUE)
+        .orElse(false);
   }
 
   public Optional<String> findGrowthTypeDescription(String growthTypeCode) {
@@ -873,7 +1216,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
     pattern.append("__");
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
             FIND_CANDIDATE_EXCOL_VALUES,
             cs -> {
               cs.setString(1, pattern.toString());
@@ -894,7 +1237,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_RATE_BY_EXEMPTION,
         cs -> cs.setString(1, normalized),
         2,
@@ -912,7 +1255,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return BigDecimal.ZERO;
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
             GET_POLICY_FACTOR,
             cs -> {
               cs.setDate(1, java.sql.Date.valueOf(applicationDate));
@@ -927,7 +1270,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
               try {
                 return new BigDecimal(percent);
               } catch (NumberFormatException ex) {
-                return BigDecimal.ZERO;
+                throw new DataRetrievalFailureException(
+                    "Oracle fee policy factor was not numeric", ex);
               }
             })
         .orElse(BigDecimal.ZERO);
@@ -939,7 +1283,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_LOG_AMV_BY_SCALE,
         cs -> cs.setString(1, normalized),
         2,
@@ -957,29 +1301,17 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return false;
     }
 
-    String call = "{ call " + IS_APP_UNMANU + " }";
-    try {
-      Long count =
-          jdbcTemplate.execute(
-              call,
-              (CallableStatementCallback<Long>)
-                  cs -> {
-                    cs.setString(1, applicationNumber.toString());
-                    cs.registerOutParameter(2, Types.REF_CURSOR);
-                    cs.execute();
-                    try (var rs = (java.sql.ResultSet) cs.getObject(2)) {
-                      if (rs == null || !rs.next()) {
-                        return 0L;
-                      }
-                      Long resultsCount = getLong(rs, "RESULTS_COUNT");
-                      return resultsCount == null ? 0L : resultsCount;
-                    }
-                  });
-      return count != null && count > 0;
-    } catch (DataAccessException ex) {
-      logger.warn("Oracle procedure call failed [{}]: {}", IS_APP_UNMANU, ex.getMessage());
-      return false;
-    }
+    Long count =
+        queryCursorSingleRequired(
+                IS_APP_UNMANU,
+                cs -> cs.setString(1, applicationNumber.toString()),
+                2,
+                rs -> getLong(rs, "RESULTS_COUNT"))
+            .orElseThrow(
+                () ->
+                    new DataRetrievalFailureException(
+                        "Oracle unmanufactured application lookup was unavailable"));
+    return count > 0;
   }
 
   private Optional<String> findCodeDescription(String procedureSignature, String code) {
@@ -996,14 +1328,17 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .or(() -> fallbackCodeDescription(procedureSignature, normalized));
   }
 
-  private List<CountryCodeRow> fallbackCountryCodeRows() {
-    return List.of(
-        new CountryCodeRow("CA", "Canada", 1L, 1L),
-        new CountryCodeRow("US", "United States", 2L, 1L),
-        new CountryCodeRow("JP", "Japan", 2L, 2L),
-        new CountryCodeRow("CN", "China", 2L, 3L),
-        new CountryCodeRow("NZ", "New Zealand", 2L, 4L),
-        new CountryCodeRow("GB", "United Kingdom", 2L, 5L));
+  private boolean codeExistsRequired(String procedureSignature, String code) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return false;
+    }
+    return queryCursorSingleRequired(
+            procedureSignature,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> Boolean.TRUE)
+        .orElse(false);
   }
 
   private String nonNull(String value) {
@@ -1264,7 +1599,35 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String ownerClientNumber,
       String ownerClientLocationCode,
       String agentClientNumber,
-      String agentClientLocationCode) {
+      String agentClientLocationCode,
+      String oicIndicator) {
+
+    public ApplicationInfoRow(
+        Long applicationNumber,
+        String exemptionNumber,
+        Long orgUnitNo,
+        String regionName,
+        String productTypeCode,
+        String growthTypeCode,
+        String endUseSort,
+        String ownerClientNumber,
+        String ownerClientLocationCode,
+        String agentClientNumber,
+        String agentClientLocationCode) {
+      this(
+          applicationNumber,
+          exemptionNumber,
+          orgUnitNo,
+          regionName,
+          productTypeCode,
+          growthTypeCode,
+          endUseSort,
+          ownerClientNumber,
+          ownerClientLocationCode,
+          agentClientNumber,
+          agentClientLocationCode,
+          null);
+    }
 
     public ApplicationInfoRow(
         Long applicationNumber,
@@ -1282,6 +1645,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           productTypeCode,
           growthTypeCode,
           endUseSort,
+          null,
           null,
           null,
           null,
@@ -1353,6 +1717,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String invoiceNumber,
       String cancelledByInvoice,
       String replacedByInvoice,
+      Long permitNumber,
       double invoiceAmount,
       LocalDate printedDate,
       LocalDate entryDate,

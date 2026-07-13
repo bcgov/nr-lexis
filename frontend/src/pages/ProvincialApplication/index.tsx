@@ -18,7 +18,11 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
+import EmptyState from '@/components/EmptyState'
+import PageHeader from '@/components/PageHeader'
+import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
+import StatusTag from '@/components/StatusTag'
 import type {
   ProvincialApplicationSearchFilters,
   ProvincialApplicationSearchItem,
@@ -31,6 +35,7 @@ import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-fo
 import {
   buildPageDataCacheKey,
   getPageDataCache,
+  getPageDataCacheGeneration,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
@@ -99,25 +104,34 @@ const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialApplicationSearchResponse>()
 
-const SORT_COLUMNS: {
-  id: ProvincialApplicationSearchSortField
+const RESULT_COLUMNS: {
+  id: string
   label: string
+  sortField?: ProvincialApplicationSearchSortField
 }[] = [
-  { id: 'applicationNumber', label: 'Application' },
+  { id: 'applicationNumber', label: 'Application', sortField: 'applicationNumber' },
   { id: 'status', label: 'Status' },
-  { id: 'applicantClientNumber', label: 'Applicant client number' },
-  { id: 'ownerClientNumber', label: 'Owner client number' },
-  { id: 'region', label: 'Region' },
+  {
+    id: 'applicantClientNumber',
+    label: 'Applicant client number',
+    sortField: 'applicantClientNumber',
+  },
+  {
+    id: 'ownerClientNumber',
+    label: 'Owner client number',
+    sortField: 'displayOwnerClientNumber',
+  },
+  { id: 'region', label: 'Region', sortField: 'regionCode' },
   { id: 'applicationVolume', label: 'Application volume (m³)' },
-  { id: 'exemptionNumber', label: 'Exemption number' },
-  { id: 'listingDate', label: 'Listing date' },
+  { id: 'exemptionNumber', label: 'Exemption number', sortField: 'exemptionNumber' },
+  { id: 'listingDate', label: 'Listing date', sortField: 'listingDate' },
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialApplicationSearchSortField = 'applicationNumber'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
-const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
-  (column) => column.id,
-) as ProvincialApplicationSearchSortField[]
+const SORT_FIELD_OPTIONS = RESULT_COLUMNS.flatMap((column) =>
+  column.sortField ? [column.sortField] : [],
+)
 
 const buildSearchParams = (
   filters: ProvincialApplicationSearchFilters,
@@ -152,6 +166,8 @@ const ProvincialApplicationPage = () => {
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
+  const [optionsLoading, setOptionsLoading] = useState(true)
+  const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [results, setResults] = useState<ProvincialApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -162,6 +178,9 @@ const ProvincialApplicationPage = () => {
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
+  const visibleResultColumns = canCreateExemption
+    ? RESULT_COLUMNS
+    : RESULT_COLUMNS.filter((column) => column.id !== 'applicantClientNumber')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -249,6 +268,7 @@ const ProvincialApplicationPage = () => {
 
   const runSearch = useCallback(
     async (request: ProvincialApplicationSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
       const pageCacheKey = buildPageDataCacheKey(
         'provincial-application-search',
         capabilities?.principal,
@@ -286,14 +306,21 @@ const ProvincialApplicationPage = () => {
       setErrorMessage('')
       try {
         const totalCacheKey = buildSearchTotalCacheKey(request.filters)
-        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const cachedTotal = options.force
+          ? undefined
+          : getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
         const commitSearchResponse = (
           response: ProvincialApplicationSearchResponse,
           totalIsExact: boolean,
         ) => {
+          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
+            return
+          }
           if (totalIsExact) {
+            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
+              return
+            }
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            setPageDataCache(pageCacheKey, response)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-application-search',
               principal: capabilities?.principal,
@@ -304,7 +331,7 @@ const ProvincialApplicationPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest()) {
+            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
               commitResults(response)
             }
           })
@@ -348,12 +375,19 @@ const ProvincialApplicationPage = () => {
 
   useEffect(() => {
     const loadOptions = async () => {
-      const options = await fetchProvincialApplicationOptions()
+      try {
+        const options = await fetchProvincialApplicationOptions()
 
-      setExemptionTypeOptions(options.exemptionTypes)
-      setApplicationStatusOptions(options.applicationStatuses)
-      setProductTypeOptions(options.productTypes)
-      setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setExemptionTypeOptions(options.exemptionTypes)
+        setApplicationStatusOptions(options.applicationStatuses)
+        setProductTypeOptions(options.productTypes)
+        setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setOptionsUnavailable(false)
+      } catch {
+        setOptionsUnavailable(true)
+      } finally {
+        setOptionsLoading(false)
+      }
     }
 
     void loadOptions()
@@ -473,8 +507,13 @@ const ProvincialApplicationPage = () => {
   return (
     <Grid fullWidth className="default-grid provincial-application-search-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial application search</h1>
+        <PageHeader
+          title="Provincial application search"
+          subtitle="Find provincial applications and manage eligible application workflows."
+        />
       </Column>
+
+      {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-application-search-filters">
@@ -492,6 +531,7 @@ const ProvincialApplicationPage = () => {
                 value={filters.applicationStatus}
                 placeholder="All statuses"
                 options={applicationStatusOptions}
+                disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('applicationStatus', value)}
               />
               <TextInput
@@ -506,6 +546,7 @@ const ProvincialApplicationPage = () => {
                 value={filters.exemptionType}
                 placeholder="All types"
                 options={exemptionTypeOptions}
+                disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('exemptionType', value)}
               />
               <TextInput
@@ -520,6 +561,7 @@ const ProvincialApplicationPage = () => {
                 value={filters.productTypeCode}
                 placeholder="All product types"
                 options={productTypeOptions}
+                disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('productTypeCode', value)}
               />
               <FilterableMultiSelect
@@ -530,6 +572,7 @@ const ProvincialApplicationPage = () => {
                 placeholder="Select region(s)"
                 helperText={selectedRegionHelperText}
                 selectedItems={selectedRegions}
+                disabled={optionsLoading || optionsUnavailable}
                 onChange={(event) => {
                   const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
                   updateFilter(
@@ -538,18 +581,22 @@ const ProvincialApplicationPage = () => {
                   )
                 }}
               />
-              <TextInput
-                id="applicantClientNumber"
-                labelText="Applicant client number"
-                value={filters.applicantClientNumber}
-                onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-              />
-              <TextInput
-                id="ownerClientNumber"
-                labelText="Owner client number"
-                value={filters.ownerClientNumber}
-                onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-              />
+              {canCreateExemption && (
+                <>
+                  <TextInput
+                    id="applicantClientNumber"
+                    labelText="Applicant client number"
+                    value={filters.applicantClientNumber}
+                    onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
+                  />
+                  <TextInput
+                    id="ownerClientNumber"
+                    labelText="Owner client number"
+                    value={filters.ownerClientNumber}
+                    onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+                  />
+                </>
+              )}
               <IsoDatePicker
                 id="listingFromDate"
                 labelText="Listing from date"
@@ -579,14 +626,16 @@ const ProvincialApplicationPage = () => {
               <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
                 Clear Filters
               </Button>
-              <Button
-                kind="secondary"
-                size="md"
-                onClick={onCreateExemptionClick}
-                disabled={selectedRowsCount === 0 || !canCreateExemption}
-              >
-                Create exemption for Selected Applications
-              </Button>
+              {canCreateExemption && (
+                <Button
+                  kind="secondary"
+                  size="md"
+                  onClick={onCreateExemptionClick}
+                  disabled={selectedRowsCount === 0}
+                >
+                  Create exemption for Selected Applications
+                </Button>
+              )}
             </div>
             {canCreateApplication && (
               <div className="provincial-application-create-link">
@@ -609,103 +658,132 @@ const ProvincialApplicationPage = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search results</h2>
-          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+        <section
+          className="legacy-search-section legacy-search-section--results"
+          aria-label="Search results"
+        >
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading application search results..."
-            totalItems={results.page.totalElements}
+            totalItems={
+              errorMessage || (loading && results.content.length === 0)
+                ? undefined
+                : results.page.totalElements
+            }
           >
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>
-                    <Checkbox
-                      id="selectAllCurrentPageRows"
-                      hideLabel
-                      labelText="Select all rows on this page"
-                      checked={allSelectableRowsAreSelected}
-                      disabled={selectableRows.length === 0}
-                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
-                    />
-                  </TableHeader>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => (
-                  <TableRow key={row.applicationNumber}>
-                    <TableCell>
-                      <Checkbox
-                        id={`selectRow-${row.applicationNumber}`}
-                        hideLabel
-                        labelText={`Select ${row.applicationNumber}`}
-                        checked={Boolean(selectedRowsById[row.applicationNumber])}
-                        disabled={!canCreateExemption || !row.allowCreateExemption}
-                        onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        className="cds--link"
-                        to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
-                      >
-                        {row.applicationNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell>{row.applicantClientNumber}</TableCell>
-                    <TableCell>{row.ownerClientNumber}</TableCell>
-                    <TableCell>{row.region}</TableCell>
-                    <TableCell>{row.applicationVolume}</TableCell>
-                    <TableCell>
-                      {row.exemptionNumber ? (
+            {errorMessage ? (
+              <EmptyState
+                role="alert"
+                title="Application search unavailable"
+                description={errorMessage}
+              />
+            ) : results.content.length > 0 ? (
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    {canCreateExemption && (
+                      <TableHeader>
+                        <Checkbox
+                          id="selectAllCurrentPageRows"
+                          hideLabel
+                          labelText="Select all rows on this page"
+                          checked={allSelectableRowsAreSelected}
+                          disabled={selectableRows.length === 0}
+                          onChange={(_, payload) =>
+                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                          }
+                        />
+                      </TableHeader>
+                    )}
+                    {visibleResultColumns.map((column) => (
+                      <TableHeader key={column.id}>
+                        {column.sortField ? (
+                          <button
+                            type="button"
+                            className="legacy-sort-button"
+                            onClick={() => onHeaderClick(column.sortField!)}
+                          >
+                            {column.label}
+                            {sortField === column.sortField
+                              ? ` (${sortDirection.toUpperCase()})`
+                              : ''}
+                          </button>
+                        ) : (
+                          column.label
+                        )}
+                      </TableHeader>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {results.content.map((row) => (
+                    <TableRow key={row.applicationNumber}>
+                      {canCreateExemption && (
+                        <TableCell>
+                          <Checkbox
+                            id={`selectRow-${row.applicationNumber}`}
+                            hideLabel
+                            labelText={`Select ${row.applicationNumber}`}
+                            checked={Boolean(selectedRowsById[row.applicationNumber])}
+                            disabled={!row.allowCreateExemption}
+                            onChange={(_, payload) =>
+                              toggleRowSelection(row, Boolean(payload.checked))
+                            }
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell>
                         <Link
                           className="cds--link"
-                          to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                          to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
                         >
-                          {row.exemptionNumber}
+                          {row.applicationNumber}
                         </Link>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                    <TableCell>{row.listingDate}</TableCell>
-                  </TableRow>
-                ))}
-                {results.content.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={9}>
-                      No applications found for the selected criteria.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                clearSelection()
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
+                      </TableCell>
+                      <TableCell>
+                        <StatusTag status={row.status} />
+                      </TableCell>
+                      {canCreateExemption && <TableCell>{row.applicantClientNumber}</TableCell>}
+                      <TableCell>{row.ownerClientNumber}</TableCell>
+                      <TableCell>{row.region}</TableCell>
+                      <TableCell>{row.applicationVolume}</TableCell>
+                      <TableCell>
+                        {row.exemptionNumber ? (
+                          <Link
+                            className="cds--link"
+                            to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                          >
+                            {row.exemptionNumber}
+                          </Link>
+                        ) : (
+                          '-'
+                        )}
+                      </TableCell>
+                      <TableCell>{row.listingDate}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : !loading ? (
+              <EmptyState
+                title="No applications found"
+                description="No applications found for the selected criteria."
+              />
+            ) : null}
+            {!errorMessage && (!loading || results.content.length > 0) && (
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  clearSelection()
+                  setSearchParams(
+                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                  )
+                }}
+              />
+            )}
           </SearchResultsTableFrame>
         </section>
       </Column>

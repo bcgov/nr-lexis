@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckmarkFilled,
   ErrorFilled,
@@ -13,6 +13,8 @@ import {
   Grid,
   InlineLoading,
   Modal,
+  RadioButton,
+  RadioButtonGroup,
   Table,
   TableBody,
   TableCell,
@@ -20,9 +22,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TextInput,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import PageHeader from '@/components/PageHeader'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   saveRtmEmsLogAmv,
@@ -31,6 +34,7 @@ import {
   type RtmEmsLogAmvRow,
   type RtmEmsLogAmvSaveRequest,
 } from '@/service/rtm-emslogamv-service'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 type RtmGrowthIndicator = 'O' | 'S'
 type RtmAmvChangeKind = 'added' | 'changed' | 'removed' | null
@@ -39,7 +43,6 @@ type RtmAmvSpeciesColumn = {
   key: string
   label: string
   speciesCodes: string[]
-  persistSpeciesCodes: string[]
 }
 
 type RtmAmvCellBasis = {
@@ -73,21 +76,18 @@ type NotificationState = {
 }
 
 const RTM_AMV_DESCRIPTION =
-  'Maintain average monthly values directly in the table. Each saved value is persisted for old and second growth.'
+  'Maintain one monthly value for each physical species, grade, and growth type.'
 
 const RTM_AMV_SPECIES_COLUMNS: RtmAmvSpeciesColumn[] = [
-  { key: 'BA', label: 'Balsam', speciesCodes: ['BA', 'BALSAM'], persistSpeciesCodes: ['BA'] },
-  { key: 'HE', label: 'Hemlock', speciesCodes: ['HE', 'HEMLOCK'], persistSpeciesCodes: ['HE'] },
-  { key: 'CE', label: 'Cedar', speciesCodes: ['CE', 'CEDAR'], persistSpeciesCodes: ['CE'] },
-  { key: 'CY', label: 'Cypress', speciesCodes: ['CY', 'CYPRESS'], persistSpeciesCodes: ['CY'] },
-  { key: 'FI', label: 'Fir', speciesCodes: ['FI', 'FIR'], persistSpeciesCodes: ['FI'] },
-  { key: 'SP', label: 'Spruce', speciesCodes: ['SP', 'SPRUCE'], persistSpeciesCodes: ['SP'] },
-  {
-    key: 'PINE',
-    label: 'Pine',
-    speciesCodes: ['P', 'PINE', 'WH', 'LO', 'YE'],
-    persistSpeciesCodes: ['WH', 'LO', 'YE'],
-  },
+  { key: 'BA', label: 'Balsam (BA)', speciesCodes: ['BA', 'BALSAM'] },
+  { key: 'HE', label: 'Hemlock (HE)', speciesCodes: ['HE', 'HEMLOCK'] },
+  { key: 'CE', label: 'Cedar (CE)', speciesCodes: ['CE', 'CEDAR'] },
+  { key: 'CY', label: 'Cypress (CY)', speciesCodes: ['CY', 'CYPRESS'] },
+  { key: 'FI', label: 'Fir (FI)', speciesCodes: ['FI', 'FIR'] },
+  { key: 'SP', label: 'Spruce (SP)', speciesCodes: ['SP', 'SPRUCE'] },
+  { key: 'WH', label: 'Western white pine (WH)', speciesCodes: ['WH'] },
+  { key: 'LO', label: 'Lodgepole pine (LO)', speciesCodes: ['LO'] },
+  { key: 'YE', label: 'Yellow pine (YE)', speciesCodes: ['YE'] },
 ]
 
 const RTM_AMV_GRADE_ORDER = [
@@ -105,6 +105,7 @@ const RTM_AMV_GRADE_ORDER = [
   'L',
   'M',
   'U',
+  'W',
   'X',
   'Y',
   'Z',
@@ -114,43 +115,67 @@ const RTM_AMV_GRADE_ORDER = [
   '4',
   '5',
   '6',
+  'BLANK',
 ]
 
+const RTM_AMV_GRADE_ROLLOVER_DATE = '2006-04-01'
+const RTM_AMV_POST_ROLLOVER_GRADES = new Set(['W', 'Z', '1', '2'])
+
 const RTM_AMV_GROWTH_INDICATORS: RtmGrowthIndicator[] = ['O', 'S']
+const RTM_AMV_GROWTH_LABELS: Record<RtmGrowthIndicator, string> = {
+  O: 'Old growth',
+  S: 'Second growth',
+}
 const MAX_AMV_VALUE = 9999.99
 
 const normalizeKey = (value: string | null | undefined) => (value ?? '').trim().toUpperCase()
 
-const padDatePart = (value: number) => String(value).padStart(2, '0')
-
-const toLocalIsoDate = (date: Date) =>
-  `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`
-
-const todayIsoDate = () => toLocalIsoDate(new Date())
-
-const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
-
-const previousDayDate = (dateValue: string) => {
-  const [year, month, day] = dateValue.split('-').map(Number)
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    return dateValue
+const normalizeGrade = (value: string | null | undefined) => {
+  if (value === ' ') {
+    return 'BLANK'
   }
 
-  return toLocalIsoDate(new Date(year, month - 1, day - 1))
+  const normalized = normalizeKey(value)
+  return normalized === 'BLANK' ? 'BLANK' : normalized
 }
 
-const formatEffectiveDate = (dateValue: string) => {
-  const [year, month, day] = dateValue.split('-').map(Number)
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+const currentMonthDate = () => `${formatBusinessIsoDate().slice(0, 7)}-01`
+
+const isMonthStartDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-01$/.test(value)) {
+    return false
+  }
+
+  const [year, month] = value.split('-').map(Number)
+  return Number.isInteger(year) && year >= 1 && Number.isInteger(month) && month >= 1 && month <= 12
+}
+
+const availableGradesForDate = (dateValue: string) =>
+  isMonthStartDate(dateValue) && dateValue < RTM_AMV_GRADE_ROLLOVER_DATE
+    ? RTM_AMV_GRADE_ORDER.filter((grade) => !RTM_AMV_POST_ROLLOVER_GRADES.has(grade))
+    : RTM_AMV_GRADE_ORDER
+
+const previousMonthDate = (dateValue: string) => {
+  if (!isMonthStartDate(dateValue)) {
+    return ''
+  }
+
+  const [year, month] = dateValue.split('-').map(Number)
+  const previous = new Date(Date.UTC(year, month - 2, 1))
+  return previous.toISOString().slice(0, 10)
+}
+
+const formatEffectiveMonth = (dateValue: string) => {
+  if (!isMonthStartDate(dateValue)) {
     return dateValue
   }
 
+  const [year, month] = dateValue.split('-').map(Number)
   return new Intl.DateTimeFormat('en-CA', {
-    day: 'numeric',
     month: 'long',
     timeZone: 'UTC',
     year: 'numeric',
-  }).format(new Date(Date.UTC(year, month - 1, day)))
+  }).format(new Date(Date.UTC(year, month - 1, 1)))
 }
 
 const formatRawNumber = (value: number | null | undefined) => {
@@ -208,7 +233,7 @@ const resolveSpeciesColumnKey = (species: string | null | undefined) => {
 }
 
 const rowMatchesCell = (row: RtmEmsLogAmvRow, grade: string, column: RtmAmvSpeciesColumn) => {
-  const rowGrade = normalizeKey(row.grade)
+  const rowGrade = normalizeGrade(row.grade)
   const rowSpeciesColumnKey = resolveSpeciesColumnKey(row.species)
   return rowGrade === grade && rowSpeciesColumnKey === column.key
 }
@@ -220,10 +245,11 @@ const rowMatchesPersistTarget = (
   growthIndicator: RtmGrowthIndicator,
 ) =>
   normalizeKey(row.species) === normalizeKey(species) &&
-  normalizeKey(row.grade) === normalizeKey(grade) &&
+  normalizeGrade(row.grade) === normalizeGrade(grade) &&
   normalizeKey(row.growthIndicator) === growthIndicator
 
-const buildCellKey = (grade: string, columnKey: string) => `${grade}|${columnKey}`
+const buildCellKey = (growthIndicator: RtmGrowthIndicator, grade: string, columnKey: string) =>
+  `${growthIndicator}|${grade}|${columnKey}`
 
 const buildCellBasis = (
   currentRows: RtmEmsLogAmvRow[],
@@ -231,68 +257,65 @@ const buildCellBasis = (
 ): Record<string, RtmAmvCellBasis> => {
   const basisByKey: Record<string, RtmAmvCellBasis> = {}
 
-  RTM_AMV_GRADE_ORDER.forEach((grade) => {
-    RTM_AMV_SPECIES_COLUMNS.forEach((column) => {
-      const currentCellRows = currentRows.filter((row) => rowMatchesCell(row, grade, column))
-      const previousCellRows = previousRows.filter((row) => rowMatchesCell(row, grade, column))
-      const currentValues = currentCellRows
-        .map(rowValue)
-        .filter((value): value is number => value !== null && value !== undefined)
-      const previousValues = previousCellRows
-        .map(rowValue)
-        .filter((value): value is number => value !== null && value !== undefined)
-      const distinctCurrentValues = new Set(currentValues.map(numericSignature))
-      const distinctPreviousValues = new Set(previousValues.map(numericSignature))
+  RTM_AMV_GROWTH_INDICATORS.forEach((growthIndicator) => {
+    RTM_AMV_GRADE_ORDER.forEach((grade) => {
+      RTM_AMV_SPECIES_COLUMNS.forEach((column) => {
+        const currentCellRows = currentRows.filter(
+          (row) =>
+            rowMatchesCell(row, grade, column) &&
+            normalizeKey(row.growthIndicator) === growthIndicator,
+        )
+        const previousCellRows = previousRows.filter(
+          (row) =>
+            rowMatchesCell(row, grade, column) &&
+            normalizeKey(row.growthIndicator) === growthIndicator,
+        )
+        const currentValues = currentCellRows
+          .map(rowValue)
+          .filter((value): value is number => value !== null && value !== undefined)
+        const previousValues = previousCellRows
+          .map(rowValue)
+          .filter((value): value is number => value !== null && value !== undefined)
+        const distinctCurrentValues = new Set(currentValues.map(numericSignature))
+        const distinctPreviousValues = new Set(previousValues.map(numericSignature))
 
-      basisByKey[buildCellKey(grade, column.key)] = {
-        currentRows: currentCellRows,
-        currentValue: formatRawNumber(currentValues[0]),
-        hasCurrentRow: currentCellRows.length > 0,
-        hasCurrentValue: currentValues.length > 0,
-        hasMixedCurrentValues: distinctCurrentValues.size > 1,
-        hasMixedPreviousValues: distinctPreviousValues.size > 1,
-        previousRows: previousCellRows,
-        previousValue: formatRawNumber(previousValues[0]),
-        hasPreviousRow: previousCellRows.length > 0,
-        hasPreviousValue: previousValues.length > 0,
-      }
+        basisByKey[buildCellKey(growthIndicator, grade, column.key)] = {
+          currentRows: currentCellRows,
+          currentValue: formatRawNumber(currentValues[0]),
+          hasCurrentRow: currentCellRows.length > 0,
+          hasCurrentValue: currentValues.length > 0,
+          hasMixedCurrentValues: distinctCurrentValues.size > 1,
+          hasMixedPreviousValues: distinctPreviousValues.size > 1,
+          previousRows: previousCellRows,
+          previousValue: formatRawNumber(previousValues[0]),
+          hasPreviousRow: previousCellRows.length > 0,
+          hasPreviousValue: previousValues.length > 0,
+        }
+      })
     })
   })
 
   return basisByKey
 }
 
-const buildPrefillValues = (sourceRows: RtmEmsLogAmvRow[]) => {
+const buildPrefillValues = (sourceRows: RtmEmsLogAmvRow[], currentRows: RtmEmsLogAmvRow[]) => {
   const sourceBasis = buildCellBasis(sourceRows, [])
+  const currentBasis = buildCellBasis(currentRows, [])
   return Object.fromEntries(
     Object.entries(sourceBasis)
-      .filter(([, basis]) => basis.hasCurrentValue)
+      .filter(([key, basis]) => basis.hasCurrentValue && !currentBasis[key]?.hasCurrentValue)
       .map(([key, basis]) => [key, basis.currentValue]),
   )
 }
 
-const buildCellWarning = (
-  cell: {
-    column: RtmAmvSpeciesColumn
-    changeKind: RtmAmvChangeKind
-    grade: string
-    hasCurrentValue: boolean
-    hasPreviousValue: boolean
-    value: string
-  },
-  showDailyWarnings: boolean,
-) => {
-  const nextValue = parseCellValue(cell.value)
-  const hasNextValue = nextValue !== null && nextValue !== undefined
-
-  if (showDailyWarnings && cell.hasPreviousValue && !hasNextValue) {
-    return `${cell.column.label} grade ${cell.grade} had a value yesterday and is blank for today.`
-  }
-
-  if (showDailyWarnings && !cell.hasPreviousValue && hasNextValue) {
-    return `${cell.column.label} grade ${cell.grade} is newly populated; it was blank yesterday.`
-  }
-
+const buildCellWarning = (cell: {
+  column: RtmAmvSpeciesColumn
+  changeKind: RtmAmvChangeKind
+  grade: string
+  hasCurrentValue: boolean
+  hasPreviousValue: boolean
+  value: string
+}) => {
   if (cell.changeKind === 'added') {
     return `${cell.column.label} grade ${cell.grade} was blank in the starting values and is now populated.`
   }
@@ -327,43 +350,45 @@ const buildCells = (
   editedValues: Record<string, string>,
   prefillValues: Record<string, string>,
   retryCellKeys: Record<string, true>,
-  showDailyWarnings: boolean,
 ): RtmAmvCell[] =>
-  RTM_AMV_GRADE_ORDER.flatMap((grade) =>
-    RTM_AMV_SPECIES_COLUMNS.map((column) => {
-      const key = buildCellKey(grade, column.key)
-      const basis = basisByKey[key]
-      const value = editedValues[key] ?? basis.currentValue
-      const dirty =
-        retryCellKeys[key] === true ||
-        comparableCellValue(value) !== comparableCellValue(basis.currentValue)
-      const baselineValue = prefillValues[key] ?? basis.currentValue
-      const changedFromBaseline = comparableCellValue(value) !== comparableCellValue(baselineValue)
-      const baselineHasValue = normalizeNumericString(baselineValue) !== ''
-      const hasInputValue = normalizeNumericString(value) !== ''
-      const changeKind: RtmAmvChangeKind = !changedFromBaseline
-        ? null
-        : !baselineHasValue && hasInputValue
-          ? 'added'
-          : baselineHasValue && !hasInputValue
-            ? 'removed'
-            : 'changed'
-      const cell = {
-        ...basis,
-        changeKind,
-        column,
-        dirty,
-        grade,
-        key,
-        value,
-      }
+  RTM_AMV_GROWTH_INDICATORS.flatMap((growthIndicator) =>
+    RTM_AMV_GRADE_ORDER.flatMap((grade) =>
+      RTM_AMV_SPECIES_COLUMNS.map((column) => {
+        const key = buildCellKey(growthIndicator, grade, column.key)
+        const basis = basisByKey[key]
+        const value = editedValues[key] ?? basis.currentValue
+        const dirty =
+          retryCellKeys[key] === true ||
+          comparableCellValue(value) !== comparableCellValue(basis.currentValue)
+        const baselineValue = prefillValues[key] ?? basis.currentValue
+        const changedFromBaseline =
+          comparableCellValue(value) !== comparableCellValue(baselineValue)
+        const baselineHasValue = normalizeNumericString(baselineValue) !== ''
+        const hasInputValue = normalizeNumericString(value) !== ''
+        const changeKind: RtmAmvChangeKind = !changedFromBaseline
+          ? null
+          : !baselineHasValue && hasInputValue
+            ? 'added'
+            : baselineHasValue && !hasInputValue
+              ? 'removed'
+              : 'changed'
+        const cell = {
+          ...basis,
+          changeKind,
+          column,
+          dirty,
+          grade,
+          key,
+          value,
+        }
 
-      return {
-        ...cell,
-        validationError: buildCellValidationError(cell),
-        warning: buildCellWarning(cell, showDailyWarnings),
-      }
-    }),
+        return {
+          ...cell,
+          validationError: buildCellValidationError(cell),
+          warning: buildCellWarning(cell),
+        }
+      }),
+    ),
   )
 
 const warningDeduplicate = (warnings: Array<string | null>) =>
@@ -375,36 +400,41 @@ const notificationMessage = (message: string, errors: string[]) =>
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
-  const [targetDate, setTargetDate] = useState(todayIsoDate)
-  const [loadedDate, setLoadedDate] = useState(todayIsoDate)
+  const [targetDate, setTargetDate] = useState(currentMonthDate)
+  const [loadedDate, setLoadedDate] = useState('')
+  const [selectedGrowth, setSelectedGrowth] = useState<RtmGrowthIndicator>('O')
   const [currentRows, setCurrentRows] = useState<RtmEmsLogAmvRow[]>([])
   const [previousRows, setPreviousRows] = useState<RtmEmsLogAmvRow[]>([])
   const [editedValues, setEditedValues] = useState<Record<string, string>>({})
   const [prefillValues, setPrefillValues] = useState<Record<string, string>>({})
-  const [prefillSourceDate, setPrefillSourceDate] = useState('')
   const [retryCellKeys, setRetryCellKeys] = useState<Record<string, true>>({})
   const [showWarningConfirmation, setShowWarningConfirmation] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [notification, setNotification] = useState<NotificationState | null>(null)
+  const loadRequestIdRef = useRef(0)
 
-  const today = todayIsoDate()
-  const selectedDateIsPast = isIsoDate(targetDate) && targetDate < today
-  const selectedDateIsToday = isIsoDate(targetDate) && targetDate === today
-  const selectedDateIsFuture = isIsoDate(targetDate) && targetDate > today
-  const selectedPreviousDayDate = selectedDateIsToday ? previousDayDate(targetDate) : ''
+  const currentMonth = currentMonthDate()
+  const selectedDateIsPast = isMonthStartDate(targetDate) && targetDate < currentMonth
+  const selectedDateIsCurrent = isMonthStartDate(targetDate) && targetDate === currentMonth
+  const selectedDateIsFuture = isMonthStartDate(targetDate) && targetDate > currentMonth
+  const selectedPreviousMonthDate = previousMonthDate(targetDate)
+  const availableGrades = useMemo(() => availableGradesForDate(targetDate), [targetDate])
+  const usesHistoricGrades = availableGrades.length < RTM_AMV_GRADE_ORDER.length
 
   const loadRows = useCallback(async () => {
-    if (!isIsoDate(targetDate)) {
-      setLoadError('Enter a valid effective date.')
+    const requestId = ++loadRequestIdRef.current
+    if (!isMonthStartDate(targetDate)) {
+      setLoadError('Select a valid effective month.')
+      setLoadedDate('')
       setCurrentRows([])
       setPreviousRows([])
       setEditedValues({})
       setPrefillValues({})
-      setPrefillSourceDate('')
       setRetryCellKeys({})
       setShowWarningConfirmation(false)
+      setIsLoading(false)
       return
     }
 
@@ -412,56 +442,56 @@ const RTMEmsLogAmvPage = () => {
     setLoadError('')
 
     try {
-      const [currentResponse, previousResponse] = await Promise.all([
+      const [currentResponse, previousResponse, latestRows] = await Promise.all([
         searchRtmEmsLogAmv({
           species: '',
           growthIndicator: '',
           retrievalDate: targetDate,
           updateDate: targetDate,
         }),
-        selectedPreviousDayDate
+        selectedPreviousMonthDate
           ? searchRtmEmsLogAmv({
               species: '',
               growthIndicator: '',
-              retrievalDate: selectedPreviousDayDate,
-              updateDate: selectedPreviousDayDate,
+              retrievalDate: selectedPreviousMonthDate,
+              updateDate: selectedPreviousMonthDate,
             })
           : Promise.resolve([]),
+        searchLatestRtmEmsLogAmv(targetDate),
       ])
 
-      let nextPrefillValues: Record<string, string> = {}
-      let nextPrefillSourceDate = ''
-      if (currentResponse.length === 0) {
-        const latestRows = await searchLatestRtmEmsLogAmv(targetDate)
-        nextPrefillValues = buildPrefillValues(latestRows)
-        const sourceRow = latestRows.find((row) => row.updateDate || row.retrievalDate)
-        if (Object.keys(nextPrefillValues).length > 0 && sourceRow) {
-          nextPrefillSourceDate = sourceRow.updateDate ?? sourceRow.retrievalDate ?? ''
-        }
+      if (requestId !== loadRequestIdRef.current) {
+        return
       }
+
+      const nextPrefillValues = buildPrefillValues(latestRows, currentResponse)
 
       setCurrentRows(currentResponse)
       setPreviousRows(previousResponse)
       setLoadedDate(targetDate)
       setEditedValues(nextPrefillValues)
       setPrefillValues(nextPrefillValues)
-      setPrefillSourceDate(nextPrefillSourceDate)
       setRetryCellKeys({})
       setShowWarningConfirmation(false)
     } catch (error) {
+      if (requestId !== loadRequestIdRef.current) {
+        return
+      }
       console.error(error)
       setLoadError('Unable to load average monthly values.')
+      setLoadedDate('')
       setCurrentRows([])
       setPreviousRows([])
       setEditedValues({})
       setPrefillValues({})
-      setPrefillSourceDate('')
       setRetryCellKeys({})
       setShowWarningConfirmation(false)
     } finally {
-      setIsLoading(false)
+      if (requestId === loadRequestIdRef.current) {
+        setIsLoading(false)
+      }
     }
-  }, [selectedPreviousDayDate, targetDate])
+  }, [selectedPreviousMonthDate, targetDate])
 
   useEffect(() => {
     void loadRows()
@@ -471,26 +501,35 @@ const RTMEmsLogAmvPage = () => {
     () => buildCellBasis(currentRows, previousRows),
     [currentRows, previousRows],
   )
-  const compareWithPreviousDay = selectedDateIsToday && !prefillSourceDate
   const cells = useMemo(
-    () =>
-      buildCells(basisByKey, editedValues, prefillValues, retryCellKeys, compareWithPreviousDay),
-    [basisByKey, compareWithPreviousDay, editedValues, prefillValues, retryCellKeys],
+    () => buildCells(basisByKey, editedValues, prefillValues, retryCellKeys),
+    [basisByKey, editedValues, prefillValues, retryCellKeys],
   )
-  const warnings = warningDeduplicate(cells.map((cell) => cell.warning))
-  const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))
-  const dirtyCells = cells.filter((cell) => cell.dirty)
+  const selectedCells = cells.filter(
+    (cell) => cell.key.startsWith(`${selectedGrowth}|`) && availableGrades.includes(cell.grade),
+  )
+  const warnings = warningDeduplicate(selectedCells.map((cell) => cell.warning))
+  const validationErrors = warningDeduplicate(selectedCells.map((cell) => cell.validationError))
+  const dirtyCells = selectedCells.filter((cell) => cell.dirty)
+  const hasSelectedPrefill = selectedCells.some(
+    (cell) => prefillValues[cell.key] !== undefined && cell.dirty,
+  )
   const saveWarnings = warningDeduplicate(dirtyCells.map((cell) => cell.warning))
   const confirmationMessages = warningDeduplicate([
     selectedDateIsPast
-      ? `You are changing values for ${formatEffectiveDate(targetDate)}, which is in the past.`
+      ? `You are changing values for ${formatEffectiveMonth(targetDate)}, which is in the past.`
       : null,
     ...saveWarnings,
   ])
   const hasPendingChanges = dirtyCells.length > 0
-  const isReadOnly = !canManage || isLoading || isSaving
+  const hasExplicitEdits = dirtyCells.some((cell) => {
+    const startingValue = prefillValues[cell.key] ?? basisByKey[cell.key].currentValue
+    return comparableCellValue(cell.value) !== comparableCellValue(startingValue)
+  })
+  const hasAuthoritativeBaseline = !loadError && loadedDate === targetDate
+  const isReadOnly = !canManage || isLoading || isSaving || !hasAuthoritativeBaseline
   const saveDisabled =
-    isReadOnly || !hasPendingChanges || validationErrors.length > 0 || !isIsoDate(targetDate)
+    isReadOnly || !hasPendingChanges || validationErrors.length > 0 || !isMonthStartDate(targetDate)
 
   const updateCellValue = (key: string, value: string) => {
     setEditedValues((current) => ({
@@ -505,37 +544,31 @@ const RTMEmsLogAmvPage = () => {
     setShowWarningConfirmation(false)
   }
 
-  const buildSaveRequestsForCell = (cell: RtmAmvCell): RtmEmsLogAmvSaveRequest[] => {
+  const buildSaveRequestForCell = (cell: RtmAmvCell): RtmEmsLogAmvSaveRequest | null => {
     const parsedValue = parseCellValue(cell.value)
     if (typeof parsedValue !== 'number') {
-      return []
+      return null
     }
 
-    return cell.column.persistSpeciesCodes.flatMap((species) =>
-      RTM_AMV_GROWTH_INDICATORS.map((growthIndicator) => {
-        const currentRow = cell.currentRows.find((row) =>
-          rowMatchesPersistTarget(row, species, cell.grade, growthIndicator),
-        )
-        const previousRow = cell.previousRows.find((row) =>
-          rowMatchesPersistTarget(row, species, cell.grade, growthIndicator),
-        )
-        const hasExistingRow = Boolean(currentRow || previousRow)
-        const retrievalDate =
-          currentRow?.retrievalDate ??
-          previousRow?.retrievalDate ??
-          (previousRow ? selectedPreviousDayDate : targetDate)
-
-        return {
-          species,
-          grade: cell.grade,
-          growthIndicator,
-          retrievalDate: retrievalDate || targetDate,
-          updateDate: targetDate,
-          newValue: parsedValue,
-          saveMode: hasExistingRow ? 'update' : 'create',
-        }
-      }),
+    const species = cell.column.key
+    const currentRow = cell.currentRows.find((row) =>
+      rowMatchesPersistTarget(row, species, cell.grade, selectedGrowth),
     )
+    const previousRow = cell.previousRows.find((row) =>
+      rowMatchesPersistTarget(row, species, cell.grade, selectedGrowth),
+    )
+    const hasExistingRow = Boolean(currentRow || previousRow)
+    const retrievalDate = currentRow?.retrievalDate ?? previousRow?.retrievalDate ?? targetDate
+
+    return {
+      species,
+      grade: cell.grade,
+      growthIndicator: selectedGrowth,
+      retrievalDate: retrievalDate || targetDate,
+      updateDate: targetDate,
+      newValue: parsedValue,
+      saveMode: hasExistingRow ? 'update' : 'create',
+    }
   }
 
   const saveChanges = async () => {
@@ -557,9 +590,10 @@ const RTMEmsLogAmvPage = () => {
       return
     }
 
-    const saveAttempts = dirtyCells.flatMap((cell) =>
-      buildSaveRequestsForCell(cell).map((request) => ({ cellKey: cell.key, request })),
-    )
+    const saveAttempts = dirtyCells.flatMap((cell) => {
+      const request = buildSaveRequestForCell(cell)
+      return request ? [{ cellKey: cell.key, request }] : []
+    })
     if (saveAttempts.length === 0) {
       return
     }
@@ -567,16 +601,21 @@ const RTMEmsLogAmvPage = () => {
     setIsSaving(true)
 
     try {
-      const results = await Promise.all(
-        saveAttempts.map(async (attempt) => {
-          try {
-            return { ...attempt, result: await saveRtmEmsLogAmv(attempt.request) }
-          } catch (error) {
-            console.error(error)
-            return { ...attempt, result: null }
-          }
-        }),
-      )
+      const results = []
+      for (const [attemptIndex, attempt] of saveAttempts.entries()) {
+        try {
+          results.push({ ...attempt, result: await saveRtmEmsLogAmv(attempt.request) })
+        } catch (error) {
+          console.error(error)
+          results.push({ ...attempt, result: null })
+          results.push(
+            ...saveAttempts
+              .slice(attemptIndex + 1)
+              .map((pendingAttempt) => ({ ...pendingAttempt, result: null })),
+          )
+          break
+        }
+      }
       const failedResults = results.filter((attempt) => attempt.result?.status !== 'accepted')
 
       if (failedResults.length > 0) {
@@ -590,7 +629,7 @@ const RTMEmsLogAmvPage = () => {
 
         if (failedResults.length < results.length) {
           await loadRows()
-          setEditedValues(failedValues)
+          setEditedValues((current) => ({ ...current, ...failedValues }))
           setRetryCellKeys(
             Object.fromEntries(Array.from(failedCellKeys, (key) => [key, true as const])),
           )
@@ -639,8 +678,11 @@ const RTMEmsLogAmvPage = () => {
   return (
     <Grid fullWidth className="default-grid admin-upload-fspts-page rtm-amv-page">
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header rtm-amv-header">
-        <h1>Average Monthly Values</h1>
-        <p>{RTM_AMV_DESCRIPTION}</p>
+        <PageHeader
+          title="Average Monthly Values"
+          subtitle={RTM_AMV_DESCRIPTION}
+          style={{ marginBlockEnd: '1.5rem' }}
+        />
       </Column>
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-content">
@@ -649,13 +691,35 @@ const RTMEmsLogAmvPage = () => {
           aria-labelledby="rtm-amv-table-title"
         >
           <div className="rtm-amv-toolbar__controls">
-            <IsoDatePicker
+            <TextInput
               id="rtm-amv-effective-date"
-              labelText="Effective date"
-              value={targetDate}
-              onChange={setTargetDate}
-              disabled={isLoading || isSaving}
+              type="month"
+              labelText="Effective month"
+              value={isMonthStartDate(targetDate) ? targetDate.slice(0, 7) : ''}
+              onChange={(event) => {
+                const month = event.target.value
+                setTargetDate(/^\d{4}-\d{2}$/.test(month) ? `${month}-01` : '')
+              }}
+              disabled={isSaving || hasExplicitEdits}
             />
+            <Button
+              kind="tertiary"
+              size="md"
+              onClick={() => setTargetDate(currentMonth)}
+              disabled={isSaving || hasExplicitEdits || targetDate === currentMonth}
+            >
+              Current month
+            </Button>
+            <Button
+              kind="tertiary"
+              size="md"
+              onClick={() => setTargetDate(previousMonthDate(currentMonth))}
+              disabled={
+                isSaving || hasExplicitEdits || targetDate === previousMonthDate(currentMonth)
+              }
+            >
+              Previous month
+            </Button>
             <Button
               kind="secondary"
               size="md"
@@ -663,11 +727,28 @@ const RTMEmsLogAmvPage = () => {
               onClick={() => {
                 void loadRows()
               }}
-              disabled={isLoading || isSaving || !isIsoDate(targetDate)}
+              disabled={isLoading || isSaving || hasExplicitEdits || !isMonthStartDate(targetDate)}
             >
               Reload
             </Button>
           </div>
+          <RadioButtonGroup
+            className="rtm-amv-growth-selector"
+            name="rtm-amv-growth"
+            legendText="Growth type"
+            orientation="horizontal"
+            valueSelected={selectedGrowth}
+            disabled={isLoading || isSaving || hasExplicitEdits}
+            onChange={(selection) => {
+              if (selection === 'O' || selection === 'S') {
+                setSelectedGrowth(selection)
+                setShowWarningConfirmation(false)
+              }
+            }}
+          >
+            <RadioButton id="rtm-amv-growth-old" value="O" labelText="Old growth" />
+            <RadioButton id="rtm-amv-growth-second" value="S" labelText="Second growth" />
+          </RadioButtonGroup>
           <div className="rtm-amv-toolbar__status" role="status">
             {isLoading ? (
               <InlineLoading description="Loading values" />
@@ -675,11 +756,11 @@ const RTMEmsLogAmvPage = () => {
               <>
                 <InformationFilled size={16} aria-hidden="true" />
                 <span>
-                  {selectedDateIsToday
-                    ? `Comparing ${formatEffectiveDate(loadedDate)} against ${formatEffectiveDate(selectedPreviousDayDate)}`
+                  {selectedDateIsCurrent
+                    ? `Viewing ${formatEffectiveMonth(loadedDate)}; previous month is ${formatEffectiveMonth(selectedPreviousMonthDate)}`
                     : selectedDateIsFuture
-                      ? 'Future date selected'
-                      : 'Past date selected'}
+                      ? `Viewing future month ${formatEffectiveMonth(loadedDate)}`
+                      : `Viewing past month ${formatEffectiveMonth(loadedDate)}`}
                 </span>
               </>
             )}
@@ -690,13 +771,15 @@ const RTMEmsLogAmvPage = () => {
           <div className="rtm-amv-warning-panel" role="status">
             <div className="rtm-amv-warning-panel__header">
               <WarningAltFilled size={20} aria-hidden="true" />
-              <h2>Past date selected</h2>
+              <h2>Past month selected</h2>
             </div>
-            <p>Changes for {formatEffectiveDate(targetDate)} require confirmation before saving.</p>
+            <p>
+              Changes for {formatEffectiveMonth(targetDate)} require confirmation before saving.
+            </p>
           </div>
         )}
 
-        {prefillSourceDate && (
+        {hasSelectedPrefill && (
           <div className="admin-upload-validation admin-upload-validation--info" role="status">
             <InformationFilled
               size={20}
@@ -706,8 +789,10 @@ const RTMEmsLogAmvPage = () => {
             <div className="admin-upload-validation__content">
               <h3>Starting values copied</h3>
               <p>
-                Prefilled from {formatEffectiveDate(prefillSourceDate)}. These values are not saved
-                for {formatEffectiveDate(targetDate)} until Save changes is selected.
+                Prefilled from the latest available earlier value for each species, grade, and
+                growth key. Only the visible {RTM_AMV_GROWTH_LABELS[selectedGrowth].toLowerCase()}{' '}
+                values are saved when Save changes is selected for{' '}
+                {formatEffectiveMonth(targetDate)}.
               </p>
             </div>
           </div>
@@ -749,7 +834,7 @@ const RTMEmsLogAmvPage = () => {
             <ErrorFilled size={20} className="admin-upload-validation__icon" aria-hidden="true" />
             <div className="admin-upload-validation__content">
               <h3>Invalid table value</h3>
-              <p>{validationErrors[0]}</p>
+              <p id="rtm-amv-validation-summary">{validationErrors[0]}</p>
             </div>
           </div>
         )}
@@ -757,12 +842,21 @@ const RTMEmsLogAmvPage = () => {
         <section className="admin-upload-panel rtm-amv-table-panel">
           <div className="admin-upload-section-heading rtm-amv-table-heading">
             <h2 id="rtm-amv-table-title">Average monthly values table</h2>
-            <p>Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.</p>
+            <p>
+              Editing {RTM_AMV_GROWTH_LABELS[selectedGrowth].toLowerCase()}. Each cell maps to one
+              physical species, grade, growth type, and month.
+              {usesHistoricGrades &&
+                ' The historical grade set applies before April 2006; W, Z, 1, and 2 are unavailable.'}
+            </p>
           </div>
 
           <div className="rtm-amv-table-wrap">
             <TableContainer>
-              <Table size="lg" useZebraStyles aria-label="Average monthly value table">
+              <Table
+                size="lg"
+                useZebraStyles
+                aria-label={`${RTM_AMV_GROWTH_LABELS[selectedGrowth]} average monthly value table`}
+              >
                 <TableHead>
                   <TableRow>
                     <TableHeader>Grade</TableHeader>
@@ -771,13 +865,14 @@ const RTMEmsLogAmvPage = () => {
                     ))}
                   </TableRow>
                 </TableHead>
-                <TableBody key={loadedDate}>
-                  {RTM_AMV_GRADE_ORDER.map((grade) => (
+                <TableBody key={`${loadedDate}|${selectedGrowth}`}>
+                  {availableGrades.map((grade) => (
                     <TableRow key={grade}>
                       <TableCell className="rtm-amv-grade-cell">{grade}</TableCell>
                       {RTM_AMV_SPECIES_COLUMNS.map((column) => {
                         const cell = cells.find(
-                          (candidate) => candidate.key === buildCellKey(grade, column.key),
+                          (candidate) =>
+                            candidate.key === buildCellKey(selectedGrowth, grade, column.key),
                         )
                         if (!cell) {
                           return <TableCell key={column.key} />
@@ -799,11 +894,15 @@ const RTMEmsLogAmvPage = () => {
                         return (
                           <TableCell key={column.key} className={cellClassName}>
                             <label className="rtm-amv-cell-input-label">
-                              <span>{`${column.label} grade ${grade}`}</span>
+                              <span>{`${column.label} grade ${grade}, ${RTM_AMV_GROWTH_LABELS[selectedGrowth]}`}</span>
                               <input
                                 className="rtm-amv-cell-input"
                                 inputMode="decimal"
-                                aria-label={`${column.label} grade ${grade}`}
+                                aria-label={`${column.label} grade ${grade}, ${RTM_AMV_GROWTH_LABELS[selectedGrowth]}`}
+                                aria-invalid={Boolean(cell.validationError)}
+                                aria-describedby={
+                                  cell.validationError ? 'rtm-amv-validation-summary' : undefined
+                                }
                                 placeholder={cell.hasCurrentValue ? undefined : '-'}
                                 value={cell.value}
                                 disabled={isReadOnly}
@@ -847,7 +946,7 @@ const RTMEmsLogAmvPage = () => {
           <div className="rtm-amv-actions__summary" role="status">
             {hasPendingChanges ? (
               <span>
-                {dirtyCells.length} {prefillSourceDate ? 'carried-forward' : 'changed'} cell
+                {dirtyCells.length} {RTM_AMV_GROWTH_LABELS[selectedGrowth].toLowerCase()} cell
                 {dirtyCells.length === 1 ? '' : 's'} ready to save
               </span>
             ) : (

@@ -41,6 +41,21 @@ class RequestParameterUtilsTest {
   }
 
   @Test
+  void firstPresentDistinguishesExplicitBlankFromMissingAndPreservesAliasOrder() {
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("receiptNumber", " RCPT-1 ");
+    parameters.add("permitReceiptNo", "   ");
+
+    assertThat(RequestParameterUtils.firstPresent(parameters, "missing")).isNull();
+    assertThat(
+            RequestParameterUtils.firstPresent(
+                parameters, "permitReceiptNo", "receiptNumber"))
+        .isEmpty();
+    assertThat(RequestParameterUtils.firstPresent(parameters, "receiptNumber"))
+        .isEqualTo("RCPT-1");
+  }
+
+  @Test
   void parsePositiveLongRequiresPositiveNumericValue() {
     assertThat(RequestParameterUtils.parsePositiveLong(" 123 ")).isEqualTo(123L);
     assertThat(RequestParameterUtils.parsePositiveLong("0")).isNull();

@@ -12,4 +12,21 @@ public record FederalApplicationSearchResultDto(
     String exemptionNumber,
     LocalDate receivedDate,
     LocalDate listingDate,
-    boolean selectable) {}
+    boolean selectable,
+    boolean locked) {
+
+  public FederalApplicationSearchResultDto withLocked(boolean locked) {
+    return new FederalApplicationSearchResultDto(
+        applicationNumber,
+        federalApplicationNumber,
+        status,
+        client,
+        reason,
+        exemptionType,
+        exemptionNumber,
+        receivedDate,
+        listingDate,
+        selectable,
+        locked);
+  }
+}

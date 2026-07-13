@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.nio.charset.StandardCharsets;
@@ -22,6 +23,7 @@ class InMemoryLexisReportServiceTest {
 
     assertThat(report.filename()).isEqualTo("offerReport.csv");
     assertThat(report.mediaType()).isEqualTo("application/vnd.ms-excel");
+    assertThat(content).contains("mode=stub-reports");
     assertThat(content).contains("reportAction=offerReport");
     assertThat(content).contains("parameter.fromDate=2026-01-01");
     assertThat(content).contains("parameter.toDate=2026-05-01");
@@ -38,5 +40,18 @@ class InMemoryLexisReportServiceTest {
     assertThat(report.mediaType()).isEqualTo("application/pdf");
     assertThat(content).contains("format=PDF");
     assertThat(content).contains("parameters=<none>");
+  }
+
+  @Test
+  void shouldRejectUnknownAndUnsupportedFormats() {
+    InMemoryLexisReportService service = new InMemoryLexisReportService();
+
+    for (String format : java.util.List.of("PPTX", "DOC", "DOCX", "RTF")) {
+      LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), format);
+
+      assertThatThrownBy(() -> service.generateReport("offerReport", request))
+          .isInstanceOf(LexisReportValidationException.class)
+          .hasMessage("Report format must be PDF, CSV, XLS, or XLSX.");
+    }
   }
 }

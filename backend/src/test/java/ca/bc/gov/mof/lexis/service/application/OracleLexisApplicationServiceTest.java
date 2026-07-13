@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -207,6 +209,15 @@ class OracleLexisApplicationServiceTest {
   void detailShouldReturnEmptyForInvalidApplicationNumber() {
     assertThat(service.findByApplicationNumber(0L)).isEmpty();
     verifyNoInteractions(repository);
+  }
+
+  @Test
+  void detailShouldPropagateRepositoryFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(repository.findByApplicationNumber(1000456L)).thenThrow(failure);
+
+    assertThatThrownBy(() -> service.findByApplicationNumber(1000456L)).isSameAs(failure);
   }
 
   @Test

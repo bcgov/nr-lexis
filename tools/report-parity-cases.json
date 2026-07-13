@@ -193,7 +193,7 @@
   },
   {
     "id": "biweekly-listing-csv",
-    "description": "Biweekly listing CSV with legacy P/F jurisdiction fallback",
+    "description": "Advertising List CSV using the current filtered report action",
     "reportId": "biweeklyListing",
     "legacyPath": "/biweeklyListing.do",
     "actionMapping": "generate",
@@ -208,7 +208,7 @@
   },
   {
     "id": "biweekly-listing-pdf",
-    "description": "Biweekly listing PDF using the migrated Jasper template",
+    "description": "Advertising List PDF using the current filtered report action",
     "reportId": "biweeklyListing",
     "legacyPath": "/biweeklyListing.do",
     "actionMapping": "generate",
@@ -221,26 +221,6 @@
       "toDate": "2025-12-31",
       "outputFormat": "PDF"
     }
-  },
-  {
-    "id": "biweekly-industry-csv",
-    "description": "Biweekly industry CSV with current schedule defaults",
-    "reportId": "biweeklyListing",
-    "legacyPath": "/biweeklyListing.do",
-    "actionMapping": "generateIndustryCSV",
-    "format": "CSV",
-    "compare": "exact",
-    "parameters": {}
-  },
-  {
-    "id": "biweekly-industry-pdf",
-    "description": "Biweekly industry PDF with current schedule defaults",
-    "reportId": "biweeklyListing",
-    "legacyPath": "/biweeklyListing.do",
-    "actionMapping": "generateIndustryPDF",
-    "format": "PDF",
-    "compare": "metadata",
-    "parameters": {}
   },
   {
     "id": "transport-report-csv",
@@ -376,6 +356,21 @@
     }
   },
   {
+    "id": "tenure-permit-pdf",
+    "description": "Tenure permit details PDF parameter variant",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generatePermitReport",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
     "id": "tenure-type-spreadsheet",
     "description": "Tenure analysis spreadsheet by tenure type",
     "reportId": "tenureReport",
@@ -388,6 +383,21 @@
       "toDate": "2025-12-31",
       "tenureType1": "${REPORT_TENURE_TYPE}",
       "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "tenure-type-pdf",
+    "description": "Tenure analysis PDF parameter variant by tenure type",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateTenureReport",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "tenureType1": "${REPORT_TENURE_TYPE}",
+      "outputFormat": "PDF"
     }
   },
   {
@@ -406,6 +416,21 @@
     }
   },
   {
+    "id": "tenure-mark-pdf",
+    "description": "Tenure analysis PDF parameter variant by timber mark",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateMarkReport",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "timberMark1": "${REPORT_TIMBER_MARK}",
+      "outputFormat": "PDF"
+    }
+  },
+  {
     "id": "tenure-file-spreadsheet",
     "description": "Tenure analysis spreadsheet by forest file",
     "reportId": "tenureReport",
@@ -418,6 +443,21 @@
       "toDate": "2025-12-31",
       "forestFileId": "${REPORT_FOREST_FILE_ID}",
       "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "tenure-file-pdf",
+    "description": "Tenure analysis PDF parameter variant by forest file",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateFileReport",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "forestFileId": "${REPORT_FOREST_FILE_ID}",
+      "outputFormat": "PDF"
     }
   }
 ]

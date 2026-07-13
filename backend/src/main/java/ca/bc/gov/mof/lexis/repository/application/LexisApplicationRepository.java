@@ -10,9 +10,9 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.ResultSet;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -74,36 +74,36 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     List<CodeNameDto> options = new ArrayList<>();
     options.add(new CodeNameDto("ALL", "All"));
     options.addAll(
-        loadCodeNameOptions(FIND_ALL_EXEMPTION_TYPE_CODES).stream()
+        loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES).stream()
             .filter(option -> option.code() == null || !JURISDICTION_FEDERAL.equalsIgnoreCase(option.code()))
             .toList());
     return options;
   }
 
   public List<CodeNameDto> loadExemptionReasonOptions() {
-    return loadCodeNameOptions(FIND_ALL_EXEMPTION_REASON_CODES);
+    return loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_REASON_CODES);
   }
 
   public List<CodeNameDto> loadApplicationStatusOptions() {
     List<CodeNameDto> options = new ArrayList<>();
     options.add(new CodeNameDto("", "All"));
-    options.addAll(loadCodeNameOptions(FIND_ALL_APPLICATION_STATUS_CODES));
+    options.addAll(loadCodeNameOptionsRequired(FIND_ALL_APPLICATION_STATUS_CODES));
     return options;
   }
 
   public List<CodeNameDto> loadProductTypeOptions() {
     List<CodeNameDto> options = new ArrayList<>();
     options.add(new CodeNameDto("", "All"));
-    options.addAll(loadCodeNameOptions(FIND_ALL_PRODUCT_TYPE_CODES));
+    options.addAll(loadCodeNameOptionsRequired(FIND_ALL_PRODUCT_TYPE_CODES));
     return options;
   }
 
   public List<CodeNameDto> loadGrowthTypeOptions() {
-    return loadCodeNameOptions(FIND_ALL_GROWTH_TYPE_CODES);
+    return loadCodeNameOptionsRequired(FIND_ALL_GROWTH_TYPE_CODES);
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return loadOrgUnitOptions(true);
+    return loadOrgUnitOptionsRequired(true);
   }
 
   public Page<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
@@ -113,7 +113,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   public Page<LexisApplicationSearchResultDto> search(
       LexisApplicationSearchCriteria criteria, Integer knownTotal) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
-    LocalDate today = LocalDate.now(ZoneId.systemDefault());
+    LocalDate today = LexisBusinessTime.today();
     int totalElements =
         knownTotal == null
             ? queryLegacyDynamicCountProcedure(
@@ -164,15 +164,21 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       int idx1 = where.nextBindIndex();
       int idx2 = idx1 + 1;
       where.addRawWithBinds(
-          " AND ((v.OWNER_CLIENT_NUMBER LIKE '%' || :"
-              + idx1
-              + " || '%' AND v.EXPORT_APPLICANT_TYPE_CODE = '"
-              + APPLICANT_TYPE_OWNER
-              + "') OR (v.AGENT_CLIENT_NUMBER LIKE '%' || :"
-              + idx2
-              + " || '%' AND v.EXPORT_APPLICANT_TYPE_CODE = '"
-              + APPLICANT_TYPE_AGENT
-              + "'))",
+          criteria.broadClientMatch()
+              ? " AND (v.OWNER_CLIENT_NUMBER LIKE '%' || :"
+                  + idx1
+                  + " || '%' OR v.AGENT_CLIENT_NUMBER LIKE '%' || :"
+                  + idx2
+                  + " || '%')"
+              : " AND ((v.OWNER_CLIENT_NUMBER LIKE '%' || :"
+                  + idx1
+                  + " || '%' AND v.EXPORT_APPLICANT_TYPE_CODE = '"
+                  + APPLICANT_TYPE_OWNER
+                  + "') OR (v.AGENT_CLIENT_NUMBER LIKE '%' || :"
+                  + idx2
+                  + " || '%' AND v.EXPORT_APPLICANT_TYPE_CODE = '"
+                  + APPLICANT_TYPE_AGENT
+                  + "'))",
           agentClientNumber,
           agentClientNumber);
     }
@@ -186,7 +192,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     }
 
     Optional<ApplicationSnapshot> snapshot =
-        queryCursorSingle(
+        queryCursorSingleFailClosed(
             FIND_APPLICATION_BY_NUMBER,
             cs -> cs.setString(1, applicationNumber.toString()),
             2,
@@ -201,7 +207,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     List<LexisApplicationDetailDto.LexisPackageDto> packages =
         loadPackagesByApplication(applicationNumber);
     List<LexisApplicationDetailDto.LexisRemarkDto> remarks = loadRemarksByApplication(applicationNumber);
-    List<LexisApplicationDetailDto.LexisOfferDto> offers = loadOffersByApplication(applicationNumber);
+    List<LexisApplicationDetailDto.LexisOfferDto> offers =
+        loadOffersByApplicationFailClosed(applicationNumber);
 
     return Optional.of(
         new LexisApplicationDetailDto(
@@ -227,11 +234,18 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             false,
             false,
             false,
+            false,
+            false,
+            false,
+            false,
+            false,
             null,
             null,
             packages,
             remarks,
-            offers));
+            offers,
+            app.jurisdictionCode(),
+            app.author()));
   }
 
   public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {
@@ -308,7 +322,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       if (applicationNumber == null || applicationNumber < 1) {
         continue;
       }
-      List<LexisApplicationDetailDto.LexisOfferDto> offers = loadOffersByApplication(applicationNumber);
+      List<LexisApplicationDetailDto.LexisOfferDto> offers =
+          loadOffersByApplicationFailClosed(applicationNumber);
       for (LexisApplicationDetailDto.LexisOfferDto offer : offers) {
         if (offer.validOffer() && offer.withdrawalDate() == null) {
           return true;
@@ -409,7 +424,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   private List<LexisApplicationDetailDto.LexisPackageDto> loadPackagesByApplication(Long applicationNumber) {
     Map<String, Long> pieceCountByPackage = loadPieceCountByPackage(applicationNumber);
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_PACKAGES_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
@@ -426,7 +441,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
 
   private Map<String, Long> loadPieceCountByPackage(Long applicationNumber) {
     List<PieceCountSnapshot> rows =
-        queryCursorProcedure(
+        queryCursorProcedureFailClosed(
             FIND_SCALE_DETAIL_BY_APPLICATION,
             cs -> cs.setString(1, applicationNumber.toString()),
             2,
@@ -443,7 +458,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   private List<LexisApplicationDetailDto.LexisRemarkDto> loadRemarksByApplication(Long applicationNumber) {
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_REMARKS_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
@@ -461,17 +476,36 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   private List<LexisApplicationDetailDto.LexisOfferDto> loadOffersByApplication(Long applicationNumber) {
-    return queryCursorProcedure(
-        FIND_PURCHASE_OFFERS_BY_APPLICATION,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
+    return loadOffersByApplication(applicationNumber, false);
+  }
+
+  private List<LexisApplicationDetailDto.LexisOfferDto> loadOffersByApplicationFailClosed(
+      Long applicationNumber) {
+    return loadOffersByApplication(applicationNumber, true);
+  }
+
+  private List<LexisApplicationDetailDto.LexisOfferDto> loadOffersByApplication(
+      Long applicationNumber, boolean failClosed) {
+    SqlRowMapper<LexisApplicationDetailDto.LexisOfferDto> rowMapper =
         rs ->
             new LexisApplicationDetailDto.LexisOfferDto(
                 offerNumberAsString(rs),
                 getString(rs, "COMPANY_NAME"),
                 getLocalDate(rs, "ENTRY_TIMESTAMP"),
                 INDICATOR_YES.equalsIgnoreCase(getString(rs, "VALID_OFFER_INDICATOR")),
-                getLocalDate(rs, "OFFER_WITHDRAWAL_DATE")));
+                getLocalDate(rs, "OFFER_WITHDRAWAL_DATE"));
+    if (failClosed) {
+      return queryCursorProcedureFailClosed(
+          FIND_PURCHASE_OFFERS_BY_APPLICATION,
+          cs -> cs.setString(1, applicationNumber.toString()),
+          2,
+          rowMapper);
+    }
+    return queryCursorProcedure(
+        FIND_PURCHASE_OFFERS_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rowMapper);
   }
 
   private boolean canCreateOffers(Long applicationNumber) {
@@ -482,7 +516,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_SCHEDULE_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
@@ -504,7 +538,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       return false;
     }
 
-    LocalDate today = LocalDate.now(ZoneId.systemDefault());
+    LocalDate today = LexisBusinessTime.today();
     return (!today.isBefore(advertisingDate) && !today.isAfter(offerReceiptDate));
   }
 
@@ -529,7 +563,9 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         getLong(rs, "TERM_DAYS"),
         firstNonNull(
             getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
-        getDouble(rs, "AVERAGE_LOG_VOLUME"));
+        getDouble(rs, "AVERAGE_LOG_VOLUME"),
+        getString(rs, "EXPORT_JURISDICTION_CODE"),
+        getString(rs, "ENTRY_USERID"));
   }
 
   private String buildSortOrder(String sortField) {
@@ -600,7 +636,9 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LocalDate listingDate,
       Long termDays,
       Double applicationVolume,
-      Double averageLogVolume) {}
+      Double averageLogVolume,
+      String jurisdictionCode,
+      String author) {}
 
   private record ScheduleSnapshot(
       LocalDate advertisingDate, LocalDate offerReceiptDate, LocalDate teacMeetingDate) {}

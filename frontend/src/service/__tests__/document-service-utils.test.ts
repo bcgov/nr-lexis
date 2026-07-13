@@ -45,6 +45,8 @@ describe('document-service-utils', () => {
           fileName: ' example.pdf ',
           fileDescription: ' Uploaded file ',
           attachmentTypeDescription: ' PDF ',
+          origin: ' permit ',
+          canDelete: 'true',
         },
         0,
       ),
@@ -53,6 +55,8 @@ describe('document-service-utils', () => {
       name: 'example.pdf',
       description: 'Uploaded file',
       type: 'PDF',
+      source: 'permit',
+      deletable: true,
     })
 
     expect(normalizeDocumentRowBase({}, 1)).toEqual({
@@ -60,6 +64,7 @@ describe('document-service-utils', () => {
       name: 'Document 2',
       description: '',
       type: '',
+      source: '',
     })
 
     expect(normalizeDocumentRowBase('not a row', 2)).toEqual({
@@ -67,6 +72,17 @@ describe('document-service-utils', () => {
       name: 'Document 3',
       description: '',
       type: '',
+      source: '',
+    })
+  })
+
+  it('preserves absent and explicit document delete metadata', () => {
+    expect(normalizeDocumentRowBase({ id: 1 }, 0)).not.toHaveProperty('deletable')
+    expect(normalizeDocumentRowBase({ id: 2, deletable: false }, 1)).toMatchObject({
+      deletable: false,
+    })
+    expect(normalizeDocumentRowBase({ id: 3, canDelete: false }, 2)).toMatchObject({
+      deletable: false,
     })
   })
 

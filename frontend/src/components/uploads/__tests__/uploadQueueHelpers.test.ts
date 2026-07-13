@@ -1,10 +1,52 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DOCUMENT_UPLOAD_ACCEPT,
+  DOCUMENT_UPLOAD_EXTENSIONS,
   extractUploadErrorDetails,
   GENERIC_SUBMISSION_FAILURE_MESSAGE,
+  validateDocumentUploadDescription,
+  validateDocumentUploadFile,
+  validateUploadFileSize,
 } from '@/components/uploads/uploadQueueHelpers'
 
 describe('uploadQueueHelpers', () => {
+  it('rejects document files above the shared 20 MiB business limit', () => {
+    const oversized = new File([new Uint8Array(20 * 1024 * 1024 + 1)], 'large.pdf')
+
+    expect(validateDocumentUploadFile(oversized)).toBe('File must be 20 MiB or smaller.')
+    expect(validateUploadFileSize(oversized)).toBe('File must be 20 MiB or smaller.')
+  })
+
+  it('uses the authoritative attachment extension allowlist for the file picker and queue', () => {
+    expect(DOCUMENT_UPLOAD_ACCEPT).toBe(
+      '.bmp,.csv,.doc,.docx,.jpg,.pdf,.png,.rtf,.txt,.xls,.xlsx,.xml,.zip',
+    )
+
+    for (const extension of DOCUMENT_UPLOAD_EXTENSIONS) {
+      expect(validateDocumentUploadFile(new File(['content'], `evidence${extension}`))).toBe('')
+    }
+
+    expect(validateDocumentUploadFile(new File(['content'], 'evidence.exe'))).toContain(
+      'File type is not supported',
+    )
+  })
+
+  it('validates Oracle-compatible attachment metadata before queueing', () => {
+    expect(validateDocumentUploadFile(new File(['content'], 'résumé.pdf'))).toBe(
+      'File name must use printable US-ASCII characters without path separators.',
+    )
+    expect(validateDocumentUploadFile(new File(['content'], `${'a'.repeat(247)}.pdf`))).toBe(
+      'File name must be 250 bytes or fewer.',
+    )
+    expect(validateDocumentUploadDescription('Résumé')).toBe(
+      'Document description must use US-ASCII characters.',
+    )
+    expect(validateDocumentUploadDescription('a'.repeat(251))).toBe(
+      'Document description must be 250 bytes or fewer.',
+    )
+    expect(validateDocumentUploadDescription('Line one\nLine two')).toBe('')
+  })
+
   it('keeps actionable validation errors from failed uploads', () => {
     const result = extractUploadErrorDetails({
       response: {

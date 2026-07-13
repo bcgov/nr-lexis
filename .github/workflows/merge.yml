@@ -6,8 +6,6 @@ on:
     paths-ignore:
       - "*.md"
       - ".github/graphics/**"
-  workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -48,8 +46,17 @@ jobs:
       environment: test
       target: test
       tag: ${{ needs.init.outputs.pr }}
-      backend_replicas: "2"
-      frontend_replicas: "2"
+      backend_replicas: "1"
+      frontend_replicas: "1"
+      backend_cpu_request: "500m"
+      backend_memory_request: "1Gi"
+      backend_cpu_limit: "1500m"
+      backend_memory_limit: "2Gi"
+      frontend_cpu_request: "100m"
+      frontend_memory_request: "128Mi"
+      frontend_cpu_limit: "500m"
+      frontend_memory_limit: "256Mi"
+      expiry_enabled: true
 
   tests:
     name: Tests
@@ -84,7 +91,8 @@ jobs:
       environment: prod
       target: prod
       tag: ${{ needs.init.outputs.pr }}
-      backend_replicas: "3"
+      # JVM-local edit/scheduler locks require one backend until distributed locking is accepted.
+      backend_replicas: "1"
       frontend_replicas: "3"
 
   # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is

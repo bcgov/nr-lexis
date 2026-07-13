@@ -10,6 +10,7 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
@@ -21,9 +22,12 @@ import org.springframework.stereotype.Service;
 public class PermitOracleService implements PermitService {
 
   private final PermitRepository repository;
+  private final PermitRpcRepository permitRpcRepository;
 
-  public PermitOracleService(PermitRepository repository) {
+  public PermitOracleService(
+      PermitRepository repository, PermitRpcRepository permitRpcRepository) {
     this.repository = repository;
+    this.permitRpcRepository = permitRpcRepository;
   }
 
   @Override
@@ -68,10 +72,18 @@ public class PermitOracleService implements PermitService {
     return repository.findByPermitNumber(permitNumber);
   }
 
+  @Override
+  public List<Long> findLinkedApplicationNumbers(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+    return permitRpcRepository.findApplicationNumbersByPermitNumberRequired(permitNumber);
+  }
+
   private PermitSearchCriteria normalizeCriteria(PermitSearchCriteria input) {
     if (input == null) {
       return new PermitSearchCriteria(
-          null, null, null, null, null, null, null, null, null, false, List.of(), null, 0, 25);
+          null, null, null, null, null, null, null, null, null, null, false, List.of(), null, 0, 25);
     }
 
     return new PermitSearchCriteria(
@@ -84,6 +96,7 @@ public class PermitOracleService implements PermitService {
         trimToNull(input.invoiceNumber()),
         trimToNull(input.applicantClientNumber()),
         trimToNull(input.ownerClientNumber()),
+        trimToNull(input.accessClientNumber()),
         input.requireScalePermit(),
         positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),

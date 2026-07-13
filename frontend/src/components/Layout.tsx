@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   AsleepFilled,
   Calendar,
@@ -20,7 +20,7 @@ import {
   UserAvatar,
   type CarbonIconType,
 } from '@carbon/icons-react'
-import { IconButton, SkipToContent, Theme } from '@carbon/react'
+import { HeaderMenuButton, IconButton, SkipToContent, Theme } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   hasFederalSubmitterRole,
@@ -48,6 +48,24 @@ type NavigationLink = {
 type NavigationSection = {
   label: string
   links: NavigationLink[]
+}
+
+type UiTheme = 'white' | 'g100'
+
+const UI_PREFERENCE_KEYS = {
+  theme: 'lexis.ui.theme',
+  sideNavCollapsed: 'lexis.ui.sideNavCollapsed',
+  collapsedSections: 'lexis.ui.collapsedSections',
+} as const
+
+const MOBILE_NAVIGATION_MEDIA_QUERY = '(max-width: 671px)'
+
+const isMobileNavigationViewport = (): boolean => {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY).matches
+  )
 }
 
 const NAVIGATION_SECTIONS: NavigationSection[] = [
@@ -227,6 +245,64 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   },
 ]
 
+const readUiPreference = (key: string): string | null => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    return window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+const writeUiPreference = (key: string, value: string): void => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // UI preferences are optional when storage is unavailable.
+  }
+}
+
+const readThemePreference = (): UiTheme => {
+  return readUiPreference(UI_PREFERENCE_KEYS.theme) === 'g100' ? 'g100' : 'white'
+}
+
+const readSideNavCollapsedPreference = (): boolean => {
+  const storedValue = readUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed)
+  return storedValue === 'true'
+}
+
+const readCollapsedSectionsPreference = (): Record<string, boolean> => {
+  const storedValue = readUiPreference(UI_PREFERENCE_KEYS.collapsedSections)
+  if (!storedValue) {
+    return {}
+  }
+
+  try {
+    const parsedValue: unknown = JSON.parse(storedValue)
+    if (typeof parsedValue !== 'object' || parsedValue === null || Array.isArray(parsedValue)) {
+      return {}
+    }
+
+    const parsedRecord = parsedValue as Record<string, unknown>
+    const restoredSections: Record<string, boolean> = {}
+    NAVIGATION_SECTIONS.forEach(({ label }) => {
+      if (typeof parsedRecord[label] === 'boolean') {
+        restoredSections[label] = parsedRecord[label]
+      }
+    })
+    return restoredSections
+  } catch {
+    return {}
+  }
+}
+
 const getProfileInitials = (principal: string | null): string => {
   if (!principal) {
     return 'LX'
@@ -272,10 +348,17 @@ function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { capabilities, canPerform, defaultRoute, logout } = useAuth()
-  const [isDarkTheme, setIsDarkTheme] = useState(false)
+  const [theme, setTheme] = useState<UiTheme>(readThemePreference)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
-  const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(false)
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(readSideNavCollapsedPreference)
+  const [isMobileViewport, setIsMobileViewport] = useState(isMobileNavigationViewport)
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const previousPathRef = useRef(location.pathname)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(
+    readCollapsedSectionsPreference,
+  )
+  const isDarkTheme = theme === 'g100'
+  const isDesktopSideNavCollapsed = isSideNavCollapsed && !isMobileViewport
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
     [capabilities.principal],
@@ -324,6 +407,79 @@ function Layout({ children }: LayoutProps) {
     void logout()
   }
 
+  const focusMobileNavigationToggle = (): void => {
+    window.requestAnimationFrame(() => {
+      document.getElementById('mobile-navigation-toggle')?.focus()
+    })
+  }
+
+  const closeMobileNavigation = (returnFocus = false): void => {
+    setIsMobileNavOpen(false)
+    if (returnFocus) {
+      focusMobileNavigationToggle()
+    }
+  }
+
+  const toggleMobileNavigation = (): void => {
+    setIsProfileOpen(false)
+    setIsMobileNavOpen((current) => !current)
+  }
+
+  const toggleProfile = (): void => {
+    setIsMobileNavOpen(false)
+    setIsProfileOpen((current) => !current)
+  }
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY)
+    const handleViewportChange = (event: MediaQueryListEvent): void => {
+      setIsMobileViewport(event.matches)
+      if (!event.matches) {
+        setIsMobileNavOpen(false)
+      }
+    }
+
+    mediaQuery.addEventListener('change', handleViewportChange)
+    return () => mediaQuery.removeEventListener('change', handleViewportChange)
+  }, [])
+
+  useEffect(() => {
+    if (previousPathRef.current === location.pathname) {
+      return undefined
+    }
+
+    previousPathRef.current = location.pathname
+    const closeFrame = window.requestAnimationFrame(() => setIsMobileNavOpen(false))
+    return () => window.cancelAnimationFrame(closeFrame)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!isMobileViewport || !isMobileNavOpen) {
+      return undefined
+    }
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLAnchorElement>('#side-navigation-list .csp-side-nav__link')
+        ?.focus()
+    })
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setIsMobileNavOpen(false)
+        window.requestAnimationFrame(() => {
+          document.getElementById('mobile-navigation-toggle')?.focus()
+        })
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isMobileNavOpen, isMobileViewport])
+
   useEffect(() => {
     if (!isProfileOpen) {
       return undefined
@@ -340,21 +496,57 @@ function Layout({ children }: LayoutProps) {
   }, [isProfileOpen])
 
   useEffect(() => {
+    writeUiPreference(UI_PREFERENCE_KEYS.theme, theme)
+
+    const root = document.documentElement
+    const previousTheme = root.getAttribute('data-carbon-theme')
+    root.setAttribute('data-carbon-theme', theme)
     syncAppNotificationRegionTheme(isDarkTheme)
-  }, [isDarkTheme])
+
+    return () => {
+      if (previousTheme === null) {
+        root.removeAttribute('data-carbon-theme')
+      } else {
+        root.setAttribute('data-carbon-theme', previousTheme)
+      }
+      syncAppNotificationRegionTheme(previousTheme === 'g90' || previousTheme === 'g100')
+    }
+  }, [isDarkTheme, theme])
+
+  useEffect(() => {
+    writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsed))
+  }, [isSideNavCollapsed])
+
+  useEffect(() => {
+    writeUiPreference(UI_PREFERENCE_KEYS.collapsedSections, JSON.stringify(collapsedSections))
+  }, [collapsedSections])
 
   return (
     <Theme theme={isDarkTheme ? 'g100' : 'white'}>
-      <div className={`app-shell${isSideNavCollapsed ? ' is-side-nav-collapsed' : ''}`}>
+      <div
+        className={`app-shell${isDesktopSideNavCollapsed ? ' is-side-nav-collapsed' : ''}${isMobileNavOpen ? ' is-mobile-nav-open' : ''}`}
+      >
         <SkipToContent />
         <header className="cds--header csp-app-header" aria-label="NR LEXIS">
+          <HeaderMenuButton
+            id="mobile-navigation-toggle"
+            className="csp-mobile-nav-toggle"
+            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-controls="side-navigation"
+            aria-expanded={isMobileNavOpen}
+            isActive={isMobileNavOpen}
+            isCollapsible
+            onClick={toggleMobileNavigation}
+          />
+
           <button
             type="button"
             className="cds--header__name csp-header-name"
             onClick={() => navigate(defaultRoute)}
             aria-label="Go to your landing page"
           >
-            Log Exemption Information System
+            <span className="csp-header-prefix">LEXIS</span>
+            <span className="csp-header-title">Log Exemption Information System</span>
           </button>
 
           <div className="cds--header__global csp-header-global">
@@ -366,7 +558,7 @@ function Layout({ children }: LayoutProps) {
                 role="switch"
                 aria-checked={isDarkTheme}
                 aria-label="Toggle dark mode"
-                onClick={() => setIsDarkTheme((current) => !current)}
+                onClick={() => setTheme((current) => (current === 'white' ? 'g100' : 'white'))}
               >
                 {isDarkTheme ? <AsleepFilled size={12} /> : <LightFilled size={12} />}
               </button>
@@ -380,7 +572,7 @@ function Layout({ children }: LayoutProps) {
               label={isProfileOpen ? 'Close profile panel' : 'Open profile panel'}
               aria-expanded={isProfileOpen}
               aria-controls="profile-panel"
-              onClick={() => setIsProfileOpen((current) => !current)}
+              onClick={toggleProfile}
             >
               <UserAvatar size={20} />
             </IconButton>
@@ -428,22 +620,26 @@ function Layout({ children }: LayoutProps) {
         </aside>
 
         <nav
-          className={`cds--side-nav csp-side-nav${isSideNavCollapsed ? ' is-collapsed' : ''}`}
+          id="side-navigation"
+          className={`cds--side-nav csp-side-nav${isDesktopSideNavCollapsed ? ' is-collapsed' : ''}${isMobileNavOpen ? ' is-mobile-open' : ''}`}
           aria-label="Side navigation"
+          aria-hidden={isMobileViewport && !isMobileNavOpen ? true : undefined}
+          inert={isMobileViewport && !isMobileNavOpen ? true : undefined}
         >
           <button
             type="button"
             className="csp-side-nav__toggle"
             aria-controls="side-navigation-list"
-            aria-expanded={!isSideNavCollapsed}
-            aria-label={isSideNavCollapsed ? 'Expand side navigation' : 'Collapse side navigation'}
+            aria-label={
+              isDesktopSideNavCollapsed ? 'Expand side navigation' : 'Collapse side navigation'
+            }
             onClick={() => setIsSideNavCollapsed((current) => !current)}
           >
             <span className="csp-side-nav__toggle-icon" aria-hidden="true">
               <ChevronLeft size={16} />
             </span>
             <span className="cds--side-nav__toggle-label csp-side-nav__toggle-text">
-              {isSideNavCollapsed ? 'Expand' : 'Collapse'}
+              {isDesktopSideNavCollapsed ? 'Expand' : 'Collapse'}
             </span>
           </button>
 
@@ -453,13 +649,13 @@ function Layout({ children }: LayoutProps) {
               const isSectionCollapsed =
                 section.label !== activeSectionLabel &&
                 Boolean(collapsedSections[section.label]) &&
-                !isSideNavCollapsed
+                !isDesktopSideNavCollapsed
               return (
                 <li
                   key={section.label}
                   className={`csp-side-nav__section${isSectionCollapsed ? ' is-section-collapsed' : ''}`}
                 >
-                  {isSideNavCollapsed ? (
+                  {isDesktopSideNavCollapsed ? (
                     <span className="cds--side-nav__category csp-side-nav__category">
                       {section.label}
                     </span>
@@ -492,15 +688,16 @@ function Layout({ children }: LayoutProps) {
                                   : 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link'
                               }
                               aria-current={location.pathname === link.to ? 'page' : undefined}
-                              aria-label={isSideNavCollapsed ? link.label : undefined}
-                              title={isSideNavCollapsed ? link.label : undefined}
+                              aria-label={isDesktopSideNavCollapsed ? link.label : undefined}
+                              title={isDesktopSideNavCollapsed ? link.label : undefined}
                               data-label={link.label}
+                              onClick={() => closeMobileNavigation()}
                             >
                               <span
                                 className="cds--side-nav__icon csp-side-nav__icon"
                                 aria-hidden="true"
                               >
-                                <LinkIcon size={16} />
+                                <LinkIcon size={20} />
                               </span>
                               <span className="cds--side-nav__link-text csp-side-nav__link-text">
                                 {link.label}
@@ -517,7 +714,21 @@ function Layout({ children }: LayoutProps) {
           </ul>
         </nav>
 
-        <main id="main-content" className="cds--content app-main">
+        {isMobileViewport && isMobileNavOpen && (
+          <button
+            type="button"
+            className="csp-mobile-nav-overlay"
+            aria-label="Dismiss navigation menu"
+            onClick={() => closeMobileNavigation(true)}
+          />
+        )}
+
+        <main
+          id="main-content"
+          className="cds--content app-main"
+          aria-hidden={isMobileViewport && isMobileNavOpen ? true : undefined}
+          inert={isMobileViewport && isMobileNavOpen ? true : undefined}
+        >
           {children}
         </main>
       </div>

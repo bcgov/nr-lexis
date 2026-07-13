@@ -49,7 +49,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return loadOrgUnitOptions(true);
+    return loadOrgUnitOptionsRequired(true);
   }
 
   public Page<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
@@ -116,6 +116,23 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
           clientNumber);
     }
     where.addLike("PO.OFFERING_CLIENT_NUMBER", criteria.offeringClientNumber());
+    String accessClientNumber = trim(criteria.accessClientNumber());
+    if (accessClientNumber != null) {
+      int ownerBind = where.nextBindIndex();
+      int agentBind = ownerBind + 1;
+      int offeringBind = ownerBind + 2;
+      where.addRawWithBinds(
+          " AND (EEA.OWNER_CLIENT_NUMBER = :"
+              + ownerBind
+              + " OR EEA.AGENT_CLIENT_NUMBER = :"
+              + agentBind
+              + " OR PO.OFFERING_CLIENT_NUMBER = :"
+              + offeringBind
+              + ")",
+          accessClientNumber,
+          accessClientNumber,
+          accessClientNumber);
+    }
     if (criteria.excludeWithdrawn()) {
       where.addRaw(" AND PO.OFFER_WITHDRAWAL_DATE IS NULL");
     }
@@ -146,7 +163,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_PURCHASE_OFFER_BY_NUMBER,
         cs -> cs.setString(1, offerNumber.toString()),
         2,
@@ -184,23 +201,50 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         INSERT_PURCHASE_OFFER,
         cs -> bindPurchaseOfferInsert(cs, record),
         24,
-        this::mapPurchaseOfferInsertRow);
+        this::mapPurchaseOfferInsertRow)
+        .filter(
+            row ->
+                row.exportPurchaseOfferNumber() != null
+                    && row.exportPurchaseOfferNumber() > 0);
   }
 
   public boolean applicationExists(Long applicationNumber) {
+    return findApplicationReference(applicationNumber).isPresent();
+  }
+
+  public Optional<ApplicationReferenceRow> findApplicationReference(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
-      return false;
+      return Optional.empty();
     }
-    return queryCursorSingle(
-            FIND_APPLICATION_BY_NUMBER,
-            cs -> cs.setString(1, applicationNumber.toString()),
-            2,
-            rs -> getLong(rs, "APPLICATION_NUMBER"))
-        .isPresent();
+    return queryCursorSingleRequired(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationReferenceRow(
+                getLong(rs, "APPLICATION_NUMBER"),
+                getString(rs, "EXPORT_JURISDICTION_CODE")));
+  }
+
+  public Optional<ApplicationRecipientRow> findApplicationRecipient(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationRecipientRow(
+                getString(rs, "EXPORT_APPLICANT_TYPE_CODE"),
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+                getString(rs, "AGENT_CLIENT_NUMBER"),
+                getString(rs, "AGENT_CLIENT_LOCATION_CODE")));
   }
 
   public Optional<Long> findPackageApplicationNumber(String packageNumber) {
@@ -208,7 +252,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_PACKAGE_BY_NUMBER,
         cs -> cs.setString(1, normalized),
         2,
@@ -220,7 +264,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_PURCHASE_OFFER_BY_NUMBER,
         cs -> cs.setLong(1, offerNumber),
         2,
@@ -232,7 +276,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       return false;
     }
 
-    return executeProcedure(UPDATE_PURCHASE_OFFER, cs -> bindPurchaseOfferUpdate(cs, record));
+    executeProcedureRequired(UPDATE_PURCHASE_OFFER, cs -> bindPurchaseOfferUpdate(cs, record));
+    return true;
   }
 
   private void bindPurchaseOfferInsert(CallableStatement cs, PurchaseOfferInsertRecord record)
@@ -343,6 +388,15 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       Double offerVolume) {}
 
   public record PurchaseOfferInsertRow(Long exportPurchaseOfferNumber) {}
+
+  public record ApplicationRecipientRow(
+      String applicantTypeCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String agentClientNumber,
+      String agentClientLocationCode) {}
+
+  public record ApplicationReferenceRow(Long applicationNumber, String jurisdictionCode) {}
 
   public record PurchaseOfferUpdateSourceRow(
       Long exportPurchaseOfferNumber,

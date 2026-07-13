@@ -1,6 +1,13 @@
 import type { AxiosRequestConfig } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_EXPIRED_EVENT } from '@/context/auth/session-expiry'
+import {
+  buildPageDataCacheKey,
+  clearAllPageDataCache,
+  getPageDataCache,
+  getPageDataCacheGeneration,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
 import apiService from '@/service/api-service'
 
 type RequestInterceptor = (
@@ -113,6 +120,7 @@ describe('api-service cached GET support', () => {
     getMock.mockReset()
     fetchAuthSessionMock.mockReset()
     apiService.clearCachedGetData()
+    clearAllPageDataCache()
     fetchAuthSessionMock.mockResolvedValue(buildSession())
   })
 
@@ -362,10 +370,12 @@ describe('api-service cached GET support', () => {
   })
 
   it.each(['post', 'put', 'patch', 'delete'])(
-    'clears cached GET data when a %s request goes through the shared client',
+    'clears cached GET and page data when a %s request starts',
     async (method) => {
       apiService.clearCachedGetData()
       getMock.mockReset()
+      const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+      setPageDataCache(pageCacheKey, { rows: ['cached'] }, getPageDataCacheGeneration())
       getMock
         .mockResolvedValueOnce(buildResponse({ count: 1 }))
         .mockResolvedValueOnce(buildResponse({ count: 2 }))
@@ -379,11 +389,143 @@ describe('api-service cached GET support', () => {
         headers: {},
       })
 
+      expect(getPageDataCache(pageCacheKey)).toBeNull()
       await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
         count: 2,
       })
 
       expect(getMock).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('refetches cached status-filtered page data after a write starts', async () => {
+    type StatusSearchResponse = { rows: Array<{ applicationNumber: string; status: string }> }
+
+    const pageCacheKey = buildPageDataCacheKey('federal-application-search', 'user-1', {
+      applicationStatus: 'APP',
+    })
+    const search = vi
+      .fn<() => Promise<StatusSearchResponse>>()
+      .mockResolvedValueOnce({ rows: [{ applicationNumber: '1001', status: 'APP' }] })
+      .mockResolvedValueOnce({ rows: [] })
+    const loadStatusSearch = async (): Promise<StatusSearchResponse> => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
+      const cached = getPageDataCache<StatusSearchResponse>(pageCacheKey)
+      if (cached) {
+        return cached
+      }
+      const response = await search()
+      setPageDataCache(pageCacheKey, response, pageCacheGeneration)
+      return response
+    }
+
+    await expect(loadStatusSearch()).resolves.toEqual({
+      rows: [{ applicationNumber: '1001', status: 'APP' }],
+    })
+    await expect(loadStatusSearch()).resolves.toEqual({
+      rows: [{ applicationNumber: '1001', status: 'APP' }],
+    })
+    expect(search).toHaveBeenCalledTimes(1)
+
+    await registeredRequestInterceptor()({ method: 'post', headers: {} })
+
+    await expect(loadStatusSearch()).resolves.toEqual({ rows: [] })
+    expect(search).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not let an in-flight search repopulate page data after a write starts', async () => {
+    type StatusSearchResponse = { rows: Array<{ applicationNumber: string; status: string }> }
+
+    const pageCacheKey = buildPageDataCacheKey('federal-application-search', 'user-1', {
+      applicationStatus: 'APP',
+    })
+    const pageCacheGeneration = getPageDataCacheGeneration()
+    let resolveSearch: (response: StatusSearchResponse) => void = () => {}
+    const search = new Promise<StatusSearchResponse>((resolve) => {
+      resolveSearch = resolve
+    })
+    const commitResults = vi.fn()
+    const cacheSearchResult = search.then((response) => {
+      if (pageCacheGeneration !== getPageDataCacheGeneration()) {
+        return false
+      }
+      const cacheUpdated = setPageDataCache(pageCacheKey, response, pageCacheGeneration)
+      if (cacheUpdated) {
+        commitResults(response)
+      }
+      return cacheUpdated
+    })
+
+    await registeredRequestInterceptor()({ method: 'post', headers: {} })
+    resolveSearch({ rows: [{ applicationNumber: '1001', status: 'APP' }] })
+
+    await expect(cacheSearchResult).resolves.toBe(false)
+    expect(getPageDataCache(pageCacheKey)).toBeNull()
+    expect(commitResults).not.toHaveBeenCalled()
+  })
+
+  it('refetches status-filtered page data when its 30-second TTL expires', async () => {
+    type StatusSearchResponse = { rows: Array<{ applicationNumber: string; status: string }> }
+
+    const pageCacheKey = buildPageDataCacheKey('federal-application-search', 'user-1', {
+      applicationStatus: 'APP',
+    })
+    const search = vi
+      .fn<() => Promise<StatusSearchResponse>>()
+      .mockResolvedValueOnce({ rows: [{ applicationNumber: '1001', status: 'APP' }] })
+      .mockResolvedValueOnce({ rows: [] })
+    const loadStatusSearch = async (currentTime: number): Promise<StatusSearchResponse> => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
+      const cached = getPageDataCache<StatusSearchResponse>(pageCacheKey, currentTime)
+      if (cached) {
+        return cached
+      }
+      const response = await search()
+      setPageDataCache(pageCacheKey, response, pageCacheGeneration, currentTime)
+      return response
+    }
+
+    await expect(loadStatusSearch(1_000)).resolves.toEqual({
+      rows: [{ applicationNumber: '1001', status: 'APP' }],
+    })
+    await expect(loadStatusSearch(30_999)).resolves.toEqual({
+      rows: [{ applicationNumber: '1001', status: 'APP' }],
+    })
+    await expect(loadStatusSearch(31_000)).resolves.toEqual({ rows: [] })
+    expect(search).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not restore stale cached data when a dispatched write fails ambiguously', async () => {
+    const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+    setPageDataCache(pageCacheKey, { rows: ['cached'] }, getPageDataCacheGeneration())
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+    await registeredRequestInterceptor()({ method: 'post', headers: {} })
+
+    const failedWrite = { config: { method: 'post' }, response: { status: 500 } }
+    await expect(registeredResponseRejectedInterceptor()(failedWrite)).rejects.toBe(failedWrite)
+
+    expect(getPageDataCache(pageCacheKey)).toBeNull()
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['get', 'head', 'options'])(
+    'preserves page data when a %s request starts',
+    async (method) => {
+      const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+      setPageDataCache(pageCacheKey, { rows: ['cached'] }, getPageDataCacheGeneration())
+
+      await registeredRequestInterceptor()({ method, headers: {} })
+
+      expect(getPageDataCache(pageCacheKey)).toEqual({ rows: ['cached'] })
     },
   )
 
@@ -420,37 +562,57 @@ describe('api-service cached GET support', () => {
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
   })
 
-  it.each([401, 403])(
-    'emits a session-expired event and clears cached GETs on API %s responses',
-    async (status) => {
-      const listener = vi.fn()
-      window.addEventListener(SESSION_EXPIRED_EVENT, listener)
-      getMock
-        .mockResolvedValueOnce(buildResponse({ count: 1 }))
-        .mockResolvedValueOnce(buildResponse({ count: 2 }))
+  it('emits a session-expired event and clears cached GETs on API 401 responses', async () => {
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
 
-      await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
-        count: 1,
-      })
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
 
-      const unauthorizedError = { response: { status } }
-      await expect(registeredResponseRejectedInterceptor()(unauthorizedError)).rejects.toBe(
-        unauthorizedError,
-      )
+    const unauthorizedError = { response: { status: 401 } }
+    await expect(registeredResponseRejectedInterceptor()(unauthorizedError)).rejects.toBe(
+      unauthorizedError,
+    )
 
-      await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
-        count: 2,
-      })
-      expect(listener).toHaveBeenCalledTimes(1)
-      expect(listener.mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          detail: { reason: 'api-unauthorized' },
-        }),
-      )
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        detail: { reason: 'api-unauthorized' },
+      }),
+    )
 
-      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
-    },
-  )
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+  })
+
+  it('preserves the authenticated session and cached GETs on API 403 responses', async () => {
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    getMock.mockResolvedValueOnce(buildResponse({ count: 1 }))
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+
+    const forbiddenError = { response: { status: 403 } }
+    await expect(registeredResponseRejectedInterceptor()(forbiddenError)).rejects.toBe(
+      forbiddenError,
+    )
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+    expect(getMock).toHaveBeenCalledTimes(1)
+    expect(listener).not.toHaveBeenCalled()
+
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+  })
 
   it('adds auth headers through AxiosHeaders-style setters when available', async () => {
     const headerValues: Record<string, string> = {}

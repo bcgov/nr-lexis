@@ -14,11 +14,11 @@ export type ProvincialPermitSearchFilters = {
 
 export type ProvincialPermitSearchSortField =
   | 'permitNumber'
-  | 'status'
+  | 'permitStatus'
   | 'applicantClientNumber'
   | 'ownerClientNumber'
-  | 'totalVolume'
-  | 'issueDate'
+  | 'permitVolume'
+  | 'dateIssued'
   | 'region'
 
 export type ProvincialPermitSearchItem = {

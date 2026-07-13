@@ -12,7 +12,7 @@ import {
   fetchProvincialPermitOptions,
 } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
-import { formatLocalIsoDate } from '@/utils/date'
+import { businessDateParts, formatIsoDateParts } from '@/utils/date'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -65,10 +65,15 @@ const emptyReportOptions = (): Awaited<ReturnType<typeof fetchReportOptions>> =>
 })
 
 const legacyTenureDefaultDates = (): { fromDate: string; toDate: string } => {
-  const today = new Date()
+  const today = businessDateParts()
+  const previousMonth = new Date(Date.UTC(today.year, today.month - 1, 0))
   return {
-    fromDate: formatLocalIsoDate(new Date(today.getFullYear() - 1, today.getMonth(), 1)),
-    toDate: formatLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 0)),
+    fromDate: formatIsoDateParts(today.year - 1, today.month, 1),
+    toDate: formatIsoDateParts(
+      previousMonth.getUTCFullYear(),
+      previousMonth.getUTCMonth() + 1,
+      previousMonth.getUTCDate(),
+    ),
   }
 }
 
@@ -87,16 +92,6 @@ const chooseComboBoxOption = async (labelText: string, optionName: string): Prom
     ? await within(listbox).findAllByRole('option', { name: optionName })
     : await screen.findAllByRole('option', { name: optionName })
   await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
-}
-
-const openComboBoxOptionNames = async (labelText: string): Promise<string[]> => {
-  const combobox = getComboBox(labelText)
-  await userEvent.click(combobox)
-  fireEvent.change(combobox, { target: { value: '' } })
-  return screen
-    .getAllByRole('option')
-    .map((option) => option.textContent?.trim() ?? '')
-    .filter(Boolean)
 }
 
 Element.prototype.scrollIntoView = vi.fn()
@@ -146,7 +141,13 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Reports' })
+    expect(
+      screen.getByText('Generate and download the reports available to your session.'),
+    ).toBeVisible()
     expect(screen.getByRole('heading', { name: 'No reports available' })).toBeInTheDocument()
+    expect(
+      screen.getByText('No report actions are available for the current session.'),
+    ).toBeVisible()
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
@@ -167,10 +168,45 @@ describe('Reports Page Actions', () => {
     await screen.findByRole('heading', { name: 'Exemption Report' })
 
     expect(screen.getByRole('heading', { name: 'Exemption Report' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Exemption Report' })).toHaveClass(
+      'report-config-panel',
+    )
+    const reportActions = screen.getByRole('group', { name: 'Report actions' })
+    expect(
+      within(reportActions)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Reset Fields', 'Generate Report'])
+    expect(within(reportActions).getByRole('button', { name: 'Reset Fields' })).toHaveClass(
+      'cds--btn--tertiary',
+    )
+    expect(within(reportActions).getByRole('button', { name: 'Generate Report' })).toHaveClass(
+      'cds--btn--primary',
+    )
+    expect(screen.getByText('Exemption volumes, balances, and status.')).toBeVisible()
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
     expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
+  })
+
+  it('preserves deep-linked report values in the selected configuration panel', async () => {
+    mockReportPermissions((action: string) => action === '/exemptionReport')
+    const values = encodeURIComponent(
+      JSON.stringify({ clientNumber: '00012345', listingFromDate: '2026-01-15' }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={[`/reports/exemptionReport?values=${values}&action=generate`]}>
+        <Routes>
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('region', { name: 'Exemption Report' })
+    expect(screen.getByLabelText('Client number')).toHaveValue('00012345')
+    expect(screen.getByLabelText('Listing from date')).toHaveValue('2026-01-15')
   })
 
   it('loads report field options from the report options endpoint only', async () => {
@@ -226,6 +262,63 @@ describe('Reports Page Actions', () => {
           growthType: 'O',
           growthTypeLabel: 'Old Growth',
         },
+      })
+    })
+  })
+
+  it('fails closed and notifies when authoritative report options cannot be loaded', async () => {
+    mockReportPermissions()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mockedFetchReportOptions.mockRejectedValueOnce(new Error('503 Service Unavailable'))
+
+    render(
+      <MemoryRouter initialEntries={['/reports/exemptionReport']}>
+        <Routes>
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Report options unavailable')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Authoritative report options could not be loaded. Affected controls and report generation are disabled. Reload the page to try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(getComboBox('Region')).toBeDisabled()
+    expect(getComboBox('Exemption reason')).toBeDisabled()
+    expect(getComboBox('Output format')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeDisabled()
+    expect(mockedRunReport).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  it('preserves legitimate empty report option lists without static replacement choices', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockResolvedValueOnce(emptyReportOptions())
+
+    render(
+      <MemoryRouter initialEntries={['/reports/exemptionReport']}>
+        <Routes>
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
+      expect(getComboBox('Exemption reason')).toBeDisabled()
+    })
+    expect(getComboBox('Exemption reason')).toHaveValue('')
+    expect(getComboBox('Growth type')).toBeDisabled()
+    expect(screen.queryByText('Report options unavailable')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'exemptionReport',
+        actionMapping: 'generate',
+        values: {},
       })
     })
   })
@@ -287,6 +380,10 @@ describe('Reports Page Actions', () => {
         { value: '1001', label: '2026-06-15' },
         { value: '1002', label: '2026-06-29' },
       ],
+      teacJurisdictions: [
+        { value: 'P', label: 'Provincial' },
+        { value: 'F', label: 'Federal' },
+      ],
     })
 
     render(
@@ -327,6 +424,10 @@ describe('Reports Page Actions', () => {
       regions: [
         { value: '1903', label: 'Cariboo Natural Resource Region' },
         { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+      ],
+      teacJurisdictions: [
+        { value: 'P', label: 'Provincial' },
+        { value: 'F', label: 'Federal' },
       ],
       currentSchedules: [{ value: '1001', label: '2026-06-15' }],
     })
@@ -673,7 +774,7 @@ describe('Reports Page Actions', () => {
     expect(screen.getByLabelText('Issued to date')).toHaveValue(defaultDates.toDate)
     expect(getComboBox('Client type')).toHaveValue('Permit holder')
     await chooseComboBoxOption('Exemption type', 'Ministerial')
-    await chooseComboBoxOption('Output format', 'XLS')
+    await chooseComboBoxOption('Output format', 'XLSX')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -686,7 +787,7 @@ describe('Reports Page Actions', () => {
           exemptionTypeLabel: 'Ministerial',
           clientType: 'P',
           clientTypeLabel: 'Permit holder',
-          outputFormat: 'CSV',
+          outputFormat: 'XLSX',
         },
       })
     })
@@ -762,6 +863,38 @@ describe('Reports Page Actions', () => {
           timberMark2: 'tm-b',
         },
       })
+    })
+  })
+
+  it.each([
+    ['Permit details report', 'generatePermitReport'],
+    ['Tenure types report', 'generateTenureReport'],
+    ['Timber marks report', 'generateMarkReport'],
+    ['Forest file report', 'generateFileReport'],
+  ])('submits the %s tenure variant distinctly', async (variantLabel, actionMapping) => {
+    mockReportPermissions()
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=tenureReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    if (variantLabel !== 'Permit details report') {
+      await chooseComboBoxOption('Report variant', variantLabel)
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reportId: 'tenureReport',
+          actionMapping,
+        }),
+      )
     })
   })
 
@@ -860,14 +993,13 @@ describe('Reports Page Actions', () => {
     expect(window.open).not.toHaveBeenCalled()
   })
 
-  it('uses current list date options for advertising list date range fields', async () => {
+  it('applies the authoritative current advertising period without including the next list day', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       currentSchedules: [
         { value: '1001', label: '2026-07-02' },
         { value: '1002', label: '2026-07-08' },
-        { value: '', label: 'Blank' },
       ],
     })
 
@@ -880,23 +1012,13 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Advertising List' })
-    expect(getComboBox('Listing from date')).toBeInTheDocument()
-    expect(getComboBox('Listing to date')).toBeInTheDocument()
-    expect(await openComboBoxOptionNames('Listing from date')).toEqual([
-      '2026-07-02',
-      '2026-07-08',
-      'Blank',
-    ])
-    await userEvent.keyboard('{Escape}')
+    expect(screen.getByLabelText('Listing from date')).toHaveValue('')
+    expect(screen.getByLabelText('Listing to date')).toHaveValue('')
 
-    await chooseComboBoxOption('Listing from date', '2026-07-02')
-    expect(await openComboBoxOptionNames('Listing to date')).toEqual([
-      '2026-07-02',
-      '2026-07-08',
-      'Blank',
-    ])
-    await userEvent.keyboard('{Escape}')
-    await chooseComboBoxOption('Listing to date', '2026-07-08')
+    await userEvent.click(screen.getByRole('button', { name: 'Use current advertising period' }))
+
+    expect(screen.getByLabelText('Listing from date')).toHaveValue('2026-07-02')
+    expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-07')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -905,7 +1027,7 @@ describe('Reports Page Actions', () => {
         actionMapping: 'generate',
         values: {
           fromDate: '2026-07-02',
-          toDate: '2026-07-08',
+          toDate: '2026-07-07',
         },
       })
     })
@@ -918,7 +1040,6 @@ describe('Reports Page Actions', () => {
       currentSchedules: [
         { value: '1001', label: '2026-07-02' },
         { value: '1002', label: '2026-07-08' },
-        { value: '', label: 'Blank' },
       ],
     })
 
@@ -931,8 +1052,12 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Advertising List' })
-    await chooseComboBoxOption('Listing from date', 'Blank')
-    await chooseComboBoxOption('Listing to date', 'Blank')
+    const fromDate = screen.getByLabelText('Listing from date')
+    const toDate = screen.getByLabelText('Listing to date')
+    await userEvent.type(fromDate, '2026-07-02')
+    await userEvent.clear(fromDate)
+    await userEvent.type(toDate, '2026-07-07')
+    await userEvent.clear(toDate)
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -961,7 +1086,6 @@ describe('Reports Page Actions', () => {
       currentSchedules: [
         { value: '1001', label: '2026-07-02' },
         { value: '1002', label: '2026-07-08' },
-        { value: '', label: 'Blank' },
       ],
     })
     const anchorClickSpy = vi
@@ -982,16 +1106,9 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     expect(screen.queryByText('Required action:')).not.toBeInTheDocument()
     expect(screen.queryByText('mofrListing')).not.toBeInTheDocument()
-    expect(await openComboBoxOptionNames('Listing from date')).toEqual([
-      '2026-07-02',
-      '2026-07-08',
-      'Blank',
-    ])
-    await userEvent.keyboard('{Escape}')
 
     await chooseComboBoxOption('Output format', 'CSV')
-    await chooseComboBoxOption('Listing from date', '2026-07-02')
-    await chooseComboBoxOption('Listing to date', '2026-07-08')
+    await userEvent.click(screen.getByRole('button', { name: 'Use current advertising period' }))
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -1001,7 +1118,7 @@ describe('Reports Page Actions', () => {
         values: {
           outputFormat: 'CSV',
           fromDate: '2026-07-02',
-          toDate: '2026-07-08',
+          toDate: '2026-07-07',
         },
       })
     })
@@ -1016,6 +1133,11 @@ describe('Reports Page Actions', () => {
       regions: [
         { value: '1903', label: 'Cariboo Natural Resource Region' },
         { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+      ],
+      biweeklyJurisdictions: [
+        { value: '', label: 'All' },
+        { value: 'P', label: 'Provincial' },
+        { value: 'F', label: 'Federal' },
       ],
     })
 

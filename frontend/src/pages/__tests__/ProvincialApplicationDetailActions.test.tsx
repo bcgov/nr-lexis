@@ -1,9 +1,21 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import {
+  createMemoryRouter,
+  Link,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
-import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
+import type {
+  ProvincialApplicationDetail,
+  ProvincialExemptionDetail,
+} from '@/interfaces/LexisDetails'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 import {
   approveApplicationReview,
@@ -17,6 +29,7 @@ import {
 } from '@/service/application-client-lookup-service'
 import {
   fetchProvincialApplicationDetail,
+  fetchProvincialExemptionDetail,
   releaseApplicationEditLock,
 } from '@/service/lexis-detail-service'
 import {
@@ -60,6 +73,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialApplicationDetail: vi.fn(),
+  fetchProvincialExemptionDetail: vi.fn(),
   releaseApplicationEditLock: vi.fn(),
 }))
 
@@ -145,6 +159,7 @@ const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
+const mockedFetchProvincialExemptionDetail = vi.mocked(fetchProvincialExemptionDetail)
 const mockedReleaseApplicationEditLock = vi.mocked(releaseApplicationEditLock)
 const mockedFetchApplicationDocuments = vi.mocked(fetchApplicationDocuments)
 const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
@@ -198,6 +213,7 @@ const applicationDetail: ProvincialApplicationDetail = {
   exemptionNumber: 'EX-555',
   applicationStatusCode: 'APP',
   statusDescription: 'Approved',
+  author: 'idir\\application-author',
   ownerClientNumber: '00011122',
   agentClientNumber: '00033344',
   orgUnitNumber: 12,
@@ -214,6 +230,11 @@ const applicationDetail: ProvincialApplicationDetail = {
   industryUser: false,
   readOnly: false,
   exemptionApprover: false,
+  canEditApplicationDetails: true,
+  canEditPackages: true,
+  canAddPackages: true,
+  canAddScales: true,
+  canUpdatePackageNumber: true,
   locked: false,
   packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
   remarks: [
@@ -226,6 +247,27 @@ const applicationDetail: ProvincialApplicationDetail = {
     },
   ],
   offers: [],
+}
+
+const newExemptionDetail: ProvincialExemptionDetail = {
+  exemptionNumber: 'EX-555',
+  exemptionTypeCode: 'M',
+  exemptionTypeDescription: 'Ministerial',
+  exemptionStatusCode: 'NEW',
+  exemptionStatusDescription: 'New',
+  ownerClientNumber: '00011122',
+  agentClientNumber: null,
+  applicationNumber: 321,
+  applicationStatus: 'APP',
+  approvalDate: null,
+  expiryDate: '2026-12-31',
+  approvedVolume: 100,
+  usedVolume: 0,
+  remainingVolume: 100,
+  otherConditions: null,
+  blanketOic: false,
+  permitNumbers: [],
+  remarks: [],
 }
 
 const LocationProbe = () => {
@@ -287,6 +329,7 @@ describe('Provincial Application Detail Document Actions', () => {
     vi.clearAllMocks()
     mockApplicationDetailAuth()
     mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
+    mockedFetchProvincialExemptionDetail.mockResolvedValue(null)
     mockedReleaseApplicationEditLock.mockResolvedValue()
     mockedFetchApplicationDocuments.mockResolvedValue({
       rows: [],
@@ -575,6 +618,23 @@ describe('Provincial Application Detail Document Actions', () => {
     })
   })
 
+  it('shows the legacy application author in the high-level identity', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const highlights = await screen.findByRole('group', { name: 'Application highlights' })
+    expect(within(highlights).getByText('Author')).toBeInTheDocument()
+    expect(within(highlights).getByText('idir\\application-author')).toBeInTheDocument()
+  })
+
   it('uses the legacy application detail tab order', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -588,6 +648,31 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     const tabs = await screen.findAllByRole('tab')
+    const pageHeading = screen.getByRole('heading', {
+      level: 1,
+      name: 'Application 321',
+    })
+    const pageHeader = pageHeading.closest('.lexis-page-header')
+    expect(pageHeader).toBeTruthy()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(
+      within(pageHeader as HTMLElement).getByText('Check and manage this provincial application'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Provincial application search' })).toHaveAttribute(
+      'href',
+      '/provincial/application',
+    )
+    const status = within(pageHeader as HTMLElement).getByText('Approved')
+    expect(status).toHaveClass('lexis-status-tag')
+    expect(status).toHaveAttribute('data-status-variant', 'positive')
+    expect(
+      within(pageHeader as HTMLElement).queryByRole('group', { name: 'Page actions' }),
+    ).not.toBeInTheDocument()
+    const applicationHighlights = screen.getByRole('group', { name: 'Application highlights' })
+    expect(within(applicationHighlights).getByText('Package count')).toBeInTheDocument()
+    expect(within(applicationHighlights).getByText('File count')).toBeInTheDocument()
+    expect(within(applicationHighlights).getByText('1')).toBeInTheDocument()
+    expect(within(applicationHighlights).getByText('0')).toBeInTheDocument()
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       'Owner',
       'Agent',
@@ -599,6 +684,194 @@ describe('Provincial Application Detail Document Actions', () => {
       'Review',
     ])
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('uses semantic empty states for unavailable clients and truly empty tab data', async () => {
+    mockedFetchApplicationClientData.mockResolvedValue(null)
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+      remarks: [],
+      offers: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'Owner details unavailable' }),
+    ).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Agent')
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'No agent assigned' }),
+    ).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Application')
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'No permits found' }),
+    ).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Items')
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'No packages found' }),
+    ).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'No documents found' }),
+    ).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Remarks')
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'No remarks found' }),
+    ).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Offers')
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'No offers found' }),
+    ).toBeInTheDocument()
+  })
+
+  it('loads complete application context without enabling edits for read-only viewers', async () => {
+    mockApplicationDetailAuth((action) => action === '/applicationDetails', ['LEXIS_READ_ONLY'])
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      readOnly: true,
+      canEditApplicationDetails: false,
+      canEditPackages: false,
+      canAddPackages: false,
+      canAddScales: false,
+      canUpdatePackageNumber: false,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Owner Contact')).toBeInTheDocument()
+    expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00')
+
+    await selectApplicationDetailTab('Application')
+    const summaryTile = getApplicationSummaryTile()
+    const expectSummaryField = (label: string, value: string) => {
+      const field = within(summaryTile).getByText(label).closest('.detail-field-item')
+      expect(field).toBeTruthy()
+      expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
+    }
+    expectSummaryField('Applicant type', 'A - Agent')
+    expectSummaryField('Owner client location', '00')
+    expectSummaryField('Owner contact name', 'Owner Contact')
+    expectSummaryField('Growth type', 'O')
+    expectSummaryField('Location of logs', 'BC')
+    expectSummaryField('Application species', 'FI')
+    expectSummaryField('Application end use', 'LU')
+    expect(within(summaryTile).queryByRole('button', { name: 'Save Summary' })).toBeNull()
+  })
+
+  it('shows permit lookup failures as unavailable and fails closed for industry uploads', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+    mockedFetchApplicationPermits.mockRejectedValue(new Error('permit lookup failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Application')
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'Permits unavailable' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Permit information could not be retrieved for this application.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { level: 3, name: 'No permits found' }),
+    ).not.toBeInTheDocument()
+
+    await selectApplicationDetailTab('Documents')
+    expect(
+      await screen.findByText(
+        'Application document upload is unavailable while permit information cannot be retrieved.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
+  })
+
+  it('shows document lookup failures as unavailable instead of truly empty', async () => {
+    mockedFetchApplicationDocuments.mockRejectedValue(new Error('document lookup failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'Documents unavailable' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Document information could not be retrieved for this application.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { level: 3, name: 'No documents found' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('labels the header file count unavailable without presenting a failed lookup as zero', async () => {
+    mockedFetchApplicationDocuments.mockRejectedValue(new Error('document lookup failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const applicationHighlights = await screen.findByRole('group', {
+      name: 'Application highlights',
+    })
+    await waitFor(() => {
+      expect(within(applicationHighlights).getByText('Unavailable')).toBeInTheDocument()
+    })
+    expect(within(applicationHighlights).getByText('File count')).toBeInTheDocument()
+    expect(within(applicationHighlights).queryByText('0')).not.toBeInTheDocument()
   })
 
   it('hides remarks and review tabs without legacy remarks/review access', async () => {
@@ -655,6 +928,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await selectApplicationDetailTab('Offers')
 
+    expect(await screen.findByRole('region', { name: 'Application offers' })).toBeInTheDocument()
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
     expect(screen.getByText('2026-04-05')).toBeInTheDocument()
     expect(screen.getByText('OFF-77')).toBeInTheDocument()
@@ -684,12 +958,116 @@ describe('Provincial Application Detail Document Actions', () => {
     await selectApplicationDetailTab('Application')
     const permitRow = (await screen.findByText('900101')).closest('tr')
     expect(permitRow).toBeTruthy()
-    expect(within(permitRow as HTMLElement).getByText('Complete')).toBeInTheDocument()
+    const permitStatus = within(permitRow as HTMLElement).getByText('Complete')
+    expect(permitStatus).toHaveClass('lexis-status-tag')
+    expect(permitStatus).toHaveAttribute('data-status-variant', 'positive')
 
     await userEvent.click(within(permitRow as HTMLElement).getByRole('button', { name: 'Open' }))
 
     const location = await screen.findByTestId('location')
     expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
+  })
+
+  it('links to the contextual exemption and preserves current query parameters', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321?packageFilter=PKG-1']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+          <Route path="/provincial/exemption/:exemptionNumber" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    const exemptionLink = within(summaryTile).getByRole('link', { name: 'EX-555' })
+    await userEvent.click(exemptionLink)
+
+    const location = await screen.findByTestId('location')
+    expect(location.textContent).toBe('/provincial/exemption/EX-555?packageFilter=PKG-1')
+    expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
+  })
+
+  it('renders the exemption number as plain text without exemption route capabilities', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action !== '/exemptionSearch' && action !== '/exemptionDetails',
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    expect(within(summaryTile).getByText('EX-555')).toBeInTheDocument()
+    expect(within(summaryTile).queryByRole('link', { name: 'EX-555' })).not.toBeInTheDocument()
+    expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
+  })
+
+  it('keeps an industry-linked NEW exemption as plain text', async () => {
+    mockApplicationDetailAuth(() => true, ['LEXIS_PROVINCIAL_SUBMITTER_00011122'])
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+    mockedFetchProvincialExemptionDetail.mockResolvedValue(newExemptionDetail)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    await waitFor(() => {
+      expect(mockedFetchProvincialExemptionDetail).toHaveBeenCalledWith('EX-555')
+    })
+    expect(within(summaryTile).getByText('EX-555')).toBeInTheDocument()
+    expect(within(summaryTile).queryByRole('link', { name: 'EX-555' })).not.toBeInTheDocument()
+  })
+
+  it('links an industry application after non-NEW exemption access is verified', async () => {
+    mockApplicationDetailAuth(() => true, ['LEXIS_PROVINCIAL_SUBMITTER_00011122'])
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...newExemptionDetail,
+      exemptionStatusCode: 'ACT',
+      exemptionStatusDescription: 'Active',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    expect(await within(summaryTile).findByRole('link', { name: 'EX-555' })).toHaveAttribute(
+      'href',
+      '/provincial/exemption/EX-555',
+    )
+    expect(mockedFetchProvincialExemptionDetail).toHaveBeenCalledWith('EX-555')
   })
 
   it('shows the embedded application upload panel on the documents tab without header actions', async () => {
@@ -725,6 +1103,9 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await selectApplicationDetailTab('Documents')
 
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'No documents found' }),
+    ).toBeInTheDocument()
     expect(
       await screen.findByText('No documents are on file for this application yet.'),
     ).toBeInTheDocument()
@@ -764,6 +1145,7 @@ describe('Provincial Application Detail Document Actions', () => {
     const documentName = await screen.findByText('existing-doc.pdf')
     const uploadToggle = screen.getByRole('button', { name: 'Upload new documents' })
 
+    expect(screen.getByRole('region', { name: 'Application document rows' })).toBeInTheDocument()
     expect(screen.getByLabelText('Filter document rows')).toBeInTheDocument()
     expect(
       documentName.compareDocumentPosition(uploadToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -837,6 +1219,11 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       exemptionApprover: true,
+      canEditApplicationDetails: false,
+      canEditPackages: false,
+      canAddPackages: false,
+      canAddScales: false,
+      canUpdatePackageNumber: false,
     })
 
     render(
@@ -852,7 +1239,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await selectApplicationDetailTab('Application')
     expect(await screen.findByText('Application summary')).toBeInTheDocument()
-    expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
+    expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
@@ -882,6 +1269,11 @@ describe('Provincial Application Detail Document Actions', () => {
         ...applicationDetail,
         applicationStatusCode,
         statusDescription,
+        canEditApplicationDetails: false,
+        canEditPackages: false,
+        canAddPackages: false,
+        canAddScales: false,
+        canUpdatePackageNumber: false,
       })
 
       render(
@@ -897,7 +1289,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
       await selectApplicationDetailTab('Application')
       expect(await screen.findByText('Application summary')).toBeInTheDocument()
-      expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
+      expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
       const summaryTile = getApplicationSummaryTile()
       expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
@@ -913,6 +1305,109 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
     },
   )
+
+  it('keeps item mutations available when the server denies only summary editing', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      canEditApplicationDetails: false,
+      canEditPackages: true,
+      canAddPackages: true,
+      canAddScales: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Application')
+    expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
+    expect(within(getApplicationSummaryTile()).queryByLabelText('Exemption reason')).toBeNull()
+
+    await selectApplicationDetailTab('Items')
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
+      expect(screen.queryByText('Loading authoritative item options...')).not.toBeInTheDocument()
+      expect(screen.queryByText('Item options unavailable')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save Package' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Create Package' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Add Scale' })).toBeEnabled()
+    })
+  })
+
+  it('keeps summary editing available when the server denies item mutations', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      canEditApplicationDetails: true,
+      canEditPackages: false,
+      canAddPackages: false,
+      canAddScales: false,
+      canUpdatePackageNumber: false,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Application')
+    expect(
+      await within(getApplicationSummaryTile()).findByRole('combobox', {
+        name: 'Exemption reason',
+      }),
+    ).toBeEnabled()
+
+    await selectApplicationDetailTab('Items')
+    expect(await screen.findByRole('button', { name: 'Save Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+  })
+
+  it('uses server edit policy instead of inferring permissions from application status', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'EXP',
+      statusDescription: 'Expired',
+      canEditApplicationDetails: true,
+      canEditPackages: true,
+      canAddPackages: true,
+      canAddScales: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Application')
+    expect(
+      await within(getApplicationSummaryTile()).findByRole('combobox', {
+        name: 'Exemption reason',
+      }),
+    ).toBeEnabled()
+
+    await selectApplicationDetailTab('Items')
+    expect(await screen.findByRole('button', { name: 'Save Package' })).toBeEnabled()
+  })
 
   it('blocks application edits when another user holds the edit lock', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -952,7 +1447,7 @@ describe('Provincial Application Detail Document Actions', () => {
         'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
       ).length,
     ).toBeGreaterThanOrEqual(1)
-    expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
+    expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
 
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
@@ -1038,6 +1533,99 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps a partial upload queue mounted while the document list refreshes', async () => {
+    let resolveDocumentRefresh:
+      | ((value: Awaited<ReturnType<typeof fetchApplicationDocuments>>) => void)
+      | undefined
+    mockedFetchApplicationDocuments
+      .mockResolvedValueOnce({ rows: [], source: 'api' })
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveDocumentRefresh = resolve
+        }),
+      )
+    mockedSubmitAdminUpload
+      .mockResolvedValueOnce({ status: 'success', message: 'First document uploaded.' })
+      .mockRejectedValueOnce(new Error('Second upload failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    await userEvent.type(await screen.findByLabelText('Document description'), 'Mixed batch')
+    await userEvent.upload(screen.getByLabelText('Document File'), [
+      new File(['first'], 'first.pdf', { type: 'application/pdf' }),
+      new File(['second'], 'second.pdf', { type: 'application/pdf' }),
+    ])
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+    await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2))
+    expect(screen.getAllByText('second.pdf').length).toBeGreaterThan(0)
+
+    await act(async () => {
+      resolveDocumentRefresh?.({
+        rows: [
+          {
+            id: '901',
+            name: 'first.pdf',
+            description: 'Mixed batch',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
+    })
+
+    expect(await screen.findByText(/1 file failed/)).toBeInTheDocument()
+    expect(screen.getAllByText('second.pdf').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Upload new documents' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
+
+  it('includes queued document uploads in application dirty-state protection', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    const cleanUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(cleanUnload)
+    expect(cleanUnload.defaultPrevented).toBe(false)
+
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['queued'], 'queued-doc.pdf', { type: 'application/pdf' }),
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled())
+    const queuedUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(queuedUnload)
+    expect(queuedUnload.defaultPrevented).toBe(true)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    const clearedUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(clearedUnload)
+    expect(clearedUnload.defaultPrevented).toBe(false)
+  })
+
   it('ignores stale detail responses after navigating to another application', async () => {
     const secondApplicationDetail: ProvincialApplicationDetail = {
       ...applicationDetail,
@@ -1082,14 +1670,16 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledWith('654')
     })
-    expect(await screen.findByText('Second status')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Second status', { selector: '.lexis-status-tag' }),
+    ).toBeInTheDocument()
     expect(screen.getAllByText('00099988').length).toBeGreaterThan(0)
 
     await act(async () => {
       resolveFirstDetail?.(applicationDetail)
     })
 
-    expect(screen.getByText('Second status')).toBeInTheDocument()
+    expect(screen.getByText('Second status', { selector: '.lexis-status-tag' })).toBeInTheDocument()
     expect(screen.getAllByText('00099988').length).toBeGreaterThan(0)
     expect(screen.queryByText('00011122')).not.toBeInTheDocument()
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1)
@@ -1131,7 +1721,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.click(openDocumentButton)
 
     await waitFor(() => {
-      expect(mockedOpenApplicationDocument).toHaveBeenCalledWith('100', 'app-doc.pdf')
+      expect(mockedOpenApplicationDocument).toHaveBeenCalledWith('100', 'app-doc.pdf', '321')
     })
     expect(openSpy).not.toHaveBeenCalled()
   })
@@ -1182,6 +1772,42 @@ describe('Provincial Application Detail Document Actions', () => {
     })
   })
 
+  it('keeps linked permit documents read-only on the application aggregate', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '101',
+          name: 'permit-doc.pdf',
+          description: 'linked permit copy',
+          type: 'Permit document',
+          source: 'permit',
+          deletable: false,
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    const documentRow = (await screen.findByText('permit-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(within(documentRow as HTMLElement).getByText('Permit')).toBeInTheDocument()
+    expect(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    ).toBeDisabled()
+    expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
+  })
+
   it('keeps application document delete disabled for approvers when the application is expired', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -1227,6 +1853,47 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(deleteButton).toBeDisabled()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
+  })
+
+  it('keeps expired application document delete available to scoped industry users', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === '/applicationDetails',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'EXP',
+      statusDescription: 'Expired',
+      industryUser: true,
+    })
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '104',
+          name: 'industry-expired-doc.pdf',
+          description: 'legacy industry cleanup',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
+    const documentRow = (await screen.findByText('industry-expired-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
   it('ignores stale document refreshes after navigating to another application', async () => {
@@ -1383,6 +2050,151 @@ describe('Provincial Application Detail Document Actions', () => {
       )
     })
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
+  })
+
+  it('guards package drafts and provides an explicit local reset', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: (
+            <>
+              <ProvincialApplicationDetailsPage />
+              <Link to="/next">Leave application</Link>
+            </>
+          ),
+        },
+        { path: '/next', element: <h1>Next page</h1> },
+      ],
+      { initialEntries: ['/provincial/application/321'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    await selectApplicationDetailTab('Items')
+    const comments = await screen.findByLabelText('Package Comments')
+    await userEvent.clear(comments)
+    await userEvent.type(comments, 'Unsaved package draft')
+    await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
+    expect(dialog).toHaveAccessibleDescription(/Use the Items tab to save or reset/)
+    expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Stay' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reset package drafts' }))
+
+    expect(screen.getByLabelText('Package Comments')).toHaveValue('Ready')
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(false)
+  })
+
+  it('preserves summary, remark, and review drafts when a package refreshes detail', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Application')
+    await userEvent.clear(await screen.findByLabelText('Location of logs'))
+    await userEvent.type(screen.getByLabelText('Location of logs'), 'AB')
+    await selectApplicationDetailTab('Remarks')
+    await userEvent.type(await screen.findByLabelText('New Remark'), 'Preserve remark draft')
+    const reviewTile = within(await selectApplicationReviewTile())
+    await chooseComboBoxOption(
+      reviewTile.getByRole('combobox', { name: 'Application status' }),
+      'Rejected',
+    )
+    await userEvent.clear(reviewTile.getByLabelText('Review remark'))
+    await userEvent.type(reviewTile.getByLabelText('Review remark'), 'Preserve review draft')
+    await selectApplicationDetailTab('Items')
+    await userEvent.clear(await screen.findByLabelText('Package Comments'))
+    await userEvent.type(screen.getByLabelText('Package Comments'), 'Saved package change')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+    await waitFor(() => expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1))
+
+    await selectApplicationDetailTab('Application')
+    expect(screen.getByLabelText('Location of logs')).toHaveValue('AB')
+    await selectApplicationDetailTab('Remarks')
+    expect(screen.getByLabelText('New Remark')).toHaveValue('Preserve remark draft')
+    const preservedReviewTile = within(await selectApplicationReviewTile())
+    expect(preservedReviewTile.getByRole('combobox', { name: 'Application status' })).toHaveValue(
+      'Rejected',
+    )
+    expect(preservedReviewTile.getByLabelText('Review remark')).toHaveValue('Preserve review draft')
+  })
+
+  it('fails closed when selected package data cannot be loaded', async () => {
+    mockedFetchApplicationPackageSpecies.mockRejectedValue(
+      new Error('Oracle package species lookup failed'),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+
+    expect(
+      await screen.findByText('Unable to retrieve application item details.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Package' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+    expect(mockedDeleteApplicationPackage).not.toHaveBeenCalled()
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
+  it('disables package and scale mutations when authoritative item options fail', async () => {
+    mockedFetchApplicationPackageStatusCodes.mockRejectedValue(
+      new Error('Oracle package status lookup failed'),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+
+    expect(await screen.findByText('Item options unavailable')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Package' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
   it('shows field validation before creating an empty package', async () => {
@@ -1799,6 +2611,64 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchApplicationPackageScales).not.toHaveBeenCalledWith('PKG-1')
   })
 
+  it('confirms and clears package-specific drafts before switching packages', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+        { packageNumber: 'PKG-2', volume: 200, pieceCount: 8 },
+      ],
+    })
+    mockedFetchApplicationPackageDetails.mockImplementation(async (packageNumber) => ({
+      success: true,
+      packageNumber,
+      volume: packageNumber === 'PKG-2' ? '200.0' : '100.0',
+      scaledVolume: packageNumber === 'PKG-2' ? 40 : 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: `${packageNumber} comments`,
+      statusDescription: 'Active',
+      reprocessed: 'N',
+      ageClass: 'O',
+      ageClassDescription: 'Old',
+      productType: 'LOG',
+      productTypeDescription: 'Logs',
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+    await waitFor(() =>
+      expect(screen.getByLabelText('Package Comments')).toHaveValue('PKG-1 comments'),
+    )
+    await userEvent.type(screen.getByLabelText('Timber Mark'), 'DRAFT-A')
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Selected Package' }), 'PKG-2')
+
+    const confirmation = await screen.findByRole('dialog', { name: 'Discard package drafts?' })
+    expect(confirmation).toHaveAccessibleDescription(/discard unsaved package, species, and scale/)
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-1')
+    expect(screen.getByLabelText('Timber Mark')).toHaveValue('DRAFT-A')
+
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Selected Package' }), 'PKG-2')
+    await userEvent.click(screen.getByRole('button', { name: 'Discard and switch' }))
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-2')
+      expect(screen.getByLabelText('Timber Mark')).toHaveValue('')
+    })
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
   it('shows legacy timber mark summaries for application scales', async () => {
     mockedFetchApplicationUniqueScales.mockResolvedValue([{ timberMark: 'TM-SUMMARY' }])
 
@@ -2032,6 +2902,70 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
   })
 
+  it('does not treat a normal remark as a new review-status draft', async () => {
+    const rejectedDetail: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      applicationStatusCode: 'REJ',
+      statusDescription: 'Rejected',
+      remarks: [
+        {
+          remarkId: 90,
+          title: 'Review decision',
+          remark: 'Review decision',
+          user: 'idir\\reviewer',
+          date: '2026-01-06',
+        },
+      ],
+    }
+    const detailAfterNormalRemark: ProvincialApplicationDetail = {
+      ...rejectedDetail,
+      remarks: [
+        {
+          remarkId: 91,
+          title: 'Operational note',
+          remark: 'Operational note',
+          user: 'idir\\reviewer',
+          date: '2026-01-07',
+        },
+        ...rejectedDetail.remarks,
+      ],
+    }
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(rejectedDetail)
+      .mockResolvedValueOnce(detailAfterNormalRemark)
+    mockedSaveApplicationRemark.mockResolvedValueOnce({
+      success: true,
+      remarkId: '91',
+      remark: 'Operational note',
+      title: 'Operational note',
+      user: 'idir\\reviewer',
+      status: 'ok',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Remarks')
+    fireEvent.change(await screen.findByLabelText('New Remark'), {
+      target: { value: 'Operational note' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await waitFor(() => expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2))
+
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(false)
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+  })
+
   it('hides application remarks tab without application remarks action', async () => {
     mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
 
@@ -2147,6 +3081,11 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     await selectApplicationDetailTab('Application')
+    const summaryControls = within(await waitFor(() => getApplicationSummaryTile()))
+    expect(summaryControls.getByLabelText('Application status')).toHaveAttribute('readonly')
+    expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
+    expect(summaryControls.getByLabelText('Jurisdiction')).toHaveValue('F - Federal')
+    expect(getSummaryComboBox(summaryControls, 'Applicant type')).toBeInTheDocument()
     const termInput = await screen.findByLabelText('Term (days)')
     fireEvent.change(termInput, { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('Term (months)'), { target: { value: '2' } })
@@ -2184,6 +3123,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await selectApplicationDetailTab('Application')
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    expect(screen.queryByRole('dialog', { name: 'Confirm application accuracy' })).toBeNull()
 
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith({
@@ -2200,11 +3140,9 @@ describe('Provincial Application Detail Document Actions', () => {
         agentClientLocationCode: '01',
         ownerClientNumber: '00011122',
         ownerClientLocationCode: '02',
-        applicationStatusCode: 'APP',
         applicantTypeCode: 'A',
         orgUnitNumber: '13',
         productTypeCode: 'TIMBER',
-        jurisdictionCode: 'F',
         growthTypeCode: 'S',
         agentContactName: 'Agent Contact',
         ownerContactName: 'Owner Alternate Contact',
@@ -2282,6 +3220,44 @@ describe('Provincial Application Detail Document Actions', () => {
           agentClientLocationCode: '',
           agentContactName: '',
         }),
+      )
+    })
+  })
+
+  it('keeps applicant type and workflow fields read-only for scoped submitters', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const applicantType = await summaryControls.findByLabelText('Applicant type')
+    expect(applicantType).toHaveAttribute('readonly')
+    expect(applicantType).toHaveValue('A - Agent')
+    expect(summaryControls.getByLabelText('Application status')).toHaveAttribute('readonly')
+    expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
+    expect(getSummaryComboBox(summaryControls, 'Applicant type')).toBeUndefined()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    const accuracyDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(accuracyDialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(accuracyDialog).getByRole('button', { name: 'Save summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ applicantTypeCode: undefined }),
       )
     })
   })
@@ -2514,6 +3490,78 @@ describe('Provincial Application Detail Document Actions', () => {
     })
   })
 
+  it('requires submitter accuracy confirmation while preserving the volume warning', async () => {
+    mockApplicationDetailAuth(() => true, ['PROVINCIAL_SUBMITTER_00011122'])
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+    mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Application')
+    await screen.findByLabelText('Application volume (m³)')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    const firstDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    const firstAcknowledgement = within(firstDialog).getByRole('checkbox', { name: 'I Agree' })
+    const firstConfirm = within(firstDialog).getByRole('button', { name: 'Save summary' })
+    expect(firstAcknowledgement).not.toBeChecked()
+    expect(firstConfirm).toBeDisabled()
+    await userEvent.click(firstConfirm)
+    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    await userEvent.click(firstAcknowledgement)
+    await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    const reopenedDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    const reopenedAcknowledgement = within(reopenedDialog).getByRole('checkbox', {
+      name: 'I Agree',
+    })
+    expect(reopenedAcknowledgement).not.toBeChecked()
+    await userEvent.click(reopenedAcknowledgement)
+    await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Save summary' }))
+
+    expect(
+      await screen.findByText(
+        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+      ).not.toBeInTheDocument(),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const warningAcceptedDialog = screen.getByRole('dialog', {
+      name: 'Confirm application accuracy',
+    })
+    const warningAcceptedAcknowledgement = within(warningAcceptedDialog).getByRole('checkbox', {
+      name: 'I Agree',
+    })
+    expect(warningAcceptedAcknowledgement).not.toBeChecked()
+    await userEvent.click(warningAcceptedAcknowledgement)
+    await userEvent.click(
+      within(warningAcceptedDialog).getByRole('button', { name: 'Save summary' }),
+    )
+
+    await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
+  })
+
   it('resets application summary edits from the editable snapshot', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -2554,6 +3602,117 @@ describe('Provincial Application Detail Document Actions', () => {
       )
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
     })
+  })
+
+  it('guards unload only after an application summary differs from its persisted baseline', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const productLocationInput = await summaryControls.findByLabelText('Location of logs')
+    await waitFor(() => expect(productLocationInput).toHaveValue('BC'))
+
+    const unchangedUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unchangedUnload)
+    expect(unchangedUnload.defaultPrevented).toBe(false)
+
+    await userEvent.clear(productLocationInput)
+    await userEvent.type(productLocationInput, 'Changed location')
+    const dirtyUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(dirtyUnload)
+    expect(dirtyUnload.defaultPrevented).toBe(true)
+
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Reset Summary' }))
+    const resetUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(resetUnload)
+    expect(resetUnload.defaultPrevented).toBe(false)
+  })
+
+  it('preserves an unrelated remark draft when the summary is saved normally', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Remarks')
+    fireEvent.change(await screen.findByLabelText('New Remark'), {
+      target: { value: 'Keep this unsaved remark' },
+    })
+    await selectApplicationDetailTab('Application')
+    fireEvent.change(await screen.findByLabelText('Location of logs'), {
+      target: { value: 'AB' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
+
+    await selectApplicationDetailTab('Remarks')
+    expect(screen.getByLabelText('New Remark')).toHaveValue('Keep this unsaved remark')
+  })
+
+  it('saves all dirty application sections sequentially before leaving', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: (
+            <>
+              <ProvincialApplicationDetailsPage />
+              <Link to="/next">Leave application</Link>
+            </>
+          ),
+        },
+        { path: '/next', element: <h1>Next page</h1> },
+      ],
+      { initialEntries: ['/provincial/application/321'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    await selectApplicationDetailTab('Application')
+    fireEvent.change(await screen.findByLabelText('Location of logs'), {
+      target: { value: 'AB' },
+    })
+    await selectApplicationDetailTab('Remarks')
+    fireEvent.change(await screen.findByLabelText('New Remark'), {
+      target: { value: 'Sequential remark' },
+    })
+    const reviewTile = within(await selectApplicationReviewTile())
+    await chooseComboBoxOption(
+      reviewTile.getByRole('combobox', { name: 'Application status' }),
+      'Rejected',
+    )
+    fireEvent.change(reviewTile.getByLabelText('Review remark'), {
+      target: { value: 'Needs correction' },
+    })
+
+    await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
+    await screen.findByRole('dialog', { name: 'Unsaved changes' })
+    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
+
+    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
+    expect(mockedSaveApplicationRemark).toHaveBeenCalledTimes(1)
+    expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1)
+    expect(mockedUpdateApplicationSummary.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedSaveApplicationRemark.mock.invocationCallOrder[0],
+    )
+    expect(mockedSaveApplicationRemark.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedUpdateApplicationReviewStatus.mock.invocationCallOrder[0],
+    )
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
   })
 
   it('allows manual summary contact entry when lookup has no contacts', async () => {
@@ -2636,6 +3795,12 @@ describe('Provincial Application Detail Document Actions', () => {
         'agent@example.test',
       )
     })
+    expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveAttribute('readonly')
+    expect(
+      within(reviewTile).getByText(
+        'This read-only preview is loaded from client data and revalidated from the authoritative client account at send time.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('updates a single rejection with the loaded client email without sending email', async () => {
@@ -2741,6 +3906,55 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue('')
   })
 
+  it('blocks status email when the authoritative client account has no valid address', async () => {
+    mockedFetchApplicationClientData.mockResolvedValue({
+      clientNumber: '00033344',
+      companyName: 'Applicant without email',
+      address: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      country: '',
+      phone: '',
+      fax: '',
+      email: '',
+      notfound: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewTile = await selectApplicationReviewTile()
+    const reviewControls = within(reviewTile)
+    await waitFor(() =>
+      expect(reviewControls.getByLabelText(/client email address/i)).toHaveValue(''),
+    )
+    await chooseComboBoxOption(
+      reviewControls.getByRole('combobox', { name: /application status/i }),
+      'Rejected',
+    )
+    await userEvent.type(reviewControls.getByLabelText(/review remark/i), 'Missing recipient')
+    await userEvent.click(
+      reviewControls.getByRole('button', { name: 'Update Status and Send Email' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'No valid client email address is available. Update the authoritative client account before sending status email.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+  })
+
   it('updates application review status and can send status email from detail', async () => {
     const detailAfterStatusUpdate: ProvincialApplicationDetail = {
       ...applicationDetail,
@@ -2784,14 +3998,12 @@ describe('Provincial Application Detail Document Actions', () => {
       'Rejected',
     )
     fireEvent.change(within(reviewTile).getByLabelText(/client email address/i), {
-      target: { value: 'edited.client@example.test' },
-    })
-    await waitFor(() => {
-      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-        'edited.client@example.test',
-      )
+      target: { value: 'attacker@example.test' },
     })
     await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
+    expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
+      'agent@example.test',
+    )
     mockedSendApplicationReviewStatusEmail.mockResolvedValueOnce({
       success: false,
       message: 'Application status email is not configured yet. No email was sent.',
@@ -2804,12 +4016,12 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
         statusCode: 'REJ',
         remark: 'Needs correction',
-        clientEmailAddress: 'edited.client@example.test',
+        clientEmailAddress: 'agent@example.test',
       })
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('321', {
         statusCode: 'REJ',
         remark: 'Needs correction',
-        clientEmailAddress: 'edited.client@example.test',
+        clientEmailAddress: 'agent@example.test',
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
@@ -2819,7 +4031,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ),
     ).toBeInTheDocument()
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-      'edited.client@example.test',
+      'agent@example.test',
     )
     expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Needs correction')
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)
@@ -2848,31 +4060,38 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
   })
 
-  it('requires review remark before rejecting from application detail', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
+  it.each(['Rejected', 'Withdrawn', 'Expired'])(
+    'requires review remark before setting application status to %s',
+    async (statusLabel) => {
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    const reviewTile = await selectApplicationReviewTile()
-    await chooseComboBoxOption(
-      within(reviewTile).getByRole('combobox', { name: /application status/i }),
-      'Rejected',
-    )
-    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
+      const reviewTile = await selectApplicationReviewTile()
+      await chooseComboBoxOption(
+        within(reviewTile).getByRole('combobox', { name: /application status/i }),
+        statusLabel,
+      )
+      await userEvent.click(
+        within(reviewTile).getByRole('button', { name: 'Update Review Status' }),
+      )
 
-    expect(within(reviewTile).getByLabelText(/review remark/i)).toBeInvalid()
-    expect(
-      screen.getByText('Review remark is required when rejecting or withdrawing an application.'),
-    ).toBeInTheDocument()
-    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
-  })
+      expect(within(reviewTile).getByLabelText(/review remark/i)).toBeInvalid()
+      expect(
+        screen.getByText(
+          'Review remark is required when rejecting, withdrawing, or expiring an application.',
+        ),
+      ).toBeInTheDocument()
+      expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+    },
+  )
 
   it('validates application remark before saving', async () => {
     render(
@@ -2894,7 +4113,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
   })
 
-  it('disables upload and delete without file upload permission', async () => {
+  it('disables upload and delete without file upload permission or a delete role', async () => {
     mockApplicationDetailAuth((action: string) => action !== '/fileApplicationUpload', [])
     mockedFetchApplicationDocuments.mockResolvedValue({
       rows: [
@@ -2930,6 +4149,41 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(deleteButton).toBeDisabled()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
+  })
+
+  it('keeps application delete available to approvers without file upload permission', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action !== '/fileApplicationUpload',
+      ['LEXIS_APPLICATION_APPROVER'],
+    )
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '103',
+          name: 'approver-doc.pdf',
+          description: 'delete without upload',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
+    const documentRow = (await screen.findByText('approver-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
   it('disables application document delete when status is unavailable', async () => {

@@ -67,6 +67,8 @@ describe('Provincial hub actions', () => {
   it('does not load workflow totals until explicitly refreshed', async () => {
     renderPage()
 
+    expect(screen.getByRole('region', { name: 'Provincial workflows table' })).toBeVisible()
+
     expect(mockedCountProvincialApplications).not.toHaveBeenCalled()
     expect(mockedCountProvincialExemptions).not.toHaveBeenCalled()
     expect(mockedCountProvincialOffers).not.toHaveBeenCalled()

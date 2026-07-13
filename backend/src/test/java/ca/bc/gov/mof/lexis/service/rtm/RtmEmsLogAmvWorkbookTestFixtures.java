@@ -15,25 +15,56 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
   static byte[] matrixWorkbook() throws IOException {
     return workbook(
         List.of(
-            row(1, text("A1", "Update Date"), text("B1", "2026-06-20")),
-            row(3, text("A3", "GRADE"), text("B3", "BA"), text("C3", "HE"), text("D3", "PINE**")),
-            row(4, text("A4", "A"), number("B4", "10.25"), number("C4", "20.50"), number("D4", "30.75")),
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(
+                3,
+                text("A3", "GRADE"),
+                text("B3", "BA"),
+                text("C3", "HE"),
+                text("D3", "WH"),
+                text("E3", "LO"),
+                text("F3", "YE")),
+            row(
+                4,
+                text("A4", "A"),
+                number("B4", "10.25"),
+                number("C4", "20.50"),
+                number("D4", "30.75"),
+                number("E4", "31.75"),
+                number("F4", "32.75")),
             row(5, text("A5", "1"), number("B5", "1.25"))));
   }
 
   static byte[] matrixWorkbookWithMetadataRows() throws IOException {
     return workbook(
         List.of(
-            row(1, text("A1", "Update Date"), text("B1", "2026-06-20")),
-            row(4, text("A4", "GRADE"), text("B4", "BA"), text("C4", "HE"), text("D4", "PINE**")),
-            row(5, text("A5", "A"), number("B5", "10.25"), number("C5", "20.50"), number("D5", "30.75")),
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(
+                4,
+                text("A4", "GRADE"),
+                text("B4", "BA"),
+                text("C4", "HE"),
+                text("D4", "WH"),
+                text("E4", "LO"),
+                text("F4", "YE")),
+            row(
+                5,
+                text("A5", "A"),
+                number("B5", "10.25"),
+                number("C5", "20.50"),
+                number("D5", "30.75"),
+                number("E5", "31.75"),
+                number("F5", "32.75")),
             row(6, text("A6", "1"), number("B6", "1.25"))));
   }
 
   static byte[] singleBalsamWorkbook() throws IOException {
     return workbook(
         List.of(
-            row(1, text("A1", "Update Date"), text("B1", "2026-06-20")),
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
             row(3, text("A3", "GRADE"), text("B3", "BA")),
             row(4, text("A4", "A"), number("B4", "10.25"))));
   }
@@ -41,7 +72,17 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
   static byte[] futureSingleBalsamWorkbook() throws IOException {
     return workbook(
         List.of(
-            row(1, text("A1", "Update Date"), text("B1", "2026-08-01")),
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-08-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(3, text("A3", "GRADE"), text("B3", "BA")),
+            row(4, text("A4", "A"), number("B4", "10.25"))));
+  }
+
+  static byte[] midMonthSingleBalsamWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-20")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
             row(3, text("A3", "GRADE"), text("B3", "BA")),
             row(4, text("A4", "A"), number("B4", "10.25"))));
   }
@@ -49,9 +90,45 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
   static byte[] optionalCedarGradeWorkbook() throws IOException {
     return workbook(
         List.of(
-            row(1, text("A1", "Update Date"), text("B1", "2026-06-20")),
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
             row(3, text("A3", "GRADE"), text("B3", "CE")),
             row(4, text("A4", "C"), number("B4", "11.11"))));
+  }
+
+  static byte[] singleWhitePineWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(3, text("A3", "GRADE"), text("B3", "WH")),
+            row(4, text("A4", "A"), number("B4", "30.75"))));
+  }
+
+  static byte[] ambiguousPineWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(3, text("A3", "GRADE"), text("B3", "PINE")),
+            row(4, text("A4", "A"), number("B4", "30.75"))));
+  }
+
+  static byte[] missingGrowthWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(3, text("A3", "GRADE"), text("B3", "BA")),
+            row(4, text("A4", "A"), number("B4", "10.25"))));
+  }
+
+  static byte[] invalidGrowthWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "X")),
+            row(3, text("A3", "GRADE"), text("B3", "BA")),
+            row(4, text("A4", "A"), number("B4", "10.25"))));
   }
 
   static byte[] invalidWorkbook() throws IOException {
@@ -63,7 +140,8 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
 
   static byte[] fullGradeWorkbookWithBlankRow() throws IOException {
     List<String> rows = new ArrayList<>();
-    rows.add(row(1, text("A1", "Update Date"), text("B1", "2026-06-20")));
+    rows.add(row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")));
+    rows.add(row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")));
     rows.add(row(3, text("A3", "GRADE"), text("B3", "BA")));
 
     int rowNumber = 4;
@@ -83,7 +161,7 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
               number("B" + rowNumber, "20")));
       rowNumber++;
     }
-    rows.add(row(rowNumber, text("A" + rowNumber, " "), number("B" + rowNumber, "30")));
+    rows.add(row(rowNumber, text("A" + rowNumber, "BLANK"), number("B" + rowNumber, "30")));
 
     return workbook(rows);
   }

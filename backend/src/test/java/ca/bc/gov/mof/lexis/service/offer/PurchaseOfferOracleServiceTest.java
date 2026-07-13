@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.offer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,25 +18,48 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
+import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
+import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | PurchaseOfferOracleService")
 class PurchaseOfferOracleServiceTest {
 
   @Mock private PurchaseOfferRepository repository;
-  @InjectMocks private PurchaseOfferOracleService service;
+  @Mock private AuthoritativeClientEmailResolver clientEmailResolver;
+  @Mock private EmailNotificationService notificationService;
+  private PurchaseOfferOracleService service;
+
+  @BeforeEach
+  void setUp() {
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-03-11T06:30:00Z"), LexisBusinessTime.ZONE);
+    service =
+        new PurchaseOfferOracleService(
+            repository, clientEmailResolver, notificationService, clock);
+  }
 
   @Test
   void searchOptionsShouldReturnRepositoryValues() {
@@ -47,10 +71,24 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
-  void searchShouldQueryRepositoryWhenRegionNotSelected() {
+  void searchShouldReturnOfferingClientOnlyRowsWithinScopedAccess() {
     PurchaseOfferSearchCriteria criteria =
         new PurchaseOfferSearchCriteria(
-            null, null, null, null, null, null, null, List.of(), null, 0, 25);
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00077881",
+            false,
+            false,
+            List.of(),
+            null,
+            0,
+            25);
     when(repository.search(any(PurchaseOfferSearchCriteria.class)))
         .thenReturn(page(List.of(row(81001L, LocalDate.of(2026, 2, 1))), 1));
 
@@ -59,7 +97,11 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).extracting(PurchaseOfferSearchResultDto::offerNumber)
         .containsExactly(81001L);
-    verify(repository).search(any(PurchaseOfferSearchCriteria.class));
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(repository).search(criteriaCaptor.capture());
+    assertThat(criteriaCaptor.getValue().clientNumber()).isNull();
+    assertThat(criteriaCaptor.getValue().accessClientNumber()).isEqualTo("00077881");
   }
 
   @Test
@@ -84,7 +126,7 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
-  void searchShouldNormalizeCriteriaBeforeRepositoryCall() {
+  void searchShouldNormalizeIndependentClientAndAccessCriteriaBeforeRepositoryCall() {
     PurchaseOfferSearchCriteria criteria =
         new PurchaseOfferSearchCriteria(
             " 1000456 ",
@@ -94,6 +136,10 @@ class PurchaseOfferOracleServiceTest {
             null,
             null,
             " 00077881 ",
+            " 00088999 ",
+            " 00055667 ",
+            false,
+            false,
             Arrays.asList(12L, null, 12L, -1L, 0L),
             " offerNumber DESC ",
             -3,
@@ -111,10 +157,43 @@ class PurchaseOfferOracleServiceTest {
     assertThat(normalized.applicationNumber()).isEqualTo("1000456");
     assertThat(normalized.packageNumber()).isEqualTo("pkg-903");
     assertThat(normalized.clientNumber()).isEqualTo("00077881");
+    assertThat(normalized.offeringClientNumber()).isEqualTo("00088999");
+    assertThat(normalized.accessClientNumber()).isEqualTo("00055667");
     assertThat(normalized.regionNumbers()).containsExactly(12L);
     assertThat(normalized.sortField()).isEqualTo("offerNumber DESC");
     assertThat(normalized.page()).isZero();
     assertThat(normalized.size()).isEqualTo(1);
+  }
+
+  @Test
+  void countShouldPreserveNormalizedScopedAccessCriterion() {
+    PurchaseOfferSearchCriteria criteria =
+        new PurchaseOfferSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            " 00055667 ",
+            false,
+            false,
+            List.of(),
+            null,
+            0,
+            1);
+    when(repository.count(any(PurchaseOfferSearchCriteria.class))).thenReturn(4);
+
+    int result = service.count(criteria);
+
+    assertThat(result).isEqualTo(4);
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(repository).count(criteriaCaptor.capture());
+    assertThat(criteriaCaptor.getValue().clientNumber()).isNull();
+    assertThat(criteriaCaptor.getValue().accessClientNumber()).isEqualTo("00055667");
   }
 
   @Test
@@ -176,14 +255,13 @@ class PurchaseOfferOracleServiceTest {
             "A valid company name is required.",
             "A valid contact name is required.",
             "The purchase offer amount must be greater than 0",
-            "A valid purchase offer date is required.",
             "A valid pickup location is required.");
     verifyNoInteractions(repository);
   }
 
   @Test
-  void addOfferShouldInsertWhenRequestIsValid() {
-    when(repository.applicationExists(1000456L)).thenReturn(true);
+  void addOfferShouldSetCreateLifecycleFieldsServerSide() {
+    stubProvincialApplication(1000456L);
     when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
         .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
 
@@ -195,21 +273,21 @@ class PurchaseOfferOracleServiceTest {
                 "No Packages",
                 " Example Lumber ",
                 " Alex Example ",
-                12500.25d,
-                LocalDate.of(2026, 3, 2),
-                null,
+                99_999.99d,
+                LocalDate.of(1999, 1, 1),
+                LocalDate.of(2026, 3, 12),
                 LocalDate.of(2026, 3, 18),
                 null,
                 null,
                 " Initial offer ",
                 null,
-                null,
+                " forged withdrawal ",
                 null,
                 null,
                 " 00077881 ",
                 " Port Moody ",
                 " Condition notes ",
-                99.99d),
+                9_999_999.99d),
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
@@ -226,6 +304,10 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.packageNumber()).isNull();
     assertThat(record.companyName()).isEqualTo("Example Lumber");
     assertThat(record.contactName()).isEqualTo("Alex Example");
+    assertThat(record.purchaseOfferAmount()).isEqualTo(99_999.99d);
+    assertThat(record.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 10));
+    assertThat(record.offerWithdrawalDate()).isNull();
+    assertThat(record.withdrawReason()).isNull();
     assertThat(record.fairOfferIndicator()).isEqualTo("N");
     assertThat(record.validOfferIndicator()).isEqualTo("Y");
     assertThat(record.approvalIndicator()).isEqualTo("N");
@@ -233,12 +315,244 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.manufacturingFacilityInfo()).isEqualTo(" ");
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.applicationNumber()).isEqualTo(1000456L);
-    assertThat(record.offerVolume()).isEqualTo(99.9d);
+    assertThat(record.offerVolume()).isEqualTo(9_999_999.99d);
+  }
+
+  @Test
+  void addOfferShouldRejectOracleStorageViolationsBeforeInsert() {
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                null,
+                null,
+                "Québec Lumber",
+                "C".repeat(121),
+                100_000.001d,
+                null,
+                null,
+                null,
+                "N",
+                "Y",
+                "R".repeat(255),
+                "N",
+                null,
+                "P",
+                "M".repeat(501),
+                "00077881",
+                "Montréal",
+                "O".repeat(255),
+                9_999_999.999d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "Company name must contain ASCII characters only",
+            "Contact name must be 120 ASCII characters or fewer",
+            "Purchase offer amount must be 99999.99 or less",
+            "Purchase offer amount must have no more than 2 decimal places",
+            "Offer remarks must be 254 ASCII characters or fewer",
+            "Manufacturing facility information must be 500 ASCII characters or fewer",
+            "Pickup location must contain ASCII characters only",
+            "Offer conditions must be 254 ASCII characters or fewer",
+            "Offer volume must be 9999999.99 or less",
+            "Offer volume must have no more than 2 decimal places");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addOfferShouldRejectNonFiniteNumbersBeforeInsert() {
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                null,
+                null,
+                "Example Lumber",
+                "Alex Example",
+                Double.NaN,
+                null,
+                null,
+                null,
+                "N",
+                "Y",
+                null,
+                "N",
+                null,
+                "P",
+                null,
+                "00077881",
+                "Port Moody",
+                null,
+                Double.POSITIVE_INFINITY),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The purchase offer amount must be a finite number",
+            "Offer volume must be a finite number");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addOfferShouldRollBackWhenInsertReturnsMalformedRow() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(null)));
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PurchaseOfferService.CreateOfferResult response =
+        transactionalService(transactionManager)
+            .addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.exportPurchaseOfferNumber()).isNull();
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    verifyNoInteractions(clientEmailResolver, notificationService);
+  }
+
+  @Test
+  void addOfferShouldSendLegacyEquivalentClientNotification() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null)));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("client@example.com"));
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.clientHasEmail()).isTrue();
+    assertThat(response.toEmails()).isEqualTo("client@example.com");
+    assertThat(response.warnings()).isEmpty();
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.NEW,
+                "client@example.com"));
+    verify(clientEmailResolver).resolve("00077881", "00");
+  }
+
+  @Test
+  void addOfferShouldResolveAgentRecipientForAgentApplications() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "A", "00011111", "01", "00077881", "02")));
+    when(clientEmailResolver.resolve("00077881", "02"))
+        .thenReturn(Optional.of("agent@example.com"));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.clientHasEmail()).isTrue();
+    assertThat(response.toEmails()).isEqualTo("agent@example.com");
+    verify(clientEmailResolver).resolve("00077881", "02");
+    verify(clientEmailResolver, never()).resolve("00011111", "01");
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.NEW,
+                "agent@example.com"));
+  }
+
+  @Test
+  void addOfferShouldWarnWhenApplicationHasNoRecipient() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L)).thenReturn(Optional.empty());
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.clientHasEmail()).isFalse();
+    assertThat(response.toEmails()).isNull();
+    assertThat(response.warnings())
+        .containsExactly("Offer saved, but no client email address was found.");
+    verifyNoInteractions(clientEmailResolver, notificationService);
+  }
+
+  @Test
+  void addOfferShouldWarnWhenAuthoritativeResolverRejectsInvalidEmail() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null)));
+    when(clientEmailResolver.resolve("00077881", "00")).thenReturn(Optional.empty());
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.clientHasEmail()).isFalse();
+    assertThat(response.warnings())
+        .containsExactly("Offer saved, but no client email address was found.");
+    verifyNoInteractions(notificationService);
+  }
+
+  @Test
+  void addOfferShouldPropagateAuthoritativeResolverOutage() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null)));
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("client lookup unavailable");
+    when(clientEmailResolver.resolve("00077881", "00")).thenThrow(failure);
+
+    assertThatThrownBy(
+            () -> service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith"))
+        .isSameAs(failure);
+
+    verifyNoInteractions(notificationService);
+  }
+
+  @Test
+  void addOfferShouldPropagateApplicationRecipientCursorOutage() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("application recipient unavailable");
+    when(repository.findApplicationRecipient(1000456L)).thenThrow(failure);
+
+    assertThatThrownBy(
+            () -> service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith"))
+        .isSameAs(failure);
+
+    verifyNoInteractions(clientEmailResolver, notificationService);
   }
 
   @Test
   void addOfferShouldRejectMissingApplicationBeforeOracleInsert() {
-    when(repository.applicationExists(2L)).thenReturn(false);
+    when(repository.findApplicationReference(2L)).thenReturn(Optional.empty());
 
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(2L, null), "idir\\jsmith");
@@ -250,7 +564,7 @@ class PurchaseOfferOracleServiceTest {
 
   @Test
   void addOfferShouldRejectUnknownPackageBeforeOracleInsert() {
-    when(repository.applicationExists(1000456L)).thenReturn(true);
+    stubProvincialApplication(1000456L);
     when(repository.findPackageApplicationNumber("PKG-404")).thenReturn(Optional.empty());
 
     PurchaseOfferService.CreateOfferResult response =
@@ -263,7 +577,7 @@ class PurchaseOfferOracleServiceTest {
 
   @Test
   void addOfferShouldRejectPackageForDifferentApplicationBeforeOracleInsert() {
-    when(repository.applicationExists(1000456L)).thenReturn(true);
+    stubProvincialApplication(1000456L);
     when(repository.findPackageApplicationNumber("PKG-903")).thenReturn(Optional.of(1000457L));
 
     PurchaseOfferService.CreateOfferResult response =
@@ -276,8 +590,63 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void addOfferShouldRejectNonProvincialParentBeforeOracleInsert() {
+    when(repository.findApplicationReference(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationReferenceRow(1000456L, "F")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application 1000456 does not have a valid jurisdiction to accept offers.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
+  void addOfferShouldIgnoreForgedJurisdictionAndPersistProvincial() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    PurchaseOfferService.CreateOfferRequest request =
+        new PurchaseOfferService.CreateOfferRequest(
+            1000456L,
+            null,
+            null,
+            "Example Lumber",
+            "Alex Example",
+            12500.25d,
+            LocalDate.of(2026, 3, 2),
+            null,
+            null,
+            "N",
+            "Y",
+            null,
+            "N",
+            null,
+            "F",
+            " ",
+            "00077881",
+            "Port Moody",
+            null,
+            null);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(request, "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferInsertRecord.class);
+    verify(repository).insertOffer(captor.capture());
+    assertThat(captor.getValue().exportJurisdictionCode()).isEqualTo("P");
+  }
+
+  @Test
   void addOfferShouldDefaultEntryUserWhenPrincipalIsMissing() {
-    when(repository.applicationExists(1000456L)).thenReturn(true);
+    stubProvincialApplication(1000456L);
     when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
         .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
 
@@ -330,7 +699,218 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void updateOfferShouldRejectOracleStorageViolationsBeforeUpdate() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, null, "P")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                81001L,
+                null,
+                "Québec Lumber",
+                "C".repeat(121),
+                100_000.0d,
+                null,
+                LocalDate.of(2026, 3, 10),
+                null,
+                null,
+                null,
+                "Résumé",
+                null,
+                "W".repeat(255),
+                null,
+                "M".repeat(501),
+                null,
+                "P".repeat(251),
+                "Condition é",
+                1.234d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "Company name must contain ASCII characters only",
+            "Contact name must be 120 ASCII characters or fewer",
+            "Purchase offer amount must be 99999.99 or less",
+            "Offer remarks must contain ASCII characters only",
+            "Withdraw reason must be 254 ASCII characters or fewer",
+            "Manufacturing facility information must be 500 ASCII characters or fewer",
+            "Pickup location must be 250 ASCII characters or fewer",
+            "Offer conditions must contain ASCII characters only",
+            "Offer volume must have no more than 2 decimal places");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldAllowReceivedDateExactlySevenDaysOld() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSourceWithReceivedDate(LocalDate.of(2026, 3, 4))));
+    stubProvincialApplication(1000456L);
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            updateRequestWithReceivedDate(LocalDate.of(2026, 3, 3)), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(captor.capture());
+    assertThat(captor.getValue().purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 3));
+  }
+
+  @Test
+  void updateOfferShouldRejectReceivedDateMoreThanSevenDaysOld() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSourceWithReceivedDate(LocalDate.of(2026, 3, 4))));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            updateRequestWithReceivedDate(LocalDate.of(2026, 3, 2)), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer Received Date can't be before 7 days from now.");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldRejectFutureReceivedDate() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSourceWithReceivedDate(LocalDate.of(2026, 3, 4))));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            updateRequestWithReceivedDate(LocalDate.of(2026, 3, 11)), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer Received Date can't be in the future.");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldNotRevalidateUnchangedHistoricalReceivedDate() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSourceWithReceivedDate(LocalDate.of(2026, 2, 1))));
+    stubProvincialApplication(1000456L);
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            updateRequestWithReceivedDate(LocalDate.of(2026, 2, 1)), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldRejectApplicationReparentBeforeOracleUpdate() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, null, "P")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000457L, 81001L, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("A purchase offer cannot be moved to a different application.");
+    verify(repository, never()).updateOffer(any());
+    verifyNoInteractions(notificationService);
+  }
+
+  @Test
+  void updateOfferShouldRejectAddingPackageToOfferCreatedWithoutOne() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, null, "P")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, "PKG-904", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("A package cannot be added to an offer that was created without one.");
+    verify(repository, never()).findPackageApplicationNumber(any());
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldRejectForgedJurisdictionBeforeOracleUpdate() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, null, "P")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, null, null, null, null, null, null, null, null, null,
+                null, null, null, "F", null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("A purchase offer cannot be moved to a different jurisdiction.");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldRejectReplacementPackageForDifferentApplication() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    stubProvincialApplication(1000456L);
+    when(repository.findPackageApplicationNumber("PKG-904"))
+        .thenReturn(Optional.of(1000457L));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, "PKG-904", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Package PKG-904 does not belong to application 1000456.");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldAllowReplacementPackageForCurrentApplication() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    stubProvincialApplicationWithPackage(1000456L, "PKG-904");
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, "PKG-904", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(captor.capture());
+    assertThat(captor.getValue().packageNumber()).isEqualTo("PKG-904");
+    assertThat(captor.getValue().exportJurisdictionCode()).isEqualTo("P");
+  }
+
+  @Test
   void updateOfferShouldPreserveExistingValuesAndCallOracleUpdate() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
     Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(
@@ -410,11 +990,12 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.entryUserId()).isEqualTo("creator");
     assertThat(record.entryTimestamp()).isEqualTo(entryTimestamp);
     assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
-    assertThat(record.offerVolume()).isEqualTo(99.9d);
+    assertThat(record.offerVolume()).isEqualTo(99.99d);
   }
 
   @Test
   void updateOfferShouldTreatApprovalIndicatorsAsMaterialUpdates() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
     Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(
@@ -483,6 +1064,7 @@ class PurchaseOfferOracleServiceTest {
 
   @Test
   void updateOfferShouldDefaultUpdateUserWhenPrincipalIsMissing() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
     Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(
@@ -548,6 +1130,7 @@ class PurchaseOfferOracleServiceTest {
 
   @Test
   void updateOfferShouldDefaultMissingManufacturingFacilityBeforeOracleUpdate() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
     Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(
@@ -645,7 +1228,138 @@ class PurchaseOfferOracleServiceTest {
         null);
   }
 
+  private void stubProvincialApplication(Long applicationNumber) {
+    when(repository.findApplicationReference(applicationNumber))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationReferenceRow(
+                    applicationNumber, "P")));
+  }
+
+  private void stubProvincialApplicationWithPackage(
+      Long applicationNumber, String packageNumber) {
+    stubProvincialApplication(applicationNumber);
+    when(repository.findPackageApplicationNumber(packageNumber))
+        .thenReturn(Optional.of(applicationNumber));
+  }
+
+  private PurchaseOfferService transactionalService(
+      RecordingTransactionManager transactionManager) {
+    TransactionInterceptor transactionInterceptor =
+        new TransactionInterceptor(
+            transactionManager, new AnnotationTransactionAttributeSource());
+    ProxyFactory proxyFactory = new ProxyFactory(service);
+    proxyFactory.addAdvice(transactionInterceptor);
+    return (PurchaseOfferService) proxyFactory.getProxy();
+  }
+
+  private PurchaseOfferRepository.PurchaseOfferUpdateSourceRow updateSource(
+      Long applicationNumber, String packageNumber, String jurisdictionCode) {
+    return new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+        81001L,
+        applicationNumber,
+        packageNumber,
+        "Example Lumber",
+        "Alex Example",
+        12500.25d,
+        LocalDate.of(2026, 3, 2),
+        null,
+        LocalDate.of(2026, 3, 18),
+        "N",
+        "Y",
+        "Existing remark",
+        "N",
+        null,
+        jurisdictionCode,
+        "Existing mill",
+        "Port Moody",
+        "Existing condition",
+        "creator",
+        Instant.parse("2026-03-01T18:00:00Z"),
+        95.5d);
+  }
+
+  private PurchaseOfferRepository.PurchaseOfferUpdateSourceRow updateSourceWithReceivedDate(
+      LocalDate receivedDate) {
+    PurchaseOfferRepository.PurchaseOfferUpdateSourceRow source =
+        updateSource(1000456L, null, "P");
+    return new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+        source.exportPurchaseOfferNumber(),
+        source.applicationNumber(),
+        source.packageNumber(),
+        source.companyName(),
+        source.contactName(),
+        source.purchaseOfferAmount(),
+        receivedDate,
+        source.offerWithdrawalDate(),
+        source.teacReviewDate(),
+        source.fairOfferIndicator(),
+        source.validOfferIndicator(),
+        source.offerRemark(),
+        source.approvalIndicator(),
+        source.withdrawReason(),
+        source.exportJurisdictionCode(),
+        source.manufacturingFacilityInfo(),
+        source.pickupLocation(),
+        source.offerCondition(),
+        source.entryUserId(),
+        source.entryTimestamp(),
+        source.offerVolume());
+  }
+
+  private PurchaseOfferService.CreateOfferRequest updateRequestWithReceivedDate(
+      LocalDate receivedDate) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        1000456L,
+        81001L,
+        null,
+        null,
+        null,
+        null,
+        receivedDate,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
   private static <T> Page<T> page(List<T> content, long total) {
     return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
+  }
+
+  private static final class RecordingTransactionManager
+      extends AbstractPlatformTransactionManager {
+
+    private int commits;
+    private int rollbacks;
+
+    @Override
+    protected Object doGetTransaction() {
+      return new Object();
+    }
+
+    @Override
+    protected void doBegin(Object transaction, TransactionDefinition definition) {
+      // Nothing to enlist for this transaction-boundary test.
+    }
+
+    @Override
+    protected void doCommit(DefaultTransactionStatus status) {
+      commits++;
+    }
+
+    @Override
+    protected void doRollback(DefaultTransactionStatus status) {
+      rollbacks++;
+    }
   }
 }

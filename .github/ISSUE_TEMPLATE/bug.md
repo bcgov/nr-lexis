@@ -7,6 +7,8 @@ assignees: ''
 
 ---
 
+<!-- This is a public repository. Do not include JWTs, credentials, secrets, private information or LEXIS business data, or unredacted logs or screenshots. Use an approved private channel for sensitive material. -->
+
 **Describe the Bug**
 A clear and concise description of what the bug is.
 

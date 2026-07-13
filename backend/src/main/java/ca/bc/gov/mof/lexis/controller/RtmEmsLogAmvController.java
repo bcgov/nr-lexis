@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -40,11 +41,7 @@ public class RtmEmsLogAmvController {
       @RequestParam(name = "retrievalDate", required = false) String retrievalDate,
       @RequestParam(name = "updateDate", required = false) String updateDate,
       @RequestParam(name = "latestBeforeDate", required = false) String latestBeforeDate) {
-    RtmEmsLogAmvService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("RTM EMS AMV service unavailable - returning no content for find");
-      return ResponseEntity.noContent().build();
-    }
+    RtmEmsLogAmvService service = requiredService("find");
 
     if (latestBeforeDate != null && !latestBeforeDate.isBlank()) {
       return ResponseEntity.ok(service.findLatestBefore(latestBeforeDate));
@@ -56,11 +53,7 @@ public class RtmEmsLogAmvController {
   @PostMapping("/emslogamv")
   public ResponseEntity<RtmEmsLogAmvMutationResultDto> save(
       @RequestBody(required = false) RtmEmsLogAmvSaveRequestDto request) {
-    RtmEmsLogAmvService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("RTM EMS AMV service unavailable - returning no content for save");
-      return ResponseEntity.noContent().build();
-    }
+    RtmEmsLogAmvService service = requiredService("save");
 
     RtmEmsLogAmvSaveRequestDto normalizedRequest =
         request == null
@@ -73,5 +66,17 @@ public class RtmEmsLogAmvController {
 
   private HttpStatus responseStatus(String status) {
     return "accepted".equalsIgnoreCase(status) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
+  }
+
+  private RtmEmsLogAmvService requiredService(String operation) {
+    RtmEmsLogAmvService service = serviceProvider.getIfAvailable();
+    if (service != null) {
+      return service;
+    }
+
+    LOGGER.warn(
+        "event=lexis_rtm_amv operation={} outcome=service_unavailable", operation);
+    throw new DataAccessResourceFailureException(
+        "The authoritative RTM AMV service is temporarily unavailable.");
   }
 }

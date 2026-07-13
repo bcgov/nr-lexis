@@ -14,11 +14,9 @@ export type ProvincialApplicationSearchFilters = {
 
 export type ProvincialApplicationSearchSortField =
   | 'applicationNumber'
-  | 'status'
   | 'applicantClientNumber'
-  | 'ownerClientNumber'
-  | 'region'
-  | 'applicationVolume'
+  | 'displayOwnerClientNumber'
+  | 'regionCode'
   | 'exemptionNumber'
   | 'listingDate'
 

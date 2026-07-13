@@ -1,6 +1,6 @@
 package ca.bc.gov.mof.lexis.security;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -13,10 +13,13 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {
+      "spring.profiles.active=stub-reports,stub-services",
       "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.ca-central-1.amazonaws.com/test",
       "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
       "ALLOWED_ORIGINS=http://localhost:3000",
@@ -27,6 +30,25 @@ import org.springframework.test.web.servlet.MockMvc;
 class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
   @Autowired private MockMvc mockMvc;
+
+  @Test
+  void prodRtmOnlyModeShouldExposeOnlyExactGetHealthProbes() throws Exception {
+    SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
+
+    mockMvc.perform(get("/actuator/health/liveness")).andExpect(status().isOk());
+    mockMvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
+    mockMvc.perform(get("/actuator/health")).andExpect(status().isUnauthorized());
+    mockMvc.perform(get("/actuator/info")).andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(get("/actuator/health/liveness/details"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            post("/actuator/health/liveness")
+                .with(csrf())
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isForbidden());
+  }
 
   @Test
   void prodRtmOnlyModeShouldExposeRtmAmvTableAndRequiredSupportApisToAdmins()
@@ -107,5 +129,14 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
                 .content("{}")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isForbidden());
+  }
+
+  private static JwtRequestPostProcessor jwt() {
+    return SecurityMockMvcRequestPostProcessors.jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("custom:idp_name", "idir")
+                    .claim("custom:idp_username", "lexis-test-user"));
   }
 }

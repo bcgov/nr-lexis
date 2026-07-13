@@ -1,33 +1,41 @@
-import type { ReactNode } from 'react'
+import { Loading } from '@carbon/react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Navigate, type RouteObject } from 'react-router-dom'
-import Layout from '../components/Layout'
+import AppLayout from '../components/Layout'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
-import AdminPage from '@/pages/Admin'
-import AdminPoliciesPage from '@/pages/AdminPolicies'
-import AdminUploadsPage from '@/pages/AdminUploads'
-import FederalPage from '@/pages/Federal'
-import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
 import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
-import ProvincialApplicationPage from '@/pages/ProvincialApplication'
-import ProvincialApplicationCreatePage from '@/pages/ProvincialApplicationCreate'
-import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
-import ProvincialExemptionPage from '@/pages/ProvincialExemption'
-import ProvincialExemptionCreatePage from '@/pages/ProvincialExemptionCreate'
-import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
-import ProvincialOfferCreatePage from '@/pages/ProvincialOfferCreate'
-import ProvincialOfferDetailsPage from '@/pages/ProvincialOfferDetails'
-import ProvincialOffersPage from '@/pages/ProvincialOffers'
-import ProvincialPage from '@/pages/Provincial'
-import ProvincialPermitPage from '@/pages/ProvincialPermit'
-import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
-import ProvincialReviewPage from '@/pages/ProvincialReview'
-import ReportsPage from '@/pages/Reports'
 import UnauthorizedPage from '@/pages/Unauthorized'
-import RTMEmsLogAmvPage from '@/pages/RTMEmsLogAmv'
 import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
+
+const AdminPage = lazy(() => import('@/pages/Admin'))
+const AdminPoliciesPage = lazy(() => import('@/pages/AdminPolicies'))
+const AdminUploadsPage = lazy(() => import('@/pages/AdminUploads'))
+const FederalPage = lazy(() => import('@/pages/Federal'))
+const FederalApplicationDetailsPage = lazy(() => import('@/pages/FederalApplicationDetails'))
+const ProvincialApplicationPage = lazy(() => import('@/pages/ProvincialApplication'))
+const ProvincialApplicationCreatePage = lazy(() => import('@/pages/ProvincialApplicationCreate'))
+const ProvincialApplicationDetailsPage = lazy(() => import('@/pages/ProvincialApplicationDetails'))
+const ProvincialExemptionPage = lazy(() => import('@/pages/ProvincialExemption'))
+const ProvincialExemptionCreatePage = lazy(() => import('@/pages/ProvincialExemptionCreate'))
+const ProvincialExemptionDetailsPage = lazy(() => import('@/pages/ProvincialExemptionDetails'))
+const ProvincialOfferCreatePage = lazy(() => import('@/pages/ProvincialOfferCreate'))
+const ProvincialOfferDetailsPage = lazy(() => import('@/pages/ProvincialOfferDetails'))
+const ProvincialOffersPage = lazy(() => import('@/pages/ProvincialOffers'))
+const ProvincialPage = lazy(() => import('@/pages/Provincial'))
+const ProvincialPermitPage = lazy(() => import('@/pages/ProvincialPermit'))
+const ProvincialPermitDetailsPage = lazy(() => import('@/pages/ProvincialPermitDetails'))
+const ProvincialReviewPage = lazy(() => import('@/pages/ProvincialReview'))
+const ReportsPage = lazy(() => import('@/pages/Reports'))
+const RTMEmsLogAmvPage = lazy(() => import('@/pages/RTMEmsLogAmv'))
+
+const Layout = ({ children }: { children: ReactNode }) => (
+  <AppLayout>
+    <Suspense fallback={<Loading withOverlay description="Loading page..." />}>{children}</Suspense>
+  </AppLayout>
+)
 
 export type RouteDescription = {
   id: string

@@ -9,11 +9,17 @@ import ca.bc.gov.mof.lexis.repository.upload.UploadRepository.UploadFailureReaso
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository.UploadPersistenceResult;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
+import ca.bc.gov.mof.lexis.service.upload.AttachmentUploadValidator.ValidationResult;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -27,11 +33,15 @@ public class OracleLexisUploadService implements LexisUploadService {
 
   private final UploadRepository uploadRepository;
   private final VirusScanService virusScanService;
+  private final AttachmentUploadValidator attachmentUploadValidator;
 
   public OracleLexisUploadService(
-      UploadRepository uploadRepository, VirusScanService virusScanService) {
+      UploadRepository uploadRepository,
+      VirusScanService virusScanService,
+      AttachmentUploadValidator attachmentUploadValidator) {
     this.uploadRepository = uploadRepository;
     this.virusScanService = virusScanService;
+    this.attachmentUploadValidator = attachmentUploadValidator;
   }
 
   @Override
@@ -41,14 +51,11 @@ public class OracleLexisUploadService implements LexisUploadService {
       return Optional.empty();
     }
 
-    String fileTypeCode = fileExtension(file);
-    if (fileTypeCode == null) {
-      return Optional.of(
-          rejected(
-              normalizedUploadType,
-              file,
-              "Document uploads need a file extension so LEXIS can resolve the file type."));
+    ValidationResult validation = attachmentUploadValidator.validate(file, null);
+    if (!validation.accepted()) {
+      return Optional.of(rejected(normalizedUploadType, file, validation.rejectionMessage()));
     }
+    String fileTypeCode = validation.fileTypeCode();
 
     Optional<LexisUploadResultDto> fileTypeRejection =
         rejectUnsupportedFileType(normalizedUploadType, file, fileTypeCode);
@@ -72,16 +79,20 @@ public class OracleLexisUploadService implements LexisUploadService {
   }
 
   @Override
+  @Transactional
   public Optional<LexisUploadResultDto> uploadApplication(
       MultipartFile file, Long applicationNumber, String description, String entryUserId) {
     if (!validFile(file) || applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    String fileTypeCode = fileExtension(file);
-    if (fileTypeCode == null) {
-      return Optional.empty();
+    String normalizedDescription = defaultDescription(description);
+    ValidationResult validation = attachmentUploadValidator.validate(file, normalizedDescription);
+    if (!validation.accepted()) {
+      return Optional.of(rejected("application", file, validation.rejectionMessage()));
     }
-    Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("application", file, fileTypeCode);
+    String fileTypeCode = validation.fileTypeCode();
+    Optional<LexisUploadResultDto> fileTypeRejection =
+        rejectUnsupportedFileType("application", file, fileTypeCode);
     if (fileTypeRejection.isPresent()) {
       return fileTypeRejection;
     }
@@ -91,38 +102,48 @@ public class OracleLexisUploadService implements LexisUploadService {
     }
 
     UploadPersistenceResult persistenceResult =
-        uploadRepository.insertApplicationFile(
-            applicationNumber,
-            resolveFileName(file),
-            defaultDescription(description),
-            ATTACHMENT_TYPE_APPLICATION,
-            fileTypeCode,
-            defaultSystemUser(entryUserId),
-            fileBytes(file));
+        persistFile(
+            file,
+            (content, contentLength) ->
+                uploadRepository.insertApplicationFile(
+                    applicationNumber,
+                    resolveFileName(file),
+                    normalizedDescription,
+                    ATTACHMENT_TYPE_APPLICATION,
+                    fileTypeCode,
+                    defaultSystemUser(entryUserId),
+                    content,
+                    contentLength));
 
-    return persistenceResult.persisted()
-        ? Optional.of(success("application", file, "Application upload persisted."))
-        : Optional.of(
-            rejected(
-                "application",
-                file,
-                uploadFailureMessage(
-                    "application",
-                    applicationNumber.toString(),
-                    persistenceResult.failureReason())));
+    if (!persistenceResult.persisted()) {
+      markRollbackOnly();
+      return Optional.of(
+          rejected(
+              "application",
+              file,
+              uploadFailureMessage(
+                  "application",
+                  applicationNumber.toString(),
+                  persistenceResult.failureReason())));
+    }
+    return Optional.of(success("application", file, "Application upload persisted."));
   }
 
   @Override
+  @Transactional
   public Optional<LexisUploadResultDto> uploadPermit(
       MultipartFile file, Long permitNumber, String description, String entryUserId) {
     if (!validFile(file) || permitNumber == null || permitNumber < 1) {
       return Optional.empty();
     }
-    String fileTypeCode = fileExtension(file);
-    if (fileTypeCode == null) {
-      return Optional.empty();
+    String normalizedDescription = defaultDescription(description);
+    ValidationResult validation = attachmentUploadValidator.validate(file, normalizedDescription);
+    if (!validation.accepted()) {
+      return Optional.of(rejected("permit", file, validation.rejectionMessage()));
     }
-    Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("permit", file, fileTypeCode);
+    String fileTypeCode = validation.fileTypeCode();
+    Optional<LexisUploadResultDto> fileTypeRejection =
+        rejectUnsupportedFileType("permit", file, fileTypeCode);
     if (fileTypeRejection.isPresent()) {
       return fileTypeRejection;
     }
@@ -132,37 +153,47 @@ public class OracleLexisUploadService implements LexisUploadService {
     }
 
     UploadPersistenceResult persistenceResult =
-        uploadRepository.insertPermitFile(
-            permitNumber,
-            resolveFileName(file),
-            defaultDescription(description),
-            ATTACHMENT_TYPE_PERMIT,
-            fileTypeCode,
-            defaultSystemUser(entryUserId),
-            fileBytes(file));
+        persistFile(
+            file,
+            (content, contentLength) ->
+                uploadRepository.insertPermitFile(
+                    permitNumber,
+                    resolveFileName(file),
+                    normalizedDescription,
+                    ATTACHMENT_TYPE_PERMIT,
+                    fileTypeCode,
+                    defaultSystemUser(entryUserId),
+                    content,
+                    contentLength));
 
-    return persistenceResult.persisted()
-        ? Optional.of(success("permit", file, "Permit upload persisted."))
-        : Optional.of(
-            rejected(
-                "permit",
-                file,
-                uploadFailureMessage(
-                    "permit", permitNumber.toString(), persistenceResult.failureReason())));
+    if (!persistenceResult.persisted()) {
+      markRollbackOnly();
+      return Optional.of(
+          rejected(
+              "permit",
+              file,
+              uploadFailureMessage(
+                  "permit", permitNumber.toString(), persistenceResult.failureReason())));
+    }
+    return Optional.of(success("permit", file, "Permit upload persisted."));
   }
 
   @Override
+  @Transactional
   public Optional<LexisUploadResultDto> uploadExemption(
       MultipartFile file, String exemptionNumber, String description, String entryUserId) {
     String normalizedExemptionNumber = trimToNull(exemptionNumber);
     if (!validFile(file) || normalizedExemptionNumber == null) {
       return Optional.empty();
     }
-    String fileTypeCode = fileExtension(file);
-    if (fileTypeCode == null) {
-      return Optional.empty();
+    String normalizedDescription = defaultDescription(description);
+    ValidationResult validation = attachmentUploadValidator.validate(file, normalizedDescription);
+    if (!validation.accepted()) {
+      return Optional.of(rejected("exemption", file, validation.rejectionMessage()));
     }
-    Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("exemption", file, fileTypeCode);
+    String fileTypeCode = validation.fileTypeCode();
+    Optional<LexisUploadResultDto> fileTypeRejection =
+        rejectUnsupportedFileType("exemption", file, fileTypeCode);
     if (fileTypeRejection.isPresent()) {
       return fileTypeRejection;
     }
@@ -172,26 +203,33 @@ public class OracleLexisUploadService implements LexisUploadService {
     }
 
     UploadPersistenceResult persistenceResult =
-        uploadRepository.insertExemptionFile(
-            normalizedExemptionNumber,
-            resolveFileName(file),
-            defaultDescription(description),
-            ATTACHMENT_TYPE_EXEMPTION,
-            fileTypeCode,
-            defaultSystemUser(entryUserId),
-            fileBytes(file));
+        persistFile(
+            file,
+            (content, contentLength) ->
+                uploadRepository.insertExemptionFile(
+                    normalizedExemptionNumber,
+                    resolveFileName(file),
+                    normalizedDescription,
+                    ATTACHMENT_TYPE_EXEMPTION,
+                    fileTypeCode,
+                    defaultSystemUser(entryUserId),
+                    content,
+                    contentLength));
 
-    return persistenceResult.persisted()
-        ? Optional.of(success("exemption", file, "Exemption upload persisted."))
-        : Optional.of(
-            rejected(
-                "exemption",
-                file,
-                uploadFailureMessage(
-                    "exemption", normalizedExemptionNumber, persistenceResult.failureReason())));
+    if (!persistenceResult.persisted()) {
+      markRollbackOnly();
+      return Optional.of(
+          rejected(
+              "exemption",
+              file,
+              uploadFailureMessage(
+                  "exemption", normalizedExemptionNumber, persistenceResult.failureReason())));
+    }
+    return Optional.of(success("exemption", file, "Exemption upload persisted."));
   }
 
   @Override
+  @Transactional
   public Optional<LexisUploadResultDto> uploadInvoice(
       MultipartFile file,
       Long permitNumber,
@@ -212,11 +250,18 @@ public class OracleLexisUploadService implements LexisUploadService {
         || !positive(feeInLieu)) {
       return Optional.empty();
     }
-    String fileTypeCode = fileExtension(file);
-    if (fileTypeCode == null) {
-      return Optional.empty();
+    String requestedDescription = trimToNull(description);
+    String normalizedDescription =
+        requestedDescription == null
+            ? "Invoice " + normalizedSalesInvoiceNumber
+            : requestedDescription;
+    ValidationResult validation = attachmentUploadValidator.validate(file, normalizedDescription);
+    if (!validation.accepted()) {
+      return Optional.of(rejected("invoice", file, validation.rejectionMessage()));
     }
-    Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("invoice", file, fileTypeCode);
+    String fileTypeCode = validation.fileTypeCode();
+    Optional<LexisUploadResultDto> fileTypeRejection =
+        rejectUnsupportedFileType("invoice", file, fileTypeCode);
     if (fileTypeRejection.isPresent()) {
       return fileTypeRejection;
     }
@@ -225,35 +270,36 @@ public class OracleLexisUploadService implements LexisUploadService {
       return virusScanRejection;
     }
 
-    String normalizedDescription = trimToNull(description);
-    if (normalizedDescription == null) {
-      normalizedDescription = "Invoice " + normalizedSalesInvoiceNumber;
-    }
-
     UploadPersistenceResult persistenceResult =
-        uploadRepository.insertInvoiceFile(
-            permitNumber,
-            normalizedSalesInvoiceNumber,
-            resolveFileName(file),
-            normalizedDescription,
-            ATTACHMENT_TYPE_INVOICE,
-            fileTypeCode,
-            exportValue,
-            currencyConversionRate,
-            feeInLieu,
-            defaultSystemUser(entryUserId),
-            fileBytes(file));
+        persistFile(
+            file,
+            (content, contentLength) ->
+                uploadRepository.insertInvoiceFile(
+                    permitNumber,
+                    normalizedSalesInvoiceNumber,
+                    resolveFileName(file),
+                    normalizedDescription,
+                    ATTACHMENT_TYPE_INVOICE,
+                    fileTypeCode,
+                    exportValue,
+                    currencyConversionRate,
+                    feeInLieu,
+                    defaultSystemUser(entryUserId),
+                    content,
+                    contentLength));
 
-    return persistenceResult.persisted()
-        ? Optional.of(success("invoice", file, "Invoice upload persisted."))
-        : Optional.of(
-            rejected(
-                "invoice",
-                file,
-                uploadFailureMessage(
-                    "invoice",
-                    normalizedSalesInvoiceNumber + " for permit " + permitNumber,
-                    persistenceResult.failureReason())));
+    if (!persistenceResult.persisted()) {
+      markRollbackOnly();
+      return Optional.of(
+          rejected(
+              "invoice",
+              file,
+              uploadFailureMessage(
+                  "invoice",
+                  normalizedSalesInvoiceNumber + " for permit " + permitNumber,
+                  persistenceResult.failureReason())));
+    }
+    return Optional.of(success("invoice", file, "Invoice upload persisted."));
   }
 
   private LexisUploadResultDto success(String uploadType, MultipartFile file, String message) {
@@ -283,7 +329,7 @@ public class OracleLexisUploadService implements LexisUploadService {
 
   private Optional<LexisUploadResultDto> rejectUnsupportedFileType(
       String uploadType, MultipartFile file, String fileTypeCode) {
-    if (uploadRepository.isFileTypeCodeValid(fileTypeCode)) {
+    if (uploadRepository.isFileTypeCodeValidRequired(fileTypeCode)) {
       return Optional.empty();
     }
 
@@ -326,31 +372,36 @@ public class OracleLexisUploadService implements LexisUploadService {
     return value != null && value.compareTo(BigDecimal.ZERO) > 0;
   }
 
-  private byte[] fileBytes(MultipartFile file) {
-    try {
-      return file.getBytes();
-    } catch (java.io.IOException ex) {
-      throw new IllegalStateException("Could not read uploaded file bytes", ex);
+  private UploadPersistenceResult persistFile(
+      MultipartFile file, FilePersistence persistence) {
+    try (InputStream content = file.getInputStream()) {
+      return persistence.persist(content, file.getSize());
+    } catch (IOException ex) {
+      throw new IllegalStateException("Could not stream uploaded file content", ex);
     }
   }
 
   private String resolveFileName(MultipartFile file) {
-    String fileName = trimToNull(file.getOriginalFilename());
-    return fileName == null ? "uploaded-file" : fileName;
-  }
-
-  private String fileExtension(MultipartFile file) {
-    String fileName = resolveFileName(file);
-    int extensionIndex = fileName.lastIndexOf('.');
-    if (extensionIndex < 0 || extensionIndex >= fileName.length() - 1) {
-      return null;
-    }
-    return fileName.substring(extensionIndex + 1).toUpperCase(Locale.ROOT);
+    String fileName = file == null ? null : file.getOriginalFilename();
+    return fileName == null || fileName.isBlank() ? "uploaded-file" : fileName;
   }
 
   private String defaultDescription(String description) {
     String normalizedDescription = trimToNull(description);
     return normalizedDescription == null ? "" : normalizedDescription;
+  }
+
+  private void markRollbackOnly() {
+    try {
+      TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+    } catch (NoTransactionException ignored) {
+      // Direct unit calls may invoke this service without a transactional proxy.
+    }
+  }
+
+  @FunctionalInterface
+  private interface FilePersistence {
+    UploadPersistenceResult persist(InputStream content, long contentLength);
   }
 
 }

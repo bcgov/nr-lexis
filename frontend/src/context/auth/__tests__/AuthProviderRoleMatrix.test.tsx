@@ -11,6 +11,20 @@ vi.mock('@/service/session-service', () => ({
 
 const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
 
+type SessionCapabilitiesWithoutClient = Omit<
+  Awaited<ReturnType<typeof fetchSessionCapabilities>>,
+  'forestClientNumber'
+> & {
+  forestClientNumber?: string | null
+}
+
+const mockSessionCapabilities = (capabilities: SessionCapabilitiesWithoutClient): void => {
+  mockedFetchSessionCapabilities.mockResolvedValue({
+    forestClientNumber: null,
+    ...capabilities,
+  })
+}
+
 type ProbeProps = {
   actionChecks: string[]
 }
@@ -33,6 +47,7 @@ function AuthProbe({ actionChecks }: ProbeProps) {
       <div data-testid="is-logged-in">{String(isLoggedIn)}</div>
       <div data-testid="has-any-role">{String(hasAnyRole)}</div>
       <div data-testid="roles">{capabilities.roles.join(',')}</div>
+      <div data-testid="forest-client">{capabilities.forestClientNumber ?? ''}</div>
       <div data-testid="default-route">{defaultRoute}</div>
       {actionChecks.map((action) => (
         <div key={action} data-testid={`action-${action}`}>
@@ -70,13 +85,14 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('does not normalize unknown submitter roles', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\tester',
       roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345', 'LEXIS_UNKNOWN_SUBMITTER'],
       welcomeTarget: null,
       legacyPath: null,
       grantedActions: ['/summary'],
+      forestClientNumber: '00012345',
     })
 
     renderProbe(['/summary'])
@@ -85,12 +101,13 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('roles')).toHaveTextContent(
       'PROVINCIAL_SUBMITTER_00012345,LEXIS_UNKNOWN_SUBMITTER',
     )
+    expect(screen.getByTestId('forest-client')).toHaveTextContent('00012345')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
   })
 
   it('does not route modern submitter roles to summary without a summary grant', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\submitter',
       roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345'],
@@ -108,7 +125,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('does not route legacy submitter aliases as modern submitter roles', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\tester',
       roles: ['LEXIS_INDUSTRY_00012345', 'LOG_EXPORT_INDUSTRY_00067890'],
@@ -128,7 +145,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('maps legacy admin alias to canonical admin role and review route', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\admin',
       roles: ['LEXIS_ADMIN'],
@@ -149,7 +166,7 @@ describe('Auth Provider Role Matrix', () => {
 
   it('limits admin default route and actions when PROD RTM-only mode is enabled', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\admin',
       roles: ['LEXIS_ADMIN'],
@@ -170,7 +187,7 @@ describe('Auth Provider Role Matrix', () => {
 
   it('routes non-admin users to unauthorized when PROD RTM-only mode is enabled', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\readonly',
       roles: ['LEXIS_READ_ONLY'],
@@ -189,7 +206,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('keeps admin review routing and actions when read-only is also present', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\admin',
       roles: ['LEXIS_ADMIN', 'LEXIS_READ_ONLY'],
@@ -209,7 +226,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('does not use legacyPath for default route routing anymore', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\approver',
       roles: ['LEXIS_APPLICATION_APPROVER'],
@@ -228,7 +245,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('routes application approvers to review and honours report but not admin grants', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\approver',
       roles: ['LEXIS_APPLICATION_APPROVER'],
@@ -246,28 +263,43 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
   })
 
-  it('blocks reports for read-only users even when report actions are granted', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+  it('honours server-granted report actions for read-only users', async () => {
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\readonly',
       roles: ['LEXIS_READ_ONLY'],
       welcomeTarget: null,
       legacyPath: null,
-      grantedActions: ['/applicationSearch', '/applicationReport', '/feeReport', 'mofrListing'],
+      grantedActions: [
+        '/applicationSearch',
+        '/applicationReport',
+        '/permitReport',
+        '/approvedExemptionReport',
+        'mofrListing',
+      ],
     })
 
-    renderProbe(['/applicationSearch', '/applicationReport', '/feeReport', 'mofrListing'])
+    renderProbe([
+      '/applicationSearch',
+      '/applicationReport',
+      '/permitReport',
+      '/approvedExemptionReport',
+      '/feeReport',
+      'mofrListing',
+    ])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/permitReport')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/approvedExemptionReport')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/feeReport')).toHaveTextContent('false')
-    expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('true')
   })
 
   it('routes delegated admin without LEXIS actions to unauthorized', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\delegated',
       roles: ['LEXIS_DELEGATED_ADMIN'],
@@ -285,7 +317,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('uses backend granted actions for canPerform and roleless default route selection', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\reviewer',
       roles: [],
@@ -303,7 +335,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('prioritizes the review queue over retired summary when both actions are granted', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\reviewer',
       roles: [],
@@ -321,7 +353,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('routes provincial submitters with application access to application search before upload', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\submitter',
       roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
@@ -345,7 +377,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('routes application-submission-only users to the upload flow', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\submitter',
       roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
@@ -364,7 +396,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('routes report-only users to their first available report', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\reporter',
       roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
@@ -383,7 +415,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('does not route unknown roles to federal search', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\federal',
       roles: ['LEXIS_UNKNOWN_ROLE'],
@@ -436,6 +468,7 @@ describe('Auth Provider Role Matrix', () => {
         welcomeTarget: null,
         legacyPath: null,
         grantedActions: ['/applicationsReview'],
+        forestClientNumber: null,
       })
     })
 
@@ -472,6 +505,7 @@ describe('Auth Provider Role Matrix', () => {
         welcomeTarget: null,
         legacyPath: null,
         grantedActions: ['/lexisAgentAdmin'],
+        forestClientNumber: null,
       })
     })
 
@@ -481,7 +515,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('sets login state from authenticated flag only', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
+    mockSessionCapabilities({
       authenticated: false,
       principal: null,
       roles: ['READ_ONLY'],

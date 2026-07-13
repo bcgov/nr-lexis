@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +6,7 @@ import ProvincialApplicationCreatePage from '@/pages/ProvincialApplicationCreate
 import ProvincialExemptionCreatePage from '@/pages/ProvincialExemptionCreate'
 import ProvincialOfferCreatePage from '@/pages/ProvincialOfferCreate'
 import {
+  fetchProvincialExemptionCreatePreview,
   submitProvincialApplicationCreate,
   submitProvincialExemptionCreate,
   submitProvincialOfferCreate,
@@ -14,7 +15,6 @@ import {
 import {
   fetchProvincialApplicationOptions,
   fetchProvincialExemptionOptions,
-  fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
 import {
   fetchApplicationClientContacts,
@@ -27,11 +27,12 @@ import {
 import {
   fetchOfferApplicationDetails,
   fetchOfferApplicationVolume,
+  fetchOfferClientData,
   fetchOfferPackageList,
   fetchOfferPackageVolume,
 } from '@/service/provincial-offer-create-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
-import { formatLocalIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate } from '@/utils/date'
 import { useAuth } from '@/context/auth/useAuth'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
@@ -48,10 +49,10 @@ vi.mock('react-router-dom', async () => {
 vi.mock('@/service/search-options-service', () => ({
   fetchProvincialApplicationOptions: vi.fn(),
   fetchProvincialExemptionOptions: vi.fn(),
-  fetchProvincialOfferOptions: vi.fn(),
 }))
 
 vi.mock('@/service/create-submit-service', () => ({
+  fetchProvincialExemptionCreatePreview: vi.fn(),
   submitProvincialApplicationCreate: vi.fn(),
   submitProvincialExemptionCreate: vi.fn(),
   submitProvincialOfferCreate: vi.fn(),
@@ -70,6 +71,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
 vi.mock('@/service/provincial-offer-create-service', () => ({
   fetchOfferApplicationDetails: vi.fn(),
   fetchOfferApplicationVolume: vi.fn(),
+  fetchOfferClientData: vi.fn(),
   fetchOfferPackageList: vi.fn(),
   fetchOfferPackageVolume: vi.fn(),
 }))
@@ -86,8 +88,8 @@ Element.prototype.scrollIntoView = vi.fn()
 
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
-const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
 const mockedSubmitProvincialApplicationCreate = vi.mocked(submitProvincialApplicationCreate)
+const mockedFetchProvincialExemptionCreatePreview = vi.mocked(fetchProvincialExemptionCreatePreview)
 const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
 const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
@@ -98,6 +100,7 @@ const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
 )
 const mockedFetchOfferApplicationDetails = vi.mocked(fetchOfferApplicationDetails)
 const mockedFetchOfferApplicationVolume = vi.mocked(fetchOfferApplicationVolume)
+const mockedFetchOfferClientData = vi.mocked(fetchOfferClientData)
 const mockedFetchOfferPackageList = vi.mocked(fetchOfferPackageList)
 const mockedFetchOfferPackageVolume = vi.mocked(fetchOfferPackageVolume)
 const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
@@ -119,6 +122,16 @@ const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) =
   await userEvent.type(combobox, optionName)
   const options = await screen.findAllByRole('option', { name: optionName })
   await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+}
+
+const clearComboBox = async (combobox: HTMLElement) => {
+  const clearButton = combobox
+    .closest('.cds--combo-box')
+    ?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear selected item"], button[title="Clear selected item"]',
+    )
+  expect(clearButton).toBeTruthy()
+  await userEvent.click(clearButton as HTMLButtonElement)
 }
 
 const selectApplicationCreateTab = async (name: string) => {
@@ -144,13 +157,28 @@ describe('Create Page Core Flows', () => {
       currentSchedules: [{ value: '987', label: '2026-01-11' }],
     } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
-      exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
-      exemptionStatuses: [{ value: 'NEW', label: 'New' }],
-      regions: [{ value: '11', label: 'Cariboo' }],
+      exemptionTypes: [
+        { value: 'M', label: 'Ministerial' },
+        { value: 'O', label: 'Order in Council' },
+        { value: 'B', label: 'Blanket OIC' },
+        { value: 'SECTION_1', label: 'Section 1' },
+      ],
+      exemptionStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'ACT', label: 'Active' },
+      ],
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
     } satisfies Awaited<ReturnType<typeof fetchProvincialExemptionOptions>>)
-    mockedFetchProvincialOfferOptions.mockResolvedValue({
-      regions: [{ value: '11', label: 'Cariboo' }],
-    })
+    mockedFetchProvincialExemptionCreatePreview.mockImplementation(async (applicationNumbers) => ({
+      exemptionTypeCode: 'M',
+      exemptionStatusCode: 'NEW',
+      approvedVolume: '250.5',
+      expiryDate: '2026-06-30',
+      applicationNumbers,
+    }))
     mockedFetchApplicationClientLocations.mockResolvedValue([
       { locationCode: '00', locationName: '00', selected: false },
       { locationCode: '01', locationName: '01 - MAIN LOCATION', selected: false },
@@ -179,8 +207,13 @@ describe('Create Page Core Flows', () => {
       speciesGradeCode: 'H/SA',
       advertisingDate: '03/01/2026',
       teacReviewDate: '',
+      region: 'Cariboo Natural Resource Region',
     })
     mockedFetchOfferApplicationVolume.mockResolvedValue('100.0')
+    mockedFetchOfferClientData.mockResolvedValue({
+      clientNumber: '00077881',
+      companyName: 'Authoritative Buyer Ltd.',
+    })
     mockedFetchOfferPackageList.mockResolvedValue(['PKG-9'])
     mockedFetchOfferPackageVolume.mockResolvedValue('95.0')
     mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
@@ -225,6 +258,27 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Create provincial application' }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('region', { name: 'Application summary' })).toBeInTheDocument()
+    const applicationFormActions = screen.getByRole('group', {
+      name: 'Application form actions',
+    })
+    expect(
+      within(applicationFormActions)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Cancel', 'Save'])
+    expect(within(applicationFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
+      'type',
+      'button',
+    )
+    expect(within(applicationFormActions).getByRole('button', { name: 'Save' })).toHaveAttribute(
+      'type',
+      'button',
+    )
     const newApplicationState = screen.getByRole('group', { name: 'New application state' })
     expect(within(newApplicationState).getByText('Application number')).toBeInTheDocument()
     expect(within(newApplicationState).getByText('Status')).toBeInTheDocument()
@@ -253,6 +307,7 @@ describe('Create Page Core Flows', () => {
     const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
+    expect(screen.queryByRole('dialog', { name: 'Confirm application accuracy' })).toBeNull()
 
     expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith({
@@ -282,6 +337,77 @@ describe('Create Page Core Flows', () => {
       comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
+  })
+
+  it('requires and resets application accuracy confirmation for a provincial submitter', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+          orgUnitNo: '11',
+        }),
+      }),
+    )
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('906'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const saveButton = await screen.findByRole('button', { name: 'Save' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+    await userEvent.click(saveButton)
+
+    const firstDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    const firstAcknowledgement = within(firstDialog).getByRole('checkbox', { name: 'I Agree' })
+    const firstConfirm = within(firstDialog).getByRole('button', { name: 'Save application' })
+    expect(firstAcknowledgement).not.toBeChecked()
+    expect(firstConfirm).toBeDisabled()
+    await userEvent.click(firstConfirm)
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+
+    await userEvent.click(firstAcknowledgement)
+    expect(firstConfirm).toBeEnabled()
+    await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+      ).not.toBeInTheDocument(),
+    )
+
+    await userEvent.click(saveButton)
+    const reopenedDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    const reopenedAcknowledgement = within(reopenedDialog).getByRole('checkbox', {
+      name: 'I Agree',
+    })
+    expect(reopenedAcknowledgement).not.toBeChecked()
+    await userEvent.click(reopenedAcknowledgement)
+    await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Save application' }))
+
+    await waitFor(() => expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(1))
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/906')
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+      ).not.toBeInTheDocument(),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const postSaveDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    expect(within(postSaveDialog).getByRole('checkbox', { name: 'I Agree' })).not.toBeChecked()
   })
 
   it('converts provincial application term months and years to total days on submit', async () => {
@@ -457,7 +583,7 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
-  it('prefills new provincial applications with legacy defaults and next listing date', async () => {
+  it('prefills new provincial applications with safe legacy defaults and next listing date', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'H', label: 'Harvested Timber' }],
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
@@ -483,19 +609,120 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const today = formatLocalIsoDate(new Date())
+    const today = formatBusinessIsoDate()
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Product type' })).toHaveValue('Harvested Timber')
       expect(screen.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue('Surplus')
-      expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue(
-        'Cariboo Natural Resource Region',
-      )
+      expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue('')
       expect(screen.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
         today,
       )
+      expect(screen.getByRole('textbox', { name: 'Application term days' })).toHaveValue('180')
       expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue(today)
       expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-07-01')
     })
+
+    expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
+    await selectApplicationCreateTab('Clients')
+    expect(screen.getByRole('textbox', { name: 'Owner client number' })).not.toHaveAttribute(
+      'readonly',
+    )
+  })
+
+  it('locks a scoped submitter to its authoritative owner and defaults its valid org unit', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+          orgUnitNo: '1910',
+        }),
+      }),
+    )
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
+      exemptionReasons: [{ value: 'S', label: 'Surplus' }],
+      applicationStatuses: [],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1910', label: 'West Coast Natural Resource Region' },
+      ],
+      currentSchedules: [{ value: '1001', label: '2026-07-01' }],
+    } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00099999&ownerClientLocationCode=99&region=1903',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue(
+        'West Coast Natural Resource Region',
+      )
+    })
+    expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
+    expect(screen.getByRole('textbox', { name: 'Application term days' })).toHaveValue('180')
+
+    await selectApplicationCreateTab('Clients')
+    expect(screen.getByRole('textbox', { name: 'Owner client number' })).toHaveValue('00077881')
+    expect(screen.getByRole('textbox', { name: 'Owner client number' })).toHaveAttribute('readonly')
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Owner client location' })).toHaveValue('00')
+    })
+    expect(screen.getByRole('combobox', { name: 'Owner client location' })).toBeDisabled()
+    expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
+  })
+
+  it('requires explicit region selection when a scoped org unit is not authoritative', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+          orgUnitNo: '1999',
+        }),
+      }),
+    )
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
+      exemptionReasons: [{ value: 'S', label: 'Surplus' }],
+      applicationStatuses: [],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
+      currentSchedules: [{ value: '1001', label: '2026-07-01' }],
+    } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
+
+    render(
+      <MemoryRouter
+        initialEntries={['/provincial/application/create?region=1903&ownerClientNumber=00099999']}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const region = await screen.findByRole('combobox', { name: 'Region' })
+    await waitFor(() => expect(region).toHaveValue(''))
+    expect(region).toBeEnabled()
   })
 
   it('allows manual owner contact entry when lookup has no contacts', async () => {
@@ -629,18 +856,53 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create provincial exemption')
+    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    const exemptionDetails = screen.getByRole('group', { name: 'Exemption details' })
+    expect(exemptionDetails).toHaveClass('create-form-section')
+    expect(exemptionDetails.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
+    expect(screen.getByLabelText('Approved volume (m³)')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Approved volumeume (m³)')).not.toBeInTheDocument()
+    const exemptionFormActions = screen.getByRole('group', { name: 'Exemption form actions' })
+    expect(
+      within(exemptionFormActions)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Cancel', 'Save'])
+    expect(within(exemptionFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
+      'type',
+      'button',
+    )
+    expect(within(exemptionFormActions).getByRole('button', { name: 'Save' })).toHaveAttribute(
+      'type',
+      'button',
+    )
     const newExemptionState = screen.getByRole('group', { name: 'New exemption state' })
     expect(within(newExemptionState).getByText('Exemption number')).toBeInTheDocument()
     expect(within(newExemptionState).getAllByText('New')).not.toHaveLength(0)
     expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Owner client number' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: 'Applicant client number' }),
+    ).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('250.5'))
+    expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenCalledWith(['321', '654'])
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial'),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('New'),
+    )
+    expect(screen.getByLabelText('Expiry date (YYYY-MM-DD)')).toHaveValue('2026-06-30')
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
     )
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-02-01')
+    await userEvent.clear(screen.getByLabelText('Expiry date (YYYY-MM-DD)'))
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2026-12-31')
+    await userEvent.clear(screen.getByLabelText(/Approved Volume/i))
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
 
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
@@ -654,16 +916,358 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
       applicationNumber: '321',
       linkedApplicationNumbers: ['321', '654'],
+      exemptionNumber: '',
       exemptionTypeCode: 'SECTION_1',
       exemptionStatusCode: 'NEW',
-      ownerClientNumber: '00033333',
-      applicantClientNumber: '00044444',
       approvalDate: '2026-02-01',
       expiryDate: '2026-12-31',
       approvedVolume: '500',
-      otherConditions: 'Linked applications: 321, 654',
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
+      otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777')
+  })
+
+  it('submits a standalone Ministerial exemption without an application', async () => {
+    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-900'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('combobox', { name: 'Application number (optional)' }),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial'),
+    )
+    const statusSelect = screen.getByRole('combobox', { name: 'Exemption status' })
+    expect(statusSelect).toHaveValue('New')
+    expect(statusSelect).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
+      applicationNumber: '',
+      linkedApplicationNumbers: [],
+      exemptionNumber: '',
+      exemptionTypeCode: 'M',
+      exemptionStatusCode: 'NEW',
+      approvalDate: '',
+      expiryDate: '',
+      approvedVolume: '250.5',
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
+      otherConditions: '',
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-900')
+  })
+
+  it('enforces active status and custom number when selecting OIC', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Exemption type' }),
+      'Order in Council',
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('Active')
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toBeDisabled()
+    expect(screen.getByLabelText('Exemption number')).toHaveAttribute('maxlength', '8')
+    expect(
+      screen.getByRole('combobox', { name: 'Application number (optional)' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Enable fee rate override')).toBeInTheDocument()
+  })
+
+  it('submits standalone Blanket OIC fields and hides regular applications', async () => {
+    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('BOIC-1'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Exemption type' }),
+      'Blanket OIC',
+    )
+    expect(
+      screen.queryByRole('combobox', { name: 'Application number (optional)' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('Active')
+    expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('9999999.9')
+
+    await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
+    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
+    const regionComboBox = screen.getByRole('combobox', { name: /^Regions/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
+    )
+    await userEvent.click(screen.getByLabelText('Enable fee rate override'))
+    await userEvent.type(screen.getByLabelText('Fee rate ($/m³)'), '999.99')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
+      applicationNumber: '',
+      linkedApplicationNumbers: [],
+      exemptionNumber: 'BOIC-1',
+      exemptionTypeCode: 'B',
+      exemptionStatusCode: 'ACT',
+      approvalDate: '2026-07-01',
+      expiryDate: '2027-07-01',
+      approvedVolume: '9999999.9',
+      enableRateOverride: true,
+      feeRate: '999.99',
+      regionNumbers: ['1903'],
+      otherConditions: '',
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/BOIC-1')
+  })
+
+  it('preserves operator volume and clears only the Blanket OIC sentinel', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
+    const volumeInput = screen.getByLabelText('Approved volume (m³)')
+    await userEvent.type(volumeInput, '125.5')
+    await chooseComboBoxOption(typeSelect, 'Blanket OIC')
+    expect(volumeInput).toHaveValue('125.5')
+    await chooseComboBoxOption(typeSelect, 'Ministerial')
+    expect(volumeInput).toHaveValue('125.5')
+
+    await userEvent.clear(volumeInput)
+    await chooseComboBoxOption(typeSelect, 'Blanket OIC')
+    expect(volumeInput).toHaveValue('9999999.9')
+    await chooseComboBoxOption(typeSelect, 'Order in Council')
+    expect(volumeInput).toHaveValue('')
+  })
+
+  it('rejects an OIC number beyond eight UTF-8 bytes', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Exemption type' }),
+      'Order in Council',
+    )
+    await userEvent.type(screen.getByLabelText('Exemption number'), 'ééééé')
+    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
+    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findAllByText('Exemption number must be 8 UTF-8 bytes or fewer.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps save disabled after unavailable option warning is dismissed', async () => {
+    mockedFetchProvincialExemptionOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionStatuses: [],
+      regions: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Required options not configured')).toBeInTheDocument()
+    const notification = screen
+      .getByText('Required options not configured')
+      .closest('[role="status"]')
+    const closeButton = notification?.querySelector<HTMLButtonElement>('button')
+    expect(closeButton).toBeTruthy()
+    await userEvent.click(closeButton as HTMLButtonElement)
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('fails application creation closed when authoritative options cannot be loaded', async () => {
+    mockedFetchProvincialApplicationOptions.mockRejectedValueOnce(new Error('private failure'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Options unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Product type' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(
+      screen.getByText('Options unavailable').closest('[role="status"]')?.querySelector('button'),
+    ).toBeNull()
+  })
+
+  it('preserves federal multi-application query prefill in the successful create payload', async () => {
+    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-FED-777'))
+
+    render(
+      <MemoryRouter
+        initialEntries={['/provincial/exemption/create?applications=301,302&source=federal']}
+      >
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    expect(
+      screen.getByText('Enter exemption details for the selected federal applications.'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Selected application numbers')).toHaveValue('301\n302')
+    expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
+
+    await waitFor(() => expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('250.5'))
+
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption type' }),
+      'Section 1',
+    )
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
+    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-02-01')
+    await userEvent.clear(screen.getByLabelText('Expiry date (YYYY-MM-DD)'))
+    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2026-12-31')
+    await userEvent.clear(screen.getByLabelText('Approved volume (m³)'))
+    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '500')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
+      applicationNumber: '301',
+      linkedApplicationNumbers: ['301', '302'],
+      exemptionNumber: '',
+      exemptionTypeCode: 'SECTION_1',
+      exemptionStatusCode: 'NEW',
+      approvalDate: '2026-02-01',
+      expiryDate: '2026-12-31',
+      approvedVolume: '500',
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
+      otherConditions: '',
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-FED-777')
+  })
+
+  it('blocks a direct federal prefill when federal application access is absent', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== 'viewFederalApplication',
+      }),
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={['/provincial/exemption/create?applications=301&source=federal']}
+      >
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Your session cannot create an exemption from the selected federal applications.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the selected applications cannot be previewed', async () => {
+    mockedFetchProvincialExemptionCreatePreview.mockRejectedValueOnce(
+      new Error('Application 321 must have a status of approved.'),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create?applications=321']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText('Application 321 must have a status of approved.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
+  it('hides blanket OIC creation from pure exemption approvers', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\exemption-approver',
+          roles: ['LEXIS_EXEMPTION_APPROVER'],
+        }),
+      }),
+    )
+    mockedFetchProvincialExemptionOptions.mockResolvedValue({
+      exemptionTypes: [
+        { value: 'SECTION_1', label: 'Section 1' },
+        { value: 'B', label: 'Blanket OIC' },
+      ],
+      exemptionStatuses: [{ value: 'NEW', label: 'New' }],
+      regions: [{ value: '11', label: 'Cariboo' }],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
+    await userEvent.click(typeSelect)
+
+    expect(await screen.findByRole('option', { name: 'Section 1' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Blanket OIC' })).not.toBeInTheDocument()
   })
 
   it('blocks provincial exemption submit when status is missing', async () => {
@@ -679,11 +1283,13 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create provincial exemption')
+    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
     )
+    await clearComboBox(screen.getByRole('combobox', { name: 'Exemption status' }))
+    await userEvent.clear(screen.getByLabelText(/Approved Volume/i))
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -704,12 +1310,13 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create provincial exemption')
+    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
     )
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
+    await userEvent.clear(screen.getByLabelText(/Approved Volume/i))
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '121212122')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -720,12 +1327,20 @@ describe('Create Page Core Flows', () => {
   })
 
   it('submits provincial offer form and navigates to details', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\approver',
+          roles: ['APPLICATION_APPROVER'],
+        }),
+      }),
+    )
     mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8080'))
 
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&offeringClientNumber=00099999&region=11',
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&offeringClientNumber=00099999&region=forged&purchaseOfferDate=1999-01-01&offerWithdrawalDate=2026-03-20&withdrawReason=forged',
         ]}
       >
         <Routes>
@@ -734,28 +1349,58 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Provincial offers')
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    const offerFormActions = screen.getByRole('group', { name: 'Offer form actions' })
+    expect(
+      within(offerFormActions)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Cancel', 'Save'])
+    expect(within(offerFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
+      'type',
+      'button',
+    )
+    expect(within(offerFormActions).getByRole('button', { name: 'Save' })).toHaveAttribute(
+      'type',
+      'button',
+    )
     const newOfferState = screen.getByRole('group', { name: 'New offer state' })
     expect(within(newOfferState).getByText('Offer number')).toBeInTheDocument()
     expect(within(newOfferState).getByText('New')).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /offer number/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Application details' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Offering company details' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Offer details' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Offer withdrawals' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Approval' })).toBeInTheDocument()
+    const offerSections = [
+      screen.getByRole('group', { name: 'Application details' }),
+      screen.getByRole('group', { name: 'Offering company details' }),
+      screen.getByRole('group', { name: 'Offer details' }),
+      screen.getByRole('group', { name: 'Offer withdrawals' }),
+      screen.getByRole('group', { name: 'Approval' }),
+    ]
+    expect(offerSections[0].closest('.cds--tile')).toHaveClass('create-form-tile')
+    for (const section of offerSections) {
+      expect(section).toHaveClass('create-form-section')
+      expect(section.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
+    }
     expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeEnabled()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
     expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
     expect(screen.getByDisplayValue('H/SA')).toBeInTheDocument()
     expect(screen.getByDisplayValue('03/01/2026')).toBeInTheDocument()
+    expect(screen.getByLabelText('Region')).toHaveValue('Cariboo Natural Resource Region')
+    expect(screen.getByLabelText('Region')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer received date')).toHaveValue(formatBusinessIsoDate())
+    expect(screen.getByLabelText('Offer received date')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer withdrawal date')).toHaveValue('')
+    expect(screen.getByLabelText('Offer withdrawal date')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveValue('')
+    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offering client number')).not.toHaveAttribute('readonly')
+    expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Offer remarks')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Company'), 'Example Lumber')
     await userEvent.type(screen.getByLabelText('Contact name'), 'Alex Example')
     await userEvent.type(screen.getByLabelText('Offer volume (m³)'), '99.9')
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.type(screen.getByLabelText('Offer received date'), '2026-03-10')
-    await userEvent.type(screen.getByLabelText('Offer withdrawal date'), '2026-03-20')
-    await userEvent.type(screen.getByLabelText('Offer withdrawal reason'), 'Withdrawn by buyer')
     await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
     await userEvent.type(screen.getByLabelText('Offer conditions / remarks'), 'No partial loads')
     await userEvent.type(screen.getByLabelText('Offer remarks'), 'Ready for review')
@@ -774,12 +1419,8 @@ describe('Create Page Core Flows', () => {
         offeringClientNumber: '00099999',
         companyName: 'Example Lumber',
         contactName: 'Alex Example',
-        region: '11',
         offerVolume: '99.9',
         purchaseOfferAmount: '25000',
-        purchaseOfferDate: '2026-03-10',
-        offerWithdrawalDate: '2026-03-20',
-        withdrawReason: 'Withdrawn by buyer',
         teacReviewDate: '',
         fairOfferIndicator: 'N',
         validOfferIndicator: 'Y',
@@ -792,6 +1433,131 @@ describe('Create Page Core Flows', () => {
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080')
   }, 15000)
+
+  it('uses the authoritative scoped client and non-approver offer defaults', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\buyer',
+          roles: ['PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+        }),
+      }),
+    )
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8084'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&offeringClientNumber=00099999&companyName=Scoped%20Buyer&contactName=Buyer%20Contact&region=11&pickupLocation=Yard&purchaseOfferAmount=250&purchaseOfferDate=2026-03-10&teacReviewDate=not-a-date&fairOfferIndicator=Y&validOfferIndicator=N&approvalIndicator=Y&offerRemark=forged',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    const clientNumber = await screen.findByDisplayValue('00077881')
+    expect(clientNumber).toHaveAttribute('readonly')
+    expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
+    expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
+    expect(screen.queryByDisplayValue('Scoped Buyer')).not.toBeInTheDocument()
+    const contactName = screen.getByLabelText('Contact name')
+    expect(contactName).toHaveValue('')
+    expect(screen.queryByDisplayValue('Buyer Contact')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('TEAC review date')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Fair market value')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Valid offer')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer approved')).toHaveAttribute('readonly')
+    expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
+    await userEvent.type(contactName, 'Buyer Contact')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offeringClientNumber: '00077881',
+          companyName: 'Authoritative Buyer Ltd.',
+          contactName: 'Buyer Contact',
+          teacReviewDate: '',
+          fairOfferIndicator: 'N',
+          validOfferIndicator: 'Y',
+          approvalIndicator: 'N',
+          offerRemark: '',
+        }),
+      )
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8084')
+  })
+
+  it('keeps a dual-role approver scoped to its authoritative offering client', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\scoped-approver',
+          roles: ['APPLICATION_APPROVER', 'PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+        }),
+      }),
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&offeringClientNumber=00099999',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    expect(await screen.findByDisplayValue('00077881')).toHaveAttribute('readonly')
+    expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
+    expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Offer remarks')).toBeInTheDocument()
+  })
+
+  it('fails closed when a scoped offering company cannot be loaded', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\buyer',
+          roles: ['PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+        }),
+      }),
+    )
+    mockedFetchOfferClientData.mockResolvedValue(null)
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Forged%20Company&contactName=Forged%20Contact&region=11&pickupLocation=Yard&purchaseOfferAmount=250&purchaseOfferDate=2026-03-10',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Offering client unavailable')).toBeInTheDocument()
+    expect(screen.getByLabelText('Company')).toHaveValue('')
+    expect(screen.getByLabelText('Contact name')).toHaveValue('')
+    expect(screen.queryByDisplayValue('Forged Company')).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue('Forged Contact')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findAllByText('Company name is required.')).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
 
   it('uses create offer query prefill for company, contact, pickup, and package options', async () => {
     mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8081'))
@@ -810,7 +1576,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Provincial offers')
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Bell Pole Company')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Dave Kohlen')).toBeInTheDocument()
@@ -837,11 +1603,10 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Provincial offers')
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.type(screen.getByLabelText('Offer received date'), '2026-03-10')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
@@ -871,13 +1636,12 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Provincial offers')
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
     expect(await screen.findByDisplayValue('No Packages')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeDisabled()
     expect(screen.getByDisplayValue('100.0')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.type(screen.getByLabelText('Offer received date'), '2026-03-10')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {

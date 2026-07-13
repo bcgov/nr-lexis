@@ -57,14 +57,16 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
                 FROM EXPORT_EXEMPTION_APPLICATION EEA
                WHERE EEA.EXPORT_SCHEDULE_ID = ES.EXPORT_SCHEDULE_ID) AS APPLICATION_COUNT
         FROM EXPORT_SCHEDULE ES
-       WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)
+       WHERE ES.ADVERTISING_DATE >=
+             TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Vancouver' AS DATE))
        ORDER BY ES.ADVERTISING_DATE ASC
       """;
   private static final String COUNT_UPCOMING_EXPORT_SCHEDULES =
       """
       SELECT COUNT(*)
         FROM EXPORT_SCHEDULE ES
-       WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)
+       WHERE ES.ADVERTISING_DATE >=
+             TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Vancouver' AS DATE))
       """;
   private static final String FIND_UPCOMING_EXPORT_SCHEDULES_PAGE =
       FIND_UPCOMING_EXPORT_SCHEDULES + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
@@ -142,8 +144,12 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     super(jdbcTemplate);
   }
 
-  public List<CurrentScheduleRow> findCurrentSchedules() {
-    return queryCursorProcedure(
+  /**
+   * Loads the authoritative current advertising-period boundary without converting an Oracle
+   * failure into an empty schedule list.
+   */
+  public List<CurrentScheduleRow> findCurrentSchedulesRequired() {
+    return queryCursorProcedureRequired(
         FIND_CURRENT_SCHEDULES,
         null,
         1,
@@ -270,48 +276,50 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return loadOrgUnitOptions(true);
+    return loadOrgUnitOptionsRequired(true);
   }
 
   public List<CodeNameDto> loadReportJurisdictionOptions() {
-    return withAll(withoutReserveJurisdiction(loadCodeNameOptions(FIND_ALL_JURISDICTION_CODES)));
+    return withAll(
+        withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadBiweeklyJurisdictionOptions() {
-    return withAll(withoutReserveJurisdiction(loadCodeNameOptions(FIND_ALL_JURISDICTION_CODES)));
+    return withAll(
+        withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadTeacJurisdictionOptions() {
-    return withoutReserveJurisdiction(loadCodeNameOptions(FIND_ALL_JURISDICTION_CODES));
+    return withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES));
   }
 
   public List<CodeNameDto> loadReportExemptionTypeOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_EXEMPTION_TYPE_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES));
   }
 
   public List<CodeNameDto> loadTenureExemptionTypeOptions() {
-    return withTrailingAll(loadCodeNameOptions(FIND_ALL_EXEMPTION_TYPE_CODES));
+    return withTrailingAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES));
   }
 
   public List<CodeNameDto> loadReportExemptionReasonOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_EXEMPTION_REASON_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_REASON_CODES));
   }
 
   public List<CodeNameDto> loadReportExemptionStatusOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_EXEMPTION_STATUS_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_STATUS_CODES));
   }
 
   public List<CodeNameDto> loadReportGrowthTypeOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_GROWTH_TYPE_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_GROWTH_TYPE_CODES));
   }
 
   public List<CodeNameDto> loadReportPermitStatusOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_PERMIT_STATUS_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_PERMIT_STATUS_CODES));
   }
 
   public List<CodeNameDto> loadReportDestinationCountryOptions() {
     List<CodeNameDto> options =
-        queryCursorProcedure(
+        queryCursorProcedureFailClosed(
                 FIND_COUNTRY_GROUP,
                 cs -> cs.setInt(1, 1),
                 2,
@@ -319,18 +327,15 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
                     new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")))
             .stream()
             .toList();
-    if (options.isEmpty()) {
-      options = fallbackReportDestinationCountryOptions();
-    }
     return withAll(options);
   }
 
   public List<CodeNameDto> loadAllReportDestinationCountryOptions() {
-    return loadCodeNameOptions(FIND_ALL_COUNTRY_CODES);
+    return loadCodeNameOptionsRequired(FIND_ALL_COUNTRY_CODES);
   }
 
   public List<CodeNameDto> loadReportPortOfExportOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_PORTS_OF_EXPORT));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_PORTS_OF_EXPORT));
   }
 
   public Optional<String> findDefaultRegionForForestClientNumber(String forestClientNumber) {
@@ -398,7 +403,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   private Optional<String> findClientAcronym(String forestClientNumber) {
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_FOREST_CLIENT,
         cs -> cs.setString(1, forestClientNumber),
         2,
@@ -411,7 +416,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_ORG_UNIT_BY_CODE,
         cs -> cs.setString(1, normalizedOrgUnitCode),
         2,
@@ -438,14 +443,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return options.stream()
         .filter(option -> !RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
         .toList();
-  }
-
-  private List<CodeNameDto> fallbackReportDestinationCountryOptions() {
-    return List.of(
-        new CodeNameDto("US", "United States"),
-        new CodeNameDto("JP", "Japan"),
-        new CodeNameDto("CN", "China"),
-        new CodeNameDto("NZ", "New Zealand"));
   }
 
   public record CurrentScheduleRow(Long exportScheduleId, LocalDate advertisingDate) {}

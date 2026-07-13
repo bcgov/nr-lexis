@@ -5,6 +5,7 @@ import { recordOrEmpty } from '@/utils/record'
 export type FeePolicyRow = {
   id: string
   effectiveDate: string
+  orgUnitNo: string
   orgUnitCode: string
   orgUnitName: string
   policyPercentage: string
@@ -27,8 +28,7 @@ export type FilPolicyRow = {
 export type UpsertFeePolicyRequest = {
   id?: string | null
   effectiveDate: string
-  orgUnitCode: string
-  orgUnitName: string
+  orgUnitNo: string
   policyPercentage: string
 }
 
@@ -67,9 +67,8 @@ const normalizeFeePolicyRow = (row: unknown): FeePolicyRow => {
   return {
     id: asString(source.id || source.policyId || source.lexisFeePolicyId) || createRowId(),
     effectiveDate: asString(source.effectiveDate || source.policyEffectiveDate),
-    orgUnitCode: asString(
-      source.orgUnitCode || source.regionCode || source.orgUnitNo,
-    ).toUpperCase(),
+    orgUnitNo: asString(source.orgUnitNo || source.regionNumber),
+    orgUnitCode: asString(source.orgUnitCode || source.regionCode).toUpperCase(),
     orgUnitName: asString(source.orgUnitName || source.regionName),
     policyPercentage: asString(
       source.policyPercentage || source.feeIncreasePercentage || source.percentIncrease,
@@ -155,8 +154,7 @@ export const fetchFeePolicies = async (): Promise<FeePolicyRow[]> => {
 export const upsertFeePolicy = async (request: UpsertFeePolicyRequest): Promise<FeePolicyRow[]> => {
   const payload = {
     effectiveDate: request.effectiveDate,
-    orgUnitCode: request.orgUnitCode.trim().toUpperCase(),
-    orgUnitName: request.orgUnitName.trim(),
+    orgUnitNo: request.orgUnitNo.trim(),
     policyPercentage: request.policyPercentage.trim(),
   }
 

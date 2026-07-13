@@ -1,9 +1,11 @@
 package ca.bc.gov.mof.lexis.service.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -17,11 +19,27 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionOperations;
 
 @ExtendWith(MockitoExtension.class)
 class LexisAdminScheduleServiceTest {
@@ -31,9 +49,22 @@ class LexisAdminScheduleServiceTest {
 
   @Mock private LexisReportScheduleRepository repository;
 
+  private LexisAdminScheduleService newService() {
+    return new LexisAdminScheduleService(repository, FIXED_CLOCK, immediateTransactions());
+  }
+
+  private static TransactionOperations immediateTransactions() {
+    return new TransactionOperations() {
+      @Override
+      public <T> T execute(TransactionCallback<T> action) {
+        return action.doInTransaction(new SimpleTransactionStatus());
+      }
+    };
+  }
+
   @Test
   void upcomingSchedulesShouldDelegateToRepository() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     ExportScheduleRowDto row =
         new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
     when(repository.findUpcomingExportSchedules()).thenReturn(List.of(row));
@@ -43,7 +74,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void upcomingSchedulesPageShouldDelegatePagingToRepository() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     ExportScheduleRowDto row =
         new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
     when(repository.findUpcomingExportSchedules(1, 50)).thenReturn(List.of(row));
@@ -59,7 +90,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void upcomingSchedulesPageShouldNormalizeInvalidPaging() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     when(repository.findUpcomingExportSchedules(0, 100)).thenReturn(List.of());
     when(repository.countUpcomingExportSchedules()).thenReturn(0);
 
@@ -74,7 +105,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void upcomingSchedulesPageShouldCapPageSizeAtTwoHundred() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     when(repository.findUpcomingExportSchedules(2, 200)).thenReturn(List.of());
     when(repository.countUpcomingExportSchedules()).thenReturn(0);
 
@@ -88,7 +119,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void createScheduleShouldRejectPastAdvertisingDatesBeforeRepositoryMutation() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
 
     var result =
         service.createSchedule(
@@ -102,9 +133,35 @@ class LexisAdminScheduleServiceTest {
     verifyNoInteractions(repository);
   }
 
+  @ParameterizedTest
+  @MethodSource("missingRequiredScheduleDates")
+  void createScheduleShouldRejectEveryMissingDatabaseRequiredDate(
+      ExportScheduleCreateRequestDto request, String expectedMessage) {
+    LexisAdminScheduleService service = newService();
+
+    var result = service.createSchedule(request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo(expectedMessage);
+    verifyNoInteractions(repository);
+  }
+
+  @ParameterizedTest
+  @MethodSource("missingRequiredScheduleDates")
+  void updateScheduleShouldRejectEveryMissingDatabaseRequiredDateBeforeLookup(
+      ExportScheduleCreateRequestDto request, String expectedMessage) {
+    LexisAdminScheduleService service = newService();
+
+    var result = service.updateSchedule(1001L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo(expectedMessage);
+    verifyNoInteractions(repository);
+  }
+
   @Test
   void createScheduleShouldRejectOfferWithdrawalAfterOfferEndBeforeRepositoryMutation() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         new ExportScheduleCreateRequestDto(
             LocalDate.of(2026, 7, 1),
@@ -123,7 +180,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void createScheduleShouldRejectTeacAfterOfferEndBeforeRepositoryMutation() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         new ExportScheduleCreateRequestDto(
             LocalDate.of(2026, 7, 1),
@@ -142,7 +199,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void createScheduleShouldRejectDuplicateAdvertisingDate() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
             LocalDate.of(2026, 7, 1),
@@ -159,7 +216,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void createScheduleShouldInsertValidSchedule() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
             LocalDate.of(2026, 7, 1),
@@ -186,8 +243,8 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
-  void createScheduleShouldReturnValidationMessageForDatabaseConstraintViolation() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+  void createScheduleShouldTranslateDuplicateKeyToAdvertisingDateCollision() {
+    LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
             LocalDate.of(2026, 7, 1),
@@ -195,19 +252,36 @@ class LexisAdminScheduleServiceTest {
             LocalDate.of(2026, 7, 15));
     when(repository.advertisingDateExists(LocalDate.of(2026, 7, 1))).thenReturn(false);
     when(repository.insertExportSchedule(request))
-        .thenThrow(new DataIntegrityViolationException("constraint"));
+        .thenThrow(new DuplicateKeyException("unique constraint"));
 
     var result = service.createSchedule(request);
 
     assertThat(result.success()).isFalse();
     assertThat(result.message())
-        .isEqualTo("Export schedule dates are invalid or conflict with an existing schedule.");
+        .isEqualTo("A schedule already exists for that advertising date.");
     assertThat(result.schedule()).isNull();
   }
 
   @Test
+  void createScheduleShouldFailClosedWhenAdvertisingDateLookupFails() {
+    LexisAdminScheduleService service = newService();
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 15));
+    when(repository.advertisingDateExists(request.advertisingDate()))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+
+    assertThatThrownBy(() -> service.createSchedule(request))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+    verify(repository, never()).insertExportSchedule(any());
+  }
+
+  @Test
   void updateScheduleShouldRejectReferencedSchedule() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     when(repository.findExportScheduleById(1001L))
         .thenReturn(
             Optional.of(
@@ -231,7 +305,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void updateScheduleShouldRejectInvalidScheduleIdBeforeRepositoryLookup() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
 
     var result =
         service.updateSchedule(
@@ -248,7 +322,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void updateScheduleShouldRejectDuplicateAdvertisingDateBeforeMutation() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
             LocalDate.of(2026, 7, 15),
@@ -272,7 +346,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void updateScheduleShouldUpdateFutureUnreferencedSchedule() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
             LocalDate.of(2026, 7, 15),
@@ -305,8 +379,41 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
-  void updateScheduleShouldReturnValidationMessageForDatabaseConstraintViolation() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+  void updateScheduleShouldAllowUnchangedAdvertisingDateOwnedBySameSchedule() {
+    LexisAdminScheduleService service = newService();
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 8),
+            LocalDate.of(2026, 7, 22));
+    ExportScheduleRowDto existing =
+        new ExportScheduleRowDto(
+            1001L, request.advertisingDate(), null, null, null, null, null);
+    ExportScheduleRowDto updated =
+        new ExportScheduleRowDto(
+            1001L,
+            request.advertisingDate(),
+            request.applicationReceiptDate(),
+            request.offerReceiptDate(),
+            request.offerEndDate(),
+            request.offerWithdrawalDate(),
+            request.teacMeetingDate());
+    when(repository.findExportScheduleById(1001L)).thenReturn(Optional.of(existing));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.advertisingDateExistsForOtherSchedule(request.advertisingDate(), 1001L))
+        .thenReturn(false);
+    when(repository.updateExportSchedule(1001L, request)).thenReturn(updated);
+
+    var result = service.updateSchedule(1001L, request);
+
+    assertThat(result.success()).isTrue();
+    assertThat(result.schedule()).isEqualTo(updated);
+    verify(repository).updateExportSchedule(1001L, request);
+  }
+
+  @Test
+  void updateScheduleShouldPropagateNonDuplicateIntegrityViolation() {
+    LexisAdminScheduleService service = newService();
     ExportScheduleCreateRequestDto request =
         request(
             LocalDate.of(2026, 7, 15),
@@ -323,17 +430,14 @@ class LexisAdminScheduleServiceTest {
     when(repository.updateExportSchedule(1001L, request))
         .thenThrow(new DataIntegrityViolationException("constraint"));
 
-    var result = service.updateSchedule(1001L, request);
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.message())
-        .isEqualTo("Export schedule dates are invalid or conflict with an existing schedule.");
-    assertThat(result.schedule()).isNull();
+    assertThatThrownBy(() -> service.updateSchedule(1001L, request))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessage("constraint");
   }
 
   @Test
   void deleteScheduleShouldRejectPastSchedules() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     when(repository.findExportScheduleById(1001L))
         .thenReturn(
             Optional.of(
@@ -348,7 +452,7 @@ class LexisAdminScheduleServiceTest {
 
   @Test
   void deleteScheduleShouldRejectReferencedFutureScheduleBeforeDelete() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     when(repository.findExportScheduleById(1001L))
         .thenReturn(
             Optional.of(
@@ -365,8 +469,25 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
+  void deleteScheduleShouldFailClosedWhenUsageLookupFails() {
+    LexisAdminScheduleService service = newService();
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+
+    assertThatThrownBy(() -> service.deleteSchedule(1001L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+    verify(repository, never()).deleteExportSchedule(1001L);
+  }
+
+  @Test
   void deleteScheduleShouldDeleteFutureUnreferencedSchedule() {
-    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    LexisAdminScheduleService service = newService();
     when(repository.findExportScheduleById(1001L))
         .thenReturn(
             Optional.of(
@@ -381,6 +502,241 @@ class LexisAdminScheduleServiceTest {
     assertThat(result.message()).isEqualTo("Export schedule deleted.");
   }
 
+  @Test
+  void concurrentSameDateCreatesShouldInsertAtMostOneSchedule() throws Exception {
+    LexisAdminScheduleService service = newService();
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 8),
+            LocalDate.of(2026, 7, 22));
+    AtomicReference<Long> storedScheduleId = new AtomicReference<>();
+    AtomicInteger lookupCount = new AtomicInteger();
+    AtomicInteger insertCount = new AtomicInteger();
+    CountDownLatch firstLookupEntered = new CountDownLatch(1);
+    CountDownLatch releaseFirstLookup = new CountDownLatch(1);
+    CountDownLatch secondTaskStarted = new CountDownLatch(1);
+    CountDownLatch secondLookupEntered = new CountDownLatch(1);
+
+    when(repository.advertisingDateExists(request.advertisingDate()))
+        .thenAnswer(
+            invocation -> {
+              boolean exists = storedScheduleId.get() != null;
+              if (lookupCount.incrementAndGet() == 1) {
+                firstLookupEntered.countDown();
+                awaitOrFail(releaseFirstLookup);
+              } else {
+                secondLookupEntered.countDown();
+              }
+              return exists;
+            });
+    when(repository.insertExportSchedule(request))
+        .thenAnswer(
+            invocation -> {
+              int sequence = insertCount.incrementAndGet();
+              storedScheduleId.set(2000L + sequence);
+              return scheduleRow(2000L + sequence, request);
+            });
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      var first = executor.submit(() -> service.createSchedule(request));
+      assertThat(firstLookupEntered.await(5, TimeUnit.SECONDS)).isTrue();
+      var second =
+          executor.submit(
+              () -> {
+                secondTaskStarted.countDown();
+                return service.createSchedule(request);
+              });
+      assertThat(secondTaskStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(secondLookupEntered.await(250, TimeUnit.MILLISECONDS)).isFalse();
+
+      releaseFirstLookup.countDown();
+      var firstResult = first.get(5, TimeUnit.SECONDS);
+      var secondResult = second.get(5, TimeUnit.SECONDS);
+
+      assertThat(insertCount).hasValue(1);
+      assertThat(List.of(firstResult.success(), secondResult.success()))
+          .containsExactlyInAnyOrder(true, false);
+      verify(repository, times(1)).insertExportSchedule(request);
+    } finally {
+      releaseFirstLookup.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void concurrentCreateAndUpdateToSameDateShouldAllowOnlyOneWriter() throws Exception {
+    LexisAdminScheduleService service = newService();
+    LocalDate targetDate = LocalDate.of(2026, 7, 15);
+    ExportScheduleCreateRequestDto createRequest =
+        request(targetDate, LocalDate.of(2026, 7, 8), LocalDate.of(2026, 7, 22));
+    ExportScheduleCreateRequestDto updateRequest =
+        request(targetDate, LocalDate.of(2026, 7, 9), LocalDate.of(2026, 7, 23));
+    AtomicLong targetDateOwner = new AtomicLong();
+    AtomicInteger writeCount = new AtomicInteger();
+
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.advertisingDateExists(targetDate))
+        .thenAnswer(invocation -> targetDateOwner.get() != 0L);
+    when(repository.advertisingDateExistsForOtherSchedule(targetDate, 1001L))
+        .thenAnswer(
+            invocation ->
+                targetDateOwner.get() != 0L && targetDateOwner.get() != 1001L);
+    org.mockito.Mockito.lenient()
+        .when(repository.insertExportSchedule(createRequest))
+        .thenAnswer(
+            invocation -> {
+              if (!targetDateOwner.compareAndSet(0L, 2002L)) {
+                throw new AssertionError("Create wrote a duplicate advertising date");
+              }
+              writeCount.incrementAndGet();
+              return scheduleRow(2002L, createRequest);
+            });
+    org.mockito.Mockito.lenient()
+        .when(repository.updateExportSchedule(1001L, updateRequest))
+        .thenAnswer(
+            invocation -> {
+              if (!targetDateOwner.compareAndSet(0L, 1001L)) {
+                throw new AssertionError("Update wrote a duplicate advertising date");
+              }
+              writeCount.incrementAndGet();
+              return scheduleRow(1001L, updateRequest);
+            });
+
+    CountDownLatch ready = new CountDownLatch(2);
+    CountDownLatch start = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      var create =
+          executor.submit(
+              () -> {
+                ready.countDown();
+                awaitOrFail(start);
+                return service.createSchedule(createRequest);
+              });
+      var update =
+          executor.submit(
+              () -> {
+                ready.countDown();
+                awaitOrFail(start);
+                return service.updateSchedule(1001L, updateRequest);
+              });
+      assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+      start.countDown();
+
+      var createResult = create.get(5, TimeUnit.SECONDS);
+      var updateResult = update.get(5, TimeUnit.SECONDS);
+
+      assertThat(writeCount).hasValue(1);
+      assertThat(List.of(createResult.success(), updateResult.success()))
+          .containsExactlyInAnyOrder(true, false);
+    } finally {
+      start.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void mutationGuardShouldRemainHeldUntilTransactionCompletionReturns() throws Exception {
+    BlockingCompletionTransactions transactions = new BlockingCompletionTransactions();
+    LexisAdminScheduleService service =
+        new LexisAdminScheduleService(repository, FIXED_CLOCK, transactions);
+    ExportScheduleCreateRequestDto firstRequest =
+        request(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 8),
+            LocalDate.of(2026, 7, 22));
+    ExportScheduleCreateRequestDto secondRequest =
+        request(
+            LocalDate.of(2026, 8, 15),
+            LocalDate.of(2026, 8, 8),
+            LocalDate.of(2026, 8, 22));
+    AtomicInteger sequence = new AtomicInteger();
+    when(repository.advertisingDateExists(any())).thenReturn(false);
+    when(repository.insertExportSchedule(any()))
+        .thenAnswer(
+            invocation ->
+                scheduleRow(
+                    3000L + sequence.incrementAndGet(),
+                    invocation.getArgument(0, ExportScheduleCreateRequestDto.class)));
+
+    CountDownLatch secondTaskStarted = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      var first = executor.submit(() -> service.createSchedule(firstRequest));
+      assertThat(transactions.firstCompletionReached.await(5, TimeUnit.SECONDS)).isTrue();
+      var second =
+          executor.submit(
+              () -> {
+                secondTaskStarted.countDown();
+                return service.createSchedule(secondRequest);
+              });
+      assertThat(secondTaskStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(transactions.secondExecutionEntered.await(250, TimeUnit.MILLISECONDS)).isFalse();
+      verify(repository, times(1)).insertExportSchedule(any());
+
+      transactions.releaseFirstCompletion.countDown();
+      assertThat(first.get(5, TimeUnit.SECONDS).success()).isTrue();
+      assertThat(second.get(5, TimeUnit.SECONDS).success()).isTrue();
+      assertThat(transactions.secondExecutionEntered.getCount()).isZero();
+      verify(repository, times(2)).insertExportSchedule(any());
+    } finally {
+      transactions.releaseFirstCompletion.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  private static void awaitOrFail(CountDownLatch latch) {
+    try {
+      if (!latch.await(5, TimeUnit.SECONDS)) {
+        throw new AssertionError("Timed out waiting for concurrent schedule test");
+      }
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError("Interrupted while waiting for concurrent schedule test", ex);
+    }
+  }
+
+  private static ExportScheduleRowDto scheduleRow(
+      long scheduleId, ExportScheduleCreateRequestDto request) {
+    return new ExportScheduleRowDto(
+        scheduleId,
+        request.advertisingDate(),
+        request.applicationReceiptDate(),
+        request.offerReceiptDate(),
+        request.offerEndDate(),
+        request.offerWithdrawalDate(),
+        request.teacMeetingDate());
+  }
+
+  private static final class BlockingCompletionTransactions implements TransactionOperations {
+    private final AtomicInteger executions = new AtomicInteger();
+    private final CountDownLatch firstCompletionReached = new CountDownLatch(1);
+    private final CountDownLatch releaseFirstCompletion = new CountDownLatch(1);
+    private final CountDownLatch secondExecutionEntered = new CountDownLatch(1);
+
+    @Override
+    public <T> T execute(TransactionCallback<T> action) {
+      int execution = executions.incrementAndGet();
+      if (execution == 2) {
+        secondExecutionEntered.countDown();
+      }
+      T result = action.doInTransaction(new SimpleTransactionStatus());
+      if (execution == 1) {
+        // TransactionOperations returns only after its transaction has committed or rolled back.
+        firstCompletionReached.countDown();
+        awaitOrFail(releaseFirstCompletion);
+      }
+      return result;
+    }
+  }
+
   private static ExportScheduleCreateRequestDto request(
       LocalDate advertisingDate,
       LocalDate applicationReceiptDate,
@@ -392,5 +748,69 @@ class LexisAdminScheduleServiceTest {
         offerReceiptDate.plusDays(29),
         offerReceiptDate.plusDays(19),
         offerReceiptDate.plusDays(22));
+  }
+
+  private static Stream<Arguments> missingRequiredScheduleDates() {
+    LocalDate advertisingDate = LocalDate.of(2026, 7, 1);
+    LocalDate applicationReceiptDate = LocalDate.of(2026, 6, 25);
+    LocalDate offerReceiptDate = LocalDate.of(2026, 7, 8);
+    LocalDate offerEndDate = LocalDate.of(2026, 8, 6);
+    LocalDate offerWithdrawalDate = LocalDate.of(2026, 7, 27);
+    LocalDate teacMeetingDate = LocalDate.of(2026, 7, 30);
+    return Stream.of(
+        Arguments.of(
+            new ExportScheduleCreateRequestDto(
+                null,
+                applicationReceiptDate,
+                offerReceiptDate,
+                offerEndDate,
+                offerWithdrawalDate,
+                teacMeetingDate),
+            "Advertising date is required."),
+        Arguments.of(
+            new ExportScheduleCreateRequestDto(
+                advertisingDate,
+                null,
+                offerReceiptDate,
+                offerEndDate,
+                offerWithdrawalDate,
+                teacMeetingDate),
+            "Application receipt date is required."),
+        Arguments.of(
+            new ExportScheduleCreateRequestDto(
+                advertisingDate,
+                applicationReceiptDate,
+                null,
+                offerEndDate,
+                offerWithdrawalDate,
+                teacMeetingDate),
+            "Offer receipt date is required."),
+        Arguments.of(
+            new ExportScheduleCreateRequestDto(
+                advertisingDate,
+                applicationReceiptDate,
+                offerReceiptDate,
+                null,
+                offerWithdrawalDate,
+                teacMeetingDate),
+            "Offer end date is required."),
+        Arguments.of(
+            new ExportScheduleCreateRequestDto(
+                advertisingDate,
+                applicationReceiptDate,
+                offerReceiptDate,
+                offerEndDate,
+                null,
+                teacMeetingDate),
+            "Offer withdrawal date is required."),
+        Arguments.of(
+            new ExportScheduleCreateRequestDto(
+                advertisingDate,
+                applicationReceiptDate,
+                offerReceiptDate,
+                offerEndDate,
+                offerWithdrawalDate,
+                null),
+            "TEAC meeting date is required."));
   }
 }

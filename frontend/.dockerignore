@@ -22,3 +22,7 @@ migrations
 output
 test
 tests
+
+# Runtime configuration is injected when the container starts; local Vite values must not be baked in.
+.env*
+!.env.example

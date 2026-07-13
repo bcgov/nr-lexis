@@ -201,9 +201,8 @@ describe('report-service', () => {
     )
   })
 
-  it('uses configured report api base and omits actionMapping when disabled', async () => {
+  it('uses configured report api base and preserves actionMapping without runtime configuration', async () => {
     vi.stubEnv('VITE_LEXIS_REPORT_API_BASE', '/lexis/rpc/reports/')
-    vi.stubEnv('VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING', 'false')
     postMock.mockResolvedValue({
       data: new Blob(['report']),
       headers: {},
@@ -221,8 +220,40 @@ describe('report-service', () => {
 
     const [path, payload] = postMock.mock.calls[0]
     expect(path).toBe('/lexis/rpc/reports/biweeklyListing')
-    expect(payload).toEqual({ parameters: {}, format: 'CSV' })
+    expect(payload).toEqual({
+      parameters: { legacyActionMapping: 'generate' },
+      format: 'CSV',
+    })
   })
+
+  it.each([
+    'generatePermitReport',
+    'generateTenureReport',
+    'generateMarkReport',
+    'generateFileReport',
+  ])(
+    'always sends the %s tenure variant under default deployed configuration',
+    async (actionMapping) => {
+      postMock.mockResolvedValue({
+        data: new Blob(['report']),
+        headers: {},
+      })
+
+      await runReport({
+        reportId: 'tenureReport',
+        actionMapping,
+        values: {},
+      })
+
+      expect(postMock).toHaveBeenCalledWith(
+        '/lexis/reports/tenureReport',
+        expect.objectContaining({
+          parameters: { legacyActionMapping: actionMapping },
+        }),
+        expect.any(Object),
+      )
+    },
+  )
 
   it('omits explicit blank biweekly listing dates so backend legacy schedule defaults apply', async () => {
     postMock.mockResolvedValue({
@@ -270,6 +301,82 @@ describe('report-service', () => {
     })
   })
 
+  it('extracts detail, message, and title from problem JSON blob responses', async () => {
+    const cases = [
+      {
+        problem: { detail: 'The report date range is invalid.', message: 'Ignored message' },
+        expected: 'The report date range is invalid.',
+      },
+      {
+        problem: { detail: '  ', message: 'The report parameters are invalid.' },
+        expected: 'The report parameters are invalid.',
+      },
+      {
+        problem: { title: 'Report generation failed' },
+        expected: 'Report generation failed',
+      },
+    ]
+
+    for (const testCase of cases) {
+      postMock.mockRejectedValueOnce({
+        isAxiosError: true,
+        response: {
+          data: new Blob([JSON.stringify(testCase.problem)]),
+          headers: { 'content-type': 'application/problem+json; charset=UTF-8' },
+        },
+      })
+
+      await expect(
+        runReport({
+          reportId: 'approvedExemptionReport',
+          values: { exemptionNumber: 'EX-205' },
+        }),
+      ).rejects.toMatchObject({
+        name: 'ReportRequestError',
+        message: testCase.expected,
+      })
+    }
+  })
+
+  it('does not expose serialized JSON when a problem response has no user-safe message', async () => {
+    postMock.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        data: new Blob([JSON.stringify({ status: 500, traceId: 'internal-trace' })]),
+        headers: { 'content-type': 'application/problem+json' },
+      },
+    })
+
+    await expect(
+      runReport({
+        reportId: 'approvedExemptionReport',
+        values: { exemptionNumber: 'EX-205' },
+      }),
+    ).rejects.toMatchObject({
+      name: 'ReportRequestError',
+      message: 'Unable to generate report. Check values and try again.',
+    })
+  })
+
+  it('rejects a no-content report instead of opening an empty file', async () => {
+    postMock.mockResolvedValue({
+      status: 204,
+      data: new Blob([]),
+      headers: {},
+    })
+
+    await expect(
+      runReport({
+        reportId: 'offerReport',
+        actionMapping: 'generate',
+        values: {},
+      }),
+    ).rejects.toMatchObject({
+      name: 'ReportRequestError',
+      message: 'No report data matched the selected criteria.',
+    })
+  })
+
   it('expands tenure and timber mark csv values into modern and legacy fields', async () => {
     postMock.mockResolvedValue({
       data: new Blob(['report']),
@@ -300,7 +407,7 @@ describe('report-service', () => {
     )
   })
 
-  it('keeps tenure XLS requests as spreadsheet output', async () => {
+  it('keeps tenure XLSX requests as spreadsheet output', async () => {
     postMock.mockResolvedValue({
       data: new Blob(['report']),
       headers: {},
@@ -310,7 +417,7 @@ describe('report-service', () => {
       reportId: 'tenureReport',
       actionMapping: 'generatePermitReport',
       values: {
-        outputFormat: 'XLS',
+        outputFormat: 'XLSX',
       },
     })
 
@@ -319,7 +426,7 @@ describe('report-service', () => {
     const [, payload] = postMock.mock.calls[0]
     expect(payload).toEqual(
       expect.objectContaining({
-        format: 'XLS',
+        format: 'XLSX',
         parameters: {
           legacyActionMapping: 'generatePermitReport',
         },
@@ -346,7 +453,7 @@ describe('report-service', () => {
     const [, payload] = postMock.mock.calls[0]
     expect(payload).toEqual(
       expect.objectContaining({
-        format: 'XLS',
+        format: 'XLSX',
         parameters: {
           legacyActionMapping: 'generatePermitReport',
         },

@@ -1,10 +1,13 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
+
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
-import java.io.ByteArrayOutputStream;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,6 +19,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,13 +35,16 @@ import net.sf.jasperreports.engine.JasperFillManager;
 import net.sf.jasperreports.engine.JasperPrint;
 import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.export.JRCsvExporter;
+import net.sf.jasperreports.engine.export.JRXlsExporter;
 import net.sf.jasperreports.engine.export.ooxml.JRXlsxExporter;
 import net.sf.jasperreports.export.SimpleExporterInput;
 import net.sf.jasperreports.export.SimpleOutputStreamExporterOutput;
 import net.sf.jasperreports.export.SimpleWriterExporterOutput;
+import net.sf.jasperreports.export.SimpleXlsReportConfiguration;
 import net.sf.jasperreports.export.SimpleXlsxReportConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.core.Authentication;
@@ -52,7 +59,11 @@ public class OracleLexisReportService implements LexisReportService {
   private static final Logger LOGGER = LoggerFactory.getLogger(OracleLexisReportService.class);
   private static final String BIWEEKLY_DATE_RANGE_MESSAGE =
       "Choose a Listing from date and Listing to date before generating the Advertising List.";
+  private static final String BIWEEKLY_CURRENT_PERIOD_MESSAGE =
+      "The current advertising period is unavailable because two advertising schedule dates "
+          + "are not configured.";
   private static final String TEMPLATE_CLASSPATH_DIRECTORY = "reports/lexis";
+  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
 
@@ -82,6 +93,7 @@ public class OracleLexisReportService implements LexisReportService {
   private final PermitRpcRepository permitRpcRepository;
   private final LexisReportScheduleRepository reportScheduleRepository;
   private final LexisSessionService sessionService;
+  private final LexisReportResourceManager reportResources;
   private final ConcurrentHashMap<String, JasperReport> compiledTemplateCache = new ConcurrentHashMap<>();
   private final AtomicBoolean runtimeResourcesPrepared = new AtomicBoolean(false);
   private final Path runtimeTemplateDirectory;
@@ -94,6 +106,27 @@ public class OracleLexisReportService implements LexisReportService {
       PermitRpcRepository permitRpcRepository,
       LexisReportScheduleRepository reportScheduleRepository,
       LexisSessionService sessionService) {
+    this(
+        dataSource,
+        parameterProvider,
+        legacyCsvReportService,
+        legacyJasperTableReportService,
+        permitRpcRepository,
+        reportScheduleRepository,
+        sessionService,
+        LexisReportResourceManager.defaults());
+  }
+
+  @Autowired
+  public OracleLexisReportService(
+      DataSource dataSource,
+      LexisJasperReportParameterProvider parameterProvider,
+      OracleLegacyCsvReportService legacyCsvReportService,
+      OracleLegacyJasperTableReportService legacyJasperTableReportService,
+      PermitRpcRepository permitRpcRepository,
+      LexisReportScheduleRepository reportScheduleRepository,
+      LexisSessionService sessionService,
+      LexisReportResourceManager reportResources) {
     this.dataSource = dataSource;
     this.parameterProvider = parameterProvider;
     this.legacyCsvReportService = legacyCsvReportService;
@@ -101,6 +134,7 @@ public class OracleLexisReportService implements LexisReportService {
     this.permitRpcRepository = permitRpcRepository;
     this.reportScheduleRepository = reportScheduleRepository;
     this.sessionService = sessionService;
+    this.reportResources = reportResources;
     this.runtimeTemplateDirectory = initRuntimeTemplateDirectory();
   }
 
@@ -108,11 +142,21 @@ public class OracleLexisReportService implements LexisReportService {
   public Optional<LexisGeneratedReport> generateReport(
       String reportAction,
       LexisReportRequestDto request) {
+    try (LexisReportResourceManager.ReportPermit ignored = reportResources.acquire()) {
+      return generateReportWithinPermit(reportAction, request)
+          .map(reportResources::requireWithinOutputLimit);
+    }
+  }
+
+  private Optional<LexisGeneratedReport> generateReportWithinPermit(
+      String reportAction, LexisReportRequestDto request) {
     Optional<LexisJasperReportDefinition> definitionOptional =
         LexisJasperReportDefinition.fromAction(reportAction);
 
     if (definitionOptional.isEmpty()) {
-      LOGGER.warn("Unknown report action [{}]", reportAction);
+      LOGGER.warn(
+          "event=lexis_report operation=resolve outcome=unknown_action action={}",
+          controlSafe(reportAction));
       return Optional.empty();
     }
 
@@ -121,7 +165,9 @@ public class OracleLexisReportService implements LexisReportService {
         LexisReportFormat.fromNullable(request == null ? null : request.format());
     LexisReportFormat effectiveFormat = resolveEffectiveFormat(definition, requestedFormat);
     if (!canGeneratePermitReport(definition, request)) {
-      LOGGER.warn("Current user is not authorized to generate permit report [{}]", reportAction);
+      LOGGER.warn(
+          "event=lexis_report operation=authorize outcome=denied action={}",
+          controlSafe(reportAction));
       return Optional.empty();
     }
     LexisReportRequestDto effectiveRequest = applyLegacyReportDefaults(definition, request);
@@ -143,11 +189,8 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     if (!isTemplateFormatSupported(effectiveFormat)) {
-      LOGGER.warn(
-          "Report action [{}] requested unsupported format [{}] in current migration state",
-          definition.action(),
-          requestedFormat.name());
-      return Optional.empty();
+      throw new LexisReportValidationException(
+          "Report format must be PDF, CSV, XLS, or XLSX.");
     }
 
     if (!definition.supportsJasperTemplate()) {
@@ -164,11 +207,12 @@ public class OracleLexisReportService implements LexisReportService {
               definition.templateName(),
               templateName -> compileTemplate(definition));
     } catch (IllegalStateException ex) {
-      LOGGER.warn(
-          "Jasper template preparation failed for report action [{}]: {}",
+      LOGGER.error(
+          "event=lexis_report operation=template_prepare outcome=failed action={} failureType={}",
           definition.action(),
-          ex.getMessage());
-      return Optional.empty();
+          exceptionType(ex));
+      throw new LexisReportGenerationException(
+          "The report template could not be prepared for " + definition.action(), ex);
     }
 
     HashMap<String, Object> parameters =
@@ -181,8 +225,12 @@ public class OracleLexisReportService implements LexisReportService {
         "Generating Jasper report action [{}] format [{}]",
         definition.action(),
         effectiveFormat.name());
-    try (Connection connection = dataSource.getConnection()) {
-      JasperPrint print = JasperFillManager.fillReport(jasperReport, parameters, connection);
+    try (LexisReportResourceManager.JasperVirtualizerSession ignored =
+            reportResources.openVirtualizer(parameters);
+        Connection connection = dataSource.getConnection()) {
+      JasperPrint print =
+          JasperFillManager.getInstance(reportResources.jasperReportsContext())
+              .fill(jasperReport, parameters, connection);
       byte[] reportBytes = exportTemplateReport(print, effectiveFormat, definition);
       LOGGER.info(
           "Generated Jasper report action [{}] format [{}] bytes [{}] durationMs [{}]",
@@ -196,21 +244,22 @@ public class OracleLexisReportService implements LexisReportService {
               effectiveFormat.mediaType(),
               reportBytes));
     } catch (JRException ex) {
-      LOGGER.warn(
-          "Jasper fill/export failed for report action [{}] after [{}] ms: {}; root cause: {}",
+      reportResources.rethrowOutputLimit(ex);
+      LOGGER.error(
+          "event=lexis_report operation=jasper_render outcome=failed action={} durationMs={} failureType={}",
           definition.action(),
           elapsedMillis(startedNanos),
-          ex.getMessage(),
-          rootCauseMessage(ex));
-      return Optional.empty();
+          exceptionType(ex));
+      throw new LexisReportGenerationException(
+          "The report could not be rendered for " + definition.action(), ex);
     } catch (SQLException ex) {
-      LOGGER.warn(
-          "Oracle connection failed for report action [{}] after [{}] ms: {}; root cause: {}",
+      LOGGER.error(
+          "event=lexis_report operation=oracle_load outcome=failed action={} durationMs={} failureType={}",
           definition.action(),
           elapsedMillis(startedNanos),
-          ex.getMessage(),
-          rootCauseMessage(ex));
-      return Optional.empty();
+          exceptionType(ex));
+      throw new LexisReportGenerationException(
+          "The report data could not be loaded for " + definition.action(), ex);
     }
   }
 
@@ -274,12 +323,12 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     List<LexisReportScheduleRepository.CurrentScheduleRow> schedules =
-        Optional.ofNullable(reportScheduleRepository.findCurrentSchedules()).orElse(List.of());
+        Optional.ofNullable(reportScheduleRepository.findCurrentSchedulesRequired()).orElse(List.of());
     if (schedules.size() < 2
         || schedules.get(0).advertisingDate() == null
         || schedules.get(1).advertisingDate() == null) {
       LOGGER.warn("Unable to apply legacy biweekly schedule defaults");
-      return request;
+      throw new LexisReportValidationException(BIWEEKLY_CURRENT_PERIOD_MESSAGE);
     }
 
     LocalDate fromDate = schedules.get(0).advertisingDate();
@@ -300,7 +349,9 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     Optional<String> invoiceNumber =
-        permitRpcRepository.findGbmsInvoiceHistory("", permitNumber, currentUserIsReadOnly()).stream()
+        permitRpcRepository
+            .findGbmsInvoiceHistoryRequired("", permitNumber, currentUserIsReadOnly())
+            .stream()
             .map(PermitRpcRepository.GbmsInvoiceHistoryRow::invoiceNumber)
             .filter(invoice -> invoice != null && !invoice.isBlank())
             .findFirst();
@@ -314,7 +365,9 @@ public class OracleLexisReportService implements LexisReportService {
     if (definition != LexisJasperReportDefinition.PERMIT_REPORT) {
       return true;
     }
-    if (currentUserHasRole(ROLE_APPLICATION_APPROVER) || currentUserHasRole(ROLE_READ_ONLY)) {
+    if (currentUserHasRole(ROLE_ADMIN)
+        || currentUserHasRole(ROLE_APPLICATION_APPROVER)
+        || currentUserHasRole(ROLE_READ_ONLY)) {
       return true;
     }
 
@@ -340,7 +393,7 @@ public class OracleLexisReportService implements LexisReportService {
       return true;
     }
 
-    return permitRpcRepository.findApplicationNumbersByPermitNumber(permitNumber).stream()
+    return permitRpcRepository.findApplicationNumbersByPermitNumberRequired(permitNumber).stream()
         .map(permitRpcRepository::findApplicationInfoByNumber)
         .flatMap(Optional::stream)
         .anyMatch(
@@ -400,7 +453,7 @@ public class OracleLexisReportService implements LexisReportService {
   private LexisReportRequestDto applyLegacyTenureDefaults(LexisReportRequestDto request) {
     HashMap<String, String> parameters =
         new HashMap<>(request == null || request.parameters() == null ? Map.of() : request.parameters());
-    LocalDate today = LocalDate.now();
+    LocalDate today = LexisBusinessTime.today();
     if (isBlank(parameters.get("fromDate"))) {
       parameters.put("fromDate", LocalDate.of(today.getYear() - 1, today.getMonth(), 1).toString());
     }
@@ -421,12 +474,18 @@ public class OracleLexisReportService implements LexisReportService {
       LexisJasperReportDefinition definition)
       throws JRException {
     if (format == LexisReportFormat.PDF) {
-      return JasperExportManager.exportReportToPdf(print);
+      LexisReportResourceManager.LimitedByteArrayOutputStream output =
+          reportResources.newOutputStream();
+      JasperExportManager.exportReportToPdfStream(print, output);
+      return reportResources.requireWithinOutputLimit(output.toByteArray());
     }
     if (format == LexisReportFormat.CSV) {
       return exportTemplateCsv(print);
     }
-    if (format == LexisReportFormat.XLS || format == LexisReportFormat.XLSX) {
+    if (format == LexisReportFormat.XLS) {
+      return exportTemplateXls(print);
+    }
+    if (format == LexisReportFormat.XLSX) {
       return exportTemplateXlsx(print);
     }
     throw new IllegalStateException(
@@ -434,17 +493,99 @@ public class OracleLexisReportService implements LexisReportService {
   }
 
   byte[] exportTemplateCsv(JasperPrint print) throws JRException {
-    ByteArrayOutputStream output = new ByteArrayOutputStream(32 * 1024);
+    LexisReportResourceManager.LimitedByteArrayOutputStream output =
+        reportResources.newOutputStream();
     JRCsvExporter exporter = new JRCsvExporter();
     exporter.setExporterInput(new SimpleExporterInput(print));
     exporter.setExporterOutput(
         new SimpleWriterExporterOutput(output, StandardCharsets.UTF_8.name()));
     exporter.exportReport();
-    return output.toByteArray();
+    return reportResources.requireWithinOutputLimit(sanitizeTemplateCsv(output.toByteArray()));
+  }
+
+  byte[] sanitizeTemplateCsv(byte[] csvBytes) {
+    String csv = new String(csvBytes == null ? new byte[0] : csvBytes, StandardCharsets.UTF_8);
+    List<List<String>> rows = new ArrayList<>();
+    List<String> row = new ArrayList<>();
+    StringBuilder cell = new StringBuilder();
+    boolean quoted = false;
+    boolean rowStarted = false;
+
+    for (int index = 0; index < csv.length(); index++) {
+      char current = csv.charAt(index);
+      if (quoted) {
+        if (current == '"') {
+          if (index + 1 < csv.length() && csv.charAt(index + 1) == '"') {
+            cell.append('"');
+            index++;
+          } else {
+            quoted = false;
+          }
+        } else {
+          cell.append(current);
+        }
+        rowStarted = true;
+        continue;
+      }
+      if (current == '"' && cell.length() == 0) {
+        quoted = true;
+        rowStarted = true;
+      } else if (current == ',') {
+        row.add(cell.toString());
+        cell.setLength(0);
+        rowStarted = true;
+      } else if (current == '\r' || current == '\n') {
+        if (current == '\r' && index + 1 < csv.length() && csv.charAt(index + 1) == '\n') {
+          index++;
+        }
+        row.add(cell.toString());
+        rows.add(row);
+        row = new ArrayList<>();
+        cell.setLength(0);
+        rowStarted = false;
+      } else {
+        cell.append(current);
+        rowStarted = true;
+      }
+    }
+    if (rowStarted || cell.length() > 0 || !row.isEmpty()) {
+      row.add(cell.toString());
+      rows.add(row);
+    }
+
+    StringBuilder safeCsv = new StringBuilder(csv.length() + 64);
+    for (List<String> values : rows) {
+      for (int index = 0; index < values.size(); index++) {
+        if (index > 0) {
+          safeCsv.append(',');
+        }
+        safeCsv.append('"').append(sanitizeCsvCell(values.get(index))).append('"');
+      }
+      safeCsv.append('\n');
+    }
+    return reportResources.requireWithinOutputLimit(
+        safeCsv.toString().getBytes(StandardCharsets.UTF_8));
+  }
+
+  private String sanitizeCsvCell(String input) {
+    String sanitized =
+        input == null
+            ? ""
+            : input.replace("\"", "\"\"").replace("\n", "").replace("\r", "").replace("\f", "");
+    String candidate = sanitized.stripLeading();
+    boolean startsWithControl = !sanitized.isEmpty() && sanitized.charAt(0) == '\t';
+    boolean startsWithFormula =
+        !candidate.isEmpty()
+            && (candidate.charAt(0) == '='
+                || candidate.charAt(0) == '+'
+                || candidate.charAt(0) == '-'
+                || candidate.charAt(0) == '@');
+    return startsWithControl || startsWithFormula ? "'" + sanitized : sanitized;
   }
 
   byte[] exportTemplateXlsx(JasperPrint print) throws JRException {
-    ByteArrayOutputStream output = new ByteArrayOutputStream(64 * 1024);
+    LexisReportResourceManager.LimitedByteArrayOutputStream output =
+        reportResources.newOutputStream();
     JRXlsxExporter exporter = new JRXlsxExporter();
     SimpleXlsxReportConfiguration configuration = new SimpleXlsxReportConfiguration();
     configuration.setDetectCellType(true);
@@ -455,7 +596,23 @@ public class OracleLexisReportService implements LexisReportService {
     exporter.setExporterInput(new SimpleExporterInput(print));
     exporter.setExporterOutput(new SimpleOutputStreamExporterOutput(output));
     exporter.exportReport();
-    return output.toByteArray();
+    return reportResources.requireWithinOutputLimit(output.toByteArray());
+  }
+
+  byte[] exportTemplateXls(JasperPrint print) throws JRException {
+    LexisReportResourceManager.LimitedByteArrayOutputStream output =
+        reportResources.newOutputStream();
+    JRXlsExporter exporter = new JRXlsExporter();
+    SimpleXlsReportConfiguration configuration = new SimpleXlsReportConfiguration();
+    configuration.setDetectCellType(true);
+    configuration.setOnePagePerSheet(false);
+    configuration.setRemoveEmptySpaceBetweenRows(true);
+    configuration.setWhitePageBackground(false);
+    exporter.setConfiguration(configuration);
+    exporter.setExporterInput(new SimpleExporterInput(print));
+    exporter.setExporterOutput(new SimpleOutputStreamExporterOutput(output));
+    exporter.exportReport();
+    return reportResources.requireWithinOutputLimit(output.toByteArray());
   }
 
   JasperReport compileTemplate(LexisJasperReportDefinition definition) {
@@ -469,21 +626,11 @@ public class OracleLexisReportService implements LexisReportService {
       return JasperCompileManager.compileReport(templatePath.toString());
     } catch (JRException ex) {
       LOGGER.error(
-          "Failed to compile JRXML for report action [{}] from [{}]",
+          "event=lexis_report operation=template_compile outcome=failed action={} failureType={}",
           definition.action(),
-          templatePath,
-          ex);
+          exceptionType(ex));
       throw new IllegalStateException("Failed to compile JRXML for report " + definition.action(), ex);
     }
-  }
-
-  private static String rootCauseMessage(Throwable throwable) {
-    Throwable root = throwable;
-    while (root.getCause() != null && root.getCause() != root) {
-      root = root.getCause();
-    }
-    String message = root.getMessage();
-    return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
   }
 
   private static long elapsedMillis(long startedNanos) {

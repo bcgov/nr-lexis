@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchOfferApplicationDetails,
   fetchOfferApplicationVolume,
+  fetchOfferClientData,
   fetchOfferPackageList,
 } from '@/service/provincial-offer-create-service'
 
@@ -26,6 +27,7 @@ describe('provincial-offer-create-service', () => {
       speciesGradeCode: ' HE/PL ',
       advertisingDate: ' 2026-06-15 ',
       teacReviewDate: ' 2026-06-16 ',
+      region: ' Cariboo Natural Resource Region ',
     })
 
     const result = await fetchOfferApplicationDetails('45970')
@@ -45,6 +47,7 @@ describe('provincial-offer-create-service', () => {
       speciesGradeCode: 'HE/PL',
       advertisingDate: '2026-06-15',
       teacReviewDate: '2026-06-16',
+      region: 'Cariboo Natural Resource Region',
     })
   })
 
@@ -66,6 +69,40 @@ describe('provincial-offer-create-service', () => {
       },
     )
     expect(result).toEqual(['PKG-1', 'PKG-2'])
+  })
+
+  it('loads the authoritative offering company from the default client location', async () => {
+    getCachedDataMock.mockResolvedValue({
+      clientNumber: ' 00077881 ',
+      companyName: ' Authoritative Buyer Ltd. ',
+      notfound: null,
+    })
+
+    const result = await fetchOfferClientData(' 00077881 ')
+
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/rpc/offer-details/client-data',
+      {
+        params: {
+          clientNumber: '00077881',
+          clientLocationCode: '00',
+        },
+      },
+      {
+        cacheKey: 'offer-client-data:00077881:00',
+        ttlMs: 30_000,
+      },
+    )
+    expect(result).toEqual({
+      clientNumber: '00077881',
+      companyName: 'Authoritative Buyer Ltd.',
+    })
+  })
+
+  it('fails closed when authoritative offering company data is not found', async () => {
+    getCachedDataMock.mockResolvedValue({ notfound: 'true' })
+
+    await expect(fetchOfferClientData('00077881')).resolves.toBeNull()
   })
 
   it('returns blank application volume for non-object RPC payloads', async () => {

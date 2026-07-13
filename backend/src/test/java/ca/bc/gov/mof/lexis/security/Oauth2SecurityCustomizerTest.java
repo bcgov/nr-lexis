@@ -13,7 +13,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 class Oauth2SecurityCustomizerTest {
 
   @Test
-  void normalizedAuthoritiesShouldIncludeCognitoGroupsAndKeycloakOauthScopes() {
+  void cognitoAuthoritiesShouldIncludeGroupsButIgnoreOauthScopes() {
     Oauth2SecurityCustomizer customizer =
         new Oauth2SecurityCustomizer(
             "https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
@@ -25,6 +25,8 @@ class Oauth2SecurityCustomizerTest {
     Jwt jwt =
         jwt(
             Map.of(
+                "iss",
+                "https://cognito-idp.ca-central-1.amazonaws.com/test",
                 "cognito:groups",
                 List.of("LEXIS_READ_ONLY"),
                 "scope",
@@ -36,11 +38,63 @@ class Oauth2SecurityCustomizerTest {
             customizer.normalizedAuthorities(jwt).stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList())
+        .containsExactly("LEXIS_READ_ONLY");
+  }
+
+  @Test
+  void keycloakAuthoritiesShouldIncludeOauthScopesButIgnoreCognitoGroups() {
+    Oauth2SecurityCustomizer customizer =
+        new Oauth2SecurityCustomizer(
+            "https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
+            "https://cognito-idp.ca-central-1.amazonaws.com/test",
+            "https://dev.loginproxy.gov.bc.ca/auth/realms/standard",
+            "",
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    Jwt jwt =
+        jwt(
+            Map.of(
+                "iss",
+                "https://dev.loginproxy.gov.bc.ca/auth/realms/standard",
+                "cognito:groups",
+                List.of("LEXIS_ADMIN"),
+                "scope",
+                "lexis:federal-submission:submit openid",
+                "scp",
+                List.of("extra.scope")));
+
+    assertThat(
+            customizer.normalizedAuthorities(jwt).stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList())
         .containsExactly(
-            "LEXIS_READ_ONLY",
-            "SCOPE_lexis:federal-submission:submit",
-            "SCOPE_openid",
-            "SCOPE_extra.scope");
+            "SCOPE_lexis:federal-submission:submit", "SCOPE_openid", "SCOPE_extra.scope");
+  }
+
+  @Test
+  void normalizedAuthoritiesShouldPreserveConcreteFamClientScopeAndAddBaseRole() {
+    Oauth2SecurityCustomizer customizer =
+        new Oauth2SecurityCustomizer(
+            "https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
+            "https://cognito-idp.ca-central-1.amazonaws.com/test",
+            "",
+            "",
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    Jwt jwt =
+        jwt(
+            Map.of(
+                "iss",
+                "https://cognito-idp.ca-central-1.amazonaws.com/test",
+                "cognito:groups",
+                List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")));
+
+    assertThat(
+            customizer.normalizedAuthorities(jwt).stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList())
+        .containsExactly(
+            "LEXIS_PROVINCIAL_SUBMITTER_00012345", "LEXIS_PROVINCIAL_SUBMITTER");
   }
 
   @Test
@@ -56,6 +110,8 @@ class Oauth2SecurityCustomizerTest {
     Jwt jwt =
         jwt(
             Map.of(
+                "iss",
+                "https://dev.loginproxy.gov.bc.ca/auth/realms/forests",
                 "resource_access",
                 Map.of(
                     "ap-gw-lexis-default-dev",

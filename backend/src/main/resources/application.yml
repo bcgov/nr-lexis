@@ -1,6 +1,25 @@
 spring:
   application:
     name: lexis-backend
+  lifecycle:
+    timeout-per-shutdown-phase: ${LEXIS_SHUTDOWN_PHASE_TIMEOUT:60s}
+  mvc:
+    async:
+      request-timeout: ${LEXIS_ASYNC_REQUEST_TIMEOUT:5m}
+  task:
+    execution:
+      # A named email executor suppresses this bean in AUTO mode; MVC streaming needs its own pool.
+      mode: force
+      thread-name-prefix: lexis-stream-
+      pool:
+        core-size: 2
+        max-size: 4
+        queue-capacity: 8
+        keep-alive: 30s
+        allow-core-thread-timeout: true
+      shutdown:
+        await-termination: true
+        await-termination-period: 10s
   # Keep bootstrap runnable before Oracle config is introduced.
   autoconfigure:
     exclude:
@@ -19,12 +38,24 @@ spring:
       mail:
         smtp:
           auth: false
+          connectiontimeout: ${SMTP_CONNECTION_TIMEOUT_MS:10000}
+          timeout: ${SMTP_READ_TIMEOUT_MS:10000}
+          writetimeout: ${SMTP_WRITE_TIMEOUT_MS:10000}
           starttls:
             enable: false
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
 
 server:
   port: 8080
   forward-headers-strategy: framework
+  shutdown: graceful
+
+logging:
+  level:
+    ca.bc.gov.mof.lexis: ${APP_LOG_LEVEL:INFO}
 
 management:
   endpoint:
@@ -44,6 +75,21 @@ ca:
           base-url: ${IDENTITY_LOOKUP_BASE_URL:}
 
 lexis:
+  runtime:
+    require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}
+  reports:
+    max-concurrent: ${LEXIS_REPORT_MAX_CONCURRENT:1}
+    max-output-bytes: ${LEXIS_REPORT_MAX_OUTPUT_BYTES:26214400}
+    query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}
+    virtualizer-directory: ${LEXIS_REPORT_VIRTUALIZER_DIRECTORY:/tmp/lexis-jasper}
+    virtualizer-max-pages: ${LEXIS_REPORT_VIRTUALIZER_MAX_PAGES:50}
+  expiry:
+    enabled: ${LEXIS_EXPIRY_ENABLED:false}
+    cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}
+    zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}
+  permit-invoice:
+    # Keep disabled until the deployed Oracle procedures pass rollback acceptance testing.
+    mode: ${LEXIS_PERMIT_INVOICE_MODE:disabled}
   virus-scan:
     enabled: ${LEXIS_VIRUS_SCAN_ENABLED:false}
     host: ${LEXIS_VIRUS_SCAN_HOST:localhost}
@@ -53,7 +99,11 @@ lexis:
   features:
     prod-rtm-only: ${LEXIS_PROD_RTM_ONLY:false}
   mail:
+    enabled: ${LEXIS_MAIL_ENABLED:false}
+    non-production: ${LEXIS_MAIL_NON_PRODUCTION:true}
     from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
+    override-recipients: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS:}
+    permit-request-recipients: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:}
   auth:
     cognito:
       userinfo-uri: ${COGNITO_USERINFO_URI:}
@@ -85,6 +135,7 @@ lexis:
         - "viewFederalApplication"
       LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
+        - "/changeApplicantType"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/applicationRemarks"
@@ -95,9 +146,11 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/permitsReview"
         - "/federalApplicationSearch"
         - "/federalApplicationDetails"
         - "viewFederalApplication"
+        - "manageFederalApplication"
         - "/applicationReport"
         - "/offerReport"
         - "/teacReport"
@@ -116,13 +169,14 @@ lexis:
         - "saveExemption"
         - "savePermit"
         - "uploadApplicationSubmission"
+        - "/fileApplicationUpload"
+        - "/fileExemptionUpload"
+        - "/filePermitUpload"
+        - "/fileInvoiceUpload"
       LEXIS_EXEMPTION_APPROVER:
         - "/createExemption"
         - "/exemptionSearch"
         - "/exemptionDetails"
-        - "/federalApplicationSearch"
-        - "/federalApplicationDetails"
-        - "viewFederalApplication"
         - "approveExemption"
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
@@ -138,8 +192,11 @@ lexis:
         - "uploadApplicationSubmission"
       LEXIS_DELEGATED_ADMIN: []
   federal-submission:
+    # Dedicated CREATE stays disabled until the caller contract and deployment are explicitly approved.
+    create-enabled: false
     require-request-id: false
     require-user-reference: false
+    # Compatibility setting; X-Idempotency-Key is always required when CREATE is enabled.
     require-idempotency-key: false
     require-source-system: false
     # Retry guidance returned on dedicated federal endpoint 503 responses.

@@ -1,17 +1,81 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import org.springframework.data.domain.Page;
+import java.sql.CallableStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.data.domain.Page;
 
 @DisplayName("Unit Test | PermitRepository")
 class PermitRepositoryTest {
+
+  @Test
+  void detailShouldExposeTheDistinctPermitApplicationDate() throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getDate("APPLICATION_DATE"))
+        .thenReturn(java.sql.Date.valueOf(LocalDate.of(2026, 6, 17)));
+    when(resultSet.getDate("RECEIVED_DATE"))
+        .thenReturn(java.sql.Date.valueOf(LocalDate.of(2026, 6, 19)));
+    DetailPermitRepository repository = new DetailPermitRepository(resultSet);
+
+    PermitDetailDto detail = repository.findByPermitNumber(700001L).orElseThrow();
+
+    assertThat(detail.applicationDate()).isEqualTo(LocalDate.of(2026, 6, 17));
+    assertThat(detail.receivedDate()).isEqualTo(LocalDate.of(2026, 6, 19));
+  }
+
+  @Test
+  void detailShouldExposeBlanketOicRequestLimits() throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("OIC_REQUEST_PIECES")).thenReturn(250L);
+    when(resultSet.getDouble("OIC_REQUEST_VOLUME")).thenReturn(125.75d);
+    DetailPermitRepository repository = new DetailPermitRepository(resultSet);
+
+    PermitDetailDto detail = repository.findByPermitNumber(700001L).orElseThrow();
+
+    assertThat(detail.oicRequestPieces()).isEqualTo(250L);
+    assertThat(detail.oicRequestVolume()).isEqualTo(125.75d);
+  }
+
+  @Test
+  void detailShouldPreserveUnavailableBlanketOicRequestLimitsAsNull() throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.wasNull()).thenReturn(true);
+    DetailPermitRepository repository = new DetailPermitRepository(resultSet);
+
+    PermitDetailDto detail = repository.findByPermitNumber(700001L).orElseThrow();
+
+    assertThat(detail.oicRequestPieces()).isNull();
+    assertThat(detail.oicRequestVolume()).isNull();
+  }
+
+  @Test
+  void detailShouldKeepAnEmptyCursorAsNotFound() {
+    DetailPermitRepository repository = new DetailPermitRepository(null);
+
+    assertThat(repository.findByPermitNumber(700001L)).isEmpty();
+  }
+
+  @Test
+  void detailShouldPropagateOracleCursorFailure() {
+    PermitRepository repository = new FailingDetailPermitRepository();
+
+    assertThatThrownBy(() -> repository.findByPermitNumber(700001L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("FIND_PERMIT_DET_BY_ID");
+  }
 
   @Test
   void searchShouldUsePermitPackageAliasesForDynamicCriteria() {
@@ -52,10 +116,38 @@ class PermitRepositoryTest {
             "2026-01-31",
             "ACT",
             "INV-1",
+            "00077881",
+            "00055667",
+            "00055667",
+            "1904");
+  }
+
+  @Test
+  void searchShouldApplyApplicantAndOwnerFiltersToTheirDisplayedMeanings() {
+    TestPermitRepository repository = new TestPermitRepository();
+
+    repository.search(
+        new PermitSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             "00055667",
             "00077881",
-            "00077881",
-            "1904");
+            List.of(),
+            null,
+            0,
+            10));
+
+    assertThat(repository.whereSql())
+        .contains("CLIENT_NUMBER LIKE '%' || :1 || '%'")
+        .contains("EPD.AGENT_NUMBER LIKE '%' || :2 || '%'")
+        .contains("CLIENT_NUMBER LIKE '%' || :3 || '%' AND EPD.AGENT_NUMBER IS NULL");
+    assertThat(repository.bindValues())
+        .containsExactly("00077881", "00055667", "00055667");
   }
 
   @Test
@@ -70,6 +162,58 @@ class PermitRepositoryTest {
         .doesNotContain("EPD.ORG_UNIT_NO")
         .doesNotContain("TO_NUMBER(0)");
     assertThat(repository.bindValues()).isEmpty();
+  }
+
+  @Test
+  void scopedAccessShouldIncludeDirectAndLinkedApplicationClientsForSearchAndCount() {
+    TestPermitRepository repository = new TestPermitRepository();
+    PermitSearchCriteria criteria =
+        new PermitSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00099999",
+            "00088888",
+            "00012345",
+            false,
+            List.of(),
+            null,
+            0,
+            10);
+
+    repository.search(criteria);
+    String searchSql = repository.whereSql();
+    List<String> searchBinds = repository.bindValues();
+
+    repository.count(criteria);
+
+    assertThat(searchSql)
+        .contains("CLIENT_NUMBER LIKE")
+        .contains("EPD.AGENT_NUMBER LIKE")
+        .contains("EPD.CLIENT_NUMBER =")
+        .contains("EPD.AGENT_NUMBER =")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ACCESS_ESD")
+        .contains("INNER JOIN EXPORT_PACKAGE ACCESS_EP")
+        .contains("INNER JOIN EXPORT_EXEMPTION_APPLICATION ACCESS_EEA")
+        .contains("ACCESS_ESD.EXPORT_PERMIT_DETAIL_NUMBER = EPD.EXPORT_PERMIT_DETAIL_NUMBER")
+        .contains("ACCESS_EEA.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("ACCESS_EEA.OWNER_CLIENT_NUMBER =")
+        .contains("ACCESS_EEA.AGENT_CLIENT_NUMBER =");
+    assertThat(searchBinds)
+        .containsExactly(
+            "00088888",
+            "00099999",
+            "00099999",
+            "00012345",
+            "00012345",
+            "00012345",
+            "00012345");
+    assertThat(repository.whereSql()).isEqualTo(searchSql);
+    assertThat(repository.bindValues()).isEqualTo(searchBinds);
   }
 
   @Test
@@ -179,6 +323,47 @@ class PermitRepositoryTest {
         return List.of();
       }
       return (List<T>) pages.get(page);
+    }
+  }
+
+  private static final class DetailPermitRepository extends PermitRepository {
+    private final ResultSet resultSet;
+
+    DetailPermitRepository(ResultSet resultSet) {
+      super(null);
+      this.resultSet = resultSet;
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      if (resultSet == null) {
+        return List.of();
+      }
+      try {
+        return List.of(rowMapper.map(resultSet));
+      } catch (SQLException exception) {
+        throw new AssertionError(exception);
+      }
+    }
+  }
+
+  private static final class FailingDetailPermitRepository extends PermitRepository {
+    FailingDetailPermitRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      throw new DataAccessResourceFailureException(
+          "Oracle detail dependency unavailable: " + procedureSignature);
     }
   }
 }

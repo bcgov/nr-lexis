@@ -2,22 +2,33 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +55,8 @@ class PurchaseOfferControllerTest {
   @Mock private LexisApplicationService applicationService;
   @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
+  @Mock private ProvincialAuthorizationService provincialAuthorizationService;
+  @Mock private ApplicationEditLockService editLockService;
   @Mock private Authentication authentication;
 
   private PurchaseOfferController controller;
@@ -56,7 +69,35 @@ class PurchaseOfferControllerTest {
             sessionService,
             authorizationService,
             applicationService,
-            applicationDetailsServiceProvider);
+            applicationDetailsServiceProvider,
+            provincialAuthorizationService,
+            editLockService);
+    lenient()
+        .when(
+            provincialAuthorizationService.constrainOrgUnits(
+                any(), any(), eq(OrgUnitSurface.OFFER_SEARCH)))
+        .thenAnswer(
+            invocation -> {
+              List<Long> requested = invocation.getArgument(1);
+              return new OrgUnitConstraint(
+                  false, requested == null ? List.of() : requested);
+            });
+    lenient()
+        .when(
+            provincialAuthorizationService.canAccessOffer(
+                org.mockito.ArgumentMatchers.nullable(Authentication.class),
+                any(PurchaseOfferDetailDto.class)))
+        .thenReturn(true);
+    lenient()
+        .when(
+            editLockService.acquireOffer(
+                anyLong(), nullable(String.class), nullable(String.class), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient()
+        .when(
+            editLockService.snapshotOffer(
+                anyLong(), nullable(String.class), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
   }
 
   @Test
@@ -161,12 +202,45 @@ class PurchaseOfferControllerTest {
     assertThat(criteria.withdrawalFromDate()).isEqualTo(LocalDate.of(2026, 3, 1));
     assertThat(criteria.withdrawalToDate()).isEqualTo(LocalDate.of(2026, 3, 31));
     assertThat(criteria.clientNumber()).isEqualTo("00077881");
+    assertThat(criteria.accessClientNumber()).isNull();
     assertThat(criteria.regionNumbers()).containsExactly(12L);
     assertThat(criteria.sortField()).isEqualTo("offerNumber DESC");
   }
 
   @Test
-  void searchShouldOverrideClientFilterWhenUserHasScopedForestClient() {
+  void searchShouldAddScopedAccessWithoutForcingAnOwnerOrAgentFilter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new PurchaseOfferSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        null,
+        0,
+        25,
+        null,
+        authentication);
+
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+
+    assertThat(criteriaCaptor.getValue().clientNumber()).isNull();
+    assertThat(criteriaCaptor.getValue().accessClientNumber()).isEqualTo("00077881");
+  }
+
+  @Test
+  void searchShouldKeepRequestedClientFilterInsideMandatoryScopedAccess() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(service.search(any(PurchaseOfferSearchCriteria.class)))
@@ -193,7 +267,69 @@ class PurchaseOfferControllerTest {
         ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
     verify(service).search(criteriaCaptor.capture());
 
-    assertThat(criteriaCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(criteriaCaptor.getValue().clientNumber()).isEqualTo("00099999");
+    assertThat(criteriaCaptor.getValue().accessClientNumber()).isEqualTo("00077881");
+  }
+
+  @Test
+  void countShouldKeepRequestedClientFilterInsideMandatoryScopedAccess() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.count(any(PurchaseOfferSearchCriteria.class))).thenReturn(3);
+
+    ResponseEntity<SearchCountResponseDto> response =
+        controller.count(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00099999",
+            List.of(),
+            authentication);
+
+    assertThat(response.getBody()).isEqualTo(new SearchCountResponseDto(3));
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(service).count(criteriaCaptor.capture());
+    assertThat(criteriaCaptor.getValue().clientNumber()).isEqualTo("00099999");
+    assertThat(criteriaCaptor.getValue().accessClientNumber()).isEqualTo("00077881");
+  }
+
+  @Test
+  void searchShouldUseReadOnlyIdentityOrganizationUnits() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(
+            provincialAuthorizationService.constrainOrgUnits(
+                authentication, List.of(), OrgUnitSurface.OFFER_SEARCH))
+        .thenReturn(new OrgUnitConstraint(true, List.of(76L, 1826L)));
+    when(service.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new PurchaseOfferSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        null,
+        0,
+        25,
+        null,
+        authentication);
+
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+    assertThat(criteriaCaptor.getValue().regionNumbers()).containsExactly(76L, 1826L);
   }
 
   @Test
@@ -230,7 +366,11 @@ class PurchaseOfferControllerTest {
     ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto.withApplicationContext(45.5, "FI/HE/LUM"));
+    assertThat(response.getBody())
+        .isEqualTo(
+            dto.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, false, false));
+    assertThat(response.getBody().offerRemark()).isNull();
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
   }
@@ -249,9 +389,31 @@ class PurchaseOfferControllerTest {
         controller.getByOfferNumber(81009L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(offer.withApplicationContext(45.5, "FI/HE/LUM"));
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, false, false));
+    assertThat(response.getBody().offerRemark()).isNull();
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void detailShouldRedactOfferRemarkWhenScopedUserOwnsParentApplicationAsAgent() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    PurchaseOfferDetailDto offer = offerDetail("00099999");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00077881")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().offerRemark()).isNull();
+    assertThat(response.getBody().canEditOfferRemarks()).isFalse();
   }
 
   @Test
@@ -272,6 +434,7 @@ class PurchaseOfferControllerTest {
         .isEqualTo(
             offer.withApplicationContext(45.5, "FI/HE/LUM")
                 .withEditPermissions(false, false, true, false));
+    assertThat(response.getBody().offerRemark()).isNull();
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
   }
@@ -295,6 +458,41 @@ class PurchaseOfferControllerTest {
         .isEqualTo(
             offer.withApplicationContext(45.5, "FI/HE/LUM")
                 .withEditPermissions(true, true, true, true));
+    assertThat(response.getBody().offerRemark()).isEqualTo("Initial offer");
+  }
+
+  @Test
+  void detailShouldExposeAnExistingOfferLockAfterAuthorization() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(authentication.getName()).thenReturn("idir\\reviewer2");
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+    when(editLockService.acquireOffer(
+            81009L, "idir\\reviewer2", "idir\\reviewer2", true))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                "Reviewer One",
+                "This offer is currently locked for editing by Reviewer One.",
+                null));
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().locked()).isTrue();
+    assertThat(response.getBody().lockedBy()).isEqualTo("Reviewer One");
+    assertThat(response.getBody().lockMessage()).contains("Reviewer One");
+    verify(provincialAuthorizationService).canAccessOffer(authentication, offer);
+    verify(editLockService)
+        .acquireOffer(81009L, "idir\\reviewer2", "idir\\reviewer2", true);
   }
 
   @Test
@@ -316,10 +514,11 @@ class PurchaseOfferControllerTest {
         .isEqualTo(
             offer.withApplicationContext(45.5, "FI/HE/LUM")
                 .withEditPermissions(true, true, true, true));
+    assertThat(response.getBody().offerRemark()).isEqualTo("Initial offer");
   }
 
   @Test
-  void detailShouldNotTreatAdminAsApplicationApproverForOfferEdits() {
+  void detailShouldReturnFullEditPermissionsForAdmin() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_ADMIN"));
     PurchaseOfferDetailDto offer = offerDetail("00077881");
@@ -335,7 +534,7 @@ class PurchaseOfferControllerTest {
     assertThat(response.getBody())
         .isEqualTo(
             offer.withApplicationContext(45.5, "FI/HE/LUM")
-                .withEditPermissions(false, false, false, false));
+                .withEditPermissions(true, true, true, true));
   }
 
   @Test
@@ -352,6 +551,22 @@ class PurchaseOfferControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void detailShouldReturnNotFoundWhenOrganizationAuthorizationRejectsTheOffer() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    when(provincialAuthorizationService.canAccessOffer(authentication, offer)).thenReturn(false);
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    verify(provincialAuthorizationService).canAccessOffer(authentication, offer);
   }
 
   private static PurchaseOfferDetailDto offerDetail() {

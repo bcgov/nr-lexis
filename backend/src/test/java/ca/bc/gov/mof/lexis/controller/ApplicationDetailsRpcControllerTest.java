@@ -1,11 +1,14 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -15,16 +18,28 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
+import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
+import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import java.io.ByteArrayOutputStream;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,6 +53,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationDetailsRpcController")
@@ -54,11 +70,16 @@ class ApplicationDetailsRpcControllerTest {
   @Mock private HttpServletRequest servletRequest;
   @Mock private HttpSession session;
   @Mock private ApplicationEditLockService editLockService;
+  @Mock private ProvincialAuthorizationService provincialAuthorizationService;
+  @Mock private ApplicationEditPolicyService applicationEditPolicyService;
 
   private ApplicationDetailsRpcController controller;
+  private ApplicationPermitOperationCoordinator operationCoordinator;
 
   @BeforeEach
   void setup() {
+    operationCoordinator =
+        new ApplicationPermitOperationCoordinator(new PermitOperationMutex());
     controller =
         new ApplicationDetailsRpcController(
             serviceProvider,
@@ -66,13 +87,34 @@ class ApplicationDetailsRpcControllerTest {
             applicationReviewServiceProvider,
             sessionService,
             authorizationService,
-            editLockService);
+            editLockService,
+            provincialAuthorizationService,
+            applicationEditPolicyService,
+            operationCoordinator);
     lenient()
         .when(editLockService.requireEditable(any(), any(), any()))
         .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
     lenient()
         .when(editLockService.snapshot(any(), any(), anyBoolean()))
         .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+    lenient()
+        .when(editLockService.snapshotExemption(any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+    lenient()
+        .when(editLockService.acquireExemption(any(), any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient()
+        .when(provincialAuthorizationService.canCreateForClient(any(), any(), any()))
+        .thenReturn(true);
+    lenient()
+        .when(service.findApplicationNumberForPackage(any()))
+        .thenReturn(Optional.of(1000456L));
+    lenient()
+        .when(service.findApplicationNumberForScale(any()))
+        .thenReturn(Optional.of(1000456L));
+    lenient()
+        .when(service.findApplicationNumberForRemark(any()))
+        .thenReturn(Optional.of(1000456L));
   }
 
   @Test
@@ -90,8 +132,7 @@ class ApplicationDetailsRpcControllerTest {
   void documentDetailsShouldMapServiceResponse() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getDocumentDetails(1000456L))
-        .thenReturn(
-            List.of(new ApplicationDetailsRpcService.DocumentItem(7L, "test.pdf", "Not on file", "Uploaded")));
+        .thenReturn(List.of(directApplicationDocument(7L, "test.pdf", "Not on file", "Uploaded")));
 
     ResponseEntity<List<ApplicationDetailsRpcController.DocumentDetailsResponseDto>> response =
         controller.getDocumentDetails("1000456");
@@ -101,31 +142,152 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody()).hasSize(1);
     assertThat(response.getBody().get(0).id()).isEqualTo(7L);
     assertThat(response.getBody().get(0).name()).isEqualTo("test.pdf");
+    assertThat(response.getBody().get(0).source()).isEqualTo("application");
+    assertThat(response.getBody().get(0).deletable()).isTrue();
     verify(service).getDocumentDetails(1000456L);
   }
 
   @Test
-  void getDocumentShouldReturnAttachmentPayload() {
+  void documentDetailsShouldHidePermitDocumentsWithoutPermitDetailAuthority() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\application-approver", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/permitDetails")).thenReturn(false);
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.getDocument(55L))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcService.DocumentContent("test-content".getBytes())));
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.DocumentItem(
+                    55L,
+                    "permit.pdf",
+                    "Permit copy",
+                    "Permit document",
+                    "permit",
+                    null,
+                    7000123L,
+                    false)));
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+    try {
+      ResponseEntity<List<ApplicationDetailsRpcController.DocumentDetailsResponseDto>> response =
+          controller.getDocumentDetails("1000456");
 
-    ResponseEntity<byte[]> response = controller.getDocument("55", "../unsafe/path/test.pdf");
+      assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(response.getBody()).isEmpty();
+      verify(provincialAuthorizationService, never())
+          .requirePermit(authentication, 7000123L);
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+  }
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getHeaders().getContentDisposition().isAttachment()).isTrue();
-    assertThat(response.getHeaders().getContentDisposition().getFilename()).isEqualTo("test.pdf");
-    assertThat(response.getBody()).isNotNull();
-    assertThat(new String(response.getBody())).isEqualTo("test-content");
-    verify(service).getDocument(55L);
+  @Test
+  void streamDocumentShouldRejectPermitDocumentWithoutPermitDetailAuthority() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\application-approver", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    ApplicationDetailsRpcService.DocumentItem permitDocument =
+        new ApplicationDetailsRpcService.DocumentItem(
+            55L,
+            "permit.pdf",
+            "Permit copy",
+            "Permit document",
+            "permit",
+            null,
+            7000123L,
+            false);
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/permitDetails")).thenReturn(false);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findDocumentForApplication(55L, 1000456L))
+        .thenReturn(Optional.of(permitDocument));
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+    try {
+      assertThatThrownBy(
+              () -> controller.streamDocument("55", "permit.pdf", "1000456"))
+          .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+          .hasMessage(
+              "Document does not belong to an accessible source for the supplied application.");
+      verify(service, never()).streamDocument(55L);
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+  }
+
+  @Test
+  void streamDocumentShouldRejectPermitDocumentWithoutPermitObjectAccess() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\application-approver", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    ApplicationDetailsRpcService.DocumentItem permitDocument =
+        new ApplicationDetailsRpcService.DocumentItem(
+            55L,
+            "permit.pdf",
+            "Permit copy",
+            "Permit document",
+            "permit",
+            null,
+            7000123L,
+            false);
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/permitDetails")).thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findDocumentForApplication(55L, 1000456L))
+        .thenReturn(Optional.of(permitDocument));
+    org.mockito.Mockito.doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requirePermit(authentication, 7000123L);
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+    try {
+      assertThatThrownBy(
+              () -> controller.streamDocument("55", "permit.pdf", "1000456"))
+          .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+          .hasMessage(
+              "Document does not belong to an accessible source for the supplied application.");
+      verify(service, never()).streamDocument(55L);
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+  }
+
+  @Test
+  void streamDocumentShouldReturnAttachmentPayload() throws Exception {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\application-approver", "n/a");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findDocumentForApplication(55L, 1000456L))
+        .thenReturn(Optional.of(directApplicationDocument(55L, "test.pdf", "", "Uploaded")));
+    when(service.streamDocument(55L))
+        .thenReturn(Optional.of(output -> output.write("test-content".getBytes())));
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+    try {
+      ResponseEntity<StreamingResponseBody> response =
+          controller.streamDocument("55", "../unsafe/path/test.pdf", "1000456");
+
+      assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(response.getHeaders().getContentDisposition().isAttachment()).isTrue();
+      assertThat(response.getHeaders().getContentDisposition().getFilename()).isEqualTo("test.pdf");
+      assertThat(response.getBody()).isNotNull();
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      response.getBody().writeTo(output);
+      assertThat(output.toByteArray()).containsExactly("test-content".getBytes());
+      verify(provincialAuthorizationService).requireApplication(authentication, 1000456L);
+      verify(service).streamDocument(55L);
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
   }
 
   @Test
   void removeDocumentShouldReturnSuccessFlag() {
-    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    TestingAuthenticationToken authentication = authorized();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getDocumentDetails(1000456L))
-        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
+        .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "Not on file", "Uploaded")));
     when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
     when(service.removeDocument(55L)).thenReturn(true);
 
@@ -135,28 +297,48 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isEqualTo("true");
-    verify(service).getDocumentDetails(1000456L);
-    verify(service).getApplicationSummarySnapshot(1000456L);
+    verify(editLockService, times(2))
+        .requireEditable(1000456L, "idir\\jsmith", "idir\\jsmith");
+    verify(editLockService, never()).snapshot(1000456L, "idir\\jsmith", false);
+    verify(service, times(2)).getDocumentDetails(1000456L);
+    verify(service, times(2)).getApplicationSummarySnapshot(1000456L);
     verify(service).removeDocument(55L);
   }
 
   @Test
-  void removeDocumentShouldRejectWithoutFileUploadAction() {
-    TestingAuthenticationToken authentication = unauthorized("/fileApplicationUpload");
+  void removeDocumentShouldAllowApproverWithoutFileUploadAction() {
+    TestingAuthenticationToken authentication = authorized();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "Not on file", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(service.removeDocument(55L)).thenReturn(true);
 
     ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
         controller.removeDocument("55", "1000456", authentication);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removeDocument(55L);
+  }
+
+  @Test
+  void removeDocumentShouldFailClosedWhenRpcServiceIsUnavailable() {
+    TestingAuthenticationToken authentication = authorized();
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
     verifyNoInteractions(service);
   }
 
   @Test
   void removeDocumentShouldRejectWhenDocumentDoesNotBelongToApplication() {
-    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    TestingAuthenticationToken authentication = authorized();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getDocumentDetails(1000456L))
-        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(77L, "other.pdf", "Not on file", "Uploaded")));
+        .thenReturn(List.of(directApplicationDocument(77L, "other.pdf", "Not on file", "Uploaded")));
 
     ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
         controller.removeDocument("55", "1000456", authentication);
@@ -170,13 +352,36 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void removeDocumentShouldRejectWhenApplicationLockedByAnotherUser() {
-    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+  void removeDocumentShouldRejectLinkedPermitDocument() {
+    TestingAuthenticationToken authentication = authorized();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getDocumentDetails(1000456L))
-        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
-    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
-    when(editLockService.snapshot(1000456L, "idir\\jsmith", false))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.DocumentItem(
+                    55L,
+                    "permit.pdf",
+                    "Permit copy",
+                    "Permit document",
+                    "permit",
+                    null,
+                    7000123L,
+                    false)));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).removeDocument(55L);
+  }
+
+  @Test
+  void removeDocumentShouldRejectWhenApplicationLockedByAnotherUser() {
+    TestingAuthenticationToken authentication = authorized();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "Not on file", "Uploaded")));
+    when(editLockService.requireEditable(1000456L, "idir\\jsmith", "idir\\jsmith"))
         .thenReturn(
             new ApplicationEditLockDto(
                 true,
@@ -196,10 +401,10 @@ class ApplicationDetailsRpcControllerTest {
 
   @Test
   void removeDocumentShouldRejectExpiredApplicationsForApprovers() {
-    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    TestingAuthenticationToken authentication = authorized();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getDocumentDetails(1000456L))
-        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
+        .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "Not on file", "Uploaded")));
     when(service.getApplicationSummarySnapshot(1000456L))
         .thenReturn(Optional.of(summarySnapshotWithStatus("EXP")));
 
@@ -213,17 +418,81 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void removeDocumentShouldAllowScopedIndustryForPermittedApplication() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithStatus("PMT")));
+    when(service.removeDocument(55L)).thenReturn(true);
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removeDocument(55L);
+  }
+
+  @Test
+  void removeDocumentShouldAllowScopedIndustryForExpiredApplication() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithStatus("EXP")));
+    when(service.removeDocument(55L)).thenReturn(true);
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removeDocument(55L);
+  }
+
+  @Test
+  void removeDocumentShouldRejectReadOnlyUserEvenWhenDocumentExists() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions("idir\\readonly", List.of("LEXIS_READ_ONLY"));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void getRemarkShouldReturnNotFoundWhenRemarkMissing() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getRemark(999L)).thenReturn(Optional.empty());
 
     ResponseEntity<ApplicationDetailsRpcController.GetRemarkResponseDto> response =
-        controller.getRemark("999");
+        controller.getRemark("999", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().notfound()).isTrue();
     verify(service).getRemark(999L);
+  }
+
+  @Test
+  void getRemarkShouldRejectWithoutApplicationRemarksAction() {
+    TestingAuthenticationToken authentication = unauthorized("/applicationRemarks");
+
+    ResponseEntity<ApplicationDetailsRpcController.GetRemarkResponseDto> response =
+        controller.getRemark("999", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
   }
 
   @Test
@@ -443,6 +712,7 @@ class ApplicationDetailsRpcControllerTest {
     params.add("growthTypeCode", "O");
     params.add("ownerContactName", "Owner Contact");
     params.add("comments", "Ready for review");
+    params.add("validation", "false");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.addApplicationLegacy(params, authentication);
@@ -459,9 +729,240 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(request.applicationDate()).isEqualTo(LocalDate.of(2026, 3, 1));
     assertThat(request.receivedDate()).isEqualTo(LocalDate.of(2026, 3, 2));
     assertThat(request.agentClientNumber()).isEqualTo("00022222");
+    assertThat(request.ownerClientNumber()).isEqualTo("00011111");
+    assertThat(request.ownerClientLocationCode()).isEqualTo("02");
     assertThat(request.exemptionReasonCode()).isEqualTo("U");
     assertThat(request.productTypeCode()).isEqualTo("H");
     assertThat(request.remarkBody()).isEqualTo("Ready for review");
+    assertThat(request.validationEnabled()).isTrue();
+    verify(provincialAuthorizationService)
+        .requireOrgUnit(
+            authentication,
+            11L,
+            ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+  }
+
+  @Test
+  void addApplicationShouldRejectRequestedOrganizationUnitOutsideScopeBeforePersistence() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new org.springframework.security.access.AccessDeniedException("outside org scope"))
+        .when(provincialAuthorizationService)
+        .requireOrgUnit(
+            authentication,
+            12L,
+            ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientNumber", "00011111");
+    params.add("region", "12");
+
+    assertThatThrownBy(() -> controller.addApplicationLegacy(params, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("outside org scope");
+
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldCanonicalizeScopedSubmitterOwnerIdentity() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(provincialAuthorizationService.scopedForestClientNumber(authentication))
+        .thenReturn("77881");
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientNumber", "00099999");
+    params.add("ownerClientLocationCode", "99");
+    params.add("agentClientNumber", "00022222");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service)
+        .addApplication(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
+    ApplicationDetailsRpcService.CreateApplicationRequest request = requestCaptor.getValue();
+    assertThat(request.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(request.ownerClientLocationCode()).isEqualTo("00");
+    assertThat(request.agentClientNumber()).isEqualTo("00022222");
+    verify(provincialAuthorizationService)
+        .canCreateForClient(authentication, "00077881", "00022222");
+  }
+
+  @Test
+  void addApplicationShouldFailClosedWhenSubmitterScopeCannotBeResolved() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(provincialAuthorizationService.scopedForestClientNumber(authentication))
+        .thenThrow(
+            new org.springframework.security.access.AccessDeniedException(
+                "Provincial Submitter authority is missing its forest-client scope."));
+
+    assertThatThrownBy(
+            () -> controller.addApplicationLegacy(new LinkedMultiValueMap<>(), authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("Provincial Submitter authority is missing its forest-client scope.");
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldRecheckExemptionAndClientScopeInsideAggregateLock() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(provincialAuthorizationService.canCreateForClient(
+            authentication, "00011111", null))
+        .thenReturn(true, false);
+
+    MultiValueMap<String, String> params = linkedApplicationCreateParameters();
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(provincialAuthorizationService, times(2))
+        .requireExemption(authentication, "EX-205");
+    verify(provincialAuthorizationService, times(2))
+        .canCreateForClient(authentication, "00011111", null);
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldRejectAnInteractiveExemptionLockConflict() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(editLockService.acquireExemption(
+            "EX-205", "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true, false, null, "This exemption is currently locked.", null));
+
+    assertThatThrownBy(
+            () ->
+                controller.addApplicationLegacy(
+                    linkedApplicationCreateParameters(), authentication))
+        .isInstanceOf(EditLockConflictException.class)
+        .hasMessage("This exemption is currently locked.");
+
+    verify(service, never()).addApplication(any(), any());
+    verify(editLockService, never()).releaseExemption(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldReleaseANewTemporaryExemptionLockWhenCreateFails() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenThrow(new IllegalStateException("Oracle failed"));
+
+    assertThatThrownBy(
+            () ->
+                controller.addApplicationLegacy(
+                    linkedApplicationCreateParameters(), authentication))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Oracle failed");
+
+    verify(editLockService).releaseExemption("EX-205", "idir\\jsmith");
+  }
+
+  @Test
+  void addApplicationShouldPreserveAnExistingSameUserExemptionLock() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(editLockService.snapshotExemption("EX-205", "idir\\jsmith", false))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true,
+                "The application was saved successfully.",
+                1000456L,
+                List.of(),
+                List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(
+            linkedApplicationCreateParameters(), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(editLockService, never()).releaseExemption(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldHoldCanonicalExemptionLockThroughServiceReturn() throws Exception {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    CountDownLatch serviceEntered = new CountDownLatch(1);
+    CountDownLatch releaseService = new CountDownLatch(1);
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenAnswer(
+            ignored -> {
+              serviceEntered.countDown();
+              if (!releaseService.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting to release application create.");
+              }
+              return new ApplicationDetailsRpcService.CreateApplicationResult(
+                  true,
+                  "The application was saved successfully.",
+                  1000456L,
+                  List.of(),
+                  List.of());
+            });
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto>>
+          createFuture =
+              executor.submit(
+                  () ->
+                      controller.addApplicationLegacy(
+                          linkedApplicationCreateParameters(), authentication));
+      assertThat(serviceEntered.await(5, TimeUnit.SECONDS)).isTrue();
+
+      CountDownLatch competingAttempted = new CountDownLatch(1);
+      Future<Boolean> competingMutation =
+          executor.submit(
+              () -> {
+                competingAttempted.countDown();
+                return operationCoordinator.executeKnownAggregate(
+                    List.of(" ex-205 "), List.of(), List.of(), () -> true);
+              });
+      assertThat(competingAttempted.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThatThrownBy(
+              () -> competingMutation.get(150, TimeUnit.MILLISECONDS))
+          .isInstanceOf(TimeoutException.class);
+
+      releaseService.countDown();
+      assertThat(createFuture.get(5, TimeUnit.SECONDS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      assertThat(competingMutation.get(5, TimeUnit.SECONDS)).isTrue();
+    } finally {
+      releaseService.countDown();
+      executor.shutdownNow();
+    }
+
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service).addApplication(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().exemptionNumber()).isEqualTo("EX-205");
+    verify(provincialAuthorizationService, times(2))
+        .requireExemption(authentication, "EX-205");
+    verify(provincialAuthorizationService, times(2))
+        .canCreateForClient(authentication, "00011111", null);
+    verify(editLockService).releaseExemption("EX-205", "idir\\jsmith");
   }
 
   @Test
@@ -473,6 +974,135 @@ class ApplicationDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
+  }
+
+  @Test
+  void updateApplicationSummaryShouldEnforceSummaryPolicyBeforeMutation() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("ownerClientNumber", "00011111");
+    params.add("agentClientNumber", "00022222");
+    params.add("region", "76");
+    params.add("validation", "false");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(applicationEditPolicyService, times(2))
+        .requireSummaryEdit(authentication, service, 1000456L);
+    verify(provincialAuthorizationService, times(2))
+        .requireOrgUnit(
+            authentication,
+            76L,
+            ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service)
+        .updateApplicationSummary(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().validationEnabled()).isTrue();
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectMoveOutsideOrganizationUnitScope() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new org.springframework.security.access.AccessDeniedException("outside org scope"))
+        .when(provincialAuthorizationService)
+        .requireOrgUnit(
+            authentication,
+            12L,
+            ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("ownerClientNumber", "00011111");
+    params.add("region", "12");
+
+    assertThatThrownBy(() -> controller.updateApplicationLegacy(params, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("outside org scope");
+
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldPersistApplicantTypeForAuthorizedApprover() {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("ownerClientNumber", "00011111");
+    params.add("applicantType", "A");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service)
+        .updateApplicationSummary(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().applicantTypeCode()).isEqualTo("A");
+  }
+
+  @Test
+  void updateApplicationSummaryShouldAllowScopedSubmitterWhenApplicantTypeIsOmitted() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "idir\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00011111"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("ownerClientNumber", "00011111");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service)
+        .updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\submitter"));
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectScopedSubmitterApplicantTypeChange() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "idir\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00011111"),
+            "createApplication");
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("ownerClientNumber", "00011111");
+    params.add("applicantType", "A");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updateApplicationSummary(any(), any());
   }
 
   @Test
@@ -820,16 +1450,21 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void findPermitLegacyShouldReturnPermitPayload() {
+  void findPermitLegacyShouldReturnOnlyPermitsWithinDetailAndObjectScope() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorized("/permitDetails");
     when(service.findPermits(1000456L))
         .thenReturn(
             List.of(
                 new ApplicationDetailsRpcService.ApplicationPermitItem(7000123L, "Complete"),
                 new ApplicationDetailsRpcService.ApplicationPermitItem(7000456L, "Active")));
+    when(provincialAuthorizationService.canAccessPermit(authentication, 7000123L))
+        .thenReturn(true);
+    when(provincialAuthorizationService.canAccessPermit(authentication, 7000456L))
+        .thenReturn(false);
 
     ResponseEntity<List<ApplicationDetailsRpcController.ApplicationPermitResponseDto>> response =
-        controller.findPermitLegacy("1000456");
+        controller.findPermitLegacy("1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -837,8 +1472,29 @@ class ApplicationDetailsRpcControllerTest {
         .extracting(
             ApplicationDetailsRpcController.ApplicationPermitResponseDto::permitNumber,
             ApplicationDetailsRpcController.ApplicationPermitResponseDto::permitStatusDescription)
-        .containsExactly(tuple(7000123L, "Complete"), tuple(7000456L, "Active"));
+        .containsExactly(tuple(7000123L, "Complete"));
     verify(service).findPermits(1000456L);
+    verify(provincialAuthorizationService).canAccessPermit(authentication, 7000123L);
+    verify(provincialAuthorizationService).canAccessPermit(authentication, 7000456L);
+  }
+
+  @Test
+  void findPermitsShouldReturnNoChildrenWithoutPermitDetailAuthority() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorized();
+    when(service.findPermits(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.ApplicationPermitItem(
+                    7000123L, "Complete")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationPermitResponseDto>> response =
+        controller.findPermits("1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEmpty();
+    verify(provincialAuthorizationService, never())
+        .canAccessPermit(authentication, 7000123L);
   }
 
   @Test
@@ -1008,6 +1664,8 @@ class ApplicationDetailsRpcControllerTest {
     ArgumentCaptor<ApplicationDetailsRpcService.PackageMutationRequest> requestCaptor =
         ArgumentCaptor.forClass(ApplicationDetailsRpcService.PackageMutationRequest.class);
     verify(service).addPackage(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    verify(applicationEditPolicyService, times(2))
+        .requirePackageAddOrDelete(authentication, service, 1000456L);
     ApplicationDetailsRpcService.PackageMutationRequest request = requestCaptor.getValue();
     assertThat(request.applicationNumber()).isEqualTo(1000456L);
     assertThat(request.volume()).isEqualTo(125.5d);
@@ -1076,6 +1734,10 @@ class ApplicationDetailsRpcControllerTest {
     ArgumentCaptor<ApplicationDetailsRpcService.PackageMutationRequest> requestCaptor =
         ArgumentCaptor.forClass(ApplicationDetailsRpcService.PackageMutationRequest.class);
     verify(service).updatePackage(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    verify(applicationEditPolicyService, times(2))
+        .requirePackageEdit(authentication, service, 1000456L);
+    verify(applicationEditPolicyService, times(2))
+        .requirePackageNumberUpdate(authentication, service, 1000456L);
     ApplicationDetailsRpcService.PackageMutationRequest request = requestCaptor.getValue();
     assertThat(request.packageNumber()).isEqualTo("PKG-903");
     assertThat(request.newPackageNumber()).isEqualTo("PKG-904");
@@ -1119,6 +1781,8 @@ class ApplicationDetailsRpcControllerTest {
     ArgumentCaptor<ApplicationDetailsRpcService.ScaleMutationRequest> requestCaptor =
         ArgumentCaptor.forClass(ApplicationDetailsRpcService.ScaleMutationRequest.class);
     verify(service).addScaleToPackage(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    verify(applicationEditPolicyService, times(2))
+        .requireScaleAddOrDelete(authentication, service, 1000456L);
     ApplicationDetailsRpcService.ScaleMutationRequest request = requestCaptor.getValue();
     assertThat(request.packageNumber()).isEqualTo("PKG-903");
     assertThat(request.applicationNumber()).isEqualTo(1000456L);
@@ -1139,6 +1803,8 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
     verify(service).deleteScaleById("55", "idir\\jsmith");
+    verify(applicationEditPolicyService, times(2))
+        .requireScaleAddOrDelete(authentication, service, 1000456L);
   }
 
   @Test
@@ -1165,13 +1831,22 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
     verify(service).deletePackageById("PKG-903", "idir\\jsmith");
+    verify(applicationEditPolicyService, times(2))
+        .requirePackageAddOrDelete(authentication, service, 1000456L);
   }
 
-  private TestingAuthenticationToken authorized(String action) {
-    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
-    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+  private TestingAuthenticationToken authorized(String... actions) {
+    return authenticatedWithActions(
+        "idir\\jsmith", List.of("LEXIS_APPLICATION_APPROVER"), actions);
+  }
+
+  private TestingAuthenticationToken authenticatedWithActions(
+      String userId, List<String> roles, String... actions) {
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken(userId, "n/a");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
-    when(authorizationService.canPerformAction(roles, action)).thenReturn(true);
+    for (String action : actions) {
+      when(authorizationService.canPerformAction(roles, action)).thenReturn(true);
+    }
     return authentication;
   }
 
@@ -1181,6 +1856,26 @@ class ApplicationDetailsRpcControllerTest {
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
     when(authorizationService.canPerformAction(roles, action)).thenReturn(false);
     return authentication;
+  }
+
+  private ApplicationDetailsRpcService.DocumentItem directApplicationDocument(
+      long id, String name, String description, String type) {
+    return new ApplicationDetailsRpcService.DocumentItem(
+        id,
+        name,
+        description,
+        type,
+        "application",
+        1000456L,
+        null,
+        true);
+  }
+
+  private MultiValueMap<String, String> linkedApplicationCreateParameters() {
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("exemptionNumber", " ex-205 ");
+    parameters.add("ownerClientNumber", "00011111");
+    return parameters;
   }
 
   private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshot() {

@@ -25,6 +25,7 @@ jobs:
 
   builds:
     name: Builds
+    if: github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       attestations: write
       id-token: write
@@ -73,7 +74,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -84,6 +85,7 @@ jobs:
       - name: Run frontend checks
         working-directory: frontend
         run: |
+          npm run typecheck
           npm run lint
           npm run format:check
           npm run test:cov
@@ -102,6 +104,7 @@ jobs:
 
   deploys:
     name: Deploys (${{ github.event.number }})
+    if: github.event.pull_request.head.repo.full_name == github.repository
     needs: [builds, vars, backend-tests, frontend-tests, clamav-startup]
     permissions:
       contents: read
@@ -123,7 +126,9 @@ jobs:
 
   tests:
     name: Tests
-    if: needs.deploys.outputs.triggered == 'true'
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.deploys.outputs.triggered == 'true'
     needs: [deploys, vars]
     permissions:
       contents: read

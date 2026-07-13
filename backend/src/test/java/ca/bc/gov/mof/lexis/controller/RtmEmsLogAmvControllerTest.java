@@ -1,8 +1,12 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
@@ -15,8 +19,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
 class RtmEmsLogAmvControllerTest {
@@ -36,6 +43,47 @@ class RtmEmsLogAmvControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(rows);
     verify(service).findLatestBefore("2026-07-01");
+  }
+
+  @Test
+  void findShouldPropagateAuthoritativeDatabaseFailure() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findLatestBefore("2026-07-01"))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+
+    assertThatThrownBy(
+            () -> controller().find(null, null, null, null, "2026-07-01"))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  void authoritativeDatabaseFailureShouldUsePublicSafe503Contract() throws Exception {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findLatestBefore("2026-07-01"))
+        .thenThrow(
+            new DataAccessResourceFailureException(
+                "ORA failure for private-business-id=123"));
+    MockMvc mockMvc =
+        MockMvcBuilders.standaloneSetup(controller())
+            .setControllerAdvice(new LexisApiExceptionHandler())
+            .build();
+
+    mockMvc
+        .perform(get("/api/lexis/rtm/emslogamv").param("latestBeforeDate", "2026-07-01"))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.title").value("Service temporarily unavailable"))
+        .andExpect(
+            jsonPath("$.detail")
+                .value("LEXIS could not complete the request. Please try again later."));
+  }
+
+  @Test
+  void findShouldFailWhenAuthoritativeServiceIsMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    assertThatThrownBy(() -> controller().find(null, null, null, null, null))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("The authoritative RTM AMV service is temporarily unavailable.");
   }
 
   @Test

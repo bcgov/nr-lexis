@@ -1,6 +1,6 @@
 package ca.bc.gov.mof.lexis.service.report;
 
-import java.time.LocalDate;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -52,7 +52,7 @@ public enum LexisJasperReportDefinition {
 
   public String resolveFilename(LexisReportFormat format) {
     if (format == LexisReportFormat.CSV && legacyCsvOutputName != null) {
-      return legacyCsvOutputName + LocalDate.now() + "." + format.extension();
+      return legacyCsvOutputName + LexisBusinessTime.today() + "." + format.extension();
     }
     return outputName + "." + format.extension();
   }

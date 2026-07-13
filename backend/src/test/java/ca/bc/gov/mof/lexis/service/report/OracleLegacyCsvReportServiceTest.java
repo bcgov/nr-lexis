@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import oracle.jdbc.OracleConnection;
 import org.junit.jupiter.api.Test;
@@ -69,6 +71,226 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
+  void shouldReturnEmptyWhenCsvImplementationDoesNotHandleDefinition() {
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+
+    var report =
+        service.generateLegacyCsvReport(
+            LexisJasperReportDefinition.TENURE_REPORT,
+            new LexisReportRequestDto(Map.of(), "CSV"),
+            LexisReportFormat.CSV);
+
+    assertThat(report).isEmpty();
+    verifyNoInteractions(dataSource);
+  }
+
+  @Test
+  void shouldFailExplicitReportWhenProcedureReturnsNoCursor() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.PROVINCIAL_TEAC_REPORT(?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(callableStatement.getObject(3)).thenReturn(null);
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("exportJurisdictionCode", "P"), "CSV");
+
+    assertThatThrownBy(
+            () ->
+                service.generateLegacyCsvReport(
+                    LexisJasperReportDefinition.TEAC_REPORT,
+                    request,
+                    LexisReportFormat.CSV))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessage("The TEAC report data could not be loaded")
+        .hasMessageNotContaining("LEXIS_REPORTING")
+        .hasCauseInstanceOf(SQLException.class);
+  }
+
+  @Test
+  void shouldFailDynamicReportWhenProcedureReturnsNoCursor() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.APP_REPORT_CSV(?,?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(connection.unwrap(OracleConnection.class)).thenReturn(oracleConnection);
+    when(
+            oracleConnection.createOracleArray(
+                org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"),
+                org.mockito.ArgumentMatchers.any()))
+        .thenReturn(bindArray);
+    when(callableStatement.getObject(4)).thenReturn(null);
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+
+    assertThatThrownBy(
+            () ->
+                service.generateLegacyCsvReport(
+                    LexisJasperReportDefinition.APPLICATION_REPORT,
+                    new LexisReportRequestDto(Map.of(), "CSV"),
+                    LexisReportFormat.CSV))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessage("The application report data could not be loaded")
+        .hasMessageNotContaining("LEXIS_REPORTING")
+        .hasCauseInstanceOf(SQLException.class);
+    verify(bindArray).free();
+  }
+
+  @Test
+  void shouldStopStreamingAndCloseResourcesWhenCsvOutputLimitIsReached() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.APP_REPORT_CSV(?,?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(connection.unwrap(OracleConnection.class)).thenReturn(oracleConnection);
+    when(
+            oracleConnection.createOracleArray(
+                org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"),
+                org.mockito.ArgumentMatchers.any()))
+        .thenReturn(bindArray);
+    when(callableStatement.getObject(4)).thenReturn(resultSet);
+    when(resultSet.getMetaData()).thenReturn(metaData);
+    when(metaData.getColumnCount()).thenReturn(1);
+    when(metaData.getColumnName(1)).thenReturn("APPLICATION_NUMBER");
+    AtomicInteger rowsRead = new AtomicInteger();
+    when(resultSet.next())
+        .thenAnswer(
+            ignored -> {
+              rowsRead.incrementAndGet();
+              return true;
+            });
+    when(resultSet.getString(1)).thenReturn("X".repeat(64));
+
+    OracleLegacyCsvReportService service = serviceWithMaxOutputBytes(48);
+
+    assertThatThrownBy(
+            () ->
+                service.generateLegacyCsvReport(
+                    LexisJasperReportDefinition.APPLICATION_REPORT,
+                    new LexisReportRequestDto(Map.of(), "CSV"),
+                    LexisReportFormat.CSV))
+        .isInstanceOf(LexisReportOutputLimitException.class)
+        .hasMessageContaining("48 bytes");
+
+    assertThat(rowsRead).hasValue(1);
+    verify(resultSet).close();
+    verify(callableStatement).close();
+    verify(connection).close();
+    verify(bindArray).free();
+  }
+
+  @Test
+  void shouldCloseResourcesAndPreserveSqlErrorWhenStreamingCursorFails() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.APP_REPORT_CSV(?,?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(connection.unwrap(OracleConnection.class)).thenReturn(oracleConnection);
+    when(
+            oracleConnection.createOracleArray(
+                org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"),
+                org.mockito.ArgumentMatchers.any()))
+        .thenReturn(bindArray);
+    when(callableStatement.getObject(4)).thenReturn(resultSet);
+    when(resultSet.getMetaData()).thenReturn(metaData);
+    when(metaData.getColumnCount()).thenReturn(1);
+    when(metaData.getColumnName(1)).thenReturn("APPLICATION_NUMBER");
+    when(resultSet.next()).thenReturn(true).thenThrow(new SQLException("cursor read failed"));
+    when(resultSet.getString(1)).thenReturn("123");
+
+    OracleLegacyCsvReportService service = serviceWithMaxOutputBytes(1024);
+
+    assertThatThrownBy(
+            () ->
+                service.generateLegacyCsvReport(
+                    LexisJasperReportDefinition.APPLICATION_REPORT,
+                    new LexisReportRequestDto(Map.of(), "CSV"),
+                    LexisReportFormat.CSV))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessage("The application report data could not be loaded")
+        .hasMessageNotContaining("LEXIS_REPORTING")
+        .hasCauseInstanceOf(SQLException.class)
+        .rootCause()
+        .hasMessage("cursor read failed");
+
+    verify(resultSet).close();
+    verify(callableStatement).close();
+    verify(connection).close();
+    verify(bindArray).free();
+  }
+
+  @Test
+  void shouldBoundJasperListMaterializationAndCloseResources() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.PROVINCIAL_TEAC_REPORT(?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(callableStatement.getObject(3)).thenReturn(resultSet);
+    when(resultSet.getMetaData()).thenReturn(metaData);
+    when(metaData.getColumnCount()).thenReturn(1);
+    when(metaData.getColumnName(1)).thenReturn("VALUE");
+    when(resultSet.next()).thenReturn(true);
+    when(resultSet.getString(1)).thenReturn("X");
+
+    OracleLegacyCsvReportService service = serviceWithMaxOutputBytes(170);
+
+    assertThatThrownBy(
+            () ->
+                service.loadLegacyTabularReportData(
+                    LexisJasperReportDefinition.TEAC_REPORT,
+                    new LexisReportRequestDto(
+                        Map.of("exportJurisdictionCode", "P"), "PDF")))
+        .isInstanceOf(LexisReportOutputLimitException.class)
+        .hasMessageContaining("170 bytes");
+
+    verify(resultSet).close();
+    verify(callableStatement).close();
+    verify(connection).close();
+  }
+
+  @Test
+  void shouldFailBiweeklyReportWhenMainProcedureReturnsNoCursor() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(callableStatement.getObject(5)).thenReturn(null);
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+
+    assertThatThrownBy(
+            () ->
+                service.generateLegacyCsvReport(
+                    LexisJasperReportDefinition.BIWEEKLY_LISTING,
+                    new LexisReportRequestDto(Map.of(), "CSV"),
+                    LexisReportFormat.CSV))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessageContaining("biweekly report data")
+        .hasCauseInstanceOf(SQLException.class);
+  }
+
+  @Test
+  void shouldFailBiweeklyReportWhenPackageProcedureReturnsNoCursor() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_SUBREPORT_RPT(?,?,?) }"))
+        .thenReturn(packageCallableStatement);
+    when(callableStatement.getObject(5)).thenReturn(resultSet);
+    when(packageCallableStatement.getObject(3)).thenReturn(null);
+    when(resultSet.getMetaData()).thenReturn(metaData);
+    when(metaData.getColumnCount()).thenReturn(2);
+    when(metaData.getColumnName(1)).thenReturn("APPLICATION_NUMBER");
+    when(metaData.getColumnName(2)).thenReturn("EXPORT_JURISDICTION_CODE");
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString(1)).thenReturn("12345");
+    when(resultSet.getString(2)).thenReturn("P");
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+
+    assertThatThrownBy(
+            () ->
+                service.generateLegacyCsvReport(
+                    LexisJasperReportDefinition.BIWEEKLY_LISTING,
+                    new LexisReportRequestDto(Map.of(), "CSV"),
+                    LexisReportFormat.CSV))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessageContaining("biweekly report data")
+        .hasCauseInstanceOf(SQLException.class);
+  }
+
+  @Test
   void shouldGenerateTeacCsvFromProvincialProcedure() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.PROVINCIAL_TEAC_REPORT(?,?,?) }")).thenReturn(callableStatement);
@@ -107,6 +329,7 @@ class OracleLegacyCsvReportServiceTest {
 
     verify(callableStatement).setString(1, "12,14");
     verify(callableStatement).setLong(2, 12345L);
+    verify(callableStatement).setQueryTimeout(120);
     verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
   }
 
@@ -583,7 +806,7 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
-  void shouldGenerateBiweeklyCsvHeadersWhenAdvertisingListProcedureFails() throws Exception {
+  void shouldFailBiweeklyReportWhenAdvertisingListProcedureFails() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
         .thenThrow(new SQLException("invalid identifier"));
@@ -596,22 +819,26 @@ class OracleLegacyCsvReportServiceTest {
                 "toDate", "2026-05-31"),
             "CSV");
 
-    var report =
-        service.generateLegacyCsvReport(
-            LexisJasperReportDefinition.BIWEEKLY_LISTING,
-            request,
-            LexisReportFormat.CSV);
+    assertThatThrownBy(
+            () ->
+                service.generateLegacyCsvReport(
+                    LexisJasperReportDefinition.BIWEEKLY_LISTING,
+                    request,
+                    LexisReportFormat.CSV))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessageContaining("biweekly report data");
+  }
 
-    assertThat(report).isPresent();
-    assertThat(report.orElseThrow().filename()).isEqualTo("biweeklyListing" + today() + ".csv");
+  @Test
+  void shouldNeutralizeSpreadsheetFormulaPrefixes() {
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
 
-    String csv = new String(report.orElseThrow().content());
-    assertThat(csv)
-        .contains(
-            "\"CLIENT_CONTACT_PHONE\",\"CLIENT_CONTACT_EMAIL\",\"JURISDICTION_CODE\"");
-    assertThat(csv)
-        .contains(
-            "\"AGENT_PHONE\",\"AGENT_CONTACT_NAME\",\"AGENT_CONTACT_EMAIL\",\"PACKAGE_NUMBER\"");
+    assertThat(service.sanitizeForCsv("=HYPERLINK(\"https://example.invalid\")"))
+        .startsWith("'=HYPERLINK")
+        .contains("\"\"");
+    assertThat(service.sanitizeForCsv("  +1+1")).isEqualTo("'  +1+1");
+    assertThat(service.sanitizeForCsv("\t@SUM(A1:A2)")).isEqualTo("'\t@SUM(A1:A2)");
+    assertThat(service.sanitizeForCsv("ordinary value")).isEqualTo("ordinary value");
   }
 
   @Test
@@ -737,6 +964,13 @@ class OracleLegacyCsvReportServiceTest {
         .createOracleArray(
             org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"), bindValuesCaptor.capture());
     assertThat((String[]) bindValuesCaptor.getValue()).containsExactly(expectedValues);
+  }
+
+  private OracleLegacyCsvReportService serviceWithMaxOutputBytes(long maxOutputBytes) {
+    LexisReportResourceProperties properties = new LexisReportResourceProperties();
+    properties.setMaxOutputBytes(maxOutputBytes);
+    return new OracleLegacyCsvReportService(
+        dataSource, new LexisReportResourceManager(properties));
   }
 
   private static String today() {

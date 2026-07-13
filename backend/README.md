@@ -50,6 +50,7 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 | `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
 | `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
 | `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
+| `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
 | `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
 
@@ -60,6 +61,8 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 | `default` | Boots without datasource/JPA autoconfig so backend can run while DB wiring is incomplete. |
 | `oracle` | Activates Oracle-profiled repository/service beans (e.g., exemptions service/repository). |
 | `local` | Local-dev profile. Loads `application-local.yml` (gitignored). Activate alongside `oracle` (`SPRING_PROFILES_ACTIVE=local,oracle`). |
+| `stub-services` | Explicitly enables local in-memory application, admin, upload, and RTM/EMS services. Never use for a deployed environment. The stubs stay disabled when `oracle` is also active. |
+| `stub-reports` | Explicitly enables local placeholder report output. Never use for a deployed environment. The stub stays disabled when `oracle` is also active. |
 
 ## API Endpoints
 
@@ -94,8 +97,6 @@ mvn package -DskipTests
 backend/
 ├── Dockerfile
 ├── openshift.deploy.yml
-├── openshift/
-│   └── deployment.yaml
 ├── pom.xml
 ├── src/main/java/ca/bc/gov/mof/lexis/
 │   ├── LexisApiApplication.java

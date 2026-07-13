@@ -35,7 +35,9 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Maven verify (unit tests + jacoco coverage)
+      # The default-on coverage profile attaches JaCoCo to Surefire and writes
+      # target/site/jacoco/jacoco.xml during verify for the Sonar scan below.
+      - name: Maven verify (unit tests + JaCoCo coverage)
         working-directory: backend
         run: mvn -B -DskipITs verify
 
@@ -66,11 +68,12 @@ jobs:
         with:
           commands: |
             npm ci
+            npm run typecheck
             npm run lint
             npm run format:check
             npm run test:cov
           dir: frontend
-          node_version: "22"
+          node_version: "24"
           # Keep starter-kit project key until dedicated LEXIS project exists.
           sonar_args: >
             -Dsonar.exclusions=**/coverage/**,**/node_modules/**,**/*spec.ts,**/*.test.ts,**/*.test.tsx,**/e2e/**
@@ -100,8 +103,8 @@ jobs:
   trivy:
     name: Trivy Security Scan
     if: (! github.event.pull_request.draft)
-    continue-on-error: true
     permissions:
+      contents: read
       security-events: write
     runs-on: ubuntu-slim
     timeout-minutes: 5
@@ -125,21 +128,24 @@ jobs:
           scan-type: "fs"
           scanners: "vuln,secret,misconfig"
           severity: "CRITICAL,HIGH"
+          # Require scanner execution, while findings remain non-blocking pending team policy.
+          exit-code: "0"
           trivyignores: ".github/.trivyignore"
           cache-dir: .trivycache
           skip-dirs: "**/node_modules,**/coverage,**/dist,.git"
 
       - name: Upload Trivy scan results to GitHub Security tab
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: "trivy-results.sarif"
 
   results:
     name: Analysis Results
-    needs: [backend-tests, frontend-tests, clamav-startup]
+    needs: [backend-tests, frontend-tests, clamav-startup, trivy]
     if: always() && (! github.event.pull_request.draft)
     runs-on: ubuntu-slim
     steps:
-      - if: contains(needs.*.result, 'failure')||contains(needs.*.result, 'canceled')
+      - if: contains(needs.*.result, 'failure')||contains(needs.*.result, 'cancelled')
         run: echo "At least one job has failed." && exit 1
       - run: echo "Success!"

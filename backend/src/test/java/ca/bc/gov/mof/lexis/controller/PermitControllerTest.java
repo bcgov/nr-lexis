@@ -3,11 +3,14 @@ package ca.bc.gov.mof.lexis.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
@@ -15,9 +18,11 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,8 +43,24 @@ class PermitControllerTest {
   @Mock private PermitService service;
   @Mock private LexisSessionService sessionService;
   @Mock private Authentication authentication;
+  @Mock private ProvincialAuthorizationService provincialAuthorizationService;
 
   @InjectMocks private PermitController controller;
+
+  @BeforeEach
+  void setUpAuthorization() {
+    lenient()
+        .when(
+            provincialAuthorizationService.constrainOrgUnits(
+                nullable(Authentication.class), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              List<Long> requestedOrgUnits = invocation.getArgument(1);
+              return new ProvincialAuthorizationService.OrgUnitConstraint(
+                  false,
+                  requestedOrgUnits == null ? List.of() : List.copyOf(requestedOrgUnits));
+            });
+  }
 
   @Test
   void optionsShouldReturnNoContentWhenServiceMissing() {
@@ -148,12 +169,47 @@ class PermitControllerTest {
     assertThat(criteria.invoiceNumber()).isEqualTo("SI-99881");
     assertThat(criteria.applicantClientNumber()).isEqualTo("00055667");
     assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.accessClientNumber()).isNull();
     assertThat(criteria.regionNumbers()).containsExactly(12L);
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
   }
 
   @Test
-  void searchShouldOverrideClientFiltersWhenUserHasScopedForestClient() {
+  void searchShouldApplyScopeWithoutForcingOrdinaryClientFilters() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.search(any(PermitSearchCriteria.class)))
+        .thenReturn(new PermitSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        null,
+        0,
+        25,
+        null,
+        authentication);
+
+    ArgumentCaptor<PermitSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PermitSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+
+    PermitSearchCriteria criteria = criteriaCaptor.getValue();
+    assertThat(criteria.applicantClientNumber()).isNull();
+    assertThat(criteria.ownerClientNumber()).isNull();
+    assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
+  }
+
+  @Test
+  void searchShouldKeepForgedClientFiltersInsideMandatoryScopedAccess() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(service.search(any(PermitSearchCriteria.class)))
@@ -181,8 +237,39 @@ class PermitControllerTest {
     verify(service).search(criteriaCaptor.capture());
 
     PermitSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.applicantClientNumber()).isNull();
-    assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.applicantClientNumber()).isEqualTo("00099999");
+    assertThat(criteria.ownerClientNumber()).isEqualTo("00088888");
+    assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.regionNumbers()).isEmpty();
+  }
+
+  @Test
+  void countShouldKeepForgedClientFiltersInsideMandatoryScopedAccess() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.count(any(PermitSearchCriteria.class))).thenReturn(4);
+
+    ResponseEntity<SearchCountResponseDto> response =
+        controller.count(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00099999",
+            "00088888",
+            List.of(),
+            authentication);
+
+    assertThat(response.getBody()).isEqualTo(new SearchCountResponseDto(4));
+    ArgumentCaptor<PermitSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PermitSearchCriteria.class);
+    verify(service).count(criteriaCaptor.capture());
+    assertThat(criteriaCaptor.getValue().applicantClientNumber()).isEqualTo("00099999");
+    assertThat(criteriaCaptor.getValue().ownerClientNumber()).isEqualTo("00088888");
+    assertThat(criteriaCaptor.getValue().accessClientNumber()).isEqualTo("00077881");
   }
 
   @Test
@@ -240,6 +327,7 @@ class PermitControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitDetailDto dto = permitDetail("00077881", "00055667");
     when(service.findByPermitNumber(9000123L)).thenReturn(Optional.of(dto));
+    when(provincialAuthorizationService.canAccessPermit(null, dto)).thenReturn(true);
 
     ResponseEntity<PermitDetailDto> response = controller.getByPermitNumber(9000123L, null);
 
@@ -251,15 +339,16 @@ class PermitControllerTest {
   @Test
   void detailShouldReturnNotFoundWhenScopedUserDoesNotOwnPermit() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
-    when(service.findByPermitNumber(9000123L))
-        .thenReturn(Optional.of(permitDetail("00099999", "00088888")));
+    PermitDetailDto detail = permitDetail("00099999", "00088888");
+    when(service.findByPermitNumber(9000123L)).thenReturn(Optional.of(detail));
+    when(provincialAuthorizationService.canAccessPermit(authentication, detail)).thenReturn(false);
 
     ResponseEntity<PermitDetailDto> response =
         controller.getByPermitNumber(9000123L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     verify(service).findByPermitNumber(9000123L);
+    verify(provincialAuthorizationService).canAccessPermit(authentication, detail);
   }
 
   private static PermitDetailDto permitDetail(

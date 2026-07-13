@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
 import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -19,6 +20,8 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Scal
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.SubmissionImportValidationResult;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
@@ -89,7 +92,10 @@ public class ApplicationSubmissionImportService {
   private static final String GEOJSON_FEATURE_COLLECTION = "FeatureCollection";
   private static final String GEOJSON_HARVESTED_TIMBER_ENTITY = "HARVESTEDTIMBER";
   private static final int MAX_PACKAGE_NUMBER_LENGTH = 20;
-  private static final long MAX_IMPORT_BYTES = 20L * 1024L * 1024L;
+  public static final long MAX_IMPORT_BYTES = 20L * 1024L * 1024L;
+  private static final int MAX_ZIP_ENTRIES = 64;
+  private static final int MAX_ZIP_ENTRY_NAME_LENGTH = 255;
+  private static final long MAX_ZIP_COMPRESSION_RATIO = 100L;
   private static final long DEFAULT_TERM_DAYS = 180L;
   private static final String DEFAULT_PACKAGE_STATUS = "ACT";
   private static final String DEFAULT_REPROCESSED_INDICATOR = "N";
@@ -111,6 +117,10 @@ public class ApplicationSubmissionImportService {
       "ESF legacy LEXIS submissions must be federal. Provincial applications must be uploaded in modern LEXIS.";
   private static final String FEDERAL_ENDPOINT_ONLY_ERROR =
       "Federal submission endpoint only accepts jurisdictionCode=F. Provincial applications must use the modern provincial upload path.";
+  private static final String PROVINCIAL_ENDPOINT_ONLY_ERROR =
+      "Federal applications must use the dedicated federal submission endpoint.";
+  private static final OrgUnitConstraint UNRESTRICTED_ORG_UNITS =
+      new OrgUnitConstraint(false, List.of());
   private static final Pattern UNTERMINATED_XML_TAG_PATTERN =
       Pattern.compile("The element type \"([^\"]+)\" must be terminated by the matching end-tag \"</([^\"]+)>\"\\.");
   private static final Pattern INCOMPLETE_XML_TAG_PATTERN =
@@ -146,7 +156,7 @@ public class ApplicationSubmissionImportService {
       ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider) {
     this(
         applicationDetailsServiceProvider,
-        Clock.systemDefaultZone(),
+        LexisBusinessTime.systemClock(),
         objectMapper,
         virusScanService,
         scheduleRepositoryProvider);
@@ -203,19 +213,65 @@ public class ApplicationSubmissionImportService {
   }
 
   public ApplicationSubmissionImportResultDto validateApplicationSubmission(MultipartFile file, String userReference) {
-    return validateApplicationSubmission(file, userReference, false);
+    return validateApplicationSubmission(file, userReference, null);
+  }
+
+  public ApplicationSubmissionImportResultDto validateApplicationSubmission(
+      MultipartFile file, String userReference, String expectedForestClientNumber) {
+    return validateApplicationSubmission(
+        file, userReference, expectedForestClientNumber, UNRESTRICTED_ORG_UNITS);
+  }
+
+  public ApplicationSubmissionImportResultDto validateApplicationSubmission(
+      MultipartFile file,
+      String userReference,
+      String expectedForestClientNumber,
+      OrgUnitConstraint orgUnitConstraint) {
+    return validateApplicationSubmission(
+        file,
+        userReference,
+        false,
+        FEDERAL_ESF_ONLY_ERROR,
+        expectedForestClientNumber,
+        orgUnitConstraint);
   }
 
   private ApplicationSubmissionImportResultDto validateApplicationSubmission(
       MultipartFile file, String userReference, boolean federalOnly) {
-    return validateApplicationSubmission(file, userReference, federalOnly, FEDERAL_ESF_ONLY_ERROR);
+    return validateApplicationSubmission(
+        file,
+        userReference,
+        federalOnly,
+        FEDERAL_ESF_ONLY_ERROR,
+        null,
+        UNRESTRICTED_ORG_UNITS);
   }
 
   private ApplicationSubmissionImportResultDto validateApplicationSubmission(
       MultipartFile file, String userReference, boolean federalOnly, String federalOnlyError) {
+    return validateApplicationSubmission(
+        file, userReference, federalOnly, federalOnlyError, null, UNRESTRICTED_ORG_UNITS);
+  }
+
+  private ApplicationSubmissionImportResultDto validateApplicationSubmission(
+      MultipartFile file,
+      String userReference,
+      boolean federalOnly,
+      String federalOnlyError,
+      String expectedForestClientNumber,
+      OrgUnitConstraint orgUnitConstraint) {
     String fileName = resolveFileName(file);
     long fileSize = file == null ? 0L : file.getSize();
     String normalizedUserReference = normalizeUserReference(userReference);
+    if (fileSize > MAX_IMPORT_BYTES) {
+      return rejected(
+          fileName,
+          fileSize,
+          List.of("The LEXIS application submission file must be 20 MiB or smaller."),
+          List.of(),
+          null,
+          normalizedUserReference);
+    }
     List<String> userReferenceErrors = validateUserReference(normalizedUserReference);
     if (!userReferenceErrors.isEmpty()) {
       return rejected(fileName, fileSize, userReferenceErrors, List.of(), null, normalizedUserReference);
@@ -246,6 +302,30 @@ public class ApplicationSubmissionImportService {
             federalOnlyError);
     if (federalOnlyRejection != null) {
       return federalOnlyRejection;
+    }
+    ApplicationSubmissionImportResultDto forestClientScopeRejection =
+        forestClientScopeRejection(
+            fileName,
+            fileSize,
+            submission,
+            warnings,
+            submissionSummary,
+            normalizedUserReference,
+            expectedForestClientNumber);
+    if (forestClientScopeRejection != null) {
+      return forestClientScopeRejection;
+    }
+    ApplicationSubmissionImportResultDto orgUnitScopeRejection =
+        orgUnitScopeRejection(
+            fileName,
+            fileSize,
+            submission,
+            warnings,
+            submissionSummary,
+            normalizedUserReference,
+            orgUnitConstraint);
+    if (orgUnitScopeRejection != null) {
+      return orgUnitScopeRejection;
     }
 
     ApplicationDetailsRpcService applicationDetailsService =
@@ -388,16 +468,72 @@ public class ApplicationSubmissionImportService {
 
   @Transactional
   public ApplicationSubmissionImportResultDto importApplicationSubmission(MultipartFile file, String userId, String userReference) {
-    return importApplicationSubmission(file, userId, userReference, false);
+    return importApplicationSubmission(file, userId, userReference, null);
+  }
+
+  @Transactional
+  public ApplicationSubmissionImportResultDto importApplicationSubmission(
+      MultipartFile file,
+      String userId,
+      String userReference,
+      String expectedForestClientNumber) {
+    return importApplicationSubmission(
+        file,
+        userId,
+        userReference,
+        expectedForestClientNumber,
+        UNRESTRICTED_ORG_UNITS);
+  }
+
+  @Transactional
+  public ApplicationSubmissionImportResultDto importApplicationSubmission(
+      MultipartFile file,
+      String userId,
+      String userReference,
+      String expectedForestClientNumber,
+      OrgUnitConstraint orgUnitConstraint) {
+    return importApplicationSubmission(
+        file,
+        userId,
+        userReference,
+        false,
+        FEDERAL_ESF_ONLY_ERROR,
+        expectedForestClientNumber,
+        orgUnitConstraint);
   }
 
   private ApplicationSubmissionImportResultDto importApplicationSubmission(
       MultipartFile file, String userId, String userReference, boolean federalOnly) {
-    return importApplicationSubmission(file, userId, userReference, federalOnly, FEDERAL_ESF_ONLY_ERROR);
+    return importApplicationSubmission(
+        file,
+        userId,
+        userReference,
+        federalOnly,
+        FEDERAL_ESF_ONLY_ERROR,
+        null,
+        UNRESTRICTED_ORG_UNITS);
   }
 
   private ApplicationSubmissionImportResultDto importApplicationSubmission(
       MultipartFile file, String userId, String userReference, boolean federalOnly, String federalOnlyError) {
+    return importApplicationSubmission(
+        file,
+        userId,
+        userReference,
+        federalOnly,
+        federalOnlyError,
+        null,
+        UNRESTRICTED_ORG_UNITS);
+  }
+
+  private ApplicationSubmissionImportResultDto importApplicationSubmission(
+      MultipartFile file,
+      String userId,
+      String userReference,
+      boolean federalOnly,
+      String federalOnlyError,
+      String expectedForestClientNumber,
+      OrgUnitConstraint orgUnitConstraint) {
     String fileName = resolveFileName(file);
     long fileSize = file == null ? 0L : file.getSize();
     String normalizedUserReference = normalizeUserReference(userReference);
@@ -431,6 +567,30 @@ public class ApplicationSubmissionImportService {
             federalOnlyError);
     if (federalOnlyRejection != null) {
       return federalOnlyRejection;
+    }
+    ApplicationSubmissionImportResultDto forestClientScopeRejection =
+        forestClientScopeRejection(
+            fileName,
+            fileSize,
+            submission,
+            warnings,
+            submissionSummary,
+            normalizedUserReference,
+            expectedForestClientNumber);
+    if (forestClientScopeRejection != null) {
+      return forestClientScopeRejection;
+    }
+    ApplicationSubmissionImportResultDto orgUnitScopeRejection =
+        orgUnitScopeRejection(
+            fileName,
+            fileSize,
+            submission,
+            warnings,
+            submissionSummary,
+            normalizedUserReference,
+            orgUnitConstraint);
+    if (orgUnitScopeRejection != null) {
+      return orgUnitScopeRejection;
     }
 
     ApplicationDetailsRpcService applicationDetailsService =
@@ -481,14 +641,16 @@ public class ApplicationSubmissionImportService {
     }
 
     LocalDate importDate = LocalDate.now(clock);
+    CreateApplicationRequest createRequest =
+        toCreateApplicationRequest(
+            submission,
+            importDate,
+            scheduleResolution.exportScheduleId(),
+            normalizedUserReference);
     CreateApplicationResult applicationResult =
-        applicationDetailsService.addApplication(
-            toCreateApplicationRequest(
-                submission,
-                importDate,
-                scheduleResolution.exportScheduleId(),
-                normalizedUserReference),
-            userId);
+        federalOnly
+            ? applicationDetailsService.addFederalImportedApplication(createRequest, userId)
+            : applicationDetailsService.addApplication(createRequest, userId);
     if (!applicationResult.valid() || applicationResult.applicationNumber() == null) {
       markRollbackOnly();
       return rejected(
@@ -612,7 +774,8 @@ public class ApplicationSubmissionImportService {
       return ParsedUpload.rejected(rejected(fileName, fileSize, ex.errors(), List.of()));
     } catch (Exception ex) {
       LOGGER.warn(
-          "LEXIS application submission failed while parsing [{}]: {}", fileName, ex.getMessage());
+          "event=lexis_submission_import outcome=parse_failed failureType={}",
+          exceptionType(ex));
       return ParsedUpload.rejected(
           rejected(
               fileName,
@@ -670,13 +833,31 @@ public class ApplicationSubmissionImportService {
 
     try (ZipInputStream zipInputStream = new ZipInputStream(file.getInputStream())) {
       ZipEntry entry;
+      int entryCount = 0;
+      long totalExpandedBytes = 0L;
       while ((entry = zipInputStream.getNextEntry()) != null) {
         String entryName = trimToNull(entry.getName());
-        if (entry.isDirectory() || isIgnoredZipEntry(entryName)) {
+        entryCount++;
+        if (entryCount > MAX_ZIP_ENTRIES) {
+          throw new ApplicationSubmissionImportException(
+              List.of("The ZIP file contains too many entries."));
+        }
+        validateZipEntryName(entryName);
+        if (entry.isDirectory()) {
+          totalExpandedBytes += drainZipEntry(zipInputStream, MAX_IMPORT_BYTES - totalExpandedBytes);
+          validateZipExpandedSizeAndRatio(file, totalExpandedBytes);
+          zipInputStream.closeEntry();
+          continue;
+        }
+        if (isIgnoredZipEntry(entryName)) {
+          totalExpandedBytes += drainZipEntry(zipInputStream, MAX_IMPORT_BYTES - totalExpandedBytes);
+          validateZipExpandedSizeAndRatio(file, totalExpandedBytes);
           zipInputStream.closeEntry();
           continue;
         }
         byte[] entryBytes = readBounded(zipInputStream);
+        totalExpandedBytes += entryBytes.length;
+        validateZipExpandedSizeAndRatio(file, totalExpandedBytes);
         UploadFormat entryFormat = resolveUploadFormat(entryName, entryBytes);
         if (entryFormat == null) {
           unexpectedEntryNames.add(entryName == null ? "(unnamed file)" : entryName);
@@ -778,6 +959,54 @@ public class ApplicationSubmissionImportService {
     return normalized.startsWith("__MACOSX/") || ".DS_Store".equals(baseName);
   }
 
+  private long drainZipEntry(InputStream inputStream, long remainingBytes)
+      throws Exception {
+    if (remainingBytes < 0) {
+      throw new ApplicationSubmissionImportException(
+          List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+    }
+    byte[] buffer = new byte[8192];
+    long total = 0L;
+    int read;
+    while ((read = inputStream.read(buffer)) >= 0) {
+      total += read;
+      if (total > remainingBytes) {
+        throw new ApplicationSubmissionImportException(
+            List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+      }
+    }
+    return total;
+  }
+
+  private void validateZipExpandedSizeAndRatio(MultipartFile file, long totalExpandedBytes)
+      throws ApplicationSubmissionImportException {
+    if (totalExpandedBytes > MAX_IMPORT_BYTES) {
+      throw new ApplicationSubmissionImportException(
+          List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+    }
+    if (file.getSize() > 0
+        && totalExpandedBytes > 1024L * 1024L
+        && totalExpandedBytes > file.getSize() * MAX_ZIP_COMPRESSION_RATIO) {
+      throw new ApplicationSubmissionImportException(
+          List.of("The ZIP file compression ratio exceeds the supported limit."));
+    }
+  }
+
+  private void validateZipEntryName(String entryName) throws ApplicationSubmissionImportException {
+    if (entryName == null || entryName.length() > MAX_ZIP_ENTRY_NAME_LENGTH) {
+      throw new ApplicationSubmissionImportException(
+          List.of("The ZIP file contains an invalid entry name."));
+    }
+    String normalized = entryName.replace('\\', '/');
+    if (normalized.startsWith("/")
+        || normalized.equals("..")
+        || normalized.startsWith("../")
+        || normalized.contains("/../")) {
+      throw new ApplicationSubmissionImportException(
+          List.of("The ZIP file contains an unsafe entry path."));
+    }
+  }
+
   private byte[] readBounded(InputStream inputStream) throws Exception {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     byte[] buffer = new byte[8192];
@@ -787,7 +1016,7 @@ public class ApplicationSubmissionImportService {
       totalBytes += bytesRead;
       if (totalBytes > MAX_IMPORT_BYTES) {
         throw new ApplicationSubmissionImportException(
-            List.of("The LEXIS application submission file must be 20 MB or smaller."));
+            List.of("The LEXIS application submission file must be 20 MiB or smaller."));
       }
       outputStream.write(buffer, 0, bytesRead);
     }
@@ -1228,7 +1457,9 @@ public class ApplicationSubmissionImportService {
     } catch (ApplicationSubmissionImportException ex) {
       throw ex;
     } catch (Exception ex) {
-      LOGGER.warn("LEXIS GeoJSON import failed while preparing validation: {}", ex.getMessage());
+      LOGGER.warn(
+          "event=lexis_submission_import outcome=geojson_parse_failed failureType={}",
+          exceptionType(ex));
       throw new ApplicationSubmissionImportException(List.of("The GeoJSON file could not be parsed."));
     }
   }
@@ -1598,7 +1829,9 @@ public class ApplicationSubmissionImportService {
       errors.add("The " + label + " is not well-formed XML. " + formatXmlParseError(ex));
       return null;
     } catch (Exception ex) {
-      LOGGER.warn("LEXIS {} failed while parsing: {}", label, ex.getMessage());
+      LOGGER.warn(
+          "event=lexis_submission_import outcome=xml_parse_failed failureType={}",
+          exceptionType(ex));
       errors.add("The " + label + " could not be parsed as XML.");
       return null;
     }
@@ -2059,6 +2292,9 @@ public class ApplicationSubmissionImportService {
         Optional.ofNullable(scheduleRepository.findUpcomingExportSchedules()).orElse(List.of()).stream()
             .filter(schedule -> schedule.exportScheduleId() != null)
             .filter(schedule -> schedule.advertisingDate() != null)
+            .filter(
+                schedule ->
+                    !schedule.advertisingDate().isBefore(submission.biweeklyListDate()))
             .sorted(
                 Comparator.comparing(ExportScheduleRowDto::advertisingDate)
                     .thenComparing(ExportScheduleRowDto::exportScheduleId))
@@ -2508,7 +2744,11 @@ public class ApplicationSubmissionImportService {
     List<String> normalizedWarnings = warnings == null ? List.of() : warnings;
     String detail =
         normalizedErrors.isEmpty() ? "No rejection reason was returned." : normalizedErrors.get(0);
-    LOGGER.warn("LEXIS application submission rejected for [{}]: {}", fileName, detail);
+    LOGGER.warn(
+        "event=lexis_submission_import outcome=rejected fileSize={} errorCount={} warningCount={}",
+        Math.max(0L, fileSize),
+        normalizedErrors.size(),
+        normalizedWarnings.size());
     return new ApplicationSubmissionImportResultDto(
         UPLOAD_TYPE,
         fileName,
@@ -2544,13 +2784,60 @@ public class ApplicationSubmissionImportService {
       String userReference,
       boolean federalOnly,
       String federalOnlyError) {
-    if (!federalOnly || FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())) {
+    boolean acceptedJurisdiction =
+        federalOnly
+            ? FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())
+            : PROVINCIAL_JURISDICTION.equals(submission.jurisdictionCode());
+    if (acceptedJurisdiction) {
       return null;
     }
     return rejected(
         fileName,
         fileSize,
-        List.of(federalOnlyError),
+        List.of(federalOnly ? federalOnlyError : PROVINCIAL_ENDPOINT_ONLY_ERROR),
+        warnings,
+        submissionSummary,
+        userReference);
+  }
+
+  private ApplicationSubmissionImportResultDto forestClientScopeRejection(
+      String fileName,
+      long fileSize,
+      ParsedSubmission submission,
+      List<String> warnings,
+      ApplicationSubmissionSummaryDto submissionSummary,
+      String userReference,
+      String expectedForestClientNumber) {
+    String normalizedExpectedClient = normalizeClientNumber(expectedForestClientNumber);
+    if (normalizedExpectedClient == null
+        || normalizedExpectedClient.equals(normalizeClientNumber(submission.ownerClientNumber()))
+        || normalizedExpectedClient.equals(normalizeClientNumber(submission.agentClientNumber()))) {
+      return null;
+    }
+    return rejected(
+        fileName,
+        fileSize,
+        List.of("Submission owner or agent must match the authenticated forest-client scope."),
+        warnings,
+        submissionSummary,
+        userReference);
+  }
+
+  private ApplicationSubmissionImportResultDto orgUnitScopeRejection(
+      String fileName,
+      long fileSize,
+      ParsedSubmission submission,
+      List<String> warnings,
+      ApplicationSubmissionSummaryDto submissionSummary,
+      String userReference,
+      OrgUnitConstraint orgUnitConstraint) {
+    if (orgUnitConstraint != null && orgUnitConstraint.allows(submission.orgUnitNumber())) {
+      return null;
+    }
+    return rejected(
+        fileName,
+        fileSize,
+        List.of("Submission forest region is outside the authenticated organization-unit scope."),
         warnings,
         submissionSummary,
         userReference);

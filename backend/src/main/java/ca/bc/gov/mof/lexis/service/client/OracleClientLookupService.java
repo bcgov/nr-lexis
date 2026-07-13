@@ -24,6 +24,16 @@ public class OracleClientLookupService implements ClientLookupService {
 
   @Override
   public Optional<ClientData> getClientData(String clientNumber, String locationCode) {
+    return getClientData(clientNumber, locationCode, false);
+  }
+
+  @Override
+  public Optional<ClientData> getClientDataRequired(String clientNumber, String locationCode) {
+    return getClientData(clientNumber, locationCode, true);
+  }
+
+  private Optional<ClientData> getClientData(
+      String clientNumber, String locationCode, boolean required) {
     String normalizedClientNumber = normalizeClientNumber(clientNumber);
     if (normalizedClientNumber == null) {
       return Optional.empty();
@@ -34,9 +44,13 @@ public class OracleClientLookupService implements ClientLookupService {
       normalizedLocationCode = "00";
     }
 
-    return repository
-        .findLocationByClientNumberCode(normalizedClientNumber, normalizedLocationCode)
-        .map(this::toClientData);
+    Optional<ClientLocationRow> result =
+        required
+            ? repository.findLocationByClientNumberCodeRequired(
+                normalizedClientNumber, normalizedLocationCode)
+            : repository.findLocationByClientNumberCode(
+                normalizedClientNumber, normalizedLocationCode);
+    return result.map(this::toClientData);
   }
 
   @Override

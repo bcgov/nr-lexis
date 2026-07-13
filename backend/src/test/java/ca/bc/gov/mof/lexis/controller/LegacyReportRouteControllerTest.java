@@ -1,21 +1,30 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.report.LexisReportService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
@@ -23,6 +32,11 @@ import org.springframework.util.MultiValueMap;
 class LegacyReportRouteControllerTest {
 
   @Mock private LexisReportController reportController;
+  @Mock private Authentication authentication;
+  @Mock private ObjectProvider<LexisReportService> reportServiceProvider;
+  @Mock private LexisReportService reportService;
+  @Mock private ProvincialAuthorizationService provincialAuthorizationService;
+  @Mock private LexisPrincipalService principalService;
 
   @Test
   void shouldReturnNoContentForViewAction() {
@@ -33,7 +47,8 @@ class LegacyReportRouteControllerTest {
         controller.legacyReport(
             Map.of("actionMapping", "view"),
             new LinkedMultiValueMap<>(Map.of("actionMapping", java.util.List.of("view"))),
-            request);
+            request,
+            authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(reportController);
@@ -58,7 +73,8 @@ class LegacyReportRouteControllerTest {
                 "outputFormat", "PDF",
                 "clientNumber", "123.4"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -88,7 +104,8 @@ class LegacyReportRouteControllerTest {
                 "actionMapping", "generate",
                 "clientNumber", "1234567"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -118,7 +135,8 @@ class LegacyReportRouteControllerTest {
                 "actionMapping", "generate",
                 "exportSchedule", "12345"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -150,7 +168,8 @@ class LegacyReportRouteControllerTest {
                 "actionMapping", "generate",
                 "outputFormat", "XLS"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -182,7 +201,8 @@ class LegacyReportRouteControllerTest {
                 "outputFormat", "XLS",
                 "reportingDistrict", "DSE"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -215,7 +235,8 @@ class LegacyReportRouteControllerTest {
                 "outputFormat", "CSV",
                 "forestFileId", "A12345"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -245,7 +266,8 @@ class LegacyReportRouteControllerTest {
                 "actionMapping", "generateMarkReport",
                 "timberMark1", "TM001"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -259,35 +281,28 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
-  void shouldMapLegacyTenureNonPdfOutputValuesToSpreadsheetFormat() {
+  void shouldRejectUnsupportedLegacyOutputFormat() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
-
-    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {7, 9}));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generateTenureReport");
     multi.add("outputFormat", "unexpected");
     multi.add("tenureType1", "A01");
 
-    ResponseEntity<byte[]> response =
-        controller.legacyReport(
-            Map.of(
-                "actionMapping", "generateTenureReport",
-                "outputFormat", "unexpected",
-                "tenureType1", "A01"),
-            multi,
-            request);
-
-    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
-        ArgumentCaptor.forClass(LexisReportRequestDto.class);
-    verify(reportController).tenureReport(requestCaptor.capture());
-
-    LexisReportRequestDto delegated = requestCaptor.getValue();
-    assertThat(delegated.format()).isEqualTo("XLS");
-    assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generateTenureReport");
-    assertThat(delegated.parameters()).containsEntry("tenureType1", "A01");
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThatThrownBy(
+            () ->
+                controller.legacyReport(
+                    Map.of(
+                        "actionMapping", "generateTenureReport",
+                        "outputFormat", "unexpected",
+                        "tenureType1", "A01"),
+                    multi,
+                    request,
+                    authentication))
+        .isInstanceOf(ca.bc.gov.mof.lexis.service.report.LexisReportValidationException.class)
+        .hasMessage("Report format must be PDF, CSV, XLS, or XLSX.");
+    verifyNoInteractions(reportController);
   }
 
   @Test
@@ -312,7 +327,8 @@ class LegacyReportRouteControllerTest {
                 "timberMark", "tm123",
                 "forestFileId", "a12345"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -345,7 +361,8 @@ class LegacyReportRouteControllerTest {
                 "outputFormat", "PDF",
                 "timberMark", "tm456"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -379,7 +396,8 @@ class LegacyReportRouteControllerTest {
                 "timberMark1", "tm001",
                 "forestFileId", "a12345"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -412,7 +430,8 @@ class LegacyReportRouteControllerTest {
                 "actionMapping", "generateMarkReport",
                 "outputFormat", "PDF"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
@@ -429,7 +448,7 @@ class LegacyReportRouteControllerTest {
     MockHttpServletRequest request =
         new MockHttpServletRequest("POST", "/api/lexis/approvedExemptionReport.do");
 
-    when(reportController.approvedExemptionReport(any()))
+    when(reportController.approvedExemptionReport(any(), eq(authentication)))
         .thenReturn(ResponseEntity.ok(new byte[] {4, 2}));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
@@ -442,11 +461,12 @@ class LegacyReportRouteControllerTest {
                 "actionMapping", "generate",
                 "exemptionNumber", "E-12345"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
-    verify(reportController).approvedExemptionReport(requestCaptor.capture());
+    verify(reportController).approvedExemptionReport(requestCaptor.capture(), eq(authentication));
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
     assertThat(delegated.format()).isEqualTo("PDF");
@@ -460,7 +480,7 @@ class LegacyReportRouteControllerTest {
     MockHttpServletRequest request =
         new MockHttpServletRequest("POST", "/api/lexis/approvedExemptionReport.do");
 
-    when(reportController.approvedExemptionReport(any()))
+    when(reportController.approvedExemptionReport(any(), eq(authentication)))
         .thenReturn(ResponseEntity.ok(new byte[] {4, 4}));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
@@ -475,11 +495,12 @@ class LegacyReportRouteControllerTest {
                 "outputFormat", "CSV",
                 "exemptionNumber", "E-12345"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
-    verify(reportController).approvedExemptionReport(requestCaptor.capture());
+    verify(reportController).approvedExemptionReport(requestCaptor.capture(), eq(authentication));
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
     assertThat(delegated.format()).isEqualTo("PDF");
@@ -493,7 +514,7 @@ class LegacyReportRouteControllerTest {
     MockHttpServletRequest request =
         new MockHttpServletRequest("POST", "/api/lexis/permitReport.do");
 
-    when(reportController.permitReport(any()))
+    when(reportController.permitReport(any(), eq(authentication)))
         .thenReturn(ResponseEntity.ok(new byte[] {4, 3}));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
@@ -506,16 +527,107 @@ class LegacyReportRouteControllerTest {
                 "actionMapping", "generate",
                 "permitNumber", "900100"),
             multi,
-            request);
+            request,
+            authentication);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
-    verify(reportController).permitReport(requestCaptor.capture());
+    verify(reportController).permitReport(requestCaptor.capture(), eq(authentication));
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
     assertThat(delegated.format()).isEqualTo("PDF");
     assertThat(delegated.parameters()).containsEntry("permitNumber", "900100");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void legacyApprovedExemptionReportShouldRejectMissingExemptionBeforeAuthorization() {
+    LegacyReportRouteController controller = actualContextualReportController();
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/approvedExemptionReport.do");
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+
+    assertThatThrownBy(
+            () ->
+                controller.legacyReport(
+                    Map.of("actionMapping", "generate"), multi, request, authentication))
+        .isInstanceOf(ca.bc.gov.mof.lexis.service.report.LexisReportValidationException.class)
+        .hasMessageContaining("Exemption number is required");
+    verifyNoInteractions(provincialAuthorizationService, reportServiceProvider, reportService);
+  }
+
+  @Test
+  void legacyPermitReportShouldRejectInvalidPermitBeforeAuthorization() {
+    LegacyReportRouteController controller = actualContextualReportController();
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/permitReport.do");
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("permitNumber", "not-a-number");
+
+    assertThatThrownBy(
+            () ->
+                controller.legacyReport(
+                    Map.of(
+                        "actionMapping", "generate",
+                        "permitNumber", "not-a-number"),
+                    multi,
+                    request,
+                    authentication))
+        .isInstanceOf(ca.bc.gov.mof.lexis.service.report.LexisReportValidationException.class)
+        .hasMessageContaining("positive integer");
+    verifyNoInteractions(provincialAuthorizationService, reportServiceProvider, reportService);
+  }
+
+  @Test
+  void legacyContextualReportsShouldReturnForbiddenWithoutCallingReportService() {
+    LegacyReportRouteController controller = actualContextualReportController();
+    doThrow(new AccessDeniedException("outside scope"))
+        .when(provincialAuthorizationService)
+        .requireExemption(authentication, "EX-205");
+    doThrow(new AccessDeniedException("outside scope"))
+        .when(provincialAuthorizationService)
+        .requirePermit(authentication, 7000123L);
+
+    MockHttpServletRequest exemptionRequest =
+        new MockHttpServletRequest("POST", "/api/lexis/approvedExemptionReport.do");
+    MultiValueMap<String, String> exemptionParameters = new LinkedMultiValueMap<>();
+    exemptionParameters.add("actionMapping", "generate");
+    exemptionParameters.add("exemptionNumber", "EX-205");
+    ResponseEntity<byte[]> exemptionResponse =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "exemptionNumber", "EX-205"),
+            exemptionParameters,
+            exemptionRequest,
+            authentication);
+
+    MockHttpServletRequest permitRequest =
+        new MockHttpServletRequest("POST", "/api/lexis/permitReport.do");
+    MultiValueMap<String, String> permitParameters = new LinkedMultiValueMap<>();
+    permitParameters.add("actionMapping", "generate");
+    permitParameters.add("permitNumber", "7000123");
+    ResponseEntity<byte[]> permitResponse =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "permitNumber", "7000123"),
+            permitParameters,
+            permitRequest,
+            authentication);
+
+    assertThat(exemptionResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    assertThat(permitResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(reportServiceProvider, reportService);
+  }
+
+  private LegacyReportRouteController actualContextualReportController() {
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\jsmith");
+    return new LegacyReportRouteController(
+        new LexisReportController(
+            reportServiceProvider, provincialAuthorizationService, principalService));
   }
 
 }

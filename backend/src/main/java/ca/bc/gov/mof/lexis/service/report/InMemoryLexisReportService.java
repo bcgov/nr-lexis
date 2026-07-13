@@ -10,8 +10,9 @@ import java.util.TreeMap;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
+/** Explicitly enabled development stub; its UTF-8 diagnostic payloads are not real report files. */
 @Service
-@Profile("!oracle")
+@Profile("stub-reports & !oracle")
 public class InMemoryLexisReportService implements LexisReportService {
 
   private static final String DEFAULT_FORMAT = "PDF";
@@ -37,10 +38,7 @@ public class InMemoryLexisReportService implements LexisReportService {
     }
 
     Map<String, String> parameters = request.parameters() == null ? Map.of() : Map.copyOf(request.parameters());
-    String format = request.format() == null ? DEFAULT_FORMAT : request.format().trim();
-    if (format.isEmpty()) {
-      format = DEFAULT_FORMAT;
-    }
+    String format = LexisReportFormat.fromNullable(request.format()).name();
     return new LexisReportRequestDto(parameters, format);
   }
 
@@ -79,7 +77,7 @@ public class InMemoryLexisReportService implements LexisReportService {
 
     StringBuilder body = new StringBuilder();
     body.append("LEXIS report stub").append('\n');
-    body.append("mode=in-memory").append('\n');
+    body.append("mode=stub-reports").append('\n');
     body.append("reportAction=").append(action).append('\n');
     body.append("format=").append(format).append('\n');
 

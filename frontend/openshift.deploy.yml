@@ -20,6 +20,14 @@ parameters:
   - name: REPLICAS
     description: Pod count
     value: "2"
+  - name: MIN_CPU
+    value: "50m"
+  - name: MIN_MEM
+    value: "64Mi"
+  - name: MAX_CPU
+    value: "200m"
+  - name: MAX_MEM
+    value: "128Mi"
   - name: IMAGE_TAG
     description: Container image tag (PR number, 'test', or 'prod')
     value: latest
@@ -48,7 +56,8 @@ parameters:
   - name: VITE_COGNITO_SCOPES
     value: "openid profile email"
   - name: VITE_ZONE
-    value: dev
+    description: Authentication environment; supported values are dev, test, and prod
+    required: true
   - name: VITE_LEXIS_PROD_RTM_ONLY
     value: "false"
   - name: VITE_FAM_MANAGE_URL
@@ -156,12 +165,12 @@ objects:
                   mountPath: /tmp
               resources:
                 requests:
-                  cpu: "50m"
-                  memory: "64Mi"
+                  cpu: ${MIN_CPU}
+                  memory: ${MIN_MEM}
                   ephemeral-storage: "100Mi"
                 limits:
-                  cpu: "200m"
-                  memory: "128Mi"
+                  cpu: ${MAX_CPU}
+                  memory: ${MAX_MEM}
                   ephemeral-storage: "200Mi"
               livenessProbe:
                 httpGet:

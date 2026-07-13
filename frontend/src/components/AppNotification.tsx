@@ -126,7 +126,7 @@ export function AppNotification({
     >
       <ToastNotification
         className={['app-notification__toast', className].filter(Boolean).join(' ')}
-        hideCloseButton={false}
+        hideCloseButton={!onCloseButtonClick}
         kind={kind}
         lowContrast={lowContrast}
         onCloseButtonClick={onCloseButtonClick}

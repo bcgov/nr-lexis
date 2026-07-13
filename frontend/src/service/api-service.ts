@@ -2,6 +2,7 @@ import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import axios from 'axios'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { notifySessionExpired } from '@/context/auth/session-expiry'
+import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 
 type CachedGetOptions = {
   ttlMs?: number
@@ -26,6 +27,10 @@ type HeaderAccessors = {
 }
 
 const RESPONSE_CACHE_MAX_ENTRIES = 150
+const CACHE_INVALIDATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
+
+const isCacheInvalidatingMethod = (method: string | undefined): boolean =>
+  CACHE_INVALIDATING_METHODS.has(method?.trim().toLowerCase() ?? '')
 
 class APIService {
   private readonly client: AxiosInstance
@@ -46,8 +51,9 @@ class APIService {
       const requestConfig = config
       requestConfig.headers = requestConfig.headers ?? {}
 
-      if ((requestConfig.method ?? 'get').toLowerCase() !== 'get') {
+      if (isCacheInvalidatingMethod(requestConfig.method)) {
         this.clearCachedGetData()
+        clearAllPageDataCache()
       }
 
       if (!this.hasHeader(requestConfig.headers, 'authorization')) {
@@ -74,7 +80,7 @@ class APIService {
       (response) => response,
       (error: unknown) => {
         const status = this.responseStatus(error)
-        if (status === 401 || status === 403) {
+        if (status === 401) {
           this.clearCachedGetData()
           notifySessionExpired('api-unauthorized')
         }

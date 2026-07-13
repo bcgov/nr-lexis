@@ -1,9 +1,12 @@
 package ca.bc.gov.mof.lexis.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +15,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.TestingAuthenticationToken;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | LexisPrincipalService")
@@ -68,15 +73,112 @@ class LexisPrincipalServiceTest {
   }
 
   @Test
-  void shouldFallbackToJwtSubjectWhenUserInfoHasNoProfileClaims() {
+  void shouldPreferTokenIdpClaimsOverUserInfoClaims() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
-    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+    Jwt accessToken =
+        jwt(
+            "opaque-subject",
+            Map.of(
+                "custom:idp_name", "idir",
+                "custom:idp_username", "token-user"));
+
+    when(userInfoService.getUserInfo(accessToken))
+        .thenReturn(
+            Map.of(
+                "custom:idp_name", "bceidbusiness",
+                "custom:idp_username", "userinfo-user"));
+
+    String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
+
+    assertThat(principalName).isEqualTo("IDIR\\token-user");
+  }
+
+  @Test
+  void shouldResolveTokenOnlyIdirIdentity() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken =
+        jwt(
+            "opaque-subject",
+            Map.of(
+                "custom:idp_name", "idir",
+                "custom:idp_username", "idir-user"));
 
     when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of());
 
     String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
 
-    assertThat(principalName).isEqualTo("5cdd5598-30c1-708e-3288-187b41a253e8");
+    assertThat(principalName).isEqualTo("IDIR\\idir-user");
+  }
+
+  @Test
+  void shouldResolveTokenOnlyBcscIdentityFromStableIdpUserId() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken =
+        jwt(
+            "opaque-subject",
+            Map.of(
+                "custom:idp_name", "ca.bc.gov.flnr.fam.test",
+                "custom:idp_user_id", "bcsc-user-guid"));
+
+    when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of());
+
+    String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
+
+    assertThat(principalName).isEqualTo("BCSC\\bcsc-user-guid");
+  }
+
+  @Test
+  void shouldResolveCognitoM2mClientIdWithExplicitServicePrefix() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken =
+        jwt("opaque-service-subject", Map.of("client_id", "nexcol-service-client"));
+
+    String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
+
+    assertThat(principalName).isEqualTo("SERVICE\\nexcol-service-client");
+    verifyNoInteractions(userInfoService);
+  }
+
+  @Test
+  void shouldResolveKeycloakM2mAzpWithExplicitServicePrefix() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken =
+        jwt(
+            "opaque-service-subject",
+            Map.of(
+                "azp", "nexcol-service-client",
+                "preferred_username", "service-account-nexcol-service-client"));
+
+    String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
+
+    assertThat(principalName).isEqualTo("SERVICE\\nexcol-service-client");
+    verifyNoInteractions(userInfoService);
+  }
+
+  @Test
+  void shouldRejectOpaqueJwtSubjectWhenNoStableIdentityExists() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+
+    when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of());
+
+    JwtAuthenticationToken authentication = new JwtAuthenticationToken(accessToken);
+
+    assertThatThrownBy(() -> service.resolvePrincipalName(authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("stable audit identity");
+  }
+
+  @Test
+  void shouldPreserveNonJwtPrincipalNamesForTestsAndLocalUse() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+
+    String principalName =
+        service.resolvePrincipalName(
+            new TestingAuthenticationToken("local\\developer", "n/a"));
+
+    assertThat(principalName).isEqualTo("local\\developer");
+    verifyNoInteractions(userInfoService);
   }
 
   @Test
@@ -102,6 +204,20 @@ class LexisPrincipalServiceTest {
     String orgUnitNo = service.resolveOrgUnitNo(new JwtAuthenticationToken(accessToken));
 
     assertThat(orgUnitNo).isEqualTo("1826");
+  }
+
+  @Test
+  void shouldResolveDistinctOrgUnitsFromListAndDelimitedClaims() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken =
+        jwt(
+            "5cdd5598-30c1-708e-3288-187b41a253e8",
+            Map.of("custom:org_unit_nos", List.of("76", "1826, 76", "invalid")));
+
+    when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of());
+
+    assertThat(service.resolveOrgUnitNumbers(new JwtAuthenticationToken(accessToken)))
+        .containsExactly(76L, 1826L);
   }
 
   private Jwt jwt(String subject) {

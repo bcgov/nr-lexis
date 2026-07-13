@@ -1,16 +1,22 @@
 package ca.bc.gov.mof.lexis.security;
 
 import java.security.Principal;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 
 @Service
 public class LexisPrincipalService {
+
+  private static final String SERVICE_PRINCIPAL_PREFIX = "SERVICE\\";
 
   private final CognitoUserInfoService userInfoService;
 
@@ -31,21 +37,54 @@ public class LexisPrincipalService {
   }
 
   public String resolveOrgUnitNo(Principal principal) {
+    return resolveOrgUnitNumbers(principal).stream().findFirst().map(String::valueOf).orElse(null);
+  }
+
+  public List<Long> resolveOrgUnitNumbers(Principal principal) {
     if (!(principal instanceof JwtAuthenticationToken jwtAuthentication)) {
-      return null;
+      return List.of();
     }
 
     Map<String, Object> claims = resolveJwtClaims(jwtAuthentication);
-    return Stream.of(
-            claimValue(claims, "custom:org_unit_no"),
-            claimValue(claims, "org_unit_no"),
-            claimValue(claims, "orgUnitNo"))
-        .filter(value -> !value.isBlank())
-        .findFirst()
-        .orElse(null);
+    LinkedHashSet<Long> orgUnits = new LinkedHashSet<>();
+    Stream.of(
+            claims.get("custom:org_unit_no"),
+            claims.get("org_unit_no"),
+            claims.get("orgUnitNo"),
+            claims.get("custom:org_unit_nos"),
+            claims.get("org_unit_nos"),
+            claims.get("orgUnitNos"))
+        .forEach(value -> appendPositiveLongs(orgUnits, value));
+    return List.copyOf(orgUnits);
+  }
+
+  private void appendPositiveLongs(LinkedHashSet<Long> values, Object claim) {
+    if (claim == null) {
+      return;
+    }
+    if (claim instanceof Collection<?> collection) {
+      collection.forEach(value -> appendPositiveLongs(values, value));
+      return;
+    }
+    for (String token : claim.toString().split("[,\\s]+")) {
+      try {
+        long parsed = Long.parseLong(token.trim());
+        if (parsed > 0) {
+          values.add(parsed);
+        }
+      } catch (NumberFormatException ignored) {
+        // Ignore malformed optional organization-unit metadata; it is not an authorization scope.
+      }
+    }
   }
 
   private String resolveJwtPrincipalName(JwtAuthenticationToken authentication) {
+    Map<String, Object> accessTokenClaims = authentication.getToken().getClaims();
+    String serviceClientId = resolveServiceClientId(accessTokenClaims);
+    if (serviceClientId != null) {
+      return SERVICE_PRINCIPAL_PREFIX + serviceClientId;
+    }
+
     Map<String, Object> claims = resolveJwtClaims(authentication);
 
     String userId = resolveUserId(claims);
@@ -53,7 +92,8 @@ public class LexisPrincipalService {
       return userId;
     }
 
-    return blankToNull(authentication.getName());
+    throw new AccessDeniedException(
+        "Authenticated JWT does not contain a stable audit identity.");
   }
 
   private Map<String, Object> resolveJwtClaims(JwtAuthenticationToken authentication) {
@@ -69,9 +109,10 @@ public class LexisPrincipalService {
                 claimValue(claims, "custom:idp_username"),
                 claimValue(claims, "custom:idp_user_id"),
                 claimValue(claims, "preferred_username"),
-                claimValue(claims, "cognito:username"),
-                claimValue(claims, "email"))
+                claimValue(claims, "username"),
+                claimValue(claims, "cognito:username"))
             .filter(value -> !value.isBlank())
+            .filter(value -> !isServiceAccountUsername(value))
             .findFirst()
             .orElse(null);
 
@@ -84,6 +125,50 @@ public class LexisPrincipalService {
       return username;
     }
     return provider + "\\" + username;
+  }
+
+  private String resolveServiceClientId(Map<String, Object> claims) {
+    String clientId =
+        Stream.of(claimValue(claims, "client_id"), claimValue(claims, "azp"))
+            .filter(value -> !value.isBlank())
+            .findFirst()
+            .orElse(null);
+    if (clientId == null || hasInteractiveIdentitySignal(claims)) {
+      return null;
+    }
+    return clientId;
+  }
+
+  private boolean hasInteractiveIdentitySignal(Map<String, Object> claims) {
+    if (Stream.of(
+            "custom:idp_name",
+            "custom:idp_username",
+            "custom:idp_user_id",
+            "username",
+            "cognito:username",
+            "email",
+            "cognito:groups")
+        .map(claims::get)
+        .anyMatch(this::hasClaimValue)) {
+      return true;
+    }
+
+    String preferredUsername = claimValue(claims, "preferred_username");
+    return !preferredUsername.isBlank() && !isServiceAccountUsername(preferredUsername);
+  }
+
+  private boolean hasClaimValue(Object claim) {
+    if (claim == null) {
+      return false;
+    }
+    if (claim instanceof Collection<?> values) {
+      return !values.isEmpty();
+    }
+    return !claim.toString().isBlank();
+  }
+
+  private boolean isServiceAccountUsername(String username) {
+    return username.toLowerCase(Locale.ROOT).startsWith("service-account-");
   }
 
   private String resolveProvider(Map<String, Object> claims) {

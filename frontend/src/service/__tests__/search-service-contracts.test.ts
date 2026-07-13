@@ -92,8 +92,6 @@ const federalRequest = {
   },
   page: 0,
   pageSize: 15,
-  sortField: 'federalApplicationNumber' as const,
-  sortDirection: 'asc' as const,
 }
 
 const offerRequest = {
@@ -227,6 +225,65 @@ describe('search-service contracts', () => {
     )
   })
 
+  it('fails federal exemption eligibility closed when the backend omits its selectable flag', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            applicationNumber: 302,
+            federalApplicationNumber: 'FED-302',
+            status: 'Approved',
+            client: '00011122',
+            reason: 'Test reason',
+            exemptionNumber: '',
+            receivedDate: '2026-03-02',
+            listingDate: '2026-03-04',
+          },
+        ],
+        total: 1,
+        page: 0,
+        size: 15,
+      },
+    })
+
+    const result = await searchFederalApplications(federalRequest)
+
+    expect(result.content[0].allowCreateExemption).toBe(false)
+  })
+
+  it('fails federal exemption eligibility closed when the backend omits lock state', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            applicationNumber: 302,
+            federalApplicationNumber: 'FED-302',
+            status: 'Approved',
+            client: '00011122',
+            reason: 'Test reason',
+            exemptionNumber: '',
+            selectable: true,
+            receivedDate: '2026-03-02',
+            listingDate: '2026-03-04',
+          },
+        ],
+        total: 1,
+        page: 0,
+        size: 15,
+      },
+    })
+
+    const result = await searchFederalApplications(federalRequest)
+
+    expect(result.content[0]).toEqual(
+      expect.objectContaining({
+        eligibleForExemption: true,
+        locked: true,
+        allowCreateExemption: false,
+      }),
+    )
+  })
+
   it('loads provincial application number options from application search', async () => {
     getCachedResponseMock.mockResolvedValue({
       data: {
@@ -270,14 +327,16 @@ describe('search-service contracts', () => {
       data: {
         results: [
           {
-            applicationNumber: 201,
             exemptionNumber: 'EX-2',
             exemptionType: 'LOG',
             status: 'New',
+            applicantClientNumber: '00099887',
             ownerClientNumber: '00077889',
             listingDate: '2026-02-10',
+            expiryDate: '2027-02-10',
             region: '11',
             approvedVolume: 55,
+            balanceRemaining: 37.5,
             locked: false,
           },
         ],
@@ -297,17 +356,61 @@ describe('search-service contracts', () => {
     const params = readParams()
     expect(params.get('exemptionStatusCode')).toBe('NEW')
     expect(params.get('region')).toBe('22')
-    expect(params.has('sortField')).toBe(false)
+    expect(params.get('sortField')).toBe('exemptionNumber')
     expect(result.content[0]).toEqual(
       expect.objectContaining({
         exemptionNumber: 'EX-2',
         statusCode: 'NEW',
+        applicantClientNumber: '00099887',
+        balanceRemaining: 37.5,
+        expiryDate: '2027-02-10',
         canApprove: true,
       }),
     )
   })
 
-  it('maps federal search data and sends client filter to owner and agent params', async () => {
+  it('sends supported descending exemption sort fields to the backend', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: { results: [], total: 0, page: 0, size: 10 },
+    })
+
+    await searchProvincialExemptions({
+      ...exemptionRequest,
+      sortField: 'balanceRemaining',
+      sortDirection: 'desc',
+    })
+
+    expect(readParams().get('sortField')).toBe('balanceRemaining DESC')
+  })
+
+  it('rejects exemption rows without an authoritative lock and balance', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            exemptionNumber: 'EX-2',
+            exemptionType: 'LOG',
+            status: 'New',
+            applicantClientNumber: '00099887',
+            ownerClientNumber: '00077889',
+            listingDate: '2026-02-10',
+            expiryDate: '2027-02-10',
+            region: '11',
+            approvedVolume: 55,
+          },
+        ],
+        total: 1,
+        page: 0,
+        size: 10,
+      },
+    })
+
+    await expect(searchProvincialExemptions(exemptionRequest)).rejects.toThrow(
+      'Backend provincial exemption response did not include results.',
+    )
+  })
+
+  it('maps federal search data and sends the client filter only to the legacy owner-or-agent param', async () => {
     getCachedResponseMock.mockResolvedValue({
       data: {
         results: [
@@ -319,7 +422,7 @@ describe('search-service contracts', () => {
             reason: 'Test reason',
             exemptionType: 'A',
             exemptionNumber: '',
-            showCheckbox: true,
+            selectable: true,
             locked: false,
             receivedDate: '2026-03-02',
             listingDate: '2026-03-04',
@@ -340,14 +443,39 @@ describe('search-service contracts', () => {
     )
     const params = readParams()
     expect(params.get('ownerClientNumber')).toBe('00011122')
-    expect(params.get('agentClientNumber')).toBe('00011122')
+    expect(params.has('agentClientNumber')).toBe(false)
+    expect(params.has('sortField')).toBe(false)
     expect(result.content[0]).toEqual(
       expect.objectContaining({
         federalApplicationNumber: 'FED-301',
+        eligibleForExemption: true,
+        locked: false,
         allowCreateExemption: true,
       }),
     )
   })
+
+  it.each(['permitStatus', 'permitVolume', 'dateIssued'] as const)(
+    'sends the supported provincial permit %s sort key and direction',
+    async (sortField) => {
+      getCachedResponseMock.mockResolvedValue({
+        data: {
+          results: [],
+          total: 0,
+          page: 0,
+          size: 10,
+        },
+      })
+
+      await searchProvincialPermits({
+        ...permitRequest,
+        sortField,
+        sortDirection: 'desc',
+      })
+
+      expect(readParams().get('sortField')).toBe(`${sortField} DESC`)
+    },
+  )
 
   it.each([
     {

@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.admin;
 
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
+
 import ca.bc.gov.mof.lexis.dto.admin.LexisFamUserRoleAssignmentDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisFamUserRoleAssignmentSearchResponseDto;
 import java.time.Duration;
@@ -99,18 +101,20 @@ public class LexisFamUserAccessService {
               .body(IdentityLookupResponse.class);
     } catch (RestClientResponseException exception) {
       LOGGER.warn(
-          "FAM identity lookup failed with status {}: {}",
+          "event=lexis_fam_identity_lookup outcome=upstream_rejected status={} failureType={}",
           exception.getStatusCode(),
-          exception.getResponseBodyAsString());
+          exceptionType(exception));
       return failedLookupResponse(normalizedPageNumber, normalizedPageSize);
     } catch (RestClientException exception) {
-      LOGGER.warn("FAM identity lookup failed: {}", exception.getMessage());
+      LOGGER.warn(
+          "event=lexis_fam_identity_lookup outcome=upstream_unavailable failureType={}",
+          exceptionType(exception));
       return failedLookupResponse(normalizedPageNumber, normalizedPageSize);
     }
 
     if (response == null) {
-      return new LexisFamUserRoleAssignmentSearchResponseDto(
-          List.of(), 0, normalizedPageNumber, normalizedPageSize, 0, true, null);
+      LOGGER.warn("event=lexis_fam_identity_lookup outcome=empty_response");
+      return failedLookupResponse(normalizedPageNumber, normalizedPageSize);
     }
 
     List<LexisFamUserRoleAssignmentDto> allResults =

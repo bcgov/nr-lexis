@@ -58,4 +58,27 @@ describe('SearchResultsTableFrame', () => {
 
     expect(screen.getByText('12 results found')).toBeInTheDocument()
   })
+
+  it.each([
+    [1, '1 result found'],
+    [1234, '1,234 results found'],
+  ])('formats a %s-item result count for people', (totalItems, expectedLabel) => {
+    render(
+      <SearchResultsTableFrame
+        loading={false}
+        loadingDescription="Loading search results..."
+        totalItems={totalItems}
+      >
+        <table>
+          <tbody>
+            <tr>
+              <td>Rows</td>
+            </tr>
+          </tbody>
+        </table>
+      </SearchResultsTableFrame>,
+    )
+
+    expect(screen.getByText(expectedLabel)).toBeInTheDocument()
+  })
 })

@@ -1,0 +1,6 @@
+Exemption #{{exemptionNumber}} has been approved.
+
+Application Number:
+{{applicationNumbers}}
+
+Do NOT reply to this e-mail.
