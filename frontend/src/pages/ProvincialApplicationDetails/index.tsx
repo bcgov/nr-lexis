@@ -131,16 +131,15 @@ const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Review remark is required when rejecting, withdrawing, or expiring an application.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
-const APPLICATION_DETAIL_TAB_INDEX = {
-  owner: 0,
-  agent: 1,
-  application: 2,
-  items: 3,
-  documents: 4,
-  remarks: 5,
-  offers: 6,
-  review: 7,
-} as const
+type ApplicationDetailTabKey =
+  | 'owner'
+  | 'agent'
+  | 'application'
+  | 'items'
+  | 'documents'
+  | 'remarks'
+  | 'offers'
+  | 'review'
 const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
   'Status email is only supported for rejected or withdrawn applications.'
 const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
@@ -589,9 +588,8 @@ const ProvincialApplicationDetailsPage = () => {
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
   const [focusedPackageNumber, setFocusedPackageNumber] = useState('')
   const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(0)
-  const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState<number>(
-    APPLICATION_DETAIL_TAB_INDEX.owner,
-  )
+  const [selectedApplicationTab, setSelectedApplicationTab] =
+    useState<ApplicationDetailTabKey>('owner')
   const beginDetailRequest = useLatestRequestGuard()
   const currentApplicationNumberRef = useRef(applicationNumber)
   currentApplicationNumberRef.current = applicationNumber
@@ -615,7 +613,7 @@ const ProvincialApplicationDetailsPage = () => {
     [searchParams, setSearchParams],
   )
   const focusPackageInItems = useCallback((packageNumber: string) => {
-    setSelectedApplicationTabIndex(APPLICATION_DETAIL_TAB_INDEX.items)
+    setSelectedApplicationTab('items')
     setFocusedPackageNumber(packageNumber)
     setFocusedPackageRequestId((current) => current + 1)
   }, [])
@@ -917,6 +915,20 @@ const ProvincialApplicationDetailsPage = () => {
   const hasSummaryForm = summaryForm !== null
   const summaryOwnerClientNumber = summaryForm?.ownerClientNumber.trim() ?? ''
   const isSummaryAgentApplicant = isAgentApplicant(summaryForm?.applicantTypeCode ?? '')
+  const applicationDetailTabs: ApplicationDetailTabKey[] = [
+    'owner',
+    ...(isSummaryAgentApplicant ? (['agent'] as const) : []),
+    'application',
+    'items',
+    'documents',
+    ...(canViewRemarks ? (['remarks'] as const) : []),
+    'offers',
+    ...(canViewReview ? (['review'] as const) : []),
+  ]
+  const selectedApplicationTabIndex = Math.max(
+    0,
+    applicationDetailTabs.indexOf(selectedApplicationTab),
+  )
   const summaryAgentClientNumber = isSummaryAgentApplicant
     ? (summaryForm?.agentClientNumber.trim() ?? '')
     : ''
@@ -2425,7 +2437,7 @@ const ProvincialApplicationDetailsPage = () => {
       return false
     }
     if (applicationItemsDirty) {
-      setSelectedApplicationTabIndex(APPLICATION_DETAIL_TAB_INDEX.items)
+      setSelectedApplicationTab('items')
       setActionErrorMessage(
         'Save or reset the package, species, or scale draft in the Items tab before leaving this application.',
       )
@@ -2855,15 +2867,14 @@ const ProvincialApplicationDetailsPage = () => {
           {summaryOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Application options unavailable" />
           )}
-          {selectedApplicationTabIndex === APPLICATION_DETAIL_TAB_INDEX.application &&
-            requiredSummaryOptionsMissing && (
-              <AppNotification
-                kind="warning"
-                title="Application summary options unavailable"
-                subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
-                lowContrast
-              />
-            )}
+          {selectedApplicationTab === 'application' && requiredSummaryOptionsMissing && (
+            <AppNotification
+              kind="warning"
+              title="Application summary options unavailable"
+              subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
+              lowContrast
+            />
+          )}
           {canReviewApplication && reviewOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Review options unavailable" />
           )}
@@ -2915,7 +2926,9 @@ const ProvincialApplicationDetailsPage = () => {
           <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
             <Tabs
               selectedIndex={selectedApplicationTabIndex}
-              onChange={({ selectedIndex }) => setSelectedApplicationTabIndex(selectedIndex)}
+              onChange={({ selectedIndex }) =>
+                setSelectedApplicationTab(applicationDetailTabs[selectedIndex] ?? 'owner')
+              }
             >
               <TabList
                 aria-label="Application detail sections"
@@ -2924,7 +2937,7 @@ const ProvincialApplicationDetailsPage = () => {
                 className="application-tabs__list application-detail-tab-list"
               >
                 <Tab>Owner</Tab>
-                <Tab>Agent</Tab>
+                {isSummaryAgentApplicant && <Tab>Agent</Tab>}
                 <Tab>Application</Tab>
                 <Tab>Items</Tab>
                 <Tab>Documents</Tab>
@@ -2952,25 +2965,27 @@ const ProvincialApplicationDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile
-                        id="application-agent-details"
-                        className="application-detail-section application-detail-clients"
-                      >
-                        <h2 className="detail-tile-title">Agent</h2>
-                        {agentClientSummaryContent ?? (
-                          <EmptyState
-                            title="No agent assigned"
-                            description="No agent is assigned to this application."
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
-                    </Column>
-                  </Grid>
-                </TabPanel>
+                {isSummaryAgentApplicant && (
+                  <TabPanel className="application-detail-tab-panel">
+                    <Grid fullWidth className="application-detail-tab-grid">
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile
+                          id="application-agent-details"
+                          className="application-detail-section application-detail-clients"
+                        >
+                          <h2 className="detail-tile-title">Agent</h2>
+                          {agentClientSummaryContent ?? (
+                            <EmptyState
+                              title="No agent assigned"
+                              description="No agent is assigned to this application."
+                              headingLevel={3}
+                            />
+                          )}
+                        </Tile>
+                      </Column>
+                    </Grid>
+                  </TabPanel>
+                )}
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>

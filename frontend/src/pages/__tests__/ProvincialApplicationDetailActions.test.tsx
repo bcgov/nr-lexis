@@ -3314,6 +3314,19 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+        'Owner',
+        'Application',
+        'Items',
+        'Documents',
+        'Remarks',
+        'Offers',
+        'Review',
+      ])
+    })
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+
     const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
 
