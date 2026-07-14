@@ -16,6 +16,15 @@ Full-stack LEXIS application for log export workflows.
 | Auth | AWS Cognito (FAM) for interactive users; Keycloak scopes for NEXCOL service-client submission |
 | Reports | JasperReports library |
 
+## Architecture
+
+LEXIS runs as separate frontend, backend, and ClamAV workloads on OpenShift while retaining Oracle
+as its system of record. Interactive access uses FAM/Cognito; NEXCOL federal submissions use a
+dedicated Keycloak service client through the API gateway.
+
+See [docs/architecture.md](docs/architecture.md) for the runtime architecture, component boundaries,
+deployment constraints, and the major legacy-to-modern shifts.
+
 ## Local Development
 
 Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
@@ -24,7 +33,7 @@ Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 |---|---|---|
 | **Backend hot reload** | Manual restart | Manual restart |
 | **Frontend hot reload (Vite HMR)** | Yes | Yes |
-| **First-time setup cost** | Install Java 21 + Node 22 on host | Just Docker Desktop |
+| **First-time setup cost** | Install Java 21 + Node 24 on host | Just Docker Desktop |
 | **Best for** | Day-to-day backend/frontend work | Quick smoke tests, frontend-only work, and container parity |
 
 Both options share the same prerequisites and property files below. Reports use the checked-in JRXML templates in the Spring Boot backend.
@@ -33,7 +42,7 @@ Both options share the same prerequisites and property files below. Reports use 
 
 1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
 2. **Maven 3.9+ and Java 21** (Option A only). The repo has no Maven wrapper.
-3. **Node 22+** (Option A only).
+3. **Node 24+** (Option A only).
 4. **Docker Desktop** (Option B only).
 
 ### Property files you create once
@@ -94,7 +103,7 @@ docker compose logs -f backend
 Services:
 
 - `backend` -> `localhost:8080` (Spring Boot via `mvn spring-boot:run` inside `maven:3.9.9-amazoncorretto-21-alpine`).
-- `frontend` -> `localhost:3000` (Vite via `npm run dev` inside `node:22-alpine`).
+- `frontend` -> `localhost:3000` (Vite via `npm run dev` inside `node:24-alpine`).
 
 First `up` downloads Maven dependencies into the `maven-cache` named volume. Subsequent starts are faster.
 
@@ -151,6 +160,7 @@ default URL from `VITE_ZONE`.
 
 ## Component docs
 
+- [docs/architecture.md](docs/architecture.md) - Runtime architecture and legacy-to-modern shifts.
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
 - [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.
 - [docs/permit-invoicing.md](docs/permit-invoicing.md) - Canadian and GBMS permit invoicing modes, consistency limits, and recovery.

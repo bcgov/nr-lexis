@@ -20,7 +20,7 @@
 
 x-var:
   - &java-image maven:3.9.9-amazoncorretto-21-alpine
-  - &node-image node:22-alpine
+  - &node-image node:24-alpine
 
 services:
   backend:
