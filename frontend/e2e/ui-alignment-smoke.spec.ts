@@ -656,13 +656,19 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const rootStyle = getComputedStyle(root)
       const headerStyle = getComputedStyle(header)
       const panelStyle = getComputedStyle(panel)
+      const primaryButtonTextToken = rootStyle.getPropertyValue('--fds-button-primary-text').trim()
+      const colorProbe = document.createElement('span')
+      colorProbe.style.color = primaryButtonTextToken
+      root.append(colorProbe)
+      const primaryButtonText = getComputedStyle(colorProbe).color
+      colorProbe.remove()
       return {
         background: rootStyle.backgroundColor,
         color: rootStyle.color,
         headerBackground: headerStyle.backgroundColor,
         panelBackground: panelStyle.backgroundColor,
         panelBorder: panelStyle.borderTopColor,
-        primaryButtonText: rootStyle.getPropertyValue('--fds-button-primary-text').trim(),
+        primaryButtonText,
       }
     })
 
@@ -672,7 +678,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       headerBackground: 'rgb(38, 38, 38)',
       panelBackground: 'rgb(38, 38, 38)',
       panelBorder: 'rgb(82, 82, 82)',
-      primaryButtonText: '#ffffff',
+      primaryButtonText: 'rgb(255, 255, 255)',
     })
     await expect(uploadHeader).toHaveCSS('color', 'rgb(244, 244, 244)')
 
