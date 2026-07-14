@@ -64,4 +64,30 @@ describe('SearchableSelect', () => {
       within(listbox as HTMLElement).queryByRole('option', { name: 'Option 2' }),
     ).not.toBeInTheDocument()
   })
+
+  it('does not emit a change when the selected option is chosen again', async () => {
+    const onChange = vi.fn()
+    render(
+      <SearchableSelect
+        id="application-status"
+        labelText="Application status"
+        value="OPT-1"
+        options={[
+          { value: 'OPT-1', label: 'Option 1' },
+          { value: 'OPT-2', label: 'Option 2' },
+        ]}
+        onChange={onChange}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: 'Application status' })
+    await userEvent.click(combobox)
+    const listboxId = combobox.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(listbox).not.toBeNull()
+
+    await userEvent.click(within(listbox as HTMLElement).getByRole('option', { name: 'Option 1' }))
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })

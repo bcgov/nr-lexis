@@ -111,4 +111,44 @@ describe('ApplicationNumberSelect', () => {
       }),
     ).toBeVisible()
   })
+
+  it('does not emit a change when the current application is selected again', async () => {
+    const onChange = vi.fn()
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
+      {
+        value: '28077',
+        label: '28077 - Approved - Owner 00016245 - Region RKB',
+        status: 'Approved',
+        applicantClientNumber: '',
+        ownerClientNumber: '00016245',
+        region: 'RKB',
+        listingDate: '2012-05-11',
+        exemptionNumber: '',
+      },
+    ])
+
+    render(
+      <ApplicationNumberSelect
+        id="applicationNumber"
+        labelText="Application Number (required)"
+        value="28077"
+        onChange={onChange}
+      />,
+    )
+
+    const input = screen.getByRole('combobox', { name: 'Application Number (required)' })
+    await waitFor(() => {
+      expect(input).toHaveValue('28077 - Approved - Owner 00016245 - Region RKB')
+    })
+    onChange.mockClear()
+
+    await userEvent.click(input)
+    await userEvent.click(
+      await screen.findByRole('option', {
+        name: '28077 - Approved - Owner 00016245 - Region RKB',
+      }),
+    )
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })

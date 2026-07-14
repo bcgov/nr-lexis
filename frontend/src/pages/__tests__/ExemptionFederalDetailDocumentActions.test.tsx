@@ -1251,6 +1251,41 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('updates a new federal application status and refreshes authoritative detail', async () => {
+    mockedFetchFederalApplicationDetail
+      .mockResolvedValueOnce({
+        ...federalDetail,
+        statusCode: 'NEW',
+        statusDescription: 'New',
+      })
+      .mockResolvedValue({
+        ...federalDetail,
+        statusCode: 'APP',
+        statusDescription: 'Approved',
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Application')
+    const updateButton = await screen.findByRole('button', { name: 'Update status' })
+    expect(screen.getByLabelText('Status')).toHaveValue('APP')
+
+    await userEvent.click(updateButton)
+
+    await waitFor(() => {
+      expect(mockedUpdateFederalApplicationStatus).toHaveBeenCalledWith('888', 'APP', '')
+      expect(mockedFetchFederalApplicationDetail).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('Federal application status updated.')).toBeInTheDocument()
+    expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
+  })
+
   it('offers only listing-day outcomes from an approved federal application', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
@@ -1272,6 +1307,47 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(within(statusSelect).queryByRole('option', { name: 'Approved' })).not.toBeInTheDocument()
     expect(within(statusSelect).getByRole('option', { name: 'Rejected' })).toBeInTheDocument()
     expect(within(statusSelect).getByRole('option', { name: 'Withdrawn' })).toBeInTheDocument()
+  })
+
+  it('requires a review-outcome remark and preserves the draft when status update fails', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode: 'APP',
+      statusDescription: 'Approved',
+      listingDate: '2999-12-31',
+    })
+    mockedUpdateFederalApplicationStatus.mockResolvedValue({
+      success: false,
+      message: 'Unable to update.',
+      errors: ['The federal application changed before this update.'],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Application')
+    const statusSelect = await screen.findByLabelText('Status')
+    const remark = screen.getByLabelText('Remark')
+    const updateButton = screen.getByRole('button', { name: 'Update status' })
+    expect(statusSelect).toHaveValue('REJ')
+    expect(updateButton).toBeDisabled()
+
+    await userEvent.type(remark, 'Not eligible')
+    expect(updateButton).toBeEnabled()
+    await userEvent.click(updateButton)
+
+    expect(
+      await screen.findByText('The federal application changed before this update.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdateFederalApplicationStatus).toHaveBeenCalledWith('888', 'REJ', 'Not eligible')
+    expect(mockedFetchFederalApplicationDetail).toHaveBeenCalledTimes(1)
+    expect(statusSelect).toHaveValue('REJ')
+    expect(remark).toHaveValue('Not eligible')
   })
 
   it('renders terminal federal status as read only without a mutation form', async () => {

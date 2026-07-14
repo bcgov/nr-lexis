@@ -157,6 +157,74 @@ class OracleGbmsPermitInvoiceServiceTest {
   }
 
   @Test
+  void shouldRejectABlankGeneratedInvoiceNumber() {
+    when(repository.insertGbmsForestInvoiceRequired(any()))
+        .thenReturn(new GbmsForestInvoiceRow(" "));
+
+    assertThatThrownBy(
+            () -> service.createInvoice(7_000_123L, snapshot(), "idir\\jsmith"))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("no invoice number");
+
+    verify(repository, never()).insertGbmsGeneralInvoiceRequired(any());
+  }
+
+  @Test
+  void shouldRejectAMismatchedGeneralInvoiceBeforeWritingDetails() {
+    when(repository.insertGbmsForestInvoiceRequired(any()))
+        .thenReturn(new GbmsForestInvoiceRow("GBMS-100"));
+    when(repository.insertGbmsGeneralInvoiceRequired(any()))
+        .thenReturn(new GbmsGeneralInvoiceRow("GBMS-OTHER"));
+
+    assertThatThrownBy(
+            () -> service.createInvoice(7_000_123L, snapshot(), "idir\\jsmith"))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("general invoice");
+
+    verify(repository, never()).insertGbmsInvoiceDetailRequired(any());
+  }
+
+  @Test
+  void shouldRejectInvalidDetailAndNotationIdentifiers() {
+    when(repository.insertGbmsForestInvoiceRequired(any()))
+        .thenReturn(new GbmsForestInvoiceRow("GBMS-100"));
+    when(repository.insertGbmsGeneralInvoiceRequired(any()))
+        .thenReturn(new GbmsGeneralInvoiceRow("GBMS-100"));
+    when(repository.insertGbmsInvoiceDetailRequired(any()))
+        .thenReturn(new GbmsInvoiceDetailRow("GBMS-100", 0L));
+
+    assertThatThrownBy(
+            () -> service.createInvoice(7_000_123L, snapshot(), "idir\\jsmith"))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("invalid detail number");
+    verify(repository, never()).insertGbmsNotationRequired(any());
+
+    org.mockito.Mockito.reset(repository);
+    when(repository.insertGbmsForestInvoiceRequired(any()))
+        .thenReturn(new GbmsForestInvoiceRow("GBMS-100"));
+    when(repository.insertGbmsGeneralInvoiceRequired(any()))
+        .thenReturn(new GbmsGeneralInvoiceRow("GBMS-100"));
+    when(repository.insertGbmsInvoiceDetailRequired(any()))
+        .thenReturn(
+            new GbmsInvoiceDetailRow("GBMS-100", 1L),
+            new GbmsInvoiceDetailRow("GBMS-100", 2L));
+    when(repository.insertGbmsNotationRequired(any()))
+        .thenReturn(new GbmsNotationRow("GBMS-100", null));
+
+    assertThatThrownBy(
+            () -> service.createInvoice(7_000_123L, snapshot(), "idir\\jsmith"))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("invalid notation number");
+  }
+
+  @Test
+  void shouldDelegateGbmsCancellation() {
+    service.cancelInvoice("GBMS-100", "idir\\jsmith");
+
+    verify(repository).cancelGbmsInvoiceRequired("GBMS-100", "idir\\jsmith");
+  }
+
+  @Test
   void shouldUseTheLegacyReplacementArgumentOrder() {
     when(repository.setGbmsReplacementRequired("GBMS-NEW", "GBMS-OLD", "idir\\jsmith"))
         .thenReturn(new GbmsReplacementRow("GBMS-OLD", "GBMS-NEW"));

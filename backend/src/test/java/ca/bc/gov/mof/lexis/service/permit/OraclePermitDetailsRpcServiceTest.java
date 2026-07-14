@@ -3190,14 +3190,17 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(true);
     when(permitInvoiceOrchestrationService.orchestrate(any(), eq("idir\\jsmith")))
         .thenThrow(new IllegalStateException("simulated GBMS outage"));
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(
-            invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
+        transactionalService(transactionManager)
+            .updatePermit(invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .contains("Unable to coordinate the permit invoice status change.");
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
     verify(applicationReviewRepository, never()).updateStatus(anyLong(), any(), any(), any());
   }
 

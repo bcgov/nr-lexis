@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import ca.bc.gov.mof.lexis.configuration.OracleLegacyDynamicFetchExecutorConfiguration;
+import ca.bc.gov.mof.lexis.configuration.PermitInvoiceModeConfiguration;
 import ca.bc.gov.mof.lexis.repository.permit.PermitInvoiceRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ class OracleCanadianPermitInvoiceConfigurationTest {
               () -> mock(OracleGbmsPermitInvoiceService.class))
           .withUserConfiguration(
               OracleLegacyDynamicFetchExecutorConfiguration.class,
+              PermitInvoiceModeConfiguration.class,
               OracleCanadianPermitInvoiceOrchestrationService.class,
               OracleLegacyPermitInvoiceOrchestrationService.class)
           .withPropertyValues("spring.profiles.active=oracle");
@@ -32,6 +34,18 @@ class OracleCanadianPermitInvoiceConfigurationTest {
                 .hasSingleBean(OracleLegacyPermitInvoiceOrchestrationService.class)
                 .doesNotHaveBean(OracleCanadianPermitInvoiceOrchestrationService.class)
                 .hasSingleBean(PermitInvoiceOrchestrationService.class));
+  }
+
+  @Test
+  void shouldAllowAnExplicitLegacyBestEffortMode() {
+    contextRunner
+        .withPropertyValues("lexis.permit-invoice.mode=legacy-best-effort")
+        .run(
+            context ->
+                assertThat(context)
+                    .hasSingleBean(OracleLegacyPermitInvoiceOrchestrationService.class)
+                    .doesNotHaveBean(OracleCanadianPermitInvoiceOrchestrationService.class)
+                    .hasSingleBean(PermitInvoiceOrchestrationService.class));
   }
 
   @Test
@@ -59,14 +73,26 @@ class OracleCanadianPermitInvoiceConfigurationTest {
   }
 
   @Test
-  void shouldRejectUnknownModes() {
+  void shouldFailStartupForUnknownModes() {
     contextRunner
         .withPropertyValues("lexis.permit-invoice.mode=gbms")
         .run(
             context ->
                 assertThat(context)
-                    .doesNotHaveBean(OracleCanadianPermitInvoiceOrchestrationService.class)
-                    .doesNotHaveBean(OracleLegacyPermitInvoiceOrchestrationService.class)
-                    .doesNotHaveBean(PermitInvoiceOrchestrationService.class));
+                    .hasFailed()
+                    .getFailure()
+                    .hasMessageContaining("Permit invoice mode must be"));
+  }
+
+  @Test
+  void shouldFailStartupForBlankModes() {
+    contextRunner
+        .withPropertyValues("lexis.permit-invoice.mode=")
+        .run(
+            context ->
+                assertThat(context)
+                    .hasFailed()
+                    .getFailure()
+                    .hasMessageContaining("Permit invoice mode must be"));
   }
 }

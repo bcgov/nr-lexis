@@ -37,16 +37,31 @@ class ClamAvWorkflowDaemonDetectionTest {
   }
 
   @Test
-  void clamAvDaemonDetectionScriptShouldVerifyReadinessAndDetection() throws IOException {
+  void clamAvDaemonDetectionScriptShouldVerifySupervisorDetectionAndShutdown() throws IOException {
     String script = read(".github/scripts/check-clamav-daemon-detection.sh");
+    String dockerRun =
+        script.substring(
+            script.indexOf("docker run -d"), script.indexOf("\n\nexpected_supervisor="));
 
     assertThat(script)
         .contains("docker build --pull")
+        .contains("target=/ci-bin,readonly")
+        .contains("PATH=/ci-bin:")
+        .contains("freshclam-initial-complete")
+        .contains("freshclam-daemon-running")
+        .contains("expected_supervisor=\"/opt/app-root/start-clamav.sh\"")
+        .contains("docker inspect -f '{{.Path}}' \"${CONTAINER}\"")
         .contains("docker exec \"${CONTAINER}\" /opt/app-root/clamdcheck.sh live")
         .doesNotContain("docker exec \"${CONTAINER}\" /opt/app-root/clamdcheck.sh >/dev/null")
         .contains("ClamAv-Ci-Test-Signature")
         .contains("FOUND")
-        .contains("Expected ClamAV to detect the CI test payload.");
+        .contains("Expected ClamAV to detect the CI test payload.")
+        .contains("docker kill --signal=TERM \"${CONTAINER}\"")
+        .contains("docker inspect -f '{{.State.ExitCode}}' \"${CONTAINER}\"")
+        .contains("stopped gracefully.");
+    assertThat(dockerRun)
+        .endsWith("\"${IMAGE}\"")
+        .doesNotContain("sh -c", "bash -c", "exec clamd");
   }
 
   private static String read(String relativePath) throws IOException {
