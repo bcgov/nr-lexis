@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.session;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -11,7 +12,9 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
@@ -33,11 +36,15 @@ class ProvincialAuthorizationServiceTest {
 
   @Mock private LexisPrincipalService principalService;
   @Mock private ObjectProvider<LexisApplicationService> applicationServiceProvider;
+  @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   @Mock private ObjectProvider<ExemptionService> exemptionServiceProvider;
+  @Mock private ObjectProvider<ExemptionDetailsRpcService> exemptionDetailsServiceProvider;
   @Mock private ObjectProvider<PermitService> permitServiceProvider;
   @Mock private ObjectProvider<PurchaseOfferService> offerServiceProvider;
   @Mock private LexisApplicationService applicationService;
+  @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private ExemptionService exemptionService;
+  @Mock private ExemptionDetailsRpcService exemptionDetailsService;
   @Mock private PermitService permitService;
   @Mock private PurchaseOfferService offerService;
 
@@ -50,7 +57,9 @@ class ProvincialAuthorizationServiceTest {
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"),
             principalService,
             applicationServiceProvider,
+            applicationDetailsServiceProvider,
             exemptionServiceProvider,
+            exemptionDetailsServiceProvider,
             permitServiceProvider,
             offerServiceProvider);
   }
@@ -94,6 +103,260 @@ class ProvincialAuthorizationServiceTest {
     assertThatThrownBy(() -> service.hasClientScope(missing))
         .isInstanceOf(AccessDeniedException.class);
     assertThatThrownBy(() -> service.hasClientScope(ambiguous))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void scopedSubmitterAttachmentWritesRequireDirectApplicationClientOwnership() {
+    Authentication authentication = submitter("00012345");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00012345", null, 76L)));
+    when(applicationService.findByApplicationNumber(2L))
+        .thenReturn(Optional.of(application(2L, "00099999", null, 76L)));
+    when(applicationService.findByApplicationNumber(3L))
+        .thenReturn(Optional.of(application(3L, "00012345", null, 76L, "F")));
+
+    assertThatCode(() -> service.requireApplicationAttachmentMutation(authentication, 1L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> service.requireApplicationAttachmentMutation(authentication, 2L))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+    assertThatThrownBy(() -> service.requireApplicationAttachmentMutation(authentication, 3L))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+  }
+
+  @Test
+  void scopedSubmitterCannotPersistApplicationAttachmentAfterPermitCompletion() {
+    Authentication authentication = submitter("00012345");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00012345", null, 76L)));
+    when(applicationDetailsService.getApplicationEditContext(1L))
+        .thenReturn(Optional.of(applicationEditContext(1L, true)));
+
+    assertThatThrownBy(
+            () -> service.requireApplicationAttachmentPersistence(authentication, 1L))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+    assertThatCode(() -> service.requireApplicationAttachmentMutation(authentication, 1L))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void scopedSubmitterCanPersistApplicationAttachmentBeforePermitCompletion() {
+    Authentication authentication = submitter("00012345");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00012345", null, 76L)));
+    when(applicationDetailsService.getApplicationEditContext(1L))
+        .thenReturn(Optional.of(applicationEditContext(1L, false)));
+
+    assertThatCode(
+            () -> service.requireApplicationAttachmentPersistence(authentication, 1L))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void scopedSubmitterApplicationAttachmentPersistenceFailsClosedWithoutEditContext() {
+    Authentication authentication = submitter("00012345");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00012345", null, 76L)));
+    when(applicationDetailsService.getApplicationEditContext(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () -> service.requireApplicationAttachmentPersistence(authentication, 1L))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+  }
+
+  @Test
+  void scopedSubmitterExemptionWritesFollowLegacyLinkedApplicationOwnershipAndDenyBlanketOic() {
+    Authentication authentication = submitter("00012345");
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(exemptionDetailsServiceProvider.getIfAvailable()).thenReturn(exemptionDetailsService);
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(exemptionService.findByExemptionNumber("E-1"))
+        .thenReturn(Optional.of(exemption("E-1", "00012345", null, false)));
+    when(exemptionService.findByExemptionNumber("E-2"))
+        .thenReturn(Optional.of(exemption("E-2", "00099999", null, false)));
+    when(exemptionService.findByExemptionNumber("E-3"))
+        .thenReturn(Optional.of(exemption("E-3", "00099999", null, false)));
+    when(exemptionService.findByExemptionNumber("E-4"))
+        .thenReturn(Optional.of(exemption("E-4", "00099999", null, false)));
+    when(exemptionService.findByExemptionNumber("B-1"))
+        .thenReturn(Optional.of(exemption("B-1", "00012345", null, true)));
+    when(exemptionDetailsService.getApplicationNumbersForMutation("E-2"))
+        .thenReturn(List.of());
+    when(exemptionDetailsService.getApplicationNumbersForMutation("E-3"))
+        .thenReturn(List.of(101L));
+    when(exemptionDetailsService.getApplicationNumbersForMutation("E-4"))
+        .thenReturn(List.of(102L));
+    when(applicationService.findByApplicationNumber(101L))
+        .thenReturn(Optional.of(application(101L, "00012345", null, 76L)));
+    when(applicationService.findByApplicationNumber(102L))
+        .thenReturn(Optional.of(application(102L, "00088888", null, 76L)));
+
+    assertThatCode(() -> service.requireExemptionAttachmentMutation(authentication, "E-1"))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> service.requireExemptionAttachmentMutation(authentication, "E-2"))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+    assertThatCode(() -> service.requireExemptionAttachmentMutation(authentication, "E-3"))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> service.requireExemptionAttachmentMutation(authentication, "E-4"))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+    assertThatThrownBy(() -> service.requireExemptionAttachmentMutation(authentication, "B-1"))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+  }
+
+  @Test
+  void scopedSubmitterCanAccessExemptionThroughAnyAuthoritativeLinkedApplication() {
+    Authentication authentication = submitter("00012345");
+    ExemptionDetailDto detail = exemption("E-3", "00099999", null, false);
+    when(exemptionDetailsServiceProvider.getIfAvailable()).thenReturn(exemptionDetailsService);
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(exemptionDetailsService.getApplicationNumbersForMutation("E-3"))
+        .thenReturn(List.of(101L, 102L));
+    when(applicationService.findByApplicationNumber(101L))
+        .thenReturn(Optional.of(application(101L, "00099999", null, 76L)));
+    when(applicationService.findByApplicationNumber(102L))
+        .thenReturn(Optional.of(application(102L, "00088888", "00012345", 76L)));
+
+    assertThat(service.canAccessExemption(authentication, detail)).isTrue();
+  }
+
+  @Test
+  void scopedExemptionAccessPropagatesAuthoritativeRelationshipLookupFailure() {
+    Authentication authentication = submitter("00012345");
+    ExemptionDetailDto detail = exemption("E-3", "00099999", null, false);
+    when(exemptionDetailsServiceProvider.getIfAvailable()).thenReturn(exemptionDetailsService);
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(exemptionDetailsService.getApplicationNumbersForMutation("E-3"))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+
+    assertThatThrownBy(() -> service.canAccessExemption(authentication, detail))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void scopedSubmitterPermitAttachmentWritesFollowLegacyDirectOrLinkedApplicationOwnership() {
+    Authentication authentication = submitter("00012345");
+    when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(permitService.findByPermitNumber(1L))
+        .thenReturn(Optional.of(permit(1L, "00012345", "00099999", 76L)));
+    when(permitService.findByPermitNumber(2L))
+        .thenReturn(Optional.of(permit(2L, "00099999", "00088888", 76L)));
+    when(permitService.findByPermitNumber(3L))
+        .thenReturn(Optional.of(permit(3L, "00099999", "00088888", 76L)));
+    when(permitService.findLinkedApplicationNumbers(2L)).thenReturn(List.of(101L));
+    when(permitService.findLinkedApplicationNumbers(3L)).thenReturn(List.of());
+    when(applicationService.findByApplicationNumber(101L))
+        .thenReturn(Optional.of(application(101L, "00012345", null, 76L)));
+
+    assertThatCode(() -> service.requirePermitAttachmentMutation(authentication, 1L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requirePermitAttachmentMutation(authentication, 2L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> service.requirePermitAttachmentMutation(authentication, 3L))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+  }
+
+  @Test
+  void staffAttachmentWritersRetainGlobalAttachmentWriteScope() {
+    Authentication approver =
+        new TestingAuthenticationToken("approver", "n/a", "LEXIS_APPLICATION_APPROVER");
+    Authentication administrator =
+        new TestingAuthenticationToken("administrator", "n/a", "LEXIS_ADMIN");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00099999", null, 76L)));
+    when(exemptionService.findByExemptionNumber("E-1"))
+        .thenReturn(Optional.of(exemption("E-1", "00099999", null, false)));
+    when(permitService.findByPermitNumber(2L))
+        .thenReturn(Optional.of(permit(2L, "00099999", "00088888", 76L)));
+
+    assertThatCode(() -> service.requireApplicationAttachmentMutation(approver, 1L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireApplicationAttachmentPersistence(approver, 1L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireExemptionAttachmentMutation(approver, "E-1"))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requirePermitAttachmentMutation(approver, 2L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireApplicationAttachmentMutation(administrator, 1L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireApplicationAttachmentPersistence(administrator, 1L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireExemptionAttachmentMutation(administrator, "E-1"))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requirePermitAttachmentMutation(administrator, 2L))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void applicationApproverAttachmentScopeDominatesConcurrentSubmitterScope() {
+    Authentication mixedRole =
+        new TestingAuthenticationToken(
+            "approver",
+            "n/a",
+            "LEXIS_APPLICATION_APPROVER",
+            "LEXIS_PROVINCIAL_SUBMITTER_00012345");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00099999", null, 76L, "F")));
+    when(exemptionService.findByExemptionNumber("E-1"))
+        .thenReturn(Optional.of(exemption("E-1", "00099999", null, true)));
+    when(permitService.findByPermitNumber(2L))
+        .thenReturn(Optional.of(permit(2L, "00099999", null, 76L)));
+
+    assertThatCode(() -> service.requireApplicationAttachmentMutation(mixedRole, 1L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireApplicationAttachmentPersistence(mixedRole, 1L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireExemptionAttachmentMutation(mixedRole, "E-1"))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requirePermitAttachmentMutation(mixedRole, 2L))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void readOnlyAndExemptionApproverRolesCannotMutateAttachments() {
+    Authentication readOnly =
+        new TestingAuthenticationToken("read-only", "n/a", "LEXIS_READ_ONLY");
+    Authentication exemptionApprover =
+        new TestingAuthenticationToken(
+            "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00012345", null, 76L)));
+    when(exemptionService.findByExemptionNumber("E-1"))
+        .thenReturn(Optional.of(exemption("E-1", "00012345", null, false)));
+    when(permitService.findByPermitNumber(2L))
+        .thenReturn(Optional.of(permit(2L, "00012345", null, 76L)));
+
+    assertThatThrownBy(() -> service.requireApplicationAttachmentMutation(readOnly, 1L))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> service.requireExemptionAttachmentMutation(exemptionApprover, "E-1"))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(() -> service.requirePermitAttachmentMutation(readOnly, 2L))
         .isInstanceOf(AccessDeniedException.class);
   }
 
@@ -500,6 +763,12 @@ class ProvincialAuthorizationServiceTest {
         jurisdiction);
   }
 
+  private ApplicationDetailsRpcService.ApplicationEditContext applicationEditContext(
+      Long applicationNumber, boolean hasCompletePermit) {
+    return new ApplicationDetailsRpcService.ApplicationEditContext(
+        applicationNumber, "NEW", "P", 1L, null, false, false, hasCompletePermit, null);
+  }
+
   private PermitDetailDto permit(
       Long permitNumber, String ownerClientNumber, Long orgUnitNumber) {
     return permit(permitNumber, ownerClientNumber, null, orgUnitNumber);
@@ -590,6 +859,29 @@ class ProvincialAuthorizationServiceTest {
         90,
         null,
         true,
+        List.of(),
+        List.of());
+  }
+
+  private ExemptionDetailDto exemption(
+      String exemptionNumber, String owner, String agent, boolean blanketOic) {
+    return new ExemptionDetailDto(
+        exemptionNumber,
+        blanketOic ? "B" : "M",
+        blanketOic ? "Blanket OIC" : "Ministerial",
+        "ACT",
+        "Active",
+        owner,
+        agent,
+        null,
+        null,
+        null,
+        null,
+        100,
+        10,
+        90,
+        null,
+        blanketOic,
         List.of(),
         List.of());
   }

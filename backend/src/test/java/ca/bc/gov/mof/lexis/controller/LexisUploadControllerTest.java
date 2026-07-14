@@ -124,6 +124,8 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
+    verify(provincialAuthorizationService, times(2))
+        .requireApplicationAttachmentPersistence(authentication, 7000123L);
     verify(documentUploadMutationPolicy).requireApplicationMutable(7000123L);
     verify(applicationEditLockService)
         .acquire(7000123L, "idir\\jsmith", "idir\\jsmith", false);
@@ -161,13 +163,70 @@ class LexisUploadControllerTest {
             "validated",
             "File passed validation and virus scanning.");
     when(uploadService.validateDocument(formFile, "application")).thenReturn(Optional.of(payload));
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
 
     ResponseEntity<LexisUploadResultDto> response =
-        controller.validateApplicationUpload(null, formFile, 7000123L);
+        controller.validateApplicationUpload(null, formFile, 7000123L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
+    verify(provincialAuthorizationService)
+        .requireApplicationAttachmentMutation(authentication, 7000123L);
     verify(uploadService).validateDocument(formFile, "application");
+  }
+
+  @Test
+  void documentValidationShouldAuthorizeTargetBeforeScanning() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
+    LexisUploadController controller = controller();
+    MultipartFile permitFile = sampleFile("permit.pdf");
+    MultipartFile exemptionFile = sampleFile("exemption.pdf");
+    MultipartFile invoiceFile = sampleFile("invoice.pdf");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(uploadService.validateDocument(permitFile, "permit"))
+        .thenReturn(
+            Optional.of(
+                new LexisUploadResultDto(
+                    "permit", "permit.pdf", permitFile.getSize(), "validated", "accepted")));
+    when(uploadService.validateDocument(exemptionFile, "exemption"))
+        .thenReturn(
+            Optional.of(
+                new LexisUploadResultDto(
+                    "exemption",
+                    "exemption.pdf",
+                    exemptionFile.getSize(),
+                    "validated",
+                    "accepted")));
+    when(uploadService.validateDocument(invoiceFile, "invoice"))
+        .thenReturn(
+            Optional.of(
+                new LexisUploadResultDto(
+                    "invoice", "invoice.pdf", invoiceFile.getSize(), "validated", "accepted")));
+
+    assertThat(
+            controller
+                .validatePermitUpload(null, permitFile, 7000123L, authentication)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    assertThat(
+            controller
+                .validateExemptionUpload(null, exemptionFile, "E-123", authentication)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    assertThat(
+            controller
+                .validateInvoiceUpload(
+                    null, invoiceFile, 7000123L, "INV-1001", authentication)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+
+    verify(provincialAuthorizationService)
+        .requireExemptionAttachmentMutation(authentication, "E-123");
+    verify(provincialAuthorizationService, times(2))
+        .requirePermitAttachmentMutation(authentication, 7000123L);
+    verifyNoInteractions(documentUploadMutationPolicy);
   }
 
   @Test
@@ -176,7 +235,7 @@ class LexisUploadControllerTest {
     MultipartFile formFile = sampleFile("application.pdf");
 
     ResponseEntity<LexisUploadResultDto> response =
-        controller.validateApplicationUpload(null, formFile, null);
+        controller.validateApplicationUpload(null, formFile, null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
@@ -269,7 +328,7 @@ class LexisUploadControllerTest {
         .hasMessage("Expired applications are read-only.");
 
     verify(provincialAuthorizationService, times(2))
-        .requireApplication(null, 7000123L);
+        .requireApplicationAttachmentPersistence(null, 7000123L);
     verifyNoInteractions(applicationEditLockService, uploadService);
     verify(uploadServiceProvider, never()).getIfAvailable();
   }
@@ -431,7 +490,8 @@ class LexisUploadControllerTest {
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Expired exemptions are read-only.");
 
-    verify(provincialAuthorizationService, times(2)).requireExemption(null, "E-123");
+    verify(provincialAuthorizationService, times(2))
+        .requireExemptionAttachmentMutation(null, "E-123");
     verify(applicationEditLockService, never())
         .acquireExemption(any(), any(), any(), anyBoolean());
     verify(uploadServiceProvider, never()).getIfAvailable();

@@ -1535,9 +1535,11 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void adminApplicationUploadShouldRejectScopedProvincialSubmitterRole() throws Exception {
+  void applicationUploadShouldFailClosedWithoutCanonicalEditContextForScopedSubmitter()
+      throws Exception {
     MockMultipartFile file =
-        new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
+        new MockMultipartFile(
+            "formFile", "application.pdf", "application/pdf", validPdfBytes());
 
     mockMvc.perform(
             multipart("/api/lexis/admin/uploads/applications")
@@ -1549,6 +1551,26 @@ class LexisRouteAuthorizationIntegrationTest {
                         .authorities(
                             new SimpleGrantedAuthority(
                                 "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void applicationUploadShouldRejectProvincialSubmitterWithoutClientScope()
+      throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "application.pdf", "application/pdf", validPdfBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/applications")
+                .file(file)
+                .param("applicationNumber", "1000123")
+                .param("fileDescription", "Application evidence")
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isForbidden());
   }
 
@@ -1580,7 +1602,8 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void adminPermitUploadValidationShouldAllowAdminRole() throws Exception {
+  void adminPermitUploadValidationShouldFailClosedWithoutCanonicalTargetService()
+      throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "permit.pdf", "application/pdf", validPdfBytes());
 
@@ -1589,11 +1612,12 @@ class LexisRouteAuthorizationIntegrationTest {
                 .file(file)
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
-  void adminExemptionUploadValidationShouldAllowAdminRole() throws Exception {
+  void adminExemptionUploadValidationShouldFailClosedWithoutCanonicalTargetService()
+      throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "exemption.pdf", "application/pdf", validPdfBytes());
 
@@ -1602,11 +1626,12 @@ class LexisRouteAuthorizationIntegrationTest {
                 .file(file)
                 .param("exemptionNumber", "EX-100")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
-  void adminInvoiceUploadValidationShouldAllowAdminRole() throws Exception {
+  void adminInvoiceUploadValidationShouldFailClosedWithoutCanonicalTargetService()
+      throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", validPdfBytes());
 
@@ -1616,7 +1641,7 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("permitNumber", "7000123")
                 .param("salesInvoiceNumber", "INV-100")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -1647,38 +1672,35 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void adminDocumentUploadValidationShouldRejectScopedProvincialSubmitterRole()
+  void applicationUploadValidationShouldAllowOwningScopedProvincialSubmitterRole()
       throws Exception {
     SimpleGrantedAuthority scopedSubmitter =
         new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00012345");
 
     mockMvc.perform(
             multipart("/api/lexis/admin/uploads/applications/validation")
-                .file(new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes()))
+                .file(
+                    new MockMultipartFile(
+                        "formFile", "application.pdf", "application/pdf", validPdfBytes()))
                 .param("applicationNumber", "1000123")
                 .with(jwt().authorities(scopedSubmitter)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isOk());
+  }
 
+  @Test
+  void applicationUploadValidationShouldRejectCrossClientProvincialSubmitter()
+      throws Exception {
     mockMvc.perform(
-            multipart("/api/lexis/admin/uploads/permits/validation")
-                .file(new MockMultipartFile("formFile", "permit.pdf", "application/pdf", "content".getBytes()))
-                .param("permitNumber", "7000123")
-                .with(jwt().authorities(scopedSubmitter)))
-        .andExpect(status().isForbidden());
-
-    mockMvc.perform(
-            multipart("/api/lexis/admin/uploads/exemptions/validation")
-                .file(new MockMultipartFile("formFile", "exemption.pdf", "application/pdf", "content".getBytes()))
-                .param("exemptionNumber", "EX-100")
-                .with(jwt().authorities(scopedSubmitter)))
-        .andExpect(status().isForbidden());
-
-    mockMvc.perform(
-            multipart("/api/lexis/admin/uploads/invoices/validation")
-                .file(new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", "content".getBytes()))
-                .param("permitNumber", "7000123")
-                .param("salesInvoiceNumber", "INV-100")
-                .with(jwt().authorities(scopedSubmitter)))
+            multipart("/api/lexis/admin/uploads/applications/validation")
+                .file(
+                    new MockMultipartFile(
+                        "formFile", "application.pdf", "application/pdf", validPdfBytes()))
+                .param("applicationNumber", "1000123")
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER_99999999"))))
         .andExpect(status().isForbidden());
   }
 
@@ -2190,18 +2212,18 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void sessionCanPerformActionShouldRejectDocumentUploadsForProvincialSubmitter()
+  void sessionCanPerformActionShouldAllowDocumentUploadsForProvincialSubmitter()
       throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/fileApplicationUpload")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.granted").value(false));
+        .andExpect(jsonPath("$.granted").value(true));
   }
 
   @Test
-  void sessionCanPerformActionShouldRejectDocumentUploadsForScopedProvincialSubmitter()
+  void sessionCanPerformActionShouldAllowDocumentUploadsForScopedProvincialSubmitter()
       throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
@@ -2212,7 +2234,7 @@ class LexisRouteAuthorizationIntegrationTest {
                             new SimpleGrantedAuthority(
                                 "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.granted").value(false));
+        .andExpect(jsonPath("$.granted").value(true));
   }
 
   @Test

@@ -93,15 +93,16 @@ class LexisAuthorizationMatrixParityTest {
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .contains("createApplication")
         .contains("uploadApplicationSubmission")
+        .contains(
+            "/fileApplicationUpload",
+            "/fileExemptionUpload",
+            "/fileInvoiceUpload",
+            "/filePermitUpload")
         .doesNotContain(
             "/summary",
             "/changeApplicantType",
             "/applicationRemarks",
             "/createExemption",
-            "/fileApplicationUpload",
-            "/fileExemptionUpload",
-            "/fileInvoiceUpload",
-            "/filePermitUpload",
             "approveExemption",
             "createOffer",
             "createPermit",
@@ -120,12 +121,13 @@ class LexisAuthorizationMatrixParityTest {
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .contains("createApplication")
         .contains("uploadApplicationSubmission")
-        .doesNotContain(
-            "/changeApplicantType",
+        .contains(
             "/fileApplicationUpload",
             "/fileExemptionUpload",
             "/fileInvoiceUpload",
-            "/filePermitUpload",
+            "/filePermitUpload")
+        .doesNotContain(
+            "/changeApplicantType",
             "createOffer",
             "createPermit",
             "saveExemption",
@@ -155,7 +157,7 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void supportingDocumentUploadsShouldBeAvailableToAdminsAndApplicationApproversOnly() {
+  void supportingDocumentUploadsShouldFollowLegacyGroupNineRoles() {
     List.of(
             "/fileApplicationUpload",
             "/fileExemptionUpload",
@@ -164,7 +166,10 @@ class LexisAuthorizationMatrixParityTest {
         .forEach(
             action ->
                 assertThat(authorizationService.resolveRolesForAction(action))
-                    .containsExactlyInAnyOrder("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER"));
+                    .containsExactlyInAnyOrder(
+                        "LEXIS_ADMIN",
+                        "LEXIS_APPLICATION_APPROVER",
+                        "LEXIS_PROVINCIAL_SUBMITTER"));
   }
 
   @Test

@@ -57,7 +57,7 @@ describe('Protected route guard access', () => {
     expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
   })
 
-  it('allows upload page when one matching upload action is granted', async () => {
+  it('rejects generic data upload when only a supporting-document action is granted', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -65,6 +65,22 @@ describe('Protected route guard access', () => {
           grantedActions: ['/fileApplicationUpload'],
         }),
         canPerform: (action: string) => action === '/fileApplicationUpload',
+      }),
+    )
+
+    renderWithPath('/admin/uploads?type=application')
+
+    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+  })
+
+  it('allows generic data upload when the admin upload action is granted', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\admin',
+          grantedActions: ['/lexisAgentAdmin'],
+        }),
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
       }),
     )
 

@@ -64,13 +64,7 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
   },
   {
     path: '/admin/uploads',
-    requiredActions: [
-      '/lexisAgentAdmin',
-      '/fileApplicationUpload',
-      '/fileExemptionUpload',
-      '/filePermitUpload',
-      '/fileInvoiceUpload',
-    ],
+    requiredActions: ['/lexisAgentAdmin'],
     requiredActionsMatch: 'any',
   },
 ]

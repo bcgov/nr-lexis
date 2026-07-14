@@ -2860,6 +2860,37 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitInvoiceConversionRate).not.toHaveBeenCalled()
   })
 
+  it('shows inline permit and invoice uploads to a scoped Provincial Submitter', async () => {
+    configureActivePermit()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\scoped-submitter',
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00067890'],
+        }),
+        canPerform: (action: string) =>
+          action === '/filePermitUpload' || action === '/fileInvoiceUpload',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Documents')
+    expect(await screen.findByText('Upload permit documents')).toBeInTheDocument()
+
+    await selectPermitDetailTab('Invoices')
+    expect(await screen.findByText('Upload invoices')).toBeInTheDocument()
+  })
+
   it('uploads invoice files inline and refreshes permit document data', async () => {
     configureActivePermit()
     render(

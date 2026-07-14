@@ -1089,6 +1089,33 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
   })
 
+  it('shows inline application upload to a scoped Provincial Submitter', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === '/fileApplicationUpload',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+
+    expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
+    expect(screen.getByLabelText('Document description')).toBeInTheDocument()
+  })
+
   it('shows only the upload panel when an application has no documents', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>

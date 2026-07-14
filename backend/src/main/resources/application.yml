@@ -189,6 +189,10 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/fileApplicationUpload"
+        - "/fileExemptionUpload"
+        - "/filePermitUpload"
+        - "/fileInvoiceUpload"
         - "createApplication"
         - "uploadApplicationSubmission"
       LEXIS_DELEGATED_ADMIN: []

@@ -455,6 +455,34 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows inline exemption upload to a scoped Provincial Submitter', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\scoped-submitter',
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00055566'],
+        }),
+        canPerform: (action: string) => action === '/fileExemptionUpload',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+
+    expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
+    expect(screen.getByLabelText('Document description')).toBeInTheDocument()
+  })
+
   it('renders semantic empty states for empty exemption detail collections', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,

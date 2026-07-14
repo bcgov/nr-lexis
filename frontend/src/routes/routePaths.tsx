@@ -415,13 +415,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/admin/uploads',
     id: 'Data Upload',
-    requiredActions: [
-      '/lexisAgentAdmin',
-      '/fileApplicationUpload',
-      '/fileExemptionUpload',
-      '/filePermitUpload',
-      '/fileInvoiceUpload',
-    ],
+    requiredActions: ['/lexisAgentAdmin'],
     element: (
       <Layout>
         <AdminUploadsPage />

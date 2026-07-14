@@ -5,7 +5,9 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
@@ -31,7 +33,9 @@ public class ProvincialAuthorizationService {
   private final LexisSessionService sessionService;
   private final LexisPrincipalService principalService;
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
+  private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final ObjectProvider<ExemptionService> exemptionServiceProvider;
+  private final ObjectProvider<ExemptionDetailsRpcService> exemptionDetailsServiceProvider;
   private final ObjectProvider<PermitService> permitServiceProvider;
   private final ObjectProvider<PurchaseOfferService> offerServiceProvider;
 
@@ -39,13 +43,17 @@ public class ProvincialAuthorizationService {
       LexisSessionService sessionService,
       LexisPrincipalService principalService,
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ObjectProvider<ExemptionService> exemptionServiceProvider,
+      ObjectProvider<ExemptionDetailsRpcService> exemptionDetailsServiceProvider,
       ObjectProvider<PermitService> permitServiceProvider,
       ObjectProvider<PurchaseOfferService> offerServiceProvider) {
     this.sessionService = sessionService;
     this.principalService = principalService;
     this.applicationServiceProvider = applicationServiceProvider;
+    this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.exemptionServiceProvider = exemptionServiceProvider;
+    this.exemptionDetailsServiceProvider = exemptionDetailsServiceProvider;
     this.permitServiceProvider = permitServiceProvider;
     this.offerServiceProvider = offerServiceProvider;
   }
@@ -153,7 +161,9 @@ public class ProvincialAuthorizationService {
       }
       return exemption.blanketOic()
           || matchesClient(
-              scopedClientNumber, exemption.ownerClientNumber(), exemption.agentClientNumber());
+              scopedClientNumber, exemption.ownerClientNumber(), exemption.agentClientNumber())
+          || canAccessLinkedExemptionApplication(
+              scopedClientNumber, exemption.exemptionNumber());
     }
     if (!isOrgUnitRestricted(roles, OrgUnitSurface.EXEMPTION_DETAIL)) {
       return true;
@@ -363,6 +373,111 @@ public class ProvincialAuthorizationService {
     }
   }
 
+  public void requireApplicationAttachmentMutation(
+      Authentication authentication, Long applicationNumber) {
+    LexisApplicationService service = applicationServiceProvider.getIfAvailable();
+    LexisApplicationDetailDto application =
+        service == null || applicationNumber == null || applicationNumber < 1
+            ? null
+            : service.findByApplicationNumber(applicationNumber).orElse(null);
+    if (application == null) {
+      throw attachmentMutationDenied("application");
+    }
+
+    Set<String> currentRoles = roles(authentication);
+    boolean allowed = isStaffAttachmentWriter(currentRoles);
+    if (!allowed) {
+      String scopedClientNumber = scopedClientNumber(authentication);
+      allowed =
+          scopedClientNumber != null
+              && currentRoles.contains(ROLE_PROVINCIAL_SUBMITTER)
+              && "P".equalsIgnoreCase(application.jurisdictionCode())
+              && matchesApplicationClient(scopedClientNumber, application);
+    }
+    if (!allowed) {
+      throw attachmentMutationDenied("application");
+    }
+  }
+
+  public void requireApplicationAttachmentPersistence(
+      Authentication authentication, Long applicationNumber) {
+    requireApplicationAttachmentMutation(authentication, applicationNumber);
+    Set<String> currentRoles = roles(authentication);
+    if (isStaffAttachmentWriter(currentRoles)) {
+      return;
+    }
+
+    ApplicationDetailsRpcService service = applicationDetailsServiceProvider.getIfAvailable();
+    ApplicationDetailsRpcService.ApplicationEditContext context =
+        service == null || applicationNumber == null || applicationNumber < 1
+            ? null
+            : service.getApplicationEditContext(applicationNumber).orElse(null);
+    if (context == null
+        || !applicationNumber.equals(context.applicationNumber())
+        || context.hasCompletePermit()) {
+      throw attachmentMutationDenied("application");
+    }
+  }
+
+  public void requireExemptionAttachmentMutation(
+      Authentication authentication, String exemptionNumber) {
+    ExemptionService service = exemptionServiceProvider.getIfAvailable();
+    String normalizedNumber =
+        exemptionNumber == null || exemptionNumber.isBlank() ? null : exemptionNumber.trim();
+    ExemptionDetailDto exemption =
+        service == null || normalizedNumber == null
+            ? null
+            : service.findByExemptionNumber(normalizedNumber).orElse(null);
+    if (exemption == null) {
+      throw attachmentMutationDenied("exemption");
+    }
+
+    Set<String> currentRoles = roles(authentication);
+    boolean allowed = isStaffAttachmentWriter(currentRoles);
+    if (!allowed) {
+      String scopedClientNumber = scopedClientNumber(authentication);
+      allowed =
+          scopedClientNumber != null
+              && currentRoles.contains(ROLE_PROVINCIAL_SUBMITTER)
+              && !exemption.blanketOic()
+              && !"NEW".equalsIgnoreCase(exemption.exemptionStatusCode())
+              && (matchesClient(
+                      scopedClientNumber,
+                      exemption.ownerClientNumber(),
+                      exemption.agentClientNumber())
+                  || canAccessLinkedExemptionApplication(
+                      scopedClientNumber, exemption.exemptionNumber()));
+    }
+    if (!allowed) {
+      throw attachmentMutationDenied("exemption");
+    }
+  }
+
+  public void requirePermitAttachmentMutation(
+      Authentication authentication, Long permitNumber) {
+    PermitService service = permitServiceProvider.getIfAvailable();
+    PermitDetailDto permit =
+        service == null || permitNumber == null || permitNumber < 1
+            ? null
+            : service.findByPermitNumber(permitNumber).orElse(null);
+    if (permit == null) {
+      throw attachmentMutationDenied("permit");
+    }
+
+    Set<String> currentRoles = roles(authentication);
+    boolean allowed = isStaffAttachmentWriter(currentRoles);
+    if (!allowed) {
+      String scopedClientNumber = scopedClientNumber(authentication);
+      allowed =
+          scopedClientNumber != null
+              && currentRoles.contains(ROLE_PROVINCIAL_SUBMITTER)
+              && canAccessPermit(authentication, permit);
+    }
+    if (!allowed) {
+      throw attachmentMutationDenied("permit");
+    }
+  }
+
   public void requireFederalApplication(
       Authentication authentication, Long applicationNumber) {
     if (!canAccessFederalApplication(authentication, applicationNumber)) {
@@ -418,6 +533,42 @@ public class ProvincialAuthorizationService {
     return false;
   }
 
+  private boolean canAccessLinkedExemptionApplication(
+      String scopedClientNumber, String exemptionNumber) {
+    ExemptionDetailsRpcService exemptionDetailsService =
+        exemptionDetailsServiceProvider.getIfAvailable();
+    LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
+    if (exemptionDetailsService == null || applicationService == null) {
+      return false;
+    }
+
+    List<Long> applicationNumbers =
+        exemptionDetailsService.getApplicationNumbersForMutation(exemptionNumber);
+    if (applicationNumbers == null) {
+      throw new DataRetrievalFailureException(
+          "Linked exemption applications could not be loaded.");
+    }
+    boolean matched = false;
+    for (Long applicationNumber : applicationNumbers) {
+      if (applicationNumber == null || applicationNumber < 1) {
+        throw new DataRetrievalFailureException(
+            "A linked exemption application has an invalid application number.");
+      }
+      LexisApplicationDetailDto application =
+          applicationService
+              .findByApplicationNumber(applicationNumber)
+              .orElseThrow(
+                  () ->
+                      new DataRetrievalFailureException(
+                          "A linked exemption application could not be loaded."));
+      if ("P".equalsIgnoreCase(application.jurisdictionCode())
+          && matchesApplicationClient(scopedClientNumber, application)) {
+        matched = true;
+      }
+    }
+    return matched;
+  }
+
   private boolean canAccessFederalApplication(
       Authentication authentication, LexisApplicationDetailDto application) {
     Set<String> currentRoles = roles(authentication);
@@ -450,6 +601,16 @@ public class ProvincialAuthorizationService {
       }
     }
     return false;
+  }
+
+  private AccessDeniedException attachmentMutationDenied(String recordType) {
+    return new AccessDeniedException(
+        "The " + recordType + " is outside the authenticated attachment-write scope.");
+  }
+
+  private boolean isStaffAttachmentWriter(Set<String> currentRoles) {
+    return currentRoles.contains(ROLE_ADMIN)
+        || currentRoles.contains(ROLE_APPLICATION_APPROVER);
   }
 
   private String scopedClientNumber(Authentication authentication) {

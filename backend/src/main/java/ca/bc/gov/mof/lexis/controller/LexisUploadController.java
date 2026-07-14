@@ -180,13 +180,14 @@ public class LexisUploadController {
           "application", "Choose a file and enter a valid application number before uploading documents.");
     }
     if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireApplication(authentication, applicationNumber);
+      provincialAuthorizationService.requireApplicationAttachmentPersistence(
+          authentication, applicationNumber);
     }
     return permitOperationMutex.executeApplications(
         List.of(applicationNumber),
         () -> {
           if (provincialAuthorizationService != null) {
-            provincialAuthorizationService.requireApplication(
+            provincialAuthorizationService.requireApplicationAttachmentPersistence(
                 authentication, applicationNumber);
           }
           requireApplicationMutable(applicationNumber);
@@ -233,11 +234,16 @@ public class LexisUploadController {
   public ResponseEntity<LexisUploadResultDto> validateApplicationUpload(
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
-      @RequestParam(name = "applicationNumber", required = false) Long applicationNumber) {
+      @RequestParam(name = "applicationNumber", required = false) Long applicationNumber,
+      Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty() || applicationNumber == null || applicationNumber < 1) {
       return uploadBadRequest(
           "application", "Choose a file and enter a valid application number before validating documents.");
+    }
+    if (provincialAuthorizationService != null) {
+      provincialAuthorizationService.requireApplicationAttachmentMutation(
+          authentication, applicationNumber);
     }
     return validateDocumentUpload("application", uploadFile);
   }
@@ -258,13 +264,14 @@ public class LexisUploadController {
           "permit", "Choose a file and enter a valid permit number before uploading documents.");
     }
     if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requirePermit(authentication, permitNumber);
+      provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
     }
     return permitOperationMutex.execute(
         permitNumber,
         () -> {
           if (provincialAuthorizationService != null) {
-            provincialAuthorizationService.requirePermit(authentication, permitNumber);
+            provincialAuthorizationService.requirePermitAttachmentMutation(
+                authentication, permitNumber);
           }
           requirePermitMutable(permitNumber);
           ApplicationEditLockDto lock =
@@ -305,11 +312,15 @@ public class LexisUploadController {
   public ResponseEntity<LexisUploadResultDto> validatePermitUpload(
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
-      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty() || permitNumber == null || permitNumber < 1) {
       return uploadBadRequest(
           "permit", "Choose a file and enter a valid permit number before validating documents.");
+    }
+    if (provincialAuthorizationService != null) {
+      provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
     }
     return validateDocumentUpload("permit", uploadFile);
   }
@@ -333,13 +344,15 @@ public class LexisUploadController {
           "exemption", "Choose a file and enter a valid exemption number before uploading documents.");
     }
     if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireExemption(authentication, exemptionNumber);
+      provincialAuthorizationService.requireExemptionAttachmentMutation(
+          authentication, exemptionNumber);
     }
     return permitOperationMutex.executeExemptions(
         List.of(exemptionNumber),
         () -> {
           if (provincialAuthorizationService != null) {
-            provincialAuthorizationService.requireExemption(authentication, exemptionNumber);
+            provincialAuthorizationService.requireExemptionAttachmentMutation(
+                authentication, exemptionNumber);
           }
           requireExemptionMutable(exemptionNumber);
           ApplicationEditLockDto lock =
@@ -382,7 +395,8 @@ public class LexisUploadController {
   public ResponseEntity<LexisUploadResultDto> validateExemptionUpload(
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
-      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null
         || uploadFile.isEmpty()
@@ -390,6 +404,10 @@ public class LexisUploadController {
         || exemptionNumber.isBlank()) {
       return uploadBadRequest(
           "exemption", "Choose a file and enter a valid exemption number before validating documents.");
+    }
+    if (provincialAuthorizationService != null) {
+      provincialAuthorizationService.requireExemptionAttachmentMutation(
+          authentication, exemptionNumber);
     }
     return validateDocumentUpload("exemption", uploadFile);
   }
@@ -424,13 +442,14 @@ public class LexisUploadController {
           "invoice", "Choose a file and enter valid permit and invoice numbers before uploading documents.");
     }
     if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requirePermit(authentication, permitNumber);
+      provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
     }
     return permitOperationMutex.execute(
         permitNumber,
         () -> {
           if (provincialAuthorizationService != null) {
-            provincialAuthorizationService.requirePermit(authentication, permitNumber);
+            provincialAuthorizationService.requirePermitAttachmentMutation(
+                authentication, permitNumber);
           }
           requireInvoicePermitActive(permitNumber);
           ApplicationEditLockDto lock =
@@ -476,7 +495,8 @@ public class LexisUploadController {
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
-      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber) {
+      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
+      Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null
         || uploadFile.isEmpty()
@@ -486,6 +506,9 @@ public class LexisUploadController {
         || salesInvoiceNumber.isBlank()) {
       return uploadBadRequest(
           "invoice", "Choose a file and enter valid permit and invoice numbers before validating documents.");
+    }
+    if (provincialAuthorizationService != null) {
+      provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
     }
     return validateDocumentUpload("invoice", uploadFile);
   }

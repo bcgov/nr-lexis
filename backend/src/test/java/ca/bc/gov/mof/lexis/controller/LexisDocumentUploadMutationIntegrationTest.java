@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -8,16 +9,20 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -45,9 +50,23 @@ class LexisDocumentUploadMutationIntegrationTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private LexisApplicationService applicationService;
+  @MockitoBean private ApplicationDetailsRpcService applicationDetailsService;
+  @MockitoBean private ApplicationEditLockService applicationEditLockService;
   @MockitoBean private ExemptionService exemptionService;
   @MockitoBean private PermitService permitService;
   @MockitoBean private LexisUploadService uploadService;
+
+  @BeforeEach
+  void allowEditLocks() {
+    ApplicationEditLockDto acquired =
+        new ApplicationEditLockDto(false, true, null, null, null);
+    when(applicationEditLockService.acquire(any(), any(), any(), anyBoolean()))
+        .thenReturn(acquired);
+    when(applicationEditLockService.acquireExemption(any(), any(), any(), anyBoolean()))
+        .thenReturn(acquired);
+    when(applicationEditLockService.acquirePermit(any(), any(), any(), anyBoolean()))
+        .thenReturn(acquired);
+  }
 
   @Test
   void directPersistedUploadsShouldRejectExpiredCanonicalTargets() throws Exception {
@@ -108,6 +127,32 @@ class LexisDocumentUploadMutationIntegrationTest {
     performExemptionUpload().andExpect(status().isOk());
     performPermitUpload().andExpect(status().isOk());
     performInvoiceUpload().andExpect(status().isOk());
+  }
+
+  @Test
+  void scopedSubmitterApplicationUploadShouldAllowOwnedApplicationWithoutCompletePermit()
+      throws Exception {
+    when(applicationService.findByApplicationNumber(APPLICATION_NUMBER))
+        .thenReturn(Optional.of(application("NEW")));
+    when(applicationDetailsService.getApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(Optional.of(applicationEditContext(false)));
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("application")));
+
+    performApplicationUpload(submitterJwt()).andExpect(status().isOk());
+  }
+
+  @Test
+  void scopedSubmitterApplicationUploadShouldRejectApplicationWithCompletePermit()
+      throws Exception {
+    when(applicationService.findByApplicationNumber(APPLICATION_NUMBER))
+        .thenReturn(Optional.of(application("NEW")));
+    when(applicationDetailsService.getApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(Optional.of(applicationEditContext(true)));
+
+    performApplicationUpload(submitterJwt()).andExpect(status().isForbidden());
+
+    verify(uploadService, never()).uploadApplication(any(), any(), any(), any());
   }
 
   @Test
@@ -204,6 +249,12 @@ class LexisDocumentUploadMutationIntegrationTest {
         List.of());
   }
 
+  private ApplicationDetailsRpcService.ApplicationEditContext applicationEditContext(
+      boolean hasCompletePermit) {
+    return new ApplicationDetailsRpcService.ApplicationEditContext(
+        APPLICATION_NUMBER, "NEW", "P", 1L, null, false, false, hasCompletePermit, null);
+  }
+
   private ExemptionDetailDto exemption(String status) {
     return new ExemptionDetailDto(
         EXEMPTION_NUMBER,
@@ -263,12 +314,17 @@ class LexisDocumentUploadMutationIntegrationTest {
   }
 
   private ResultActions performApplicationUpload() throws Exception {
+    return performApplicationUpload(adminJwt());
+  }
+
+  private ResultActions performApplicationUpload(JwtRequestPostProcessor authentication)
+      throws Exception {
     return mockMvc.perform(
         multipart("/api/lexis/admin/uploads/applications")
             .file(file("application.pdf"))
             .param("applicationNumber", Long.toString(APPLICATION_NUMBER))
             .param("fileDescription", "Application document")
-            .with(adminJwt()));
+            .with(authentication));
   }
 
   private ResultActions performExemptionUpload() throws Exception {
@@ -311,5 +367,16 @@ class LexisDocumentUploadMutationIntegrationTest {
                     .claim("custom:idp_name", "idir")
                     .claim("custom:idp_username", "lexis-upload-test-user"))
         .authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"));
+  }
+
+  private JwtRequestPostProcessor submitterJwt() {
+    return SecurityMockMvcRequestPostProcessors.jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("custom:idp_name", "bceidbusiness")
+                    .claim("custom:idp_username", "lexis-submit-test-user"))
+        .authorities(
+            new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00012345"));
   }
 }
