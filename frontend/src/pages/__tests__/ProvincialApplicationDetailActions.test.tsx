@@ -218,7 +218,7 @@ const applicationDetail: ProvincialApplicationDetail = {
   agentClientNumber: '00033344',
   orgUnitNumber: 12,
   orgUnitName: 'Coast',
-  productTypeCode: 'LOG',
+  productTypeCode: 'H',
   exemptionReasonCode: 'U',
   applicationDate: '2026-01-01',
   receivedDate: '2026-01-02',
@@ -379,6 +379,8 @@ describe('Provincial Application Detail Document Actions', () => {
       productTypes: [
         { value: 'LOG', label: 'Logs' },
         { value: 'H', label: 'Harvested Timber' },
+        { value: 'S', label: 'Standing Timber' },
+        { value: 'T', label: 'Timber' },
         { value: 'TIMBER', label: 'Timber' },
       ],
       growthTypes: [
@@ -592,7 +594,7 @@ describe('Provincial Application Detail Document Actions', () => {
       applicationStatusCode: 'APP',
       applicantTypeCode: 'A',
       orgUnitNumber: '12',
-      productTypeCode: 'LOG',
+      productTypeCode: 'H',
       jurisdictionCode: 'P',
       growthTypeCode: 'O',
       agentContactName: 'Agent Contact',
@@ -3415,7 +3417,7 @@ describe('Provincial Application Detail Document Actions', () => {
       exemptionTypes: [],
       exemptionReasons: [{ value: 'U', label: 'Utilization' }],
       applicationStatuses: [{ value: 'ACTIVE', label: 'Active' }],
-      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '12', label: 'Coast' }],
       currentSchedules: [
@@ -3490,12 +3492,96 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
     expect(
-      screen.getAllByText('Application volume must be 9999999.9 or less.').length,
+      screen.getAllByText('Application volume must be 9999999.99 or less.').length,
     ).toBeGreaterThan(0)
     expect(screen.getAllByText('Average log volume must be 99.9 or less.').length).toBeGreaterThan(
       0,
     )
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('rejects three application-volume decimals and accepts the exact Oracle maximum', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const applicationVolume = await summaryControls.findByLabelText('Application volume (m³)')
+    const saveSummary = summaryControls.getByRole('button', { name: 'Save Summary' })
+
+    await userEvent.clear(applicationVolume)
+    await userEvent.type(applicationVolume, '250.999')
+    await userEvent.click(saveSummary)
+
+    expect(
+      screen.getAllByText('Application volume must have no more than two decimal places.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    await userEvent.clear(applicationVolume)
+    await userEvent.type(applicationVolume, '9999999.99')
+    await userEvent.click(saveSummary)
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ applicationVolume: '9999999.99' }),
+      ),
+    )
+  })
+
+  it('applies H, S, and T summary fields without hidden stale-value validation', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const productType = getSummaryComboBox(summaryControls, 'Product type')
+    const averageLogVolume = await summaryControls.findByLabelText('Average log volume')
+    const productLocation = summaryControls.getByLabelText('Location of logs')
+
+    expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
+    await userEvent.clear(averageLogVolume)
+    await userEvent.type(averageLogVolume, '-0.1')
+    await userEvent.clear(productLocation)
+
+    await chooseComboBoxOption(productType, 'Standing Timber')
+    expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
+    expect(summaryControls.queryByLabelText('Average log volume')).not.toBeInTheDocument()
+    expect(summaryControls.queryByLabelText('Location of logs')).not.toBeInTheDocument()
+
+    await clearComboBox(getSummaryComboBox(summaryControls, 'Growth type'))
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
+    expect(screen.getAllByText('Growth type is required.').length).toBeGreaterThan(0)
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    await chooseComboBoxOption(productType, 'Timber')
+    expect(summaryControls.queryByRole('combobox', { name: 'Growth type' })).not.toBeInTheDocument()
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productTypeCode: 'T',
+          growthTypeCode: '',
+          productLocation: '',
+          averageLogVolume: '-0.1',
+        }),
+      )
+    })
   })
 
   it('warns once before saving summary when package volumes do not consume application volume', async () => {

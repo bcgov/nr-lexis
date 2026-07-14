@@ -54,6 +54,7 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationDetailsRpcController")
@@ -687,7 +688,8 @@ class ApplicationDetailsRpcControllerTest {
 
   @Test
   void addApplicationLegacyShouldMapAliasesAndReturnLegacyPersistencePayload() {
-    TestingAuthenticationToken authentication = authorized("createApplication");
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.addApplication(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(
@@ -732,6 +734,7 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(request.ownerClientNumber()).isEqualTo("00011111");
     assertThat(request.ownerClientLocationCode()).isEqualTo("02");
     assertThat(request.exemptionReasonCode()).isEqualTo("U");
+    assertThat(request.applicantTypeCode()).isEqualTo("A");
     assertThat(request.productTypeCode()).isEqualTo("H");
     assertThat(request.remarkBody()).isEqualTo("Ready for review");
     assertThat(request.validationEnabled()).isTrue();
@@ -740,6 +743,74 @@ class ApplicationDetailsRpcControllerTest {
             authentication,
             11L,
             ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+  }
+
+  @Test
+  void addApplicationShouldRejectAgentApplicantWithoutChangeApplicantTypeAuthority() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientNumber", "00011111");
+    params.add("applicantType", "A");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(serviceProvider, never()).getIfAvailable();
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldDefaultApplicantTypeToOwnerWithoutChangeApplicantTypeAuthority() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientNumber", "00011111");
+    params.add("applicantType", "   ");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service)
+        .addApplication(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().applicantTypeCode()).isEqualTo("O");
+  }
+
+  @Test
+  void addApplicationShouldDiscardAgentFieldsForOwnerApplicant() {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicantType", "O");
+    params.add("agentClientNumber", "00022222");
+    params.add("agentClientLocationCode", "03");
+    params.add("agentContactName", "Forged agent");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service)
+        .addApplication(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().agentClientNumber()).isNull();
+    assertThat(requestCaptor.getValue().agentClientLocationCode()).isNull();
+    assertThat(requestCaptor.getValue().agentContactName()).isNull();
   }
 
   @Test
@@ -771,8 +842,11 @@ class ApplicationDetailsRpcControllerTest {
             List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
             "createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
     when(provincialAuthorizationService.scopedForestClientNumber(authentication))
         .thenReturn("77881");
+    when(clientLookupService.getClientDataRequired("00077881", "02"))
+        .thenReturn(Optional.of(clientData("00077881")));
     when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
         .thenReturn(
             new ApplicationDetailsRpcService.CreateApplicationResult(
@@ -780,7 +854,7 @@ class ApplicationDetailsRpcControllerTest {
 
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("ownerClientNumber", "00099999");
-    params.add("ownerClientLocationCode", "99");
+    params.add("ownerClientLocationCode", "02");
     params.add("agentClientNumber", "00022222");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
@@ -794,10 +868,139 @@ class ApplicationDetailsRpcControllerTest {
             requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
     ApplicationDetailsRpcService.CreateApplicationRequest request = requestCaptor.getValue();
     assertThat(request.ownerClientNumber()).isEqualTo("00077881");
-    assertThat(request.ownerClientLocationCode()).isEqualTo("00");
-    assertThat(request.agentClientNumber()).isEqualTo("00022222");
+    assertThat(request.ownerClientLocationCode()).isEqualTo("02");
+    assertThat(request.agentClientNumber()).isNull();
+    verify(clientLookupService).getClientDataRequired("00077881", "02");
     verify(provincialAuthorizationService)
-        .canCreateForClient(authentication, "00077881", "00022222");
+        .canCreateForClient(authentication, "00077881", null);
+  }
+
+  @Test
+  void addApplicationShouldDefaultScopedSubmitterOwnerLocationToMainLocation() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(provincialAuthorizationService.scopedForestClientNumber(authentication))
+        .thenReturn("00077881");
+    when(clientLookupService.getClientDataRequired("00077881", "00"))
+        .thenReturn(Optional.of(clientData("00077881")));
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientNumber", "00099999");
+    params.add("ownerClientLocationCode", "   ");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service)
+        .addApplication(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
+    assertThat(requestCaptor.getValue().ownerClientNumber()).isEqualTo("00077881");
+    assertThat(requestCaptor.getValue().ownerClientLocationCode()).isEqualTo("00");
+  }
+
+  @Test
+  void addApplicationShouldRejectUnknownLocationForScopedSubmitter() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(provincialAuthorizationService.scopedForestClientNumber(authentication))
+        .thenReturn("00077881");
+    when(clientLookupService.getClientDataRequired("00077881", "99"))
+        .thenReturn(Optional.empty());
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientNumber", "00099999");
+    params.add("ownerClientLocationCode", "99");
+
+    assertThatThrownBy(() -> controller.addApplicationLegacy(params, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage(
+            "The selected owner location is not valid for the authenticated client.");
+    verify(service, never()).addApplication(any(), any());
+    verify(clientLookupService, never()).getClientDataRequired("00099999", "99");
+  }
+
+  @Test
+  void addApplicationShouldRejectMismatchedScopedLocationLookupIdentity() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(provincialAuthorizationService.scopedForestClientNumber(authentication))
+        .thenReturn("00077881");
+    when(clientLookupService.getClientDataRequired("00077881", "02"))
+        .thenReturn(Optional.of(clientData("00099999")));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientNumber", "00099999");
+    params.add("ownerClientLocationCode", "02");
+
+    assertThatThrownBy(() -> controller.addApplicationLegacy(params, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage(
+            "The selected owner location is not valid for the authenticated client.");
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldFailClosedWhenScopedLocationLookupFails() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(provincialAuthorizationService.scopedForestClientNumber(authentication))
+        .thenReturn("00077881");
+    IllegalStateException lookupFailure = new IllegalStateException("Oracle lookup failed");
+    when(clientLookupService.getClientDataRequired("00077881", "03"))
+        .thenThrow(lookupFailure);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientLocationCode", "03");
+
+    assertThatThrownBy(() -> controller.addApplicationLegacy(params, authentication))
+        .isSameAs(lookupFailure);
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldFailClosedWhenScopedLocationLookupIsUnavailable() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(provincialAuthorizationService.scopedForestClientNumber(authentication))
+        .thenReturn("00077881");
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientLocationCode", "03");
+
+    assertThatThrownBy(() -> controller.addApplicationLegacy(params, authentication))
+        .isInstanceOf(ResponseStatusException.class)
+        .satisfies(
+            exception ->
+                assertThat(((ResponseStatusException) exception).getStatusCode())
+                    .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+    verify(service, never()).addApplication(any(), any());
   }
 
   @Test
@@ -1869,6 +2072,11 @@ class ApplicationDetailsRpcControllerTest {
         1000456L,
         null,
         true);
+  }
+
+  private ClientLookupService.ClientData clientData(String clientNumber) {
+    return new ClientLookupService.ClientData(
+        clientNumber, null, null, null, null, null, null, null, null, null);
   }
 
   private MultiValueMap<String, String> linkedApplicationCreateParameters() {

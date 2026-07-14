@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -54,7 +55,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_NUMBER_ASSIGNED_MESSAGE =
       "* - this exemption number has already been assigned";
   private static final String SAVE_SUCCESS_MESSAGE = "The exemption was saved successfully.";
-  private static final double MAX_APPROVED_VOLUME = 9_999_999.9d;
+  private static final double MAX_APPROVED_VOLUME = 9_999_999.99d;
   private static final double MAX_FEE_RATE = 999.99d;
   private static final int MAX_EXEMPTION_NUMBER_BYTES = 8;
   private static final int MAX_OTHER_CONDITIONS_BYTES = 254;
@@ -841,13 +842,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
   }
 
-  private boolean hasAtMostOneDecimal(Double value) {
-    if (value == null) {
-      return true;
-    }
-    return BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 1;
-  }
-
   private boolean appNotPastListingDate(ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
     if (application.exportScheduleId() == null || application.listingDate() == null) {
       return false;
@@ -1308,13 +1302,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                 : "OIC and Blanket OIC exemptions must be created with a status of ACT.");
       }
     }
-    if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(request.exemptionStatusCode())
-        && request.expiryDate() == null) {
+    if (request.expiryDate() == null
+        && (request.approvalDate() != null
+            || EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(request.exemptionStatusCode()))) {
       errors.add(required("expiry date"));
     }
     if (request.approvalDate() != null
         && request.expiryDate() != null
-        && request.expiryDate().isBefore(request.approvalDate())) {
+        && !request.expiryDate().isAfter(request.approvalDate())) {
       errors.add("The approval date must come before the expiry.");
     }
     if (EXEMPTION_TYPE_BOIC.equalsIgnoreCase(request.exemptionTypeCode())
@@ -1361,10 +1356,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         record.exemptionStatusCode(),
         record.regionNumbers());
 
-    if (record.expiryDate() != null
-        && previous.expiryDate() != null
-        && !record.expiryDate().equals(previous.expiryDate())
-        && !canEditExpiryDate(record.exemptionStatusCode(), record.exemptionTypeCode())) {
+    if (!Objects.equals(record.expiryDate(), previous.expiryDate())
+        && !canEditExpiryDate(previous.exemptionStatusCode(), previous.exemptionTypeCode())) {
       errors.add("Insufficient privileges to change the expiry date of this exemption.");
     }
     return errors;
@@ -1389,10 +1382,12 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (trimToNull(exemptionStatusCode) == null) {
       errors.add(required("exemption status code"));
     }
-    if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(exemptionStatusCode) && expiryDate == null) {
+    if (expiryDate == null
+        && (approvalDate != null
+            || EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(exemptionStatusCode))) {
       errors.add(required("expiry date"));
     }
-    if (approvalDate != null && expiryDate != null && expiryDate.isBefore(approvalDate)) {
+    if (approvalDate != null && expiryDate != null && !expiryDate.isAfter(approvalDate)) {
       errors.add("The approval date must come before the expiry.");
     }
     if (EXEMPTION_TYPE_BOIC.equalsIgnoreCase(exemptionTypeCode)
@@ -1411,12 +1406,16 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (approvedVolume > MAX_APPROVED_VOLUME) {
       errors.add(
           "The approved volume must be less than or equal to "
-              + formatVolume(MAX_APPROVED_VOLUME)
+              + BigDecimal.valueOf(MAX_APPROVED_VOLUME).toPlainString()
               + ".");
     }
-    if (!hasAtMostOneDecimal(approvedVolume)) {
-      errors.add("The approved volume must have no more than one decimal place.");
+    if (!hasAtMostTwoDecimals(approvedVolume)) {
+      errors.add("The approved volume must have no more than two decimal places.");
     }
+  }
+
+  private boolean hasAtMostTwoDecimals(Double value) {
+    return value == null || BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 2;
   }
 
   private void validateExemptionStorage(

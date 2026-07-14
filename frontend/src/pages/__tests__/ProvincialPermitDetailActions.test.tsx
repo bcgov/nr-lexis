@@ -29,10 +29,8 @@ import {
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
-  addPermitInvoice,
   fetchPermitFeeOverrideContext,
   fetchPermitDocuments,
-  fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
   openPermitDocument,
   removePermitApplicationDocument,
@@ -83,11 +81,9 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
 }))
 
 vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
-  addPermitInvoice: vi.fn(),
   fetchPermitFeeOverrideContext: vi.fn(),
   fetchPermitDocuments: vi.fn(),
   fetchPermitInvoices: vi.fn(),
-  fetchPermitInvoiceConversionRate: vi.fn(),
   openPermitDocument: vi.fn(),
   releasePermitEditLock: vi.fn(),
   removePermitApplicationDocument: vi.fn(),
@@ -158,11 +154,9 @@ const mockedDeleteBlanketOicPackage = vi.mocked(deleteBlanketOicPackage)
 const mockedFetchBlanketOicPackageEditContext = vi.mocked(fetchBlanketOicPackageEditContext)
 const mockedAddBlanketOicScale = vi.mocked(addBlanketOicScale)
 const mockedDeleteBlanketOicScale = vi.mocked(deleteBlanketOicScale)
-const mockedAddPermitInvoice = vi.mocked(addPermitInvoice)
 const mockedFetchPermitFeeOverrideContext = vi.mocked(fetchPermitFeeOverrideContext)
 const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
 const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
-const mockedFetchPermitInvoiceConversionRate = vi.mocked(fetchPermitInvoiceConversionRate)
 const mockedOpenPermitDocument = vi.mocked(openPermitDocument)
 const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationDocument)
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
@@ -401,13 +395,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       errors: [],
       warnings: [],
     })
-    mockedAddPermitInvoice.mockResolvedValue({
-      success: true,
-      message: 'Invoice saved successfully.',
-      errors: [],
-      warnings: [],
-      source: 'api',
-    })
     mockedFetchPermitFeeOverrideContext.mockResolvedValue({
       overrideEnabled: false,
       overrideFee: '',
@@ -421,10 +408,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedFetchPermitInvoices.mockResolvedValue({
       rows: [],
-      source: 'api',
-    })
-    mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
-      conversionRate: '1.00',
       source: 'api',
     })
     mockedFetchApplicationClientData.mockImplementation(
@@ -532,30 +515,21 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedOpenBlobInNewTab.mockReturnValue(true)
   })
 
-  it('adds invoice and refreshes invoice rows', async () => {
+  it('renders permit details, client contacts, and invoice history', async () => {
     configureActivePermit()
-    mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
-      conversionRate: '1.25',
+    mockedFetchPermitInvoices.mockResolvedValue({
+      rows: [
+        {
+          id: 'INV-1',
+          invoiceNumber: 'INV-001',
+          exportValueCad: '$100.00',
+          conversionRate: '1.25',
+          feeInLieu: '$100.00',
+          invoiceFound: true,
+        },
+      ],
       source: 'api',
     })
-    mockedFetchPermitInvoices
-      .mockResolvedValueOnce({
-        rows: [],
-        source: 'api',
-      })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: 'INV-NEW-1',
-            invoiceNumber: 'INV-NEW',
-            exportValueCad: '$100.00',
-            conversionRate: '1.25',
-            feeInLieu: '$100.00',
-            invoiceFound: true,
-          },
-        ],
-        source: 'api',
-      })
 
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
@@ -657,79 +631,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '01')
     await selectPermitDetailTab('Invoices')
-    const invoiceNumberInput = await screen.findByLabelText('Invoice number')
-    const exportValueInput = await screen.findByLabelText('Export value')
-    const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
-    await userEvent.type(invoiceNumberInput, 'INV-NEW')
-    await userEvent.type(exportValueInput, '100')
-    await userEvent.click(addInvoiceButton)
-
-    await waitFor(() => {
-      expect(mockedAddPermitInvoice).toHaveBeenCalledWith({
-        permitNumber: '777',
-        salesInvoiceNumber: 'INV-NEW',
-        invoiceExportValue: '100',
-        invoiceConversionRate: '1.25',
-        invoiceFeeInLieu: '100',
-      })
-      expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(2)
-      expect(screen.getByText('INV-NEW')).toBeInTheDocument()
-    })
+    expect(await screen.findByText('INV-001')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
+    expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
   }, 15000)
-
-  it('clears a committed invoice draft when the invoice refresh fails', async () => {
-    configureActivePermit()
-    mockedFetchPermitInvoices
-      .mockResolvedValueOnce({ rows: [], source: 'api' })
-      .mockRejectedValueOnce(new Error('refresh failed'))
-    renderPermitDetails()
-
-    await selectPermitDetailTab('Invoices')
-    await userEvent.type(await screen.findByLabelText('Invoice number'), 'INV-NEW')
-    await userEvent.type(screen.getByLabelText('Export value'), '100')
-    await userEvent.click(screen.getByRole('button', { name: 'Add Invoice' }))
-
-    await waitFor(() => expect(mockedAddPermitInvoice).toHaveBeenCalledTimes(1))
-    expect(
-      await screen.findByText(/Invoice saved successfully.*Reload before adding/),
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText('Invoice number')).toHaveValue('')
-    expect(screen.getByLabelText('Export value')).toHaveValue('')
-    const committedUnload = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(committedUnload)
-    expect(committedUnload.defaultPrevented).toBe(false)
-  })
-
-  it('blocks invoice add when no positive conversion rate is available', async () => {
-    configureActivePermit()
-    mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
-      conversionRate: '0',
-      source: 'api',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectPermitDetailTab('Invoices')
-    await userEvent.type(await screen.findByLabelText('Invoice number'), 'INV-BLOCK')
-    await userEvent.type(await screen.findByLabelText('Export value'), '100')
-    await userEvent.click(await screen.findByRole('button', { name: 'Add Invoice' }))
-
-    expect(
-      await screen.findByText(
-        'Unable to retrieve a valid currency conversion rate. The invoice was not added.',
-      ),
-    ).toBeInTheDocument()
-    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
-  })
 
   it('shows legacy package metadata on the items tab', async () => {
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
@@ -1028,11 +933,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Invoices')
     expect(screen.queryByText('Upload invoices')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add Invoice' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
 
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
-    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
     expect(mockedSendPermitApprovalEmail).not.toHaveBeenCalled()
   })
 
@@ -1041,7 +945,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ['PPD', 'Payment pending'],
     ['CAN', 'Cancelled'],
   ])(
-    'keeps invoice creation and upload unavailable for a %s permit',
+    'keeps invoice upload unavailable for a %s permit',
     async (permitStatusCode, permitStatusDescription) => {
       mockedFetchProvincialPermitDetail.mockResolvedValue({
         ...permitDetail,
@@ -1053,8 +957,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await selectPermitDetailTab('Invoices')
       expect(screen.queryByText('Upload invoices')).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Add Invoice' })).toBeDisabled()
-      expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
+      expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
       expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
     },
   )
@@ -1448,7 +1351,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
   })
 
-  it('resets BOIC and invoice drafts and ignores stale package loads across permit routes', async () => {
+  it('resets BOIC drafts and ignores stale package loads across permit routes', async () => {
     let resolvePackageContext:
       | ((value: Awaited<ReturnType<typeof fetchBlanketOicPackageEditContext>>) => void)
       | undefined
@@ -1486,8 +1389,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    await selectPermitDetailTab('Invoices')
-    await userEvent.type(await screen.findByLabelText('Invoice number'), 'DRAFT-1')
     await selectPermitDetailTab('Items')
     const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')
     expect(packageRow).toBeTruthy()
@@ -1515,8 +1416,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
     expect(screen.getByRole('textbox', { name: 'Package number' })).toHaveValue('')
     expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
-    await selectPermitDetailTab('Invoices')
-    expect(screen.getByLabelText('Invoice number')).toHaveValue('')
   })
 
   it('ignores stale available-application responses across permit routes', async () => {
@@ -1821,28 +1720,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('shows field validation when adding invoice without required values', async () => {
-    configureActivePermit()
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectPermitDetailTab('Invoices')
-    const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
-    await userEvent.click(addInvoiceButton)
-
-    expect(screen.getAllByText('Invoice number is required.').length).toBeGreaterThan(0)
-    expect(screen.getByText('Invoice export value is required.')).toBeInTheDocument()
-    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
-  })
-
   it('saves permit summary changes through the permit update endpoint', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
@@ -2007,7 +1884,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() => expect(mockedUpdatePermitShipping).toHaveBeenCalledTimes(1))
   })
 
-  it('saves lifecycle and invoice-policy drafts before completing a permit', async () => {
+  it('saves shipping changes before completing a permit', async () => {
     configureEditableBlanketOicPackage()
     const router = createMemoryRouter(
       [
@@ -2026,9 +1903,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     render(<RouterProvider router={router} />)
 
-    await selectPermitDetailTab('Invoices')
-    await userEvent.type(await screen.findByLabelText('Invoice number'), 'INVPEND')
-    await userEvent.type(screen.getByLabelText('Export value'), '100')
     await selectPermitDetailTab('Shipping')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
     await userEvent.selectOptions(screen.getByLabelText('Destination country'), 'US')
@@ -2042,7 +1916,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
 
     expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
-    expect(mockedAddPermitInvoice).toHaveBeenCalledTimes(1)
     expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
       expect.objectContaining({ destinationCountry: 'US' }),
     )
@@ -2059,9 +1932,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect.objectContaining({ permitStatus: 'COM' }),
     )
     expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(2)
-    expect(mockedAddPermitInvoice.mock.invocationCallOrder[0]).toBeLessThan(
-      mockedUpdatePermitShipping.mock.invocationCallOrder[0],
-    )
     expect(mockedUpdatePermitShipping.mock.invocationCallOrder[0]).toBeLessThan(
       mockedUpdatePermitDetail.mock.invocationCallOrder[0],
     )
@@ -2536,12 +2406,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Upload permit documents')).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Invoices')
-    expect(screen.getByRole('button', { name: 'Add Invoice' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
     expect(screen.queryByText('Upload invoices')).not.toBeInTheDocument()
 
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
-    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
   })
 
   it('lets an eligible provincial submitter request permit review and records the first BOIC request date', async () => {
@@ -2796,30 +2665,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Print permit' })).not.toBeInTheDocument()
   })
 
-  it('blocks add invoice when invoice number exceeds the legacy length limit', async () => {
-    configureActivePermit()
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectPermitDetailTab('Invoices')
-    await userEvent.type(await screen.findByLabelText('Invoice number'), '1234567890')
-    await userEvent.type(screen.getByLabelText('Export value'), '100')
-    await userEvent.click(await screen.findByRole('button', { name: 'Add Invoice' }))
-
-    expect(
-      screen.getAllByText('Invoice number must be 9 characters or fewer.').length,
-    ).toBeGreaterThan(0)
-    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
-  })
-
   it('shows the embedded permit document upload panel on the documents tab without header actions', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
@@ -2856,8 +2701,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Invoices')
 
     expect(screen.queryByRole('button', { name: 'Upload Invoice' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Upload invoice conversion rate')).toHaveValue('1.00')
-    expect(mockedFetchPermitInvoiceConversionRate).not.toHaveBeenCalled()
   })
 
   it('shows inline permit and invoice uploads to a scoped Provincial Submitter', async () => {
@@ -3080,6 +2925,46 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeEnabled()
     expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalled()
+  })
+
+  it('lets admin override a concurrent read-only role for active invoice document delete', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN', 'LEXIS_READ_ONLY'] }),
+      }),
+    )
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchPermitDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '504',
+          name: 'admin-invoice-doc.pdf',
+          description: 'Admin controlled invoice',
+          type: 'Invoice',
+          typeCode: 'INV',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Documents')
+    await screen.findByText('admin-invoice-doc.pdf')
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
   it('disables invoice document delete outside active permit status', async () => {

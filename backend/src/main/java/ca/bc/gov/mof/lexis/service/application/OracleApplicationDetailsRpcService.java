@@ -10,6 +10,7 @@ import ca.bc.gov.mof.lexis.repository.application.DuplicatePackageNumberExceptio
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator.ScaleValues;
+import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -60,6 +61,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
   private static final Set<String> MUTATION_LOCKED_EXPORT_PERMIT_STATUSES =
       Set.of("COM", "PPD", "EXP", "CAN");
+  private static final Set<Long> COASTAL_ORG_UNITS =
+      Set.of(1832L, 1909L, 1910L, 15L, 23L, 27L, 43L, 48L, 1619L);
+  private static final Set<Long> SKEENA_ORG_UNITS =
+      Set.of(1621L, 24L, 40L, 1908L, 28L, 1823L, 1824L, 32L, 16L, 20L, 36L);
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
   private static final String PACKAGE_PERMITTED_SCALE_MESSAGE =
       "Package changes are not allowed after a scale has been permitted.";
@@ -67,21 +72,26 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       "Scale changes are not allowed after a permit has been completed.";
   private static final int REMARK_DISPLAY_LIMIT = 70;
   private static final int PRODUCT_LOCATION_MAX_BYTES = 250;
+  private static final String ORACLE_IGNORED_PRODUCT_LOCATION = " ";
   private static final int CONTACT_NAME_MAX_BYTES = 120;
   private static final int REMARK_MAX_BYTES = 254;
   private static final int PACKAGE_NUMBER_MAX_BYTES = 20;
   private static final int PACKAGE_COMMENTS_MAX_BYTES = 180;
   private static final long MAX_APPLICATION_TERM_DAYS = 99_999L;
-  private static final double MAX_APPLICATION_VOLUME = 9_999_999.9d;
+  private static final double MAX_APPLICATION_VOLUME = 9_999_999.99d;
   private static final double MAX_AVERAGE_LOG_VOLUME = 99.9d;
 
   private final ApplicationDetailsRpcRepository repository;
   private final ClientLookupRepository clientRepository;
+  private final ExemptionService exemptionService;
 
   public OracleApplicationDetailsRpcService(
-      ApplicationDetailsRpcRepository repository, ClientLookupRepository clientRepository) {
+      ApplicationDetailsRpcRepository repository,
+      ClientLookupRepository clientRepository,
+      ExemptionService exemptionService) {
     this.repository = repository;
     this.clientRepository = clientRepository;
+    this.exemptionService = exemptionService;
   }
 
   @Override
@@ -544,7 +554,55 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             hasPackageBeforeApproval,
             hasScaleBeforeApproval,
             hasCompletePermit,
-            trimToNull(application.oicIndicator())));
+            trimToNull(application.oicIndicator()),
+            isInteriorMinisterialItemOverrideEligible(application, scales)));
+  }
+
+  private boolean isInteriorMinisterialItemOverrideEligible(
+      ApplicationDetailsRpcRepository.ApplicationEditContextRow application,
+      List<ApplicationDetailsRpcRepository.ScaleMutationRow> scales) {
+    String exemptionNumber = trimToNull(application.exemptionNumber());
+    Long orgUnitNumber = application.orgUnitNumber();
+    if (exemptionNumber == null || orgUnitNumber == null) {
+      return false;
+    }
+
+    return exemptionService
+        .findByExemptionNumber(exemptionNumber)
+        .filter(exemption -> exemptionNumber.equals(trimToNull(exemption.exemptionNumber())))
+        .filter(exemption -> "M".equalsIgnoreCase(trimToNull(exemption.exemptionTypeCode())))
+        .filter(
+            exemption ->
+                Double.isFinite(exemption.remainingVolume())
+                    && exemption.remainingVolume() > 0.0d)
+        .filter(exemption -> isInteriorAdministration(orgUnitNumber, scales))
+        .isPresent();
+  }
+
+  private boolean isInteriorAdministration(
+      Long orgUnitNumber, List<ApplicationDetailsRpcRepository.ScaleMutationRow> scales) {
+    if (COASTAL_ORG_UNITS.contains(orgUnitNumber)) {
+      return false;
+    }
+    if (!SKEENA_ORG_UNITS.contains(orgUnitNumber)) {
+      return true;
+    }
+    if (scales == null) {
+      return false;
+    }
+    for (ApplicationDetailsRpcRepository.ScaleMutationRow scale : scales) {
+      String grade = scale == null ? null : normalizeCode(scale.gradeCode());
+      if (grade == null) {
+        continue;
+      }
+      if (grade.chars().anyMatch(value -> value >= 'A' && value <= 'Y')) {
+        return false;
+      }
+      if (grade.chars().anyMatch(Character::isDigit)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Override
@@ -1553,6 +1611,29 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 1;
   }
 
+  private boolean hasAtMostTwoDecimals(Double value) {
+    if (value == null) {
+      return false;
+    }
+    return BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 2;
+  }
+
+  private void validateApplicationVolumeRange(Double value, List<String> errors) {
+    if (value < 0.0d) {
+      errors.add("The application volume must be greater than or equal to 0.");
+      return;
+    }
+    if (value > MAX_APPLICATION_VOLUME) {
+      errors.add(
+          "The application volume must be less than or equal to "
+              + BigDecimal.valueOf(MAX_APPLICATION_VOLUME).stripTrailingZeros().toPlainString()
+              + ".");
+    }
+    if (!hasAtMostTwoDecimals(value)) {
+      errors.add("The application volume must have no more than two decimal places.");
+    }
+  }
+
   private void validateOptionalVolumeRange(
       Double value,
       String label,
@@ -2337,7 +2418,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application date"));
     }
     if (request.termDays() == null || request.termDays() <= 0) {
-      errors.add("The application term days must be greater than or equal to 0");
+      errors.add("The application term days must be greater than 0.");
     } else if (request.termDays() > MAX_APPLICATION_TERM_DAYS) {
       errors.add("The application term days must be no more than 99999.");
     }
@@ -2347,16 +2428,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (request.applicationVolume() == null || request.applicationVolume() <= 0.0d) {
       errors.add("The application volume must be greater than 0.");
     } else {
-      validateVolumeRange(
-          request.applicationVolume(), "application volume", MAX_APPLICATION_VOLUME, errors);
-    }
-    validateOptionalVolumeRange(
-        request.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
-    if (trimToNull(request.productLocation()) == null) {
-      errors.add(required("location of logs"));
+      validateApplicationVolumeRange(request.applicationVolume(), errors);
     }
     if (trimToNull(request.productTypeCode()) == null) {
       errors.add(required("product type code"));
+    }
+    if (isHarvestedProductType(request.productTypeCode())) {
+      validateOptionalVolumeRange(
+          request.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
+      if (trimToNull(request.productLocation()) == null) {
+        errors.add(required("location of logs"));
+      }
     }
     if (requiresGrowthType(request.productTypeCode())
         && trimToNull(request.growthTypeCode()) == null) {
@@ -2450,7 +2532,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application date"));
     }
     if (record.termDays() == null || record.termDays() <= 0) {
-      errors.add("The application term days must be greater than or equal to 0");
+      errors.add("The application term days must be greater than 0.");
     } else if (record.termDays() > MAX_APPLICATION_TERM_DAYS) {
       errors.add("The application term days must be no more than 99999.");
     }
@@ -2460,23 +2542,24 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (record.applicationVolume() == null || record.applicationVolume() <= 0.0d) {
       errors.add("The application volume must be greater than 0.");
     } else {
-      validateVolumeRange(
-          record.applicationVolume(), "application volume", MAX_APPLICATION_VOLUME, errors);
+      validateApplicationVolumeRange(record.applicationVolume(), errors);
     }
-    validateOptionalVolumeRange(
-        record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
     String exemptionReasonCode = trimToNull(record.exemptionReasonCode());
     if (exemptionReasonCode == null) {
       errors.add(required("application exemption reason code"));
     } else if (exemptionReasonCode.length() > 1) {
       errors.add(maxLength("application exemption reason code", 1));
     }
-    if (trimToNull(record.productLocation()) == null) {
-      errors.add(required("location of logs"));
-    }
     validateApplicationStorageText(record, errors);
     if (trimToNull(record.productTypeCode()) == null) {
       errors.add(required("product type code"));
+    }
+    if (isHarvestedProductType(record.productTypeCode())) {
+      validateOptionalVolumeRange(
+          record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
+      if (trimToNull(record.productLocation()) == null) {
+        errors.add(required("location of logs"));
+      }
     }
     if (requiresGrowthType(record.productTypeCode())
         && trimToNull(record.growthTypeCode()) == null) {
@@ -2789,8 +2872,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.termDays(),
         request.receivedDate(),
         request.applicationVolume(),
-        request.averageLogVolume(),
-        request.productLocation(),
+        averageLogVolumeForStorage(request.productTypeCode(), request.averageLogVolume()),
+        productLocationForStorage(request.productTypeCode(), request.productLocation()),
         entryUserId,
         request.exportScheduleId(),
         request.agentClientNumber(),
@@ -2820,6 +2903,18 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             : request.applicantTypeCode();
     boolean ownerApplicant =
         APPLICANT_TYPE_OWNER.equalsIgnoreCase(trimToNull(applicantTypeCode));
+    String productTypeCode =
+        request.productTypeCode() == null
+            ? existing.productTypeCode()
+            : request.productTypeCode();
+    Double averageLogVolume =
+        request.averageLogVolume() == null
+            ? existing.averageLogVolume()
+            : request.averageLogVolume();
+    String productLocation =
+        request.productLocation() == null
+            ? existing.productLocation()
+            : request.productLocation();
     return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
         existing.applicationNumber(),
         existing.federalApplicationNumber(),
@@ -2827,8 +2922,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.termDays() == null ? existing.termDays() : request.termDays(),
         request.receivedDate() == null ? existing.receivedDate() : request.receivedDate(),
         request.applicationVolume() == null ? existing.applicationVolume() : request.applicationVolume(),
-        request.averageLogVolume() == null ? existing.averageLogVolume() : request.averageLogVolume(),
-        request.productLocation() == null ? existing.productLocation() : request.productLocation(),
+        averageLogVolumeForStorage(productTypeCode, averageLogVolume),
+        productLocationForStorage(productTypeCode, productLocation),
         existing.entryUserId(),
         existing.entryTimestamp(),
         updateUserId,
@@ -2855,7 +2950,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         existing.applicationStatusCode(),
         applicantTypeCode,
         request.orgUnitNumber() == null ? existing.orgUnitNumber() : request.orgUnitNumber(),
-        request.productTypeCode() == null ? existing.productTypeCode() : request.productTypeCode(),
+        productTypeCode,
         existing.jurisdictionCode(),
         request.growthTypeCode() == null ? existing.growthTypeCode() : request.growthTypeCode(),
         ownerApplicant
@@ -2914,8 +3009,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private void validateApplicationStorageText(
       CreateApplicationRequest request, List<String> errors) {
-    validateOracleText(
-        request.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
+    if (isHarvestedProductType(request.productTypeCode())) {
+      validateOracleText(
+          request.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
+    }
     validateOracleText(
         request.ownerContactName(), "Owner contact name", CONTACT_NAME_MAX_BYTES, errors);
     validateOracleText(
@@ -2925,8 +3022,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private void validateApplicationStorageText(
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
-    validateOracleText(
-        record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
+    if (isHarvestedProductType(record.productTypeCode())) {
+      validateOracleText(
+          record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
+    }
     validateOracleText(
         record.ownerContactName(), "Owner contact name", CONTACT_NAME_MAX_BYTES, errors);
     validateOracleText(
@@ -2958,6 +3057,36 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String normalized = trimToNull(productTypeCode);
     return EXPORT_PRODUCT_TYPE_HARVESTED.equals(normalized)
         || EXPORT_PRODUCT_TYPE_STANDING.equals(normalized);
+  }
+
+  private boolean isHarvestedProductType(String productTypeCode) {
+    return EXPORT_PRODUCT_TYPE_HARVESTED.equalsIgnoreCase(trimToNull(productTypeCode));
+  }
+
+  private Double averageLogVolumeForStorage(String productTypeCode, Double value) {
+    if (isHarvestedProductType(productTypeCode)) {
+      return value;
+    }
+    if (value == null
+        || !Double.isFinite(value)
+        || value < 0.0d
+        || value > MAX_AVERAGE_LOG_VOLUME
+        || !hasAtMostOneDecimal(value)) {
+      return 0.0d;
+    }
+    return value;
+  }
+
+  private String productLocationForStorage(String productTypeCode, String value) {
+    if (isHarvestedProductType(productTypeCode)) {
+      return value;
+    }
+    if (value != null
+        && !value.isEmpty()
+        && isStorableOracleText(value, PRODUCT_LOCATION_MAX_BYTES)) {
+      return value;
+    }
+    return ORACLE_IGNORED_PRODUCT_LOCATION;
   }
 
   private String defaultMutationUser(String userId) {

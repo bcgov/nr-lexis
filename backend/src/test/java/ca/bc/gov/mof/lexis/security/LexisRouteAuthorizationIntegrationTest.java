@@ -597,7 +597,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyOfferDetailsRpcShouldAllowMatchingScopedIndustryRole() throws Exception {
+  void legacyOfferDetailsRpcShouldRejectIneligibleApplicationForScopedSubmitter() throws Exception {
     mockMvc.perform(
             get("/api/lexis/offerDetailsRPC")
                 .param("actionMapping", "getApplicationVolume")
@@ -607,7 +607,7 @@ class LexisRouteAuthorizationIntegrationTest {
                         .authorities(
                             new SimpleGrantedAuthority(
                                 "LEXIS_PROVINCIAL_SUBMITTER_00077881"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -763,6 +763,36 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("clientNumber", "77881")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
         .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void applicationClientLookupsShouldRejectCrossClientScopedSubmitter() throws Exception {
+    SimpleGrantedAuthority scopedSubmitter =
+        new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00077881");
+
+    mockMvc
+        .perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "getClientData")
+                .param("clientNumber", "99999999")
+                .param("clientLocationCode", "02")
+                .with(jwt().authorities(scopedSubmitter)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "getClientLocations")
+                .param("clientNumber", "99999999")
+                .with(jwt().authorities(scopedSubmitter)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "getContactsForLocation")
+                .param("clientNumber", "99999999")
+                .param("clientLocationCode", "02")
+                .with(jwt().authorities(scopedSubmitter)))
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -1034,6 +1064,19 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("actionMapping", "add")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyOfferDetailsAddShouldAllowScopedProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerDetails")
+                .param("actionMapping", "add")
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER_00077881"))))
+        .andExpect(status().isNoContent());
   }
 
   @Test

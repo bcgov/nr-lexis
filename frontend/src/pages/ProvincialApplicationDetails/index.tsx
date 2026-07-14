@@ -93,17 +93,19 @@ import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import {
+  averageLogVolumeFieldError,
   isAgentApplicant,
   isSelectableClientContact,
   isSelectableClientLocation,
   productTypeRequiresGrowthType,
+  productTypeRequiresLogDetails,
   resolveClientContactName,
   resolveClientLocationCode,
   toApplicationCodeOption,
   toSearchOption,
 } from '@/pages/shared/application-form-utils'
 import {
-  atMostOneDecimalFieldError,
+  atMostTwoDecimalFieldError,
   firstValidationError,
   isoDateFieldError,
   maxNumericValueFieldError,
@@ -1173,21 +1175,23 @@ const ProvincialApplicationDetailsPage = () => {
         summaryScheduleOptions.some((option) => option.value === summaryForm.exportScheduleId)
           ? undefined
           : 'Select a valid listing date.',
-      productLocation:
-        requiredFieldError(summaryForm.productLocation, 'Location of logs') ?? undefined,
+      productLocation: productTypeRequiresLogDetails(summaryForm.productTypeCode)
+        ? (requiredFieldError(summaryForm.productLocation, 'Location of logs') ?? undefined)
+        : undefined,
       applicationVolume: firstValidationError(
         () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),
         () => positiveNumericFieldError(summaryForm.applicationVolume),
         () =>
-          maxNumericValueFieldError(summaryForm.applicationVolume, 9999999.9, 'Application volume'),
-        () => atMostOneDecimalFieldError(summaryForm.applicationVolume, 'Application volume'),
+          maxNumericValueFieldError(
+            summaryForm.applicationVolume,
+            9999999.99,
+            'Application volume',
+          ),
+        () => atMostTwoDecimalFieldError(summaryForm.applicationVolume, 'Application volume'),
       ),
-      averageLogVolume: firstValidationError(
-        () => requiredFieldError(summaryForm.averageLogVolume, 'Average log volume'),
-        () => positiveNumericFieldError(summaryForm.averageLogVolume),
-        () => maxNumericValueFieldError(summaryForm.averageLogVolume, 99.9, 'Average log volume'),
-        () => atMostOneDecimalFieldError(summaryForm.averageLogVolume, 'Average log volume'),
-      ),
+      averageLogVolume: productTypeRequiresLogDetails(summaryForm.productTypeCode)
+        ? averageLogVolumeFieldError(summaryForm.averageLogVolume)
+        : undefined,
       oicIndicator: firstValidationError(
         () => requiredFieldError(summaryForm.oicIndicator, 'Order in Council indicator'),
         () =>
@@ -3082,19 +3086,22 @@ const ProvincialApplicationDetailsPage = () => {
                                   onSummaryFormChange('applicationVolume', event.target.value)
                                 }
                               />
-                              <TextInput
-                                id="applicationSummaryAverageLogVolume"
-                                labelText="Average log volume"
-                                type="number"
-                                min={0}
-                                step="0.1"
-                                value={summaryForm.averageLogVolume}
-                                invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
-                                invalidText={visibleSummaryFieldError('averageLogVolume')}
-                                onChange={(event) =>
-                                  onSummaryFormChange('averageLogVolume', event.target.value)
-                                }
-                              />
+                              {productTypeRequiresLogDetails(summaryForm.productTypeCode) && (
+                                <TextInput
+                                  id="applicationSummaryAverageLogVolume"
+                                  labelText="Average log volume"
+                                  type="number"
+                                  min={0}
+                                  max={99.9}
+                                  step="0.1"
+                                  value={summaryForm.averageLogVolume}
+                                  invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
+                                  invalidText={visibleSummaryFieldError('averageLogVolume')}
+                                  onChange={(event) =>
+                                    onSummaryFormChange('averageLogVolume', event.target.value)
+                                  }
+                                />
+                              )}
                               <TextInput
                                 id="applicationSummaryOwnerClientNumber"
                                 labelText="Owner client number"
@@ -3307,25 +3314,27 @@ const ProvincialApplicationDetailsPage = () => {
                                   onSummaryFormChange('productTypeCode', value.toUpperCase())
                                 }
                               />
-                              <SearchableSelect
-                                id="applicationSummaryGrowthType"
-                                labelText="Growth type"
-                                value={summaryForm.growthTypeCode}
-                                invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
-                                invalidText={visibleSummaryFieldError('growthTypeCode')}
-                                disabled={
-                                  summaryOptionsAvailability !== 'available' ||
-                                  summaryGrowthTypeOptions.length === 0
-                                }
-                                placeholder="Select growth type"
-                                options={optionsWithCurrentValue(
-                                  growthTypeOptions,
-                                  summaryForm.growthTypeCode,
-                                )}
-                                onChange={(value) =>
-                                  onSummaryFormChange('growthTypeCode', value.toUpperCase())
-                                }
-                              />
+                              {productTypeRequiresGrowthType(summaryForm.productTypeCode) && (
+                                <SearchableSelect
+                                  id="applicationSummaryGrowthType"
+                                  labelText="Growth type"
+                                  value={summaryForm.growthTypeCode}
+                                  invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
+                                  invalidText={visibleSummaryFieldError('growthTypeCode')}
+                                  disabled={
+                                    summaryOptionsAvailability !== 'available' ||
+                                    summaryGrowthTypeOptions.length === 0
+                                  }
+                                  placeholder="Select growth type"
+                                  options={optionsWithCurrentValue(
+                                    growthTypeOptions,
+                                    summaryForm.growthTypeCode,
+                                  )}
+                                  onChange={(value) =>
+                                    onSummaryFormChange('growthTypeCode', value.toUpperCase())
+                                  }
+                                />
+                              )}
                               <TextInput
                                 id="applicationSummaryStatus"
                                 labelText="Application status"
@@ -3376,18 +3385,20 @@ const ProvincialApplicationDetailsPage = () => {
                                 }
                               />
                             </div>
-                            <div className="legacy-search-grid">
-                              <TextArea
-                                id="applicationSummaryProductLocation"
-                                labelText="Location of logs"
-                                value={summaryForm.productLocation}
-                                invalid={Boolean(visibleSummaryFieldError('productLocation'))}
-                                invalidText={visibleSummaryFieldError('productLocation')}
-                                onChange={(event) =>
-                                  onSummaryFormChange('productLocation', event.target.value)
-                                }
-                              />
-                            </div>
+                            {productTypeRequiresLogDetails(summaryForm.productTypeCode) && (
+                              <div className="legacy-search-grid">
+                                <TextArea
+                                  id="applicationSummaryProductLocation"
+                                  labelText="Location of logs"
+                                  value={summaryForm.productLocation}
+                                  invalid={Boolean(visibleSummaryFieldError('productLocation'))}
+                                  invalidText={visibleSummaryFieldError('productLocation')}
+                                  onChange={(event) =>
+                                    onSummaryFormChange('productLocation', event.target.value)
+                                  }
+                                />
+                              </div>
+                            )}
                             <div className="legacy-search-grid">
                               <SearchableSelect
                                 id="applicationSummarySpeciesCandidate"
@@ -3474,7 +3485,11 @@ const ProvincialApplicationDetailsPage = () => {
                                 ['Received date', displayValue(detail.receivedDate)],
                                 ['Term (days)', displayValue(detail.termDays)],
                                 ['Application volume (m³)', displayValue(detail.applicationVolume)],
-                                ['Average log volume', displayValue(detail.averageLogVolume)],
+                                ...(productTypeRequiresLogDetails(
+                                  summaryForm?.productTypeCode ?? '',
+                                )
+                                  ? [['Average log volume', displayValue(detail.averageLogVolume)]]
+                                  : []),
                                 [
                                   'Applicant type',
                                   displayValue(summaryForm ? ownerApplicantTypeLabel : null),
@@ -3489,8 +3504,21 @@ const ProvincialApplicationDetailsPage = () => {
                                   displayValue(summaryForm?.agentClientLocationCode),
                                 ],
                                 ['Agent contact name', displayValue(summaryForm?.agentContactName)],
-                                ['Growth type', displayValue(summaryForm?.growthTypeCode)],
-                                ['Location of logs', displayValue(summaryForm?.productLocation)],
+                                ...(productTypeRequiresGrowthType(
+                                  summaryForm?.productTypeCode ?? '',
+                                )
+                                  ? [['Growth type', displayValue(summaryForm?.growthTypeCode)]]
+                                  : []),
+                                ...(productTypeRequiresLogDetails(
+                                  summaryForm?.productTypeCode ?? '',
+                                )
+                                  ? [
+                                      [
+                                        'Location of logs',
+                                        displayValue(summaryForm?.productLocation),
+                                      ],
+                                    ]
+                                  : []),
                                 [
                                   'Application species',
                                   displayValue(summaryForm?.speciesCodes.join(', ')),

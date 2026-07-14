@@ -732,7 +732,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 getLong(rs, "EXPORT_SCHEDULE_ID"),
                 getLocalDate(rs, "ADVERTISING_DATE"),
                 getInstant(rs, "APPROVAL_DATE"),
-                getString(rs, "OIC_INDICATOR")));
+                getString(rs, "OIC_INDICATOR"),
+                getString(rs, "EXEMPTION_NUMBER"),
+                getLong(rs, "ORG_UNIT_NO")));
   }
 
   public boolean updateApplication(ApplicationUpdateRecord record) {
@@ -1804,7 +1806,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       Long exportScheduleId,
       LocalDate advertisingDate,
       Instant approvalDate,
-      String oicIndicator) {}
+      String oicIndicator,
+      String exemptionNumber,
+      Long orgUnitNumber) {}
 
   public record CodeRow(String code, String description, long groupBy, long orderBy) {}
 

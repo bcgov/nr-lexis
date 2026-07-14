@@ -148,7 +148,12 @@ describe('Create Page Core Flows', () => {
       }),
     )
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
-      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      productTypes: [
+        { value: 'LOG', label: 'Logs' },
+        { value: 'H', label: 'Harvested Timber' },
+        { value: 'S', label: 'Standing Timber' },
+        { value: 'T', label: 'Timber' },
+      ],
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
       exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
       applicationStatuses: [],
@@ -553,6 +558,44 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902')
   })
 
+  it('ignores forged agent prefill when applicant type changes are not authorized', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+          orgUnitNo: '11',
+        }),
+        canPerform: (action: string) => action !== '/changeApplicantType',
+      }),
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Forged%20Agent',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Clients')
+    const applicantType = screen.getByRole('textbox', { name: 'Applicant type' })
+    expect(applicantType).toHaveValue('Owner')
+    expect(applicantType).toHaveAttribute('readonly')
+    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent client location')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent contact name')).not.toBeInTheDocument()
+    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
+  })
+
   it('blocks provincial application submit when owner has no selectable locations', async () => {
     mockedFetchApplicationClientLocations.mockResolvedValueOnce([
       { locationCode: '0', locationName: 'No locations on file', selected: false },
@@ -638,6 +681,7 @@ describe('Create Page Core Flows', () => {
           forestClientNumber: '00077881',
           orgUnitNo: '1910',
         }),
+        canPerform: (action: string) => action !== '/changeApplicantType',
       }),
     )
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
@@ -682,7 +726,12 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Owner client location' })).toHaveValue('00')
     })
-    expect(screen.getByRole('combobox', { name: 'Owner client location' })).toBeDisabled()
+    const ownerLocation = screen.getByRole('combobox', { name: 'Owner client location' })
+    expect(ownerLocation).toBeEnabled()
+    await chooseComboBoxOption(ownerLocation, '01 - MAIN LOCATION')
+    expect(ownerLocation).toHaveValue('01 - MAIN LOCATION')
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00077881', 'owner')
+    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00099999', 'owner')
     expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
   })
 
@@ -759,7 +808,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.55&averageLogVolume=1.23&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=H&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.555&averageLogVolume=1.23&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -776,12 +825,115 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(
-      await screen.findAllByText('Application volume must have no more than one decimal place.'),
+      await screen.findAllByText('Application volume must have no more than two decimal places.'),
     ).not.toHaveLength(0)
     expect(
       screen.getByText('Average log volume must have no more than one decimal place.'),
     ).toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
+  it('rejects application volume above the Oracle maximum and accepts the exact maximum', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('905'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=H&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=10000000&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    await userEvent.click(submitButton)
+
+    expect(
+      screen.getAllByText('Application volume must be 9999999.99 or less.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+
+    const applicationVolume = screen.getByLabelText('Application volume')
+    await userEvent.clear(applicationVolume)
+    await userEvent.type(applicationVolume, '9999999.99')
+    await userEvent.click(submitButton)
+
+    await waitFor(() =>
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ applicationVolume: '9999999.99' }),
+      ),
+    )
+  })
+
+  it('shows only the application fields required by H, S, and T product types', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?productTypeCode=H&ageClass=O&productLocation=Camp%201&averageLogVolume=1.2',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const productType = await screen.findByRole('combobox', { name: 'Product type' })
+    await waitFor(() => expect(productType).toHaveValue('Harvested Timber'))
+    expect(screen.getByRole('combobox', { name: 'Growth type' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Location of logs')).toBeInTheDocument()
+    expect(screen.getByLabelText('Average log volume')).toBeInTheDocument()
+
+    await chooseComboBoxOption(productType, 'Standing Timber')
+    expect(screen.getByRole('combobox', { name: 'Growth type' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Location of logs')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Average log volume')).not.toBeInTheDocument()
+
+    await chooseComboBoxOption(productType, 'Timber')
+    expect(screen.queryByRole('combobox', { name: 'Growth type' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Location of logs')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Average log volume')).not.toBeInTheDocument()
+  })
+
+  it('does not let hidden H-only values block a standing-timber application', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=S&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&applicationVolume=125.5&averageLogVolume=-1.23&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productTypeCode: 'S',
+          ageClass: 'O',
+          productLocation: '',
+          averageLogVolume: '-1.23',
+        }),
+      )
+    })
   })
 
   it('shows provincial application species validation when no species are available', async () => {
@@ -1351,9 +1503,99 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      await screen.findAllByText('Approved volume must be 9999999.9 or less.'),
+      await screen.findAllByText('Approved volume must be 9999999.99 or less.'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
+  it('requires a Section 1 exemption expiry after approval and accepts the next day', async () => {
+    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-902'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Exemption type' }),
+      'Section 1',
+    )
+    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
+    const expiryDate = screen.getByLabelText('Expiry date (YYYY-MM-DD)')
+    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '500')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(screen.getAllByText('Expiry date is required.').length).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+
+    await userEvent.type(expiryDate, '2026-07-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      screen.getAllByText('Expiry date must be after the approval date.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+
+    await userEvent.clear(expiryDate)
+    await userEvent.type(expiryDate, '2026-07-02')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exemptionTypeCode: 'SECTION_1',
+          approvalDate: '2026-07-01',
+          expiryDate: '2026-07-02',
+        }),
+      ),
+    )
+  })
+
+  it('blocks provincial exemption submit when approved volume has three decimals', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Exemption type' }),
+      'Section 1',
+    )
+    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.999')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      screen.getAllByText('Approved volume must have no more than two decimal places.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
+  it('accepts the maximum two-decimal provincial exemption volume', async () => {
+    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-901'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.type(await screen.findByLabelText('Approved volume (m³)'), '9999999.99')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ approvedVolume: '9999999.99' }),
+      )
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901')
   })
 
   it('submits provincial offer form and navigates to details', async () => {

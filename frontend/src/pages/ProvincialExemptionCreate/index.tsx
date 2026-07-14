@@ -20,7 +20,7 @@ import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChange
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import {
-  atMostOneDecimalFieldError,
+  atMostTwoDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
@@ -419,13 +419,14 @@ const ProvincialExemptionCreatePage = () => {
           : (isoDateFieldError(form.approvalDate) ?? undefined)) ?? undefined,
       expiryDate:
         (firstValidationError(
-          () => (oicLike ? requiredFieldError(form.expiryDate, 'Expiry date') : null),
+          () =>
+            oicLike || form.approvalDate
+              ? requiredFieldError(form.expiryDate, 'Expiry date')
+              : null,
           () => isoDateFieldError(form.expiryDate),
           () => {
             if (!form.approvalDate || !form.expiryDate) return null
-            const invalidOrder = oicLike
-              ? form.expiryDate <= form.approvalDate
-              : form.expiryDate < form.approvalDate
+            const invalidOrder = form.expiryDate <= form.approvalDate
             return invalidOrder ? 'Expiry date must be after the approval date.' : null
           },
         ) ??
@@ -434,8 +435,8 @@ const ProvincialExemptionCreatePage = () => {
       approvedVolume: firstValidationError(
         () => requiredFieldError(form.approvedVolume, 'Approved volume'),
         () => positiveNumericFieldError(form.approvedVolume),
-        () => maxNumericValueFieldError(form.approvedVolume, 9999999.9, 'Approved volume'),
-        () => atMostOneDecimalFieldError(form.approvedVolume, 'Approved volume'),
+        () => maxNumericValueFieldError(form.approvedVolume, 9999999.99, 'Approved volume'),
+        () => atMostTwoDecimalFieldError(form.approvedVolume, 'Approved volume'),
       ),
       feeRate: oicLike && form.enableRateOverride ? feeRateError(form.feeRate) : undefined,
       regionNumbers:

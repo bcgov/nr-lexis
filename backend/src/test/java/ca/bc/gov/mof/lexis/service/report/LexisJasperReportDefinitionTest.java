@@ -2,7 +2,7 @@ package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDate;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import org.junit.jupiter.api.Test;
 
 class LexisJasperReportDefinitionTest {
@@ -63,7 +63,7 @@ class LexisJasperReportDefinitionTest {
 
   @Test
   void resolveFilenameShouldUseLegacyCsvNamesWithCurrentDate() {
-    String today = LocalDate.now().toString();
+    String today = LexisBusinessTime.today().toString();
 
     assertThat(LexisJasperReportDefinition.APPLICATION_REPORT.resolveFilename(LexisReportFormat.CSV))
         .isEqualTo("applicationLedger" + today + ".csv");

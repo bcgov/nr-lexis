@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 
 @ExtendWith(MockitoExtension.class)
@@ -135,6 +137,76 @@ class ApplicationEditPolicyServiceTest {
     assertThat(policy.canAddScales()).isFalse();
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "LEXIS_ADMIN",
+        "LEXIS_APPLICATION_APPROVER",
+        "LEXIS_PROVINCIAL_SUBMITTER_00012345"
+      })
+  void authorizedRolesCanUseInteriorMinisterialRemainingVolumeItemOverride(String role) {
+    allowRoles(role);
+    context("PMT", TODAY.minusDays(30), true, true, true, true);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canEditApplicationDetails()).isFalse();
+    assertThat(policy.canUpdatePackageNumber()).isFalse();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"LEXIS_READ_ONLY", "LEXIS_EXEMPTION_APPROVER"})
+  void restrictiveRolesCannotUseInteriorMinisterialItemOverride(String restrictiveRole) {
+    allowRoles("LEXIS_APPLICATION_APPROVER", restrictiveRole);
+    context("PMT", TODAY.minusDays(30), true, true, true, true);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.anyEditable()).isFalse();
+  }
+
+  @Test
+  void administratorUsesStaffApplicationEditPolicy() {
+    allowRoles("LEXIS_ADMIN");
+    context("APP", TODAY.minusDays(5), true, true, false);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditApplicationDetails()).isTrue();
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canUpdatePackageNumber()).isTrue();
+  }
+
+  @Test
+  void administratorDominatesConcurrentRestrictiveAndSubmitterRoles() {
+    allowRoles(
+        "LEXIS_ADMIN",
+        "LEXIS_READ_ONLY",
+        "LEXIS_EXEMPTION_APPROVER",
+        "LEXIS_PROVINCIAL_SUBMITTER_00012345");
+    context("APP", TODAY.minusDays(5), true, true, false);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditApplicationDetails()).isTrue();
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canUpdatePackageNumber()).isTrue();
+    assertThat(policy.industryUser()).isFalse();
+    assertThat(policy.readOnly()).isFalse();
+    assertThat(policy.exemptionApprover()).isFalse();
+  }
+
   @Test
   void exemptionApproverAndReadOnlyRolesAreDenied() {
     allowRoles("LEXIS_EXEMPTION_APPROVER", "LEXIS_READ_ONLY");
@@ -190,7 +262,8 @@ class ApplicationEditPolicyServiceTest {
                     false,
                     false,
                     false,
-                    null)));
+                    null,
+                    true)));
 
     assertThat(
             policyService
@@ -215,7 +288,8 @@ class ApplicationEditPolicyServiceTest {
                     false,
                     false,
                     false,
-                    "Y")));
+                    "Y",
+                    true)));
 
     assertThat(
             policyService
@@ -252,6 +326,22 @@ class ApplicationEditPolicyServiceTest {
       boolean hasPackageBeforeApproval,
       boolean hasScaleBeforeApproval,
       boolean hasCompletePermit) {
+    context(
+        status,
+        advertisingDate,
+        hasPackageBeforeApproval,
+        hasScaleBeforeApproval,
+        hasCompletePermit,
+        false);
+  }
+
+  private void context(
+      String status,
+      LocalDate advertisingDate,
+      boolean hasPackageBeforeApproval,
+      boolean hasScaleBeforeApproval,
+      boolean hasCompletePermit,
+      boolean interiorMinisterialItemOverrideEligible) {
     when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
         .thenReturn(
             Optional.of(
@@ -264,6 +354,7 @@ class ApplicationEditPolicyServiceTest {
                     hasPackageBeforeApproval,
                     hasScaleBeforeApproval,
                     hasCompletePermit,
-                    null)));
+                    null,
+                    interiorMinisterialItemOverrideEligible)));
   }
 }

@@ -870,7 +870,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .contains("The approved volume must be less than or equal to 9999999.9.");
+        .contains("The approved volume must be less than or equal to 9999999.99.");
     verify(repository, never()).insertExemption(any());
   }
 
@@ -880,7 +880,7 @@ class OracleExemptionDetailsRpcServiceTest {
         service.addExemption(
             new ExemptionDetailsRpcService.CreateExemptionRequest(
                 "EX-205",
-                250.55d,
+                250.555d,
                 LocalDate.of(2026, 3, 1),
                 LocalDate.of(2026, 12, 31),
                 "Conditions",
@@ -895,8 +895,113 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .contains("The approved volume must have no more than one decimal place.");
+        .contains("The approved volume must have no more than two decimal places.");
     verify(repository, never()).insertExemption(any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(doubles = {0.01d, 250.99d, 9_999_999.99d})
+  void addExemptionShouldAcceptOracleApprovedVolumePrecision(double approvedVolume) {
+    when(repository.insertExemption(any()))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                null,
+                approvedVolume,
+                null,
+                null,
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(),
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository).insertExemption(any());
+  }
+
+  @Test
+  void addExemptionShouldRequireExpiryAfterApprovalDate() {
+    LocalDate approvalDate = LocalDate.of(2026, 3, 1);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                null,
+                250.5d,
+                approvalDate,
+                approvalDate,
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(),
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The approval date must come before the expiry.");
+    verify(repository, never()).insertExemption(any());
+  }
+
+  @Test
+  void addExemptionShouldRequireExpiryWhenApprovalDateIsPresent() {
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                null,
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                null,
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(),
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid expiry date is required.");
+    verify(repository, never()).insertExemption(any());
+  }
+
+  @Test
+  void addExemptionShouldAllowExpiryDayAfterApprovalDate() {
+    when(repository.insertExemption(any()))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+    LocalDate approvalDate = LocalDate.of(2026, 3, 1);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                null,
+                250.5d,
+                approvalDate,
+                approvalDate.plusDays(1),
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(),
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository).insertExemption(any());
   }
 
   @ParameterizedTest
@@ -1859,6 +1964,119 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(repository, never()).findExemptionRate("EX-205");
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"NEW", "ACT"})
+  void updateExemptionShouldAllowBlanketOicExpiryChangeDuringCancellation(
+      String persistedStatus) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption(persistedStatus, "B")));
+    when(repository.updateExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2027, 1, 31),
+                "Conditions",
+                "B",
+                "CAN",
+                null,
+                null,
+                List.of(1903L)),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository).updateExemption(any());
+  }
+
+  @Test
+  void updateExemptionShouldRejectActiveMinisterialExpiryChange() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", "M")));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2027, 1, 31),
+                "Conditions",
+                "M",
+                "CAN",
+                null,
+                null,
+                List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Insufficient privileges to change the expiry date of this exemption.");
+    verify(repository, never()).updateExemption(any());
+  }
+
+  @Test
+  void updateExemptionShouldRejectAddingExpiryToActiveMinisterialWithoutOne() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", "M", null, null)));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2027, 1, 31),
+                "Conditions",
+                "M",
+                "CAN",
+                null,
+                null,
+                List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Insufficient privileges to change the expiry date of this exemption.");
+    verify(repository, never()).updateExemption(any());
+  }
+
+  @Test
+  void updateExemptionShouldNotWidenExpiryPermissionFromSubmittedType() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", "M")));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2027, 1, 31),
+                "Conditions",
+                "B",
+                "ACT",
+                null,
+                null,
+                List.of(1903L)),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Insufficient privileges to change the expiry date of this exemption.");
+    verify(repository, never()).updateExemption(any());
+  }
+
   @Test
   void updateExemptionShouldRejectExpiredExemptionWithoutAnyWrite() {
     when(repository.findExemptionRecord("EX-205"))
@@ -1913,6 +2131,62 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .contains("Other conditions contains characters the current LEXIS database cannot store.");
+    verify(repository, never()).updateExemption(any());
+  }
+
+  @Test
+  void updateExemptionShouldRequireExpiryAfterApprovalDate() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("NEW", "M")));
+    LocalDate approvalDate = LocalDate.of(2026, 3, 1);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                approvalDate,
+                approvalDate,
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The approval date must come before the expiry.");
+    verify(repository, never()).updateExemption(any());
+  }
+
+  @Test
+  void updateExemptionShouldRequireExpiryWhenApprovalDateIsPresent() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("NEW", "M", null, null)));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                null,
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid expiry date is required.");
     verify(repository, never()).updateExemption(any());
   }
 
@@ -2238,7 +2512,7 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(repository).updateExemption(updateCaptor.capture());
     ExemptionDetailsRpcRepository.ExemptionUpdateRecord updateRecord = updateCaptor.getValue();
     assertThat(updateRecord.exemptionStatusCode()).isEqualTo("ACT");
-    assertThat(updateRecord.approvalDate()).isEqualTo(LocalDate.now());
+    assertThat(updateRecord.approvalDate()).isEqualTo(LexisBusinessTime.today());
     assertThat(updateRecord.updateUserId()).isEqualTo("idir\\jsmith");
     assertThat(updateRecord.regionNumbers()).isNull();
   }
@@ -2614,11 +2888,23 @@ class OracleExemptionDetailsRpcServiceTest {
 
   private ExemptionDetailsRpcRepository.ExemptionRecord exemption(
       String statusCode, String exemptionTypeCode) {
+    return exemption(
+        statusCode,
+        exemptionTypeCode,
+        LocalDate.of(2026, 3, 1),
+        LocalDate.of(2026, 12, 31));
+  }
+
+  private ExemptionDetailsRpcRepository.ExemptionRecord exemption(
+      String statusCode,
+      String exemptionTypeCode,
+      LocalDate approvalDate,
+      LocalDate expiryDate) {
     return new ExemptionDetailsRpcRepository.ExemptionRecord(
         "EX-205",
         250.5d,
-        LocalDate.of(2026, 3, 1),
-        LocalDate.of(2026, 12, 31),
+        approvalDate,
+        expiryDate,
         "Conditions",
         exemptionTypeCode,
         statusCode,

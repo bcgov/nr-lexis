@@ -267,6 +267,23 @@ class ExemptionActivationEligibilityValidatorTest {
   }
 
   @Test
+  void activationShouldAcceptOracleApprovedVolumePrecision() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+
+    assertThat(validator.validate(existingCandidate("O", 9_999_999.99d, false))).isEmpty();
+  }
+
+  @Test
+  void activationShouldRejectApprovedVolumeOutsideOraclePrecision() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+
+    assertThat(validator.validate(existingCandidate("O", 10_000_000.0d, false)))
+        .contains("The approved volume must be less than or equal to 9999999.99.");
+    assertThat(validator.validate(existingCandidate("O", 100.001d, false)))
+        .contains("The approved volume must have no more than two decimal places.");
+  }
+
+  @Test
   void activationShouldRejectUnknownAuthoritativeCodes() {
     when(repository.isExemptionTypeCodeValidRequired("O")).thenReturn(false);
     when(repository.isExemptionStatusCodeValidRequired("ACT")).thenReturn(false);

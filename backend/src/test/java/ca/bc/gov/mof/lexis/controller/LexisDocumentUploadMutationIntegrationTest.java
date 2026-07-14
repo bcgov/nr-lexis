@@ -156,6 +156,59 @@ class LexisDocumentUploadMutationIntegrationTest {
   }
 
   @Test
+  void scopedSubmitterCanValidateAndUploadOwnedDocumentsAcrossProvincialRecords()
+      throws Exception {
+    canonicalStatuses("NEW", "ACT", "ACT");
+    when(applicationDetailsService.getApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(Optional.of(applicationEditContext(false)));
+    allowSuccessfulDocumentOperations();
+
+    JwtRequestPostProcessor submitter = submitterJwt();
+    performApplicationValidation(submitter).andExpect(status().isOk());
+    performExemptionValidation(submitter).andExpect(status().isOk());
+    performPermitValidation(submitter).andExpect(status().isOk());
+    performInvoiceValidation(submitter).andExpect(status().isOk());
+    performApplicationUpload(submitter).andExpect(status().isOk());
+    performExemptionUpload(submitter).andExpect(status().isOk());
+    performPermitUpload(submitter).andExpect(status().isOk());
+    performInvoiceUpload(submitter).andExpect(status().isOk());
+  }
+
+  @Test
+  void applicationApproverCanValidateAndUploadAllProvincialDocumentTypes()
+      throws Exception {
+    canonicalStatuses("NEW", "ACT", "ACT");
+    allowSuccessfulDocumentOperations();
+
+    JwtRequestPostProcessor approver = applicationApproverJwt();
+    performApplicationValidation(approver).andExpect(status().isOk());
+    performExemptionValidation(approver).andExpect(status().isOk());
+    performPermitValidation(approver).andExpect(status().isOk());
+    performInvoiceValidation(approver).andExpect(status().isOk());
+    performApplicationUpload(approver).andExpect(status().isOk());
+    performExemptionUpload(approver).andExpect(status().isOk());
+    performPermitUpload(approver).andExpect(status().isOk());
+    performInvoiceUpload(approver).andExpect(status().isOk());
+  }
+
+  @Test
+  void wrongClientScopedSubmitterCannotValidateOrUploadProvincialDocuments()
+      throws Exception {
+    canonicalStatuses("NEW", "ACT", "ACT");
+
+    assertAllDocumentOperationsForbidden(submitterJwt("99999999"));
+    verifyNoDocumentOperations();
+  }
+
+  @Test
+  void exemptionApproverCannotValidateOrUploadProvincialDocuments() throws Exception {
+    canonicalStatuses("NEW", "ACT", "ACT");
+
+    assertAllDocumentOperationsForbidden(exemptionApproverJwt());
+    verifyNoDocumentOperations();
+  }
+
+  @Test
   void persistedInvoiceUploadsShouldRejectEveryNonActivePermitStatus() throws Exception {
     for (String status : List.of("COM", "PPD", "CAN")) {
       when(permitService.findByPermitNumber(PERMIT_NUMBER))
@@ -252,7 +305,7 @@ class LexisDocumentUploadMutationIntegrationTest {
   private ApplicationDetailsRpcService.ApplicationEditContext applicationEditContext(
       boolean hasCompletePermit) {
     return new ApplicationDetailsRpcService.ApplicationEditContext(
-        APPLICATION_NUMBER, "NEW", "P", 1L, null, false, false, hasCompletePermit, null);
+        APPLICATION_NUMBER, "NEW", "P", 1L, null, false, false, hasCompletePermit, null, false);
   }
 
   private ExemptionDetailDto exemption(String status) {
@@ -313,6 +366,42 @@ class LexisDocumentUploadMutationIntegrationTest {
     return new LexisUploadResultDto(uploadType, uploadType + ".pdf", 7L, "accepted", "queued");
   }
 
+  private void allowSuccessfulDocumentOperations() {
+    when(uploadService.validateDocument(any(), any()))
+        .thenReturn(Optional.of(accepted("document")));
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("application")));
+    when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("exemption")));
+    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("permit")));
+    when(
+            uploadService.uploadInvoice(
+                any(), eq(PERMIT_NUMBER), eq("INV-1001"), any(), any(), any(), any(), any()))
+        .thenReturn(Optional.of(accepted("invoice")));
+  }
+
+  private void assertAllDocumentOperationsForbidden(JwtRequestPostProcessor authentication)
+      throws Exception {
+    performApplicationValidation(authentication).andExpect(status().isForbidden());
+    performExemptionValidation(authentication).andExpect(status().isForbidden());
+    performPermitValidation(authentication).andExpect(status().isForbidden());
+    performInvoiceValidation(authentication).andExpect(status().isForbidden());
+    performApplicationUpload(authentication).andExpect(status().isForbidden());
+    performExemptionUpload(authentication).andExpect(status().isForbidden());
+    performPermitUpload(authentication).andExpect(status().isForbidden());
+    performInvoiceUpload(authentication).andExpect(status().isForbidden());
+  }
+
+  private void verifyNoDocumentOperations() {
+    verify(uploadService, never()).validateDocument(any(), any());
+    verify(uploadService, never()).uploadApplication(any(), any(), any(), any());
+    verify(uploadService, never()).uploadExemption(any(), any(), any(), any());
+    verify(uploadService, never()).uploadPermit(any(), any(), any(), any());
+    verify(uploadService, never())
+        .uploadInvoice(any(), any(), any(), any(), any(), any(), any(), any());
+  }
+
   private ResultActions performApplicationUpload() throws Exception {
     return performApplicationUpload(adminJwt());
   }
@@ -328,31 +417,83 @@ class LexisDocumentUploadMutationIntegrationTest {
   }
 
   private ResultActions performExemptionUpload() throws Exception {
+    return performExemptionUpload(adminJwt());
+  }
+
+  private ResultActions performExemptionUpload(JwtRequestPostProcessor authentication)
+      throws Exception {
     return mockMvc.perform(
         multipart("/api/lexis/admin/uploads/exemptions")
             .file(file("exemption.pdf"))
             .param("exemptionNumber", EXEMPTION_NUMBER)
             .param("fileDescription", "Exemption document")
-            .with(adminJwt()));
+            .with(authentication));
   }
 
   private ResultActions performPermitUpload() throws Exception {
+    return performPermitUpload(adminJwt());
+  }
+
+  private ResultActions performPermitUpload(JwtRequestPostProcessor authentication)
+      throws Exception {
     return mockMvc.perform(
         multipart("/api/lexis/admin/uploads/permits")
             .file(file("permit.pdf"))
             .param("permitNumber", Long.toString(PERMIT_NUMBER))
             .param("fileDescription", "Permit document")
-            .with(adminJwt()));
+            .with(authentication));
   }
 
   private ResultActions performInvoiceUpload() throws Exception {
+    return performInvoiceUpload(adminJwt());
+  }
+
+  private ResultActions performInvoiceUpload(JwtRequestPostProcessor authentication)
+      throws Exception {
     return mockMvc.perform(
         multipart("/api/lexis/admin/uploads/invoices")
             .file(file("invoice.pdf"))
             .param("permitNumber", Long.toString(PERMIT_NUMBER))
             .param("salesInvoiceNumber", "INV-1001")
             .param("fileDescription", "Invoice document")
-            .with(adminJwt()));
+            .with(authentication));
+  }
+
+  private ResultActions performApplicationValidation(JwtRequestPostProcessor authentication)
+      throws Exception {
+    return mockMvc.perform(
+        multipart("/api/lexis/admin/uploads/applications/validation")
+            .file(file("application.pdf"))
+            .param("applicationNumber", Long.toString(APPLICATION_NUMBER))
+            .with(authentication));
+  }
+
+  private ResultActions performExemptionValidation(JwtRequestPostProcessor authentication)
+      throws Exception {
+    return mockMvc.perform(
+        multipart("/api/lexis/admin/uploads/exemptions/validation")
+            .file(file("exemption.pdf"))
+            .param("exemptionNumber", EXEMPTION_NUMBER)
+            .with(authentication));
+  }
+
+  private ResultActions performPermitValidation(JwtRequestPostProcessor authentication)
+      throws Exception {
+    return mockMvc.perform(
+        multipart("/api/lexis/admin/uploads/permits/validation")
+            .file(file("permit.pdf"))
+            .param("permitNumber", Long.toString(PERMIT_NUMBER))
+            .with(authentication));
+  }
+
+  private ResultActions performInvoiceValidation(JwtRequestPostProcessor authentication)
+      throws Exception {
+    return mockMvc.perform(
+        multipart("/api/lexis/admin/uploads/invoices/validation")
+            .file(file("invoice.pdf"))
+            .param("permitNumber", Long.toString(PERMIT_NUMBER))
+            .param("salesInvoiceNumber", "INV-1001")
+            .with(authentication));
   }
 
   private MockMultipartFile file(String fileName) {
@@ -370,6 +511,10 @@ class LexisDocumentUploadMutationIntegrationTest {
   }
 
   private JwtRequestPostProcessor submitterJwt() {
+    return submitterJwt("00012345");
+  }
+
+  private JwtRequestPostProcessor submitterJwt(String clientNumber) {
     return SecurityMockMvcRequestPostProcessors.jwt()
         .jwt(
             token ->
@@ -377,6 +522,26 @@ class LexisDocumentUploadMutationIntegrationTest {
                     .claim("custom:idp_name", "bceidbusiness")
                     .claim("custom:idp_username", "lexis-submit-test-user"))
         .authorities(
-            new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00012345"));
+            new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_" + clientNumber));
+  }
+
+  private JwtRequestPostProcessor applicationApproverJwt() {
+    return SecurityMockMvcRequestPostProcessors.jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("custom:idp_name", "idir")
+                    .claim("custom:idp_username", "lexis-approver-test-user"))
+        .authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"));
+  }
+
+  private JwtRequestPostProcessor exemptionApproverJwt() {
+    return SecurityMockMvcRequestPostProcessors.jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("custom:idp_name", "idir")
+                    .claim("custom:idp_username", "lexis-exemption-approver-test-user"))
+        .authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"));
   }
 }

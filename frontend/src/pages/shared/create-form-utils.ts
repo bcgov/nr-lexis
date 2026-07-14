@@ -105,6 +105,13 @@ export const atMostOneDecimalFieldError = (value: string, label = 'Value'): stri
     : `${label} must have no more than one decimal place.`
 }
 
+export const atMostTwoDecimalFieldError = (value: string, label = 'Value'): string | null => {
+  if (!value.trim()) return null
+  return /^\d+(\.\d{1,2})?$/.test(value.trim())
+    ? null
+    : `${label} must have no more than two decimal places.`
+}
+
 export const numericFieldError = (value: string, label = 'Value'): string | null => {
   if (!value.trim()) return null
   return NON_NEGATIVE_DECIMAL_PATTERN.test(value.trim()) ? null : `${label} must be numeric.`

@@ -88,10 +88,10 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void provincialSubmitterShouldCreateApplicationsAndViewProvincialRecordsOnly() {
+  void provincialSubmitterShouldCreateApplicationsAndOffersAndViewProvincialRecordsOnly() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("createApplication")
+        .contains("createApplication", "createOffer")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -104,7 +104,6 @@ class LexisAuthorizationMatrixParityTest {
             "/applicationRemarks",
             "/createExemption",
             "approveExemption",
-            "createOffer",
             "createPermit",
             "saveExemption",
             "savePermit",
@@ -119,7 +118,7 @@ class LexisAuthorizationMatrixParityTest {
             authorizationService.resolveGrantedActions(
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("createApplication")
+        .contains("createApplication", "createOffer")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -128,12 +127,20 @@ class LexisAuthorizationMatrixParityTest {
             "/filePermitUpload")
         .doesNotContain(
             "/changeApplicantType",
-            "createOffer",
             "createPermit",
             "saveExemption",
             "savePermit",
             "uploadFederalSubmission")
         .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS);
+  }
+
+  @Test
+  void applicationApplicantTypeSelectionShouldRemainSeparatelyAuthorized() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+        .contains("createApplication")
+        .doesNotContain("/changeApplicantType");
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
+        .contains("createApplication", "/changeApplicantType");
   }
 
   @Test

@@ -125,7 +125,8 @@ If the backend starts but authenticated API calls fail, check network access, `a
 
 NEXCOL uses a dedicated Keycloak client and the `lexis:federal-submission:submit` OAuth scope to
 validate or submit federal XML through the API gateway. CI manages the client, scope and default
-scope assignment for configured environments.
+scope assignment in TEST and PROD. Those deployments require the Keycloak provisioner settings and
+fail if the scope/client contract or exclusive assignment is not valid.
 
 See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for the API
 contract and [gateway/README.md](gateway/README.md) for gateway responsibilities.

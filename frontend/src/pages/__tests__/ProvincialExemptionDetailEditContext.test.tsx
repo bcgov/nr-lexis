@@ -252,6 +252,145 @@ describe('Provincial exemption edit context', () => {
     )
   })
 
+  it('requires expiry after approval when updating an exemption', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: true,
+      message: 'The exemption was updated successfully.',
+      exemptionNumber: 'BOIC-205',
+      errors: [],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    const expiryDate = screen.getByLabelText('Expiry date')
+    await userEvent.clear(expiryDate)
+    await userEvent.type(expiryDate, '2026-02-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    expect(screen.getByText('Expiry date must be after the approval date.')).toBeInTheDocument()
+    expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
+
+    await userEvent.clear(expiryDate)
+    await userEvent.type(expiryDate, '2026-02-02')
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    await waitFor(() =>
+      expect(vi.mocked(updateExemption)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          approvalDate: '2026-02-01',
+          expiryDate: '2026-02-02',
+        }),
+      ),
+    )
+  })
+
+  it('accepts Oracle approved-volume precision when updating an exemption', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: true,
+      message: 'The exemption was updated successfully.',
+      exemptionNumber: 'BOIC-205',
+      errors: [],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    const approvedVolume = screen.getByLabelText('Approved volume (m³)')
+    await userEvent.clear(approvedVolume)
+    await userEvent.type(approvedVolume, '9999999.99')
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    await waitFor(() =>
+      expect(vi.mocked(updateExemption)).toHaveBeenCalledWith(
+        expect.objectContaining({ approvedVolume: '9999999.99' }),
+      ),
+    )
+  })
+
+  it('rejects approved volume with three decimals when updating an exemption', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    const approvedVolume = screen.getByLabelText('Approved volume (m³)')
+    await userEvent.clear(approvedVolume)
+    await userEvent.type(approvedVolume, '250.999')
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    expect(
+      screen.getByText(
+        'Approved volume must be greater than 0, at most 9,999,999.99, and have at most two decimal places.',
+      ),
+    ).toBeInTheDocument()
+    expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
+  })
+
   it('guards unload only after an exemption field differs from its edit baseline', async () => {
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,

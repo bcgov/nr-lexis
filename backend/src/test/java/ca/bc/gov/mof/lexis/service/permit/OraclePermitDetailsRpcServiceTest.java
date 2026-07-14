@@ -3980,7 +3980,7 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void conversionRateShouldReturnSuccessWhenRateExists() {
-    when(repository.findCurrencyConversionRateByDate(LocalDate.now(), "USD"))
+    when(repository.findCurrencyConversionRateByDate(LexisBusinessTime.today(), "USD"))
         .thenReturn(Optional.of(1.333d));
 
     PermitConversionRateRpcResponseDto response = service.getConversionRate();
@@ -3991,7 +3991,7 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void conversionRateShouldFailClosedWhenRateIsMissingOrNonPositive() {
-    when(repository.findCurrencyConversionRateByDate(LocalDate.now(), "USD"))
+    when(repository.findCurrencyConversionRateByDate(LexisBusinessTime.today(), "USD"))
         .thenReturn(Optional.of(0.0d));
 
     PermitConversionRateRpcResponseDto response = service.getConversionRate();

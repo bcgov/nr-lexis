@@ -194,6 +194,7 @@ lexis:
         - "/filePermitUpload"
         - "/fileInvoiceUpload"
         - "createApplication"
+        - "createOffer"
         - "uploadApplicationSubmission"
       LEXIS_DELEGATED_ADMIN: []
   federal-submission:

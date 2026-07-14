@@ -406,7 +406,8 @@ public interface ApplicationDetailsRpcService {
       boolean hasPackageBeforeApproval,
       boolean hasScaleBeforeApproval,
       boolean hasCompletePermit,
-      String oicIndicator) {}
+      String oicIndicator,
+      boolean interiorMinisterialItemOverrideEligible) {}
 
   record CreateApplicationRequest(
       Long federalApplicationNumber,

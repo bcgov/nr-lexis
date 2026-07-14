@@ -2098,6 +2098,24 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void removeInvoiceDocumentShouldLetAdminOverrideReadOnlyRoleForActivePermit() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "idir\\admin", List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(55L, "invoice");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    when(service.removeInvoiceDocument(55L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeInvoiceDocument("55", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removeInvoiceDocument(55L);
+  }
+
+  @Test
   void removePermitDocumentShouldFailClosedWhenCanonicalPermitIsUnavailable() {
     TestingAuthenticationToken authentication =
         authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));

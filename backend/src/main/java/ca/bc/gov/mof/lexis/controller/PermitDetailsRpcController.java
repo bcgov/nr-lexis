@@ -1207,7 +1207,7 @@ public class PermitDetailsRpcController {
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
       Authentication authentication) {
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
-    if (!hasPermitDocumentDeleteRole(roles, false)) {
+    if (!hasPermitDocumentDeleteRole(roles)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
@@ -1240,7 +1240,7 @@ public class PermitDetailsRpcController {
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
       Authentication authentication) {
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
-    if (!hasPermitDocumentDeleteRole(roles, false)) {
+    if (!hasPermitDocumentDeleteRole(roles)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     // Application-owned attachments are contextual, read-only rows on the permit aggregate.
@@ -1254,7 +1254,7 @@ public class PermitDetailsRpcController {
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
       Authentication authentication) {
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
-    if (!hasPermitDocumentDeleteRole(roles, true)) {
+    if (!hasPermitDocumentDeleteRole(roles)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
@@ -1371,7 +1371,7 @@ public class PermitDetailsRpcController {
         .map(
             status -> {
               if (invoiceDocument) {
-                return PERMIT_STATUS_ACTIVE.equals(status) && !readOnly;
+                return PERMIT_STATUS_ACTIVE.equals(status) && (admin || !readOnly);
               }
               return (admin && !PERMIT_STATUS_EXPIRED.equals(status))
                   || (PERMIT_STATUS_ACTIVE.equals(status) && !readOnly);
@@ -1379,7 +1379,7 @@ public class PermitDetailsRpcController {
         .orElse(false);
   }
 
-  private boolean hasPermitDocumentDeleteRole(List<String> roles, boolean invoiceDocument) {
+  private boolean hasPermitDocumentDeleteRole(List<String> roles) {
     List<String> normalizedRoles = normalizedRoles(roles);
     if (normalizedRoles.isEmpty()) {
       return false;
@@ -1393,8 +1393,7 @@ public class PermitDetailsRpcController {
                         || ROLE_APPLICATION_APPROVER.equals(role)
                         || ROLE_PROVINCIAL_SUBMITTER.equals(role)
                         || role.startsWith(ROLE_PROVINCIAL_SUBMITTER + "_"));
-    return authorizedActor
-        && (invoiceDocument ? !readOnly : normalizedRoles.contains(ROLE_ADMIN) || !readOnly);
+    return authorizedActor && (normalizedRoles.contains(ROLE_ADMIN) || !readOnly);
   }
 
   private List<String> normalizedRoles(List<String> roles) {

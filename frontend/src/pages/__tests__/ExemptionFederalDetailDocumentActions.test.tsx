@@ -858,11 +858,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
   })
 
-  it('denies exemption document delete to exemption approvers', async () => {
+  it('allows exemption approvers to open documents without upload or delete access', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
-        canPerform: () => true,
+        canPerform: (action: string) => action === '/exemptionDetails',
       }),
     )
     mockedFetchExemptionDocuments.mockResolvedValue({
@@ -891,6 +891,15 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Documents')
     const documentRow = (await screen.findByText('approver-exemption-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
+    expect(screen.queryByText('Upload exemption documents')).not.toBeInTheDocument()
+    await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
+    await waitFor(() => {
+      expect(mockedOpenExemptionDocument).toHaveBeenCalledWith(
+        '702',
+        'approver-exemption-doc.pdf',
+        'EX-777',
+      )
+    })
     expect(
       within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
     ).toBeDisabled()

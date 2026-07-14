@@ -62,10 +62,8 @@ import {
   type ApplicationClientData,
 } from '@/service/application-client-lookup-service'
 import {
-  addPermitInvoice,
   fetchPermitFeeOverrideContext,
   fetchPermitDocuments,
-  fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
   openPermitDocument,
   releasePermitEditLock,
@@ -138,7 +136,6 @@ const isApplicationDocumentRow = (row: PermitDocumentRow): boolean => {
   return row.typeCode.trim().toUpperCase() === 'INS'
 }
 
-type PermitInvoiceField = 'invoiceDraftNumber' | 'invoiceDraftExportValue' | 'invoiceDraftFeeInLieu'
 type BlanketOicScaleForm = {
   packageNumber: string
   timberMark: string
@@ -164,7 +161,6 @@ type BlanketOicPackageForm = {
 
 type PermitFeeOverrideForm = PermitFeeOverrideContext
 
-const MAX_SALES_INVOICE_NUMBER_LENGTH = 9
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN'])
@@ -540,25 +536,17 @@ const ProvincialPermitDetailsPage = () => {
   const [boicScaleBaselineForm, setBoicScaleBaselineForm] = useState<BlanketOicScaleForm>(
     EMPTY_BLANKET_OIC_SCALE_FORM,
   )
-  const [invoiceDraftNumber, setInvoiceDraftNumber] = useState('')
-  const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
-  const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
   const [permitDocumentUploadDirty, setPermitDocumentUploadDirty] = useState(false)
   const [permitDocumentUploadBusy, setPermitDocumentUploadBusy] = useState(false)
   const [invoiceDocumentUploadDirty, setInvoiceDocumentUploadDirty] = useState(false)
   const [invoiceDocumentUploadBusy, setInvoiceDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
-  const [isAddingInvoice, setIsAddingInvoice] = useState(false)
   const [selectedPermitTabIndex, setSelectedPermitTabIndex] = useState<number>(
     PERMIT_DETAIL_TAB_INDEX.permit,
   )
-  const [touchedInvoiceFields, setTouchedInvoiceFields] = useState<
-    TouchedFields<PermitInvoiceField>
-  >({})
   const [touchedPermitFields, setTouchedPermitFields] = useState<
     TouchedFields<PermitDetailFormField>
   >({})
-  const [showInvoiceValidationErrors, setShowInvoiceValidationErrors] = useState(false)
   const [showPermitValidationErrors, setShowPermitValidationErrors] = useState(false)
   const [shippingReferences, setShippingReferences] = useState<ShippingReferenceOptions | null>(
     null,
@@ -572,7 +560,6 @@ const ProvincialPermitDetailsPage = () => {
   const [permitOptionsErrorMessage, setPermitOptionsErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
-  const beginAddInvoiceRequest = useLatestRequestGuard()
   const beginPermitMutationRequest = useLatestRequestGuard()
   const beginBoicPackageEditRequest = useLatestRequestGuard()
   const beginAvailablePermitApplicationsRequest = useLatestRequestGuard()
@@ -618,17 +605,11 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleBaselineForm(EMPTY_BLANKET_OIC_SCALE_FORM)
     setIsSavingBoicScale(false)
     setIsDeletingBoicScaleId(null)
-    setInvoiceDraftNumber('')
-    setInvoiceDraftExportValue('')
-    setInvoiceDraftFeeInLieu('')
     setPermitDocumentUploadDirty(false)
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
     setInvoiceDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
-    setTouchedInvoiceFields({})
-    setShowInvoiceValidationErrors(false)
-    setIsAddingInvoice(false)
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setIsLoadingAvailableApplications(false)
@@ -1098,7 +1079,7 @@ const ProvincialPermitDetailsPage = () => {
     editContextLoaded &&
     !permitEditLocked &&
     hasDocumentActorRole &&
-    !readOnlyUser &&
+    (adminUser || !readOnlyUser) &&
     permitStatusCode === 'ACT'
   const scaleAttachmentLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const feeOverrideLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
@@ -1176,11 +1157,6 @@ const ProvincialPermitDetailsPage = () => {
   const blanketOicScaleDirty =
     canEditBlanketOicScaleRows &&
     !formValuesEqual(resolvedBlanketOicScaleForm, resolvedBlanketOicScaleBaselineForm)
-  const invoiceDraftDirty =
-    canUploadInvoiceDocuments &&
-    [invoiceDraftNumber, invoiceDraftExportValue, invoiceDraftFeeInLieu].some(
-      (value) => value.length > 0,
-    )
   const permitReviewReady =
     canRequestPermitReview &&
     permitStatusCode === 'ACT' &&
@@ -1333,36 +1309,6 @@ const ProvincialPermitDetailsPage = () => {
   const hasShippingValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
   )
-  const invoiceFieldErrors = useMemo<FieldErrors<PermitInvoiceField>>(
-    () => ({
-      invoiceDraftNumber:
-        requiredMaxLengthFieldError(
-          invoiceDraftNumber,
-          MAX_SALES_INVOICE_NUMBER_LENGTH,
-          'Invoice number',
-        ) ?? undefined,
-      invoiceDraftExportValue: firstValidationError(
-        () => requiredFieldError(invoiceDraftExportValue, 'Invoice export value'),
-        () => numericFieldError(invoiceDraftExportValue, 'Invoice export value'),
-      ),
-      invoiceDraftFeeInLieu: numericFieldError(invoiceDraftFeeInLieu, 'Fee in lieu') ?? undefined,
-    }),
-    [invoiceDraftExportValue, invoiceDraftFeeInLieu, invoiceDraftNumber],
-  )
-  const hasInvoiceValidationError = Object.values(invoiceFieldErrors).some((error) => !!error)
-
-  const markInvoiceFieldTouched = (field: PermitInvoiceField): void => {
-    setTouchedInvoiceFields((current) => ({ ...current, [field]: true }))
-  }
-
-  const invoiceFieldError = (field: PermitInvoiceField): string | undefined =>
-    getVisibleFieldError(
-      field,
-      invoiceFieldErrors,
-      touchedInvoiceFields,
-      showInvoiceValidationErrors,
-    )
-
   const markPermitFieldTouched = (field: PermitDetailFormField): void => {
     setTouchedPermitFields((current) => ({ ...current, [field]: true }))
   }
@@ -2338,126 +2284,12 @@ const ProvincialPermitDetailsPage = () => {
     ],
   )
 
-  const onAddInvoice = useCallback(async (): Promise<boolean> => {
-    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-    if (!resolvedPermitNumber || !canUploadInvoiceDocuments || isAddingInvoice) {
-      return false
-    }
-
-    const salesInvoiceNumber = invoiceDraftNumber.trim()
-    const invoiceExportValue = invoiceDraftExportValue.trim()
-    const invoiceFeeInLieu = invoiceDraftFeeInLieu.trim() || invoiceExportValue
-
-    if (hasInvoiceValidationError) {
-      setShowInvoiceValidationErrors(true)
-      setActionErrorMessage(
-        Object.values(invoiceFieldErrors).find((error): error is string => !!error) ??
-          'Please fix validation errors before adding an invoice.',
-      )
-      return false
-    }
-
-    const isLatestRequest = beginAddInvoiceRequest()
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setIsAddingInvoice(true)
-    try {
-      let conversionRate: string
-      try {
-        const conversionResult = await fetchPermitInvoiceConversionRate()
-        if (!isLatestRequest()) {
-          return false
-        }
-        conversionRate = conversionResult.conversionRate.trim()
-        const numericConversionRate = Number(conversionRate)
-        if (
-          !conversionRate ||
-          !Number.isFinite(numericConversionRate) ||
-          numericConversionRate <= 0
-        ) {
-          throw new Error('A valid currency conversion rate is required to add an invoice.')
-        }
-      } catch (error) {
-        if (!isLatestRequest()) {
-          return false
-        }
-        console.error(error)
-        setActionErrorMessage(
-          'Unable to retrieve a valid currency conversion rate. The invoice was not added.',
-        )
-        return false
-      }
-
-      const addResult = await addPermitInvoice({
-        permitNumber: resolvedPermitNumber,
-        salesInvoiceNumber,
-        invoiceExportValue,
-        invoiceConversionRate: conversionRate,
-        invoiceFeeInLieu,
-      })
-
-      if (!isLatestRequest()) {
-        return false
-      }
-      if (!addResult.success) {
-        setActionErrorMessage(addResult.errors[0] || addResult.message || 'Unable to add invoice.')
-        return false
-      }
-
-      setInvoiceDraftNumber('')
-      setInvoiceDraftExportValue('')
-      setInvoiceDraftFeeInLieu('')
-      setTouchedInvoiceFields({})
-      setShowInvoiceValidationErrors(false)
-      try {
-        const refreshedInvoices = await fetchPermitInvoices(resolvedPermitNumber)
-        if (isLatestRequest()) {
-          setInvoiceRows(refreshedInvoices.rows)
-          setDocumentsInvoicesErrorMessage('')
-        }
-      } catch (refreshError) {
-        if (isLatestRequest()) {
-          console.error(refreshError)
-          setDocumentsInvoicesErrorMessage(
-            'The invoice was added, but invoice details could not be refreshed.',
-          )
-          setActionInfoMessage(
-            `${addResult.message || 'Invoice added successfully.'} Reload before adding another invoice.`,
-          )
-        }
-      }
-      return true
-    } catch (error) {
-      if (isLatestRequest()) {
-        console.error(error)
-        setActionErrorMessage('Unable to add invoice.')
-      }
-      return false
-    } finally {
-      if (isLatestRequest()) {
-        setIsAddingInvoice(false)
-      }
-    }
-  }, [
-    beginAddInvoiceRequest,
-    canUploadInvoiceDocuments,
-    detail?.permitNumber,
-    hasInvoiceValidationError,
-    invoiceFieldErrors,
-    invoiceDraftExportValue,
-    invoiceDraftFeeInLieu,
-    invoiceDraftNumber,
-    isAddingInvoice,
-    permitNumber,
-  ])
-
   const isPermitDirty =
     permitDetailDirty ||
     permitShippingDirty ||
     permitFeeOverrideDirty ||
     blanketOicPackageDirty ||
     blanketOicScaleDirty ||
-    invoiceDraftDirty ||
     permitDocumentUploadDirty ||
     invoiceDocumentUploadDirty
 
@@ -2477,7 +2309,6 @@ const ProvincialPermitDetailsPage = () => {
     if (permitFeeOverrideDirty && !(await onSaveFeeOverride())) return false
     if (blanketOicPackageDirty && !(await onSaveBlanketOicPackage())) return false
     if (blanketOicScaleDirty && !(await onAddBlanketOicScale())) return false
-    if (invoiceDraftDirty && !(await onAddInvoice())) return false
     // Persist lifecycle-dependent drafts before a status transition can make them read-only.
     // The permit orchestrator saves shipping first and, when required by the backend contract,
     // saves policy fields before applying the final invoiced status.
@@ -2487,10 +2318,8 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     blanketOicPackageDirty,
     blanketOicScaleDirty,
-    invoiceDraftDirty,
     invoiceDocumentUploadDirty,
     onAddBlanketOicScale,
-    onAddInvoice,
     onSaveBlanketOicPackage,
     onSaveFeeOverride,
     onSavePermit,
@@ -2513,11 +2342,6 @@ const ProvincialPermitDetailsPage = () => {
     setIsEditingFeeOverride(false)
     resetBlanketOicPackageForm()
     setBoicScaleForm(boicScaleBaselineForm)
-    setInvoiceDraftNumber('')
-    setInvoiceDraftExportValue('')
-    setInvoiceDraftFeeInLieu('')
-    setTouchedInvoiceFields({})
-    setShowInvoiceValidationErrors(false)
     setPermitDocumentUploadDirty(false)
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
@@ -4307,50 +4131,6 @@ const ProvincialPermitDetailsPage = () => {
                             onUploadComplete={refreshPermitDocuments}
                           />
                         )}
-                        <div className="legacy-search-grid">
-                          <TextInput
-                            id="permitInvoiceDraftNumber"
-                            labelText="Invoice number"
-                            value={invoiceDraftNumber}
-                            invalid={!!invoiceFieldError('invoiceDraftNumber')}
-                            invalidText={invoiceFieldError('invoiceDraftNumber')}
-                            onBlur={() => markInvoiceFieldTouched('invoiceDraftNumber')}
-                            onChange={(event) => setInvoiceDraftNumber(event.target.value)}
-                            placeholder="Enter sales invoice number"
-                          />
-                          <TextInput
-                            id="permitInvoiceDraftExportValue"
-                            labelText="Export value"
-                            value={invoiceDraftExportValue}
-                            invalid={!!invoiceFieldError('invoiceDraftExportValue')}
-                            invalidText={invoiceFieldError('invoiceDraftExportValue')}
-                            onBlur={() => markInvoiceFieldTouched('invoiceDraftExportValue')}
-                            onChange={(event) => setInvoiceDraftExportValue(event.target.value)}
-                            placeholder="Enter export value"
-                          />
-                          <TextInput
-                            id="permitInvoiceDraftFeeInLieu"
-                            labelText="Fee in lieu"
-                            value={invoiceDraftFeeInLieu}
-                            invalid={!!invoiceFieldError('invoiceDraftFeeInLieu')}
-                            invalidText={invoiceFieldError('invoiceDraftFeeInLieu')}
-                            onBlur={() => markInvoiceFieldTouched('invoiceDraftFeeInLieu')}
-                            onChange={(event) => setInvoiceDraftFeeInLieu(event.target.value)}
-                            placeholder="Enter fee in lieu (defaults to export value)"
-                          />
-                        </div>
-                        <div className="legacy-search-actions">
-                          <Button
-                            kind="secondary"
-                            size="sm"
-                            disabled={
-                              !canUploadInvoiceDocuments || isAddingInvoice || !detail.permitNumber
-                            }
-                            onClick={() => void onAddInvoice()}
-                          >
-                            {isAddingInvoice ? 'Adding Invoice...' : 'Add Invoice'}
-                          </Button>
-                        </div>
                         <TextInput
                           id="permitInvoicesFilter"
                           labelText="Filter invoice rows"
@@ -4443,7 +4223,6 @@ const ProvincialPermitDetailsPage = () => {
           isSavingFeeOverride ||
           isSavingBoicPackage ||
           isSavingBoicScale ||
-          isAddingInvoice ||
           isUpdatingScaleId !== null ||
           isDeletingBoicScaleId !== null ||
           isDeletingBoicPackageNumber !== null ||

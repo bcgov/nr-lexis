@@ -11,6 +11,7 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
@@ -476,7 +477,7 @@ class OracleLexisReportServiceFormatSupportTest {
     OracleLexisReportService service = createService();
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("legacyActionMapping", "generatePermitReport"), "PDF");
-    LocalDate today = LocalDate.now();
+    LocalDate today = LexisBusinessTime.today();
     LocalDate previousMonth = today.minusMonths(1);
 
     LexisReportRequestDto result =

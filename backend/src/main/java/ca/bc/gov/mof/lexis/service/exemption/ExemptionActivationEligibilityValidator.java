@@ -25,7 +25,7 @@ public class ExemptionActivationEligibilityValidator {
   private static final String EXEMPTED_APPLICATION_STATUS = "EXE";
   private static final String OIC_TYPE = "O";
   private static final String BLANKET_OIC_TYPE = "B";
-  private static final double MAX_APPROVED_VOLUME = 9_999_999.9d;
+  private static final double MAX_APPROVED_VOLUME = 9_999_999.99d;
   private static final Set<Long> NATURAL_RESOURCE_REGION_NUMBERS =
       Set.of(1903L, 1904L, 1905L, 1906L, 1907L, 1908L, 1909L, 1910L);
 
@@ -351,10 +351,10 @@ public class ExemptionActivationEligibilityValidator {
       return;
     }
     if (approvedVolume > MAX_APPROVED_VOLUME) {
-      errors.add("The approved volume must be less than or equal to 9999999.9.");
+      errors.add("The approved volume must be less than or equal to 9999999.99.");
     }
-    if (BigDecimal.valueOf(approvedVolume).stripTrailingZeros().scale() > 1) {
-      errors.add("The approved volume must have no more than one decimal place.");
+    if (BigDecimal.valueOf(approvedVolume).stripTrailingZeros().scale() > 2) {
+      errors.add("The approved volume must have no more than two decimal places.");
     }
   }
 

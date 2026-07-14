@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import static java.util.Map.entry;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.Connection;
@@ -15,7 +16,6 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -974,6 +974,6 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   private static String today() {
-    return LocalDate.now().toString();
+    return LexisBusinessTime.today().toString();
   }
 }

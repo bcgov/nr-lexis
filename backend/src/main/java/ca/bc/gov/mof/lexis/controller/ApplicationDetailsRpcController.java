@@ -61,6 +61,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/lexis")
@@ -111,6 +112,7 @@ public class ApplicationDetailsRpcController {
   private static final String LEGACY_ACTION_PERMIT_DETAILS = "/permitDetails";
   private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
   private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
+  private static final String APPLICATION_APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final Set<String> APPLICATION_DOCUMENT_DELETE_ROLES =
@@ -521,6 +523,14 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
+    String requestedApplicantType =
+        trimToNull(first(parameters, "ownerApplicantType", "applicantType"));
+    if (!canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)
+        && requestedApplicantType != null
+        && !APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(requestedApplicantType)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for add application");
@@ -723,12 +733,12 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<ApplicationClientDataResponseDto> getClientData(
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
       @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    requireClientAccess(clientNumber);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application client data");
       return ResponseEntity.noContent().build();
     }
-    requireClientAccess(clientNumber);
 
     return clientLookupService
         .getClientData(clientNumber, clientLocationCode)
@@ -752,12 +762,12 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "applicantType", required = false) String applicantType) {
+    requireClientAccess(clientNumber);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application client locations");
       return ResponseEntity.noContent().build();
     }
-    requireClientAccess(clientNumber);
 
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
@@ -792,12 +802,12 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "applicantType", required = false) String applicantType) {
+    requireClientAccess(clientNumber);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application contacts");
       return ResponseEntity.noContent().build();
     }
-    requireClientAccess(clientNumber);
 
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
@@ -1662,6 +1672,12 @@ public class ApplicationDetailsRpcController {
 
   private ApplicationDetailsRpcService.CreateApplicationRequest toCreateApplicationRequest(
       MultiValueMap<String, String> parameters) {
+    String applicantTypeCode =
+        firstTrimmedNonBlank(
+            first(parameters, "ownerApplicantType", "applicantType"),
+            APPLICATION_APPLICANT_TYPE_OWNER);
+    boolean ownerApplicant =
+        APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(applicantTypeCode);
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
         parsePositiveLong(first(parameters, "federalApplicationNumber", "fedApplicationNumber")),
         parseDate(first(parameters, "applicationDate")),
@@ -1671,18 +1687,24 @@ public class ApplicationDetailsRpcController {
         parseDouble(first(parameters, "averageLogVolume")),
         first(parameters, "logLocation", "productLocation"),
         parsePositiveLong(first(parameters, "exportScheduleId", "legacyExportScheduleId")),
-        first(parameters, "agentClientNumber", "applicantClientNumber"),
-        first(parameters, "agentClientLocation", "agentClientLocationCode", "applicantClientLocationCode"),
+        ownerApplicant ? null : first(parameters, "agentClientNumber", "applicantClientNumber"),
+        ownerApplicant
+            ? null
+            : first(
+                parameters,
+                "agentClientLocation",
+                "agentClientLocationCode",
+                "applicantClientLocationCode"),
         first(parameters, "ownerClientNumber"),
         first(parameters, "ownerClientLocation", "ownerClientLocationCode"),
         canonicalExemptionNumber(first(parameters, "exemptionNumber")),
         first(parameters, "exemptionReason", "exemptionType", "exemptionTypeCode"),
-        first(parameters, "ownerApplicantType", "applicantType"),
+        applicantTypeCode,
         parsePositiveLong(first(parameters, "region", "orgUnitNumber")),
         first(parameters, "productType", "productTypeCode"),
         first(parameters, "exportJurisdictionCode", "jurisdictionCode"),
         first(parameters, "ageClass", "growthTypeCode"),
-        first(parameters, "agentContactName"),
+        ownerApplicant ? null : first(parameters, "agentContactName"),
         first(parameters, "ownerContactName"),
         first(parameters, "oicIndicator"),
         first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
@@ -1700,6 +1722,22 @@ public class ApplicationDetailsRpcController {
     if (scopedClientNumber == null) {
       return request;
     }
+    String ownerClientLocationCode =
+        firstTrimmedNonBlank(request.ownerClientLocationCode(), "00");
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE, "Client location verification is unavailable.");
+    }
+    clientLookupService
+        .getClientDataRequired(scopedClientNumber, ownerClientLocationCode)
+        .filter(
+            client ->
+                scopedClientNumber.equals(normalizeClientNumber(client.clientNumber())))
+        .orElseThrow(
+            () ->
+                new AccessDeniedException(
+                    "The selected owner location is not valid for the authenticated client."));
 
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
         request.federalApplicationNumber(),
@@ -1713,7 +1751,7 @@ public class ApplicationDetailsRpcController {
         request.agentClientNumber(),
         request.agentClientLocationCode(),
         scopedClientNumber,
-        "00",
+        ownerClientLocationCode,
         request.exemptionNumber(),
         request.exemptionReasonCode(),
         request.applicationStatusCode(),

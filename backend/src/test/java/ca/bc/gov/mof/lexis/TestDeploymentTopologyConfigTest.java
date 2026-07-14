@@ -94,7 +94,7 @@ class TestDeploymentTopologyConfigTest {
     String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
     String backendJob = workflowJob(workflow, "backend", "frontend");
     String frontendJob = workflow.substring(workflow.indexOf("  frontend:"));
-    String backendJobEnv = between(backendJob, "    env:", "    steps:");
+    String backendJobHeader = backendJob.substring(0, backendJob.indexOf("    steps:"));
     String checkoutStep =
         between(
             backendJob,
@@ -113,10 +113,16 @@ class TestDeploymentTopologyConfigTest {
         frontendJob.substring(0, frontendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
     String frontendDeployStep =
         frontendJob.substring(frontendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
+    String logoutStep =
+        between(
+            frontendJob,
+            "      - name: Resolve frontend logout URL",
+            "      - uses: bcgov/action-deployer-openshift@");
 
-    assertThat(backendJobEnv)
-        .contains("KC_SA_CLIENT_ID: ${{ secrets.keycloak_sa_client_id }}")
+    assertThat(backendJobHeader)
         .doesNotContain(
+            "keycloak_sa_client_id",
+            "keycloak_sa_client_secret",
             "DATABASE_HOST",
             "DATABASE_SERVICE_NAME",
             "DATABASE_USER",
@@ -136,7 +142,11 @@ class TestDeploymentTopologyConfigTest {
             "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2")
         .doesNotContain("env:");
     assertThat(keycloakStep)
+        .contains("if: ${{ inputs.environment != 'dev' }}")
+        .doesNotContain("env.KC_SA_CLIENT_ID != ''")
+        .contains("KC_SA_CLIENT_ID: ${{ secrets.keycloak_sa_client_id }}")
         .contains("KC_SA_CLIENT_SECRET: ${{ secrets.keycloak_sa_client_secret }}")
+        .contains("NEXCOL_KEYCLOAK_CLIENT_ID: ${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}")
         .doesNotContain("DATABASE_PASSWORD", "KEYSTORE_SECRET", "LEXIS_MAIL_OVERRIDE_RECIPIENTS");
     assertThat(backendBeforeDeploy)
         .doesNotContain(
@@ -180,8 +190,18 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:"
                 + " ${{ secrets.LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS }}");
     assertThat(frontendBeforeDeploy).doesNotContain("LEXIS_PROD_RTM_ONLY");
+    assertThat(logoutStep)
+        .contains("CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}")
+        .contains("LEXIS_SLOT: ${{ inputs.slot || inputs.target }}")
+        .contains("^([0-9]|[1-4][0-9])$")
+        .contains(
+            "https%3A%2F%2F${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca%2F")
+        .contains("VITE_REDIRECT_SIGN_OUT is required outside DEV")
+        .contains("printf 'VITE_REDIRECT_SIGN_OUT=%s\\n'");
     assertThat(frontendDeployStep)
-        .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}");
+        .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}")
+        .contains("-p VITE_REDIRECT_SIGN_OUT=\"$VITE_REDIRECT_SIGN_OUT\"")
+        .doesNotContain("-p VITE_REDIRECT_SIGN_OUT=\"${{ vars.VITE_REDIRECT_SIGN_OUT }}\"");
   }
 
   @Test

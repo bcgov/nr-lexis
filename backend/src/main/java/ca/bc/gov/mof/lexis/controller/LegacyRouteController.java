@@ -400,6 +400,7 @@ public class LegacyRouteController {
       @RequestParam(name = "offerNumber", required = false) @Positive Long offerNumber,
       Authentication authentication) {
     if (isLegacyAddOrCreateAction(actionMapping)) {
+      ScopedClientRequestSupport.currentForestClientNumber(sessionService, authentication);
       return authorizeLegacyAction(authentication, LEGACY_ACTION_CREATE_OFFER);
     }
     if (offerNumber == null) {

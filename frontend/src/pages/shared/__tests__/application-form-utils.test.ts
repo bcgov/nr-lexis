@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  averageLogVolumeFieldError,
   codeOptionLabel,
   isAgentApplicant,
   isSelectableClientContact,
   isSelectableClientLocation,
   productTypeRequiresGrowthType,
+  productTypeRequiresLogDetails,
   resolveClientContactName,
   resolveClientLocationCode,
   toApplicationCodeOption,
@@ -44,7 +46,10 @@ describe('application-form-utils', () => {
   it('maps common application option state consistently', () => {
     expect(productTypeRequiresGrowthType('H')).toBe(true)
     expect(productTypeRequiresGrowthType('S')).toBe(true)
-    expect(productTypeRequiresGrowthType('L')).toBe(false)
+    expect(productTypeRequiresGrowthType('T')).toBe(false)
+    expect(productTypeRequiresLogDetails('H')).toBe(true)
+    expect(productTypeRequiresLogDetails('S')).toBe(false)
+    expect(productTypeRequiresLogDetails('T')).toBe(false)
     expect(isAgentApplicant('A')).toBe(true)
     expect(isAgentApplicant('O')).toBe(false)
 
@@ -58,5 +63,17 @@ describe('application-form-utils', () => {
       code: 'H',
       description: 'Harvested Timber',
     })
+  })
+
+  it.each([
+    ['', 'Average log volume is required.'],
+    ['0', undefined],
+    ['99.9', undefined],
+    ['-0.1', 'Average log volume must be greater than or equal to 0.'],
+    ['not-a-number', 'Average log volume must be numeric.'],
+    ['100', 'Average log volume must be 99.9 or less.'],
+    ['1.23', 'Average log volume must have no more than one decimal place.'],
+  ])('validates average log volume %j', (value, expectedError) => {
+    expect(averageLogVolumeFieldError(value)).toBe(expectedError)
   })
 })

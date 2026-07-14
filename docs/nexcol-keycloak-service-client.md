@@ -29,13 +29,23 @@ lexis:federal-submission:submit
 The gateway validates the token issuer, expiry, required scope, and audience when configured.
 LEXIS validates the forwarded token and applies the same scope-based authorization.
 
-CI idempotently creates/checks the client scope, confidential client, and default scope assignment
-when these GitHub environment values are configured:
+TEST and PROD deployments idempotently create or check the client scope, confidential client, and
+default scope assignment. Each GitHub environment requires:
+
+- secrets `KEYCLOAK_SA_CLIENT_ID` and `KEYCLOAK_SA_CLIENT_SECRET` for the least-privilege
+  provisioning service account;
+- variable `KEYCLOAK_ISSUER_URI` for the target realm; and
+- variable `NEXCOL_KEYCLOAK_CLIENT_ID` for the approved calling client.
+
+The expected calling-client values are:
 
 - TEST: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
 - PROD: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-prod`
 
-Runtime client-secret lifecycle is managed through the environment's operational process.
+The deployment fails when required configuration is absent, the existing scope/client shape is
+unexpected, or the submission scope is assigned as a realm default or to another client. It does
+not remove assignments from unrelated clients. Runtime client-secret lifecycle is managed through
+the environment's operational process.
 
 Obtain an access token with the standard client-credentials grant:
 
@@ -52,6 +62,9 @@ Tokens should contain the expected issuer, an unexpired access-token lifetime, a
 represented in `aud`.
 
 ## Endpoints
+
+Validation is deployable now. The submission route is present but returns `503` while federal
+CREATE remains disabled in application configuration.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|

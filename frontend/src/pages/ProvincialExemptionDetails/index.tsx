@@ -576,14 +576,14 @@ const ProvincialExemptionDetailsPage = () => {
     if (
       !Number.isFinite(approvedVolume) ||
       approvedVolume <= 0 ||
-      approvedVolume > 9_999_999.9 ||
-      !/^\d{1,7}(\.\d)?$/.test(editForm.approvedVolume.trim())
+      approvedVolume > 9_999_999.99 ||
+      !/^\d{1,7}(\.\d{1,2})?$/.test(editForm.approvedVolume.trim())
     ) {
-      return 'Approved volume must be greater than 0, at most 9,999,999.9, and have at most one decimal place.'
+      return 'Approved volume must be greater than 0, at most 9,999,999.99, and have at most two decimal places.'
     }
     if (!editForm.expiryDate.trim()) return 'Expiry date is required.'
-    if (editForm.approvalDate && editForm.expiryDate < editForm.approvalDate) {
-      return 'Approval date must be on or before the expiry date.'
+    if (editForm.approvalDate && editForm.expiryDate <= editForm.approvalDate) {
+      return 'Expiry date must be after the approval date.'
     }
     if (editForm.otherConditions.length > 250) {
       return 'Other conditions must contain at most 250 characters.'

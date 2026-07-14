@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 public class ApplicationEditPolicyService {
 
   private static final String ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
@@ -51,9 +52,10 @@ public class ApplicationEditPolicyService {
       Long applicationNumber) {
     List<String> parsedRoles = sessionService.parseRolesFromPrincipal(authentication);
     Set<String> roles = normalizeRoles(parsedRoles);
-    boolean industryUser = isIndustryUser(roles);
-    boolean readOnly = roles.contains(ROLE_READ_ONLY);
-    boolean exemptionApprover = roles.contains(ROLE_EXEMPTION_APPROVER);
+    boolean administrator = roles.contains(ROLE_ADMIN);
+    boolean industryUser = !administrator && isIndustryUser(roles);
+    boolean readOnly = !administrator && roles.contains(ROLE_READ_ONLY);
+    boolean exemptionApprover = !administrator && roles.contains(ROLE_EXEMPTION_APPROVER);
 
     ApplicationEditPolicy denied =
         ApplicationEditPolicy.denied(industryUser, readOnly, exemptionApprover);
@@ -79,7 +81,8 @@ public class ApplicationEditPolicyService {
       return denied;
     }
 
-    boolean applicationApprover = roles.contains(ROLE_APPLICATION_APPROVER);
+    boolean applicationApprover =
+        administrator || roles.contains(ROLE_APPLICATION_APPROVER);
     String status = normalizeCode(context.applicationStatusCode());
     LocalDate today = LocalDate.now(clock);
     LocalDate advertisingDate = context.advertisingDate();
@@ -107,8 +110,7 @@ public class ApplicationEditPolicyService {
     boolean canAddScales = false;
     boolean approved = LEGACY_APPROVED_STATUSES.contains(status);
 
-    // Manufacturing exemptions do not bypass role-based edit restrictions.
-    if (!readOnly) {
+    if (!readOnly && !exemptionApprover) {
       // The branch order is intentional: legacy treated a dual-role industry user as industry.
       if (industryUser) {
         if (!(context.hasCompletePermit() || (approved && context.hasScaleBeforeApproval()))) {
@@ -123,6 +125,15 @@ public class ApplicationEditPolicyService {
         canAddPackages = true;
         canAddScales = true;
       }
+    }
+
+    if (!readOnly
+        && !exemptionApprover
+        && (applicationApprover || industryUser)
+        && context.interiorMinisterialItemOverrideEligible()) {
+      canEditPackages = true;
+      canAddPackages = true;
+      canAddScales = true;
     }
 
     boolean canUpdatePackageNumber =
