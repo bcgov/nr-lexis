@@ -121,10 +121,10 @@ const RESULT_COLUMNS: {
   sortField?: ApplicationReviewSearchSortField
 }[] = [
   { id: 'applicationNumber', label: 'Application', sortField: 'applicationNumber' },
-  { id: 'volume', label: 'Volume (m³)' },
-  { id: 'speciesEndUse', label: 'Species / end use' },
-  { id: 'listingDate', label: 'Listing date', sortField: 'listingDate' },
   { id: 'status', label: 'Status' },
+  { id: 'volume', label: 'Application volume (m³)' },
+  { id: 'speciesEndUse', label: 'Species end use sort' },
+  { id: 'listingDate', label: 'Listing date', sortField: 'listingDate' },
   { id: 'region', label: 'Region', sortField: 'regionCode' },
 ]
 
@@ -1056,12 +1056,12 @@ const ProvincialReviewPage = () => {
                           row.applicationNumber
                         )}
                       </TableCell>
-                      <TableCell>{row.volume}</TableCell>
-                      <TableCell>{row.speciesEndUse}</TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
+                      <TableCell>{row.volume}</TableCell>
+                      <TableCell>{row.speciesEndUse}</TableCell>
+                      <TableCell>{row.listingDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
                       <TableCell>
                         <Button

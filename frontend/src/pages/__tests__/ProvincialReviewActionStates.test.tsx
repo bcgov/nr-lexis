@@ -235,8 +235,30 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
 
     expect(screen.queryByRole('button', { name: 'Status' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Volume (m³)' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Species / end use' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Application volume (m³)' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Species end use sort' })).not.toBeInTheDocument()
+  })
+
+  it('renders review data columns in legacy order', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    const headers = screen
+      .getAllByRole('columnheader')
+      .slice(1)
+      .map((header) => header.textContent?.replace(/\s+/g, ' ').trim())
+
+    expect(headers).toEqual([
+      'Application (DESC)',
+      'Status',
+      'Application volume (m³)',
+      'Species end use sort',
+      'Listing date',
+      'Region',
+      'Action',
+    ])
   })
 
   it.each([
