@@ -323,6 +323,8 @@ class PermitRpcRepositoryTest {
             invocation ->
                 switch ((String) invocation.getArgument(0)) {
                   case "EXEMPTION_NUMBER" -> "EX-700";
+                  case "REGION" -> "Cariboo Natural Resource Region";
+                  case "ORG_UNIT_NAME" -> throw new java.sql.SQLException("Column not projected");
                   case "OIC_INDICATOR" -> "Y";
                   default -> null;
                 });
@@ -331,11 +333,12 @@ class PermitRpcRepositoryTest {
 
     assertThat(repository.findApplicationInfoByNumber(1000999L))
         .get()
-        .extracting("applicationNumber", "exemptionNumber", "oicIndicator")
-        .containsExactly(1000999L, "EX-700", "Y");
+        .extracting("applicationNumber", "exemptionNumber", "regionName", "oicIndicator")
+        .containsExactly(1000999L, "EX-700", "Cariboo Natural Resource Region", "Y");
     verify(callableStatement).setString(1, "1000999");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
     verify(resultSet, never()).getString("END_USE_SORT");
+    verify(resultSet, never()).getString("ORG_UNIT_NAME");
   }
 
   @Test

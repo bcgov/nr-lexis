@@ -1101,7 +1101,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 getLong(rs, "APPLICATION_NUMBER"),
                 getString(rs, "EXEMPTION_NUMBER"),
                 getLong(rs, "ORG_UNIT_NO"),
-                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_NAME")),
+                getString(rs, "REGION"),
                 getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
                 getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
                 // FIND_APPLICATION_BY_NUMBER does not project END_USE_SORT. The service derives it

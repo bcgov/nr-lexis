@@ -108,8 +108,11 @@ describe('Provincial Permit Search Actions', () => {
       expect.objectContaining({
         filters: expect.objectContaining({
           invoiceNumber: '',
+          permitStatus: '',
           region: [],
         }),
+        sortField: 'permitNumber',
+        sortDirection: 'desc',
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
@@ -157,7 +160,7 @@ describe('Provincial Permit Search Actions', () => {
       )
       expect(currentParams.has('invoiceNumber')).toBe(false)
       expect(currentParams.get('sortField')).toBe('permitNumber')
-      expect(currentParams.get('sortDirection')).toBe('asc')
+      expect(currentParams.get('sortDirection')).toBe('desc')
       expect(currentParams.get('page')).toBe('1')
       expect(currentParams.get('pageSize')).toBe('10')
     })
@@ -331,12 +334,12 @@ describe('Provincial Permit Search Actions', () => {
       expect(searchButton).toBeEnabled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Permit (ASC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Permit (DESC)' }))
 
     await waitFor(() => {
       expect(
         mockedSearchProvincialPermits.mock.calls.some(
-          ([request]) => request.sortField === 'permitNumber' && request.sortDirection === 'desc',
+          ([request]) => request.sortField === 'permitNumber' && request.sortDirection === 'asc',
         ),
       ).toBe(true)
     })

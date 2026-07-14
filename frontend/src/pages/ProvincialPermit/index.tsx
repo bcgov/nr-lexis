@@ -100,7 +100,7 @@ const SORT_COLUMNS: {
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialPermitSearchSortField = 'permitNumber'
-const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialPermitSearchSortField[]
