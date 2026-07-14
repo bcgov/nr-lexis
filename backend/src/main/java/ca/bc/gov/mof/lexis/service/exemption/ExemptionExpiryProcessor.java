@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
@@ -45,6 +46,7 @@ public class ExemptionExpiryProcessor {
   private final ApplicationEditLockService editLockService;
   private final Clock clock;
 
+  @Autowired
   public ExemptionExpiryProcessor(
       ExemptionDetailsRpcRepository exemptionRepository,
       ApplicationDetailsRpcRepository applicationRepository,
