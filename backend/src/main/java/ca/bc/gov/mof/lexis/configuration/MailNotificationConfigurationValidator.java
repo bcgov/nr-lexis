@@ -19,7 +19,10 @@ public class MailNotificationConfigurationValidator {
       @Value("${lexis.mail.non-production:true}") boolean nonProduction,
       @Value("${lexis.mail.from:Provincial.Log.Export.Analyst@gov.bc.ca}") String fromAddress,
       @Value("${lexis.mail.override-recipients:}") String overrideRecipients,
-      @Value("${lexis.mail.permit-request-recipients:}") String permitRequestRecipients) {
+      @Value("${lexis.mail.permit-request-recipients:}") String permitRequestRecipients,
+      @Value("${lexis.mail.region-rco-recipients:}") String rcoRecipients,
+      @Value("${lexis.mail.region-rni-recipients:}") String rniRecipients,
+      @Value("${lexis.mail.region-rsi-recipients:}") String rsiRecipients) {
     if (!enabled) {
       return;
     }
@@ -30,9 +33,32 @@ public class MailNotificationConfigurationValidator {
           overrideRecipients,
           "Enabled non-production mail requires valid override recipients.");
     }
-    requireAddressList(
-        permitRequestRecipients,
-        "Enabled mail requires valid permit-review recipients.");
+    boolean hasFallback =
+        validateOptionalAddressList(
+            permitRequestRecipients,
+            "Enabled mail requires valid fallback permit-review recipients.");
+    boolean hasRco =
+        validateOptionalAddressList(
+            rcoRecipients, "Enabled mail requires valid RCO recipients.");
+    boolean hasRni =
+        validateOptionalAddressList(
+            rniRecipients, "Enabled mail requires valid RNI recipients.");
+    boolean hasRsi =
+        validateOptionalAddressList(
+            rsiRecipients, "Enabled mail requires valid RSI recipients.");
+
+    if (!hasFallback && !(hasRco && hasRni && hasRsi)) {
+      throw new IllegalStateException(
+          "Enabled mail requires all regional recipient lists or fallback permit-review recipients.");
+    }
+  }
+
+  private boolean validateOptionalAddressList(String csv, String failureMessage) {
+    if (trimToNull(csv) == null) {
+      return false;
+    }
+    requireAddressList(csv, failureMessage);
+    return true;
   }
 
   private void requireAddressList(String csv, String failureMessage) {

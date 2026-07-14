@@ -725,10 +725,13 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(reopenedConfirm)
 
     await waitFor(() => expect(vi.mocked(approveExemptions)).toHaveBeenCalledWith(['EX-205']))
-    expect(mockedSendExemptionApprovalEmails).toHaveBeenCalledWith([])
+    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Approve exemption' })).not.toBeInTheDocument(),
     )
+    expect(
+      screen.getByText('Exemption approved. No applicant notification recipient was returned.'),
+    ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Approve exemption' }))
     const postApprovalDialog = screen.getByRole('dialog', { name: 'Approve exemption' })
@@ -737,6 +740,81 @@ describe('Provincial exemption edit context', () => {
         name: 'I certify that this exemption has been approved.',
       }),
     ).not.toBeChecked()
+  })
+
+  it('sends an edited approval recipient without treating notification failure as approval failure', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
+        canPerform: vi.fn(
+          (action: string) => action === 'saveExemption' || action === 'approveExemption',
+        ),
+      }),
+    )
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...ministerialExemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903'],
+      locked: false,
+      lockMessage: '',
+    })
+    vi.mocked(approveExemptions).mockResolvedValue({
+      success: true,
+      valid: true,
+      errorMessage: '',
+      errors: [],
+      warnings: [],
+      sendGrid: [['EX-205', 'owner@example.test']],
+    })
+    mockedSendExemptionApprovalEmails.mockResolvedValue({
+      success: false,
+      message: 'The notification service is unavailable.',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve exemption' }))
+    const approvalDialog = screen.getByRole('dialog', { name: 'Approve exemption' })
+    await userEvent.click(
+      within(approvalDialog).getByRole('checkbox', {
+        name: 'I certify that this exemption has been approved.',
+      }),
+    )
+    await userEvent.click(within(approvalDialog).getByRole('button', { name: 'Approve exemption' }))
+
+    const notificationDialog = await screen.findByRole('dialog', {
+      name: 'Send approval notification',
+    })
+    const recipient = within(notificationDialog).getByLabelText('Recipient for exemption EX-205')
+    expect(recipient).toHaveValue('owner@example.test')
+    await userEvent.clear(recipient)
+    await userEvent.type(recipient, 'corrected@example.test')
+    await userEvent.click(within(notificationDialog).getByRole('button', { name: 'Send' }))
+
+    await waitFor(() =>
+      expect(mockedSendExemptionApprovalEmails).toHaveBeenCalledWith([
+        ['EX-205', 'corrected@example.test'],
+      ]),
+    )
+    expect(await screen.findByText('Action completed')).toBeInTheDocument()
+    expect(
+      screen.getByText('Exemption approved. The notification service is unavailable.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
   })
 
   it('keeps an expired exemption fully read-only', async () => {

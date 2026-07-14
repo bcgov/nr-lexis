@@ -26,6 +26,9 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import ExemptionApprovalEmailModal, {
+  type ExemptionApprovalRecipient,
+} from '@/components/ExemptionApprovalEmailModal'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import StatusTag from '@/components/StatusTag'
@@ -161,6 +164,10 @@ const ProvincialExemptionDetailsPage = () => {
   const [approvalConfirmationTarget, setApprovalConfirmationTarget] = useState<string | null>(null)
   const [approvalCertified, setApprovalCertified] = useState(false)
   const [approvalDate, setApprovalDate] = useState('')
+  const [approvalEmailRecipients, setApprovalEmailRecipients] = useState<
+    ExemptionApprovalRecipient[]
+  >([])
+  const [sendingApprovalEmail, setSendingApprovalEmail] = useState(false)
   const [permitCreationConfirmationOpen, setPermitCreationConfirmationOpen] = useState(false)
   const [creatingPermit, setCreatingPermit] = useState(false)
   const [permitCreationDestination, setPermitCreationDestination] = useState<string | null>(null)
@@ -216,6 +223,8 @@ const ProvincialExemptionDetailsPage = () => {
       setApprovalConfirmationTarget(null)
       setApprovalCertified(false)
       setApprovalDate('')
+      setApprovalEmailRecipients([])
+      setSendingApprovalEmail(false)
       setPermitCreationConfirmationOpen(false)
       setCreatingPermit(false)
       setPermitCreationDestination(null)
@@ -820,6 +829,36 @@ const ProvincialExemptionDetailsPage = () => {
     setApprovalDate('')
   }, [approving])
 
+  const closeApprovalEmail = useCallback(() => {
+    if (sendingApprovalEmail) return
+    setApprovalEmailRecipients([])
+    setActionInfoMessage('Exemption approved. Approval notification was skipped.')
+  }, [sendingApprovalEmail])
+
+  const onSendApprovalEmail = useCallback(
+    async (recipients: ExemptionApprovalRecipient[]) => {
+      if (sendingApprovalEmail) return
+      setSendingApprovalEmail(true)
+      try {
+        const email = await sendExemptionApprovalEmails(recipients)
+        setActionInfoMessage(
+          email.success
+            ? `Exemption approved. ${email.message || 'Approval notification queued.'}`
+            : `Exemption approved. ${
+                email.message || 'The approval notification could not be queued.'
+              }`,
+        )
+      } catch (error) {
+        console.error(error)
+        setActionInfoMessage('Exemption approved. The approval notification could not be queued.')
+      } finally {
+        setSendingApprovalEmail(false)
+        setApprovalEmailRecipients([])
+      }
+    },
+    [sendingApprovalEmail],
+  )
+
   const onApproveExemption = useCallback(async () => {
     if (!detail || approving || !approvalCertified) return
     setApproving(true)
@@ -835,13 +874,23 @@ const ProvincialExemptionDetailsPage = () => {
         )
         return
       }
-      const email = await sendExemptionApprovalEmails(approval.sendGrid)
-      await refreshEditableData()
-      setActionInfoMessage(
-        email.success
-          ? `Exemption approved. ${email.message || 'Approval email queued.'}`
-          : `Exemption approved, but ${email.message || 'the approval email could not be queued.'}`,
+
+      const recipients = approval.sendGrid.map(
+        ([number, email]): ExemptionApprovalRecipient => [number, email],
       )
+      setApprovalConfirmationOpen(false)
+      setApprovalEmailRecipients(recipients)
+      setActionInfoMessage(
+        recipients.length > 0
+          ? 'Exemption approved. Review the applicant recipient before sending the notification.'
+          : 'Exemption approved. No applicant notification recipient was returned.',
+      )
+      try {
+        await refreshEditableData(true)
+      } catch (refreshError) {
+        console.error(refreshError)
+        setActionInfoMessage((current) => `${current} Refresh the page to see the latest status.`)
+      }
     } catch (error) {
       console.error(error)
       setActionErrorMessage('Unable to approve the exemption.')
@@ -2002,6 +2051,15 @@ const ProvincialExemptionDetailsPage = () => {
           />
         </Modal>
       )}
+      {approvalEmailRecipients.length > 0 && (
+        <ExemptionApprovalEmailModal
+          recipients={approvalEmailRecipients}
+          sending={sendingApprovalEmail}
+          onRecipientsChange={setApprovalEmailRecipients}
+          onSend={(recipients) => void onSendApprovalEmail(recipients)}
+          onSkip={closeApprovalEmail}
+        />
+      )}
       {permitCreationConfirmationOpen && canCreateMinisterialPermit && detail && (
         <Modal
           open
@@ -2029,6 +2087,7 @@ const ProvincialExemptionDetailsPage = () => {
         isBusy={
           saving ||
           approving ||
+          sendingApprovalEmail ||
           creatingPermit ||
           applicationMutationNumber !== null ||
           isRemovingDocumentId !== null ||

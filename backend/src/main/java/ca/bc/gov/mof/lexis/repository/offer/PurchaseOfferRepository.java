@@ -244,7 +244,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 getString(rs, "OWNER_CLIENT_NUMBER"),
                 getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
                 getString(rs, "AGENT_CLIENT_NUMBER"),
-                getString(rs, "AGENT_CLIENT_LOCATION_CODE")));
+                getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
+                getLong(rs, "ORG_UNIT_NO")));
   }
 
   public Optional<Long> findPackageApplicationNumber(String packageNumber) {
@@ -394,7 +395,24 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       String ownerClientNumber,
       String ownerClientLocationCode,
       String agentClientNumber,
-      String agentClientLocationCode) {}
+      String agentClientLocationCode,
+      Long orgUnitNumber) {
+
+    public ApplicationRecipientRow(
+        String applicantTypeCode,
+        String ownerClientNumber,
+        String ownerClientLocationCode,
+        String agentClientNumber,
+        String agentClientLocationCode) {
+      this(
+          applicantTypeCode,
+          ownerClientNumber,
+          ownerClientLocationCode,
+          agentClientNumber,
+          agentClientLocationCode,
+          null);
+    }
+  }
 
   public record ApplicationReferenceRow(Long applicationNumber, String jurisdictionCode) {}
 

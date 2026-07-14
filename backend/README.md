@@ -62,7 +62,10 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_MAIL_NON_PRODUCTION` | Replaces original recipients with override recipients and marks the message as non-production | true outside PROD |
 | `LEXIS_MAIL_FROM` | Approved sender mailbox for LEXIS workflow messages | Provincial analyst mailbox |
 | `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Comma/semicolon-separated recipients receiving all DEV/TEST messages | Required when non-production mail is enabled |
-| `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Ministry inboxes receiving permit-review notifications | Required when mail is enabled |
+| `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | RCO distribution list recipient(s) | Required in PROD |
+| `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | RNI distribution list recipient(s) | Required in PROD |
+| `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | RSI distribution list recipient(s) | Required in PROD |
+| `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Migration fallback when a regional list cannot be resolved | Optional after all regional lists are configured |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
 | `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
 
@@ -88,6 +91,9 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_MAIL_NON_PRODUCTION` | Derived from the deployment environment |
 | `LEXIS_MAIL_FROM` | Variable `LEXIS_MAIL_FROM` |
 | `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Secret `LEXIS_MAIL_OVERRIDE_RECIPIENTS` |
+| `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RCO_RECIPIENTS` |
+| `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RNI_RECIPIENTS` |
+| `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RSI_RECIPIENTS` |
 | `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Secret `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` |
 
 ### Spring Profiles

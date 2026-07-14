@@ -12,6 +12,12 @@ Workflow services publish immutable email snapshots. A dedicated executor dispat
 
 Email responses mean **queued**, not delivered. Delivery is best effort; failures are logged and are not retried.
 
+## Recipient routing
+
+The backend resolves the RCO, RNI, or RSI distribution list from the record's persisted organization unit. Permit-review requests send to that list and purchase-offer notifications copy it. Applicant notifications use the validated recipient saved with the application, exemption, or permit workflow.
+
+`LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` remains available as a migration fallback when a regional list is not configured or the organization unit is not mapped. Configure all three regional lists before removing that fallback.
+
 ## Safe TEST/DEV delivery
 
 Non-production delivery fails closed unless override recipients are configured. When enabled, every original To/Cc address is replaced with the configured administrators. The subject receives a `[NON-PROD]` prefix and the original recipients are recorded in the message body.
@@ -23,8 +29,14 @@ Configure the GitHub Environment:
 | `LEXIS_MAIL_ENABLED` | Variable | `true` when the environment is ready to send mail |
 | `LEXIS_MAIL_FROM` | Variable | Approved sender mailbox; defaults to the provincial analyst address |
 | `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Secret | Comma/semicolon-separated approved DEV/TEST recipients |
-| `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Secret | Ministry inbox(es) receiving permit-ready-for-review notifications |
+| `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | Secret | Externally managed RCO distribution list recipient(s) |
+| `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | Secret | Externally managed RNI distribution list recipient(s) |
+| `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | Secret | Externally managed RSI distribution list recipient(s) |
+| `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Secret | Optional migration fallback recipient(s) |
 
 The deployment workflow sets `LEXIS_MAIL_NON_PRODUCTION=true` outside PROD. PROD preserves the actual workflow recipients.
 
-When mail is enabled, the backend validates this configuration during startup. It requires a valid sender, a complete valid permit-review recipient list, and at least one valid override recipient outside PROD. A missing, blank, or malformed entry prevents the pod from becoming ready instead of silently discarding workflow mail. Mail-disabled environments keep the permissive defaults above.
+- DEV/TEST: set `LEXIS_MAIL_OVERRIDE_RECIPIENTS` before enabling mail. Regional values can be exercised safely because delivery is globally redirected.
+- PROD: configure all three regional secrets and leave mail disabled until the lists are confirmed. The override is not used.
+
+When mail is enabled, the backend validates this configuration during startup. It requires a valid sender, valid regional or fallback recipients, and at least one valid override recipient outside PROD. A missing, blank, or malformed required entry prevents the pod from becoming ready instead of silently discarding workflow mail. Mail-disabled environments keep the permissive defaults above.

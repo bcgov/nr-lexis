@@ -179,14 +179,14 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(
             List.of(scale("101", "TM1", "HEM", "J", 7.6d, 11L, "7000123", "PKG-903")));
-    when(permitEmailService.sendRequest(7000123L, null)).thenReturn(true);
+    when(permitEmailService.sendRequest(7000123L, 1835L)).thenReturn(true);
 
     PermitDetailsRpcService.PermitEmailResult response =
         service.sendRequestPermitEmail(7000123L, null, "idir\\submitter");
 
     assertThat(response.success()).isTrue();
     assertThat(response.permitRequestDate()).isEqualTo("2026-03-15");
-    verify(permitEmailService).sendRequest(7000123L, null);
+    verify(permitEmailService).sendRequest(7000123L, 1835L);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -202,7 +202,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(
             List.of(scale("101", "TM1", "HEM", "J", 7.6d, 11L, "7000123", "BOIC-1")));
-    when(permitEmailService.sendRequest(7000123L, "copy@example.test")).thenReturn(true);
+    when(permitEmailService.sendRequest(7000123L, 1835L)).thenReturn(true);
     when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\submitter"), eq(null)))
         .thenReturn(true);
 
@@ -241,46 +241,80 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void approvalEmailShouldIgnoreRequestedRecipientAndUseTheRecordedAgent() {
+  void approvalEmailShouldHonorAValidRequestedRecipient() {
     PermitMutationRow permit = permitMutationRow("COM");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permit));
+    when(repository.findPackageNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of("PKG-903"));
+    when(permitEmailService.sendApproval(
+            7000123L, "COM", List.of("PKG-903"), "edited@example.test"))
+        .thenReturn(true);
+
+    PermitDetailsRpcService.PermitEmailResult response =
+        service.sendApprovalPermitEmail(
+            7000123L, " Applicant <edited@example.test> ");
+
+    assertThat(response.success()).isTrue();
+    verify(permitEmailService)
+        .sendApproval(7000123L, "COM", List.of("PKG-903"), "edited@example.test");
+    verifyNoInteractions(clientEmailResolver);
+  }
+
+  @Test
+  void approvalEmailShouldUseTheRecordedAgentWhenRequestedRecipientIsBlank() {
+    PermitMutationRow permit = permitMutationRow("PPD");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permit));
     when(clientEmailResolver.resolve("00077880", "01"))
         .thenReturn(Optional.of("agent@example.test"));
-    when(repository.findPackageNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of("PKG-903"));
-    when(permitEmailService.sendApproval(
-            7000123L, "COM", List.of("PKG-903"), "agent@example.test"))
+    when(repository.findPackageNumbersByPermitNumberRequired(7000123L)).thenReturn(List.of());
+    when(permitEmailService.sendApproval(7000123L, "PPD", List.of(), "agent@example.test"))
         .thenReturn(true);
 
     PermitDetailsRpcService.PermitEmailResult response =
-        service.sendApprovalPermitEmail(7000123L, "attacker@example.test");
+        service.sendApprovalPermitEmail(7000123L, " ");
 
     assertThat(response.success()).isTrue();
     verify(permitEmailService)
-        .sendApproval(7000123L, "COM", List.of("PKG-903"), "agent@example.test");
-    verify(permitEmailService, never())
-        .sendApproval(any(), any(), any(), eq("attacker@example.test"));
+        .sendApproval(7000123L, "PPD", List.of(), "agent@example.test");
+    verify(clientEmailResolver, never()).resolve("00077881", "01");
   }
 
   @Test
-  void approvalEmailShouldUseOwnerOnlyWhenNoAgentNumberIsRecorded() {
+  void approvalEmailShouldUseTheRecordedOwnerForBlanketOic() {
     PermitMutationRow permit =
-        permitMutationRowWithClients("00077881", "01", null, null, "PPD");
+        withAggregateRelationships(permitMutationRow("COM"), "EX-700", 111L);
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permit));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(clientEmailResolver.resolve("00077881", "01"))
         .thenReturn(Optional.of("owner@example.test"));
     when(repository.findPackageNumbersByPermitNumberRequired(7000123L)).thenReturn(List.of());
-    when(permitEmailService.sendApproval(7000123L, "PPD", List.of(), "owner@example.test"))
+    when(permitEmailService.sendApproval(7000123L, "COM", List.of(), "owner@example.test"))
         .thenReturn(true);
 
     PermitDetailsRpcService.PermitEmailResult response =
-        service.sendApprovalPermitEmail(7000123L, "attacker@example.test");
+        service.sendApprovalPermitEmail(7000123L, " ");
 
     assertThat(response.success()).isTrue();
     verify(permitEmailService)
-        .sendApproval(7000123L, "PPD", List.of(), "owner@example.test");
+        .sendApproval(7000123L, "COM", List.of(), "owner@example.test");
+    verify(clientEmailResolver, never()).resolve("00077880", "01");
+  }
+
+  @Test
+  void approvalEmailShouldRejectAMalformedRequestedRecipient() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+
+    PermitDetailsRpcService.PermitEmailResult response =
+        service.sendApprovalPermitEmail(7000123L, "not-an-email");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.message()).contains("one valid email address");
+    verifyNoInteractions(clientEmailResolver, permitEmailService);
+    verify(repository, never()).findPackageNumbersByPermitNumberRequired(anyLong());
   }
 
   @Test
@@ -298,19 +332,24 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void approvalEmailShouldFailClosedWhenAnAgentNumberHasNoLocation() {
+  void approvalEmailShouldNotPreferAnIncompleteAgentOverTheRecordedOwner() {
     PermitMutationRow permit =
         permitMutationRowWithClients("00077881", "01", "00077880", null, "COM");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permit));
+    when(clientEmailResolver.resolve("00077881", "01"))
+        .thenReturn(Optional.of("owner@example.test"));
+    when(repository.findPackageNumbersByPermitNumberRequired(7000123L)).thenReturn(List.of());
+    when(permitEmailService.sendApproval(7000123L, "COM", List.of(), "owner@example.test"))
+        .thenReturn(true);
 
     PermitDetailsRpcService.PermitEmailResult response =
-        service.sendApprovalPermitEmail(7000123L, "attacker@example.test");
+        service.sendApprovalPermitEmail(7000123L, " ");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.message()).contains("No valid email address");
-    verifyNoInteractions(clientEmailResolver);
-    verify(permitEmailService, never()).sendApproval(any(), any(), any(), any());
+    assertThat(response.success()).isTrue();
+    verify(permitEmailService)
+        .sendApproval(7000123L, "COM", List.of(), "owner@example.test");
+    verify(clientEmailResolver, never()).resolve("00077880", null);
   }
 
   @Test
@@ -320,7 +359,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(clientEmailResolver.resolve("00077880", "01")).thenReturn(Optional.empty());
 
     PermitDetailsRpcService.PermitEmailResult response =
-        service.sendApprovalPermitEmail(7000123L, "attacker@example.test");
+        service.sendApprovalPermitEmail(7000123L, " ");
 
     assertThat(response.success()).isFalse();
     verify(permitEmailService, never()).sendApproval(any(), any(), any(), any());
@@ -335,7 +374,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(clientEmailResolver.resolve("00077880", "01")).thenThrow(failure);
 
     assertThatThrownBy(
-            () -> service.sendApprovalPermitEmail(7000123L, "attacker@example.test"))
+            () -> service.sendApprovalPermitEmail(7000123L, " "))
         .isSameAs(failure);
     verify(permitEmailService, never()).sendApproval(any(), any(), any(), any());
   }
@@ -351,7 +390,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findPackageNumbersByPermitNumberRequired(7000123L)).thenThrow(failure);
 
     assertThatThrownBy(
-            () -> service.sendApprovalPermitEmail(7000123L, "attacker@example.test"))
+            () -> service.sendApprovalPermitEmail(7000123L, " "))
         .isSameAs(failure);
     verify(permitEmailService, never()).sendApproval(any(), any(), any(), any());
   }

@@ -311,7 +311,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(await screen.findByText('Approved 1 application(s).')).toBeInTheDocument()
   })
 
-  it('rejects a single NEW row with a read-only authoritative client email preview', async () => {
+  it('rejects a single NEW row with an editable client email recipient', async () => {
     renderPage()
     await screen.findByText('1000123')
 
@@ -326,18 +326,16 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Rejected')
     expect(screen.getByRole('checkbox', { name: 'Send status email' })).toBeChecked()
-    expect(screen.getByLabelText('Client email address')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Client email address')).not.toHaveAttribute('readonly')
     expect(
-      screen.getByText(
-        'This read-only preview is loaded from client data and revalidated from the authoritative client account at send time.',
-      ),
+      screen.getByText('Defaults from client data. Changes apply only to this notification.'),
     ).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Client email address'), {
-      target: { value: 'attacker@example.com' },
+      target: { value: 'edited.client@example.com' },
     })
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
-    expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
+    expect(screen.getByLabelText('Client email address')).toHaveValue('edited.client@example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
     await waitFor(() => {
@@ -346,7 +344,7 @@ describe('Provincial Review Action State Smoke', () => {
         expect.objectContaining({
           statusCode: 'REJ',
           remark: 'Rejected from review queue',
-          clientEmailAddress: 'client@example.com',
+          clientEmailAddress: 'edited.client@example.com',
         }),
       )
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
@@ -354,7 +352,7 @@ describe('Provincial Review Action State Smoke', () => {
         expect.objectContaining({
           statusCode: 'REJ',
           remark: 'Rejected from review queue',
-          clientEmailAddress: 'client@example.com',
+          clientEmailAddress: 'edited.client@example.com',
         }),
       )
     })
@@ -475,6 +473,48 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
+  it('does not substitute the owner email when an agent applicant has no email', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummary,
+      applicantTypeCode: 'A',
+      agentClientNumber: '00054321',
+      agentClientLocationCode: '02',
+    })
+    mockedFetchApplicationClientData
+      .mockResolvedValueOnce({
+        clientNumber: '00012345',
+        companyName: 'Owner Ltd.',
+        address: '',
+        city: '',
+        province: '',
+        postalCode: '',
+        country: '',
+        phone: '',
+        fax: '',
+        email: 'owner@example.com',
+        notfound: '',
+      })
+      .mockResolvedValueOnce({
+        clientNumber: '00054321',
+        companyName: 'Agent without email',
+        address: '',
+        city: '',
+        province: '',
+        postalCode: '',
+        country: '',
+        phone: '',
+        fax: '',
+        email: '',
+        notfound: '',
+      })
+
+    renderPage()
+    await screen.findByText('1000123')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+
+    await waitFor(() => expect(screen.getByLabelText('Client email address')).toHaveValue(''))
+  })
+
   it('validates single-row rejection before status update', async () => {
     renderPage()
     await screen.findByText('1000123')
@@ -512,19 +552,23 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
 
     expect(
-      await screen.findByText(
-        'No valid client email address is available. Update the authoritative client account or deselect Send status email.',
-      ),
-    ).toBeInTheDocument()
+      (
+        await screen.findAllByText(
+          'Enter one valid client email address or deselect Send status email.',
+        )
+      ).length,
+    ).toBeGreaterThan(0)
 
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
     expect(
-      await screen.findByText(
-        'No valid client email address is available. Update the authoritative client account or deselect Send status email.',
-      ),
-    ).toBeInTheDocument()
+      (
+        await screen.findAllByText(
+          'Enter one valid client email address or deselect Send status email.',
+        )
+      ).length,
+    ).toBeGreaterThan(0)
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
@@ -539,7 +583,7 @@ describe('Provincial Review Action State Smoke', () => {
     )
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
-    expect(screen.getByLabelText('Client email address')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Client email address')).not.toHaveAttribute('readonly')
 
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected without notification')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))

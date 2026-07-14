@@ -109,6 +109,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 const formatAmount = (value: number): string => {
   return value.toLocaleString(undefined, {
@@ -497,6 +498,8 @@ const ProvincialPermitDetailsPage = () => {
   const [isSavingFeeOverride, setIsSavingFeeOverride] = useState(false)
   const [isOpeningPermitReport, setIsOpeningPermitReport] = useState(false)
   const [isSendingPermitEmail, setIsSendingPermitEmail] = useState(false)
+  const [permitApprovalEmailOpen, setPermitApprovalEmailOpen] = useState(false)
+  const [permitApprovalEmailAddress, setPermitApprovalEmailAddress] = useState('')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [permitTablesErrorMessage, setPermitTablesErrorMessage] = useState('')
@@ -613,6 +616,8 @@ const ProvincialPermitDetailsPage = () => {
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setIsLoadingAvailableApplications(false)
+    setPermitApprovalEmailOpen(false)
+    setPermitApprovalEmailAddress('')
   }, [beginAvailablePermitApplicationsRequest, beginBoicPackageEditRequest])
 
   useEffect(() => {
@@ -2173,15 +2178,19 @@ const ProvincialPermitDetailsPage = () => {
   }, [canOpenPermitReport, detail?.permitNumber, permitNumber])
 
   const onSendPermitEmail = useCallback(
-    async (type: 'request' | 'approval') => {
+    async (type: 'request' | 'approval', approvalEmailAddress = ''): Promise<boolean> => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
       if (
         !resolvedPermitNumber ||
         (type === 'request' ? !permitReviewReady : !canSendPermitApproval)
       ) {
-        return
+        return false
       }
-      const clientEmail = agentClientData?.email || ownerClientData?.email || ''
+      const clientEmail = normalizeTrimmedText(approvalEmailAddress)
+      if (type === 'approval' && !isValidEmail(clientEmail)) {
+        setActionErrorMessage('Enter one valid applicant email address.')
+        return false
+      }
       setActionErrorMessage('')
       setActionInfoMessage('')
       setIsSendingPermitEmail(true)
@@ -2200,24 +2209,20 @@ const ProvincialPermitDetailsPage = () => {
               current ? { ...current, permitRequestDate: result.permitRequestDate } : current,
             )
           }
+          return true
         } else {
           setActionErrorMessage(result.message || 'Permit email could not be queued.')
+          return false
         }
       } catch (error) {
         console.error(error)
         setActionErrorMessage('Unable to queue permit email.')
+        return false
       } finally {
         setIsSendingPermitEmail(false)
       }
     },
-    [
-      agentClientData?.email,
-      canSendPermitApproval,
-      detail?.permitNumber,
-      ownerClientData?.email,
-      permitReviewReady,
-      permitNumber,
-    ],
+    [canSendPermitApproval, detail?.permitNumber, permitReviewReady, permitNumber],
   )
 
   const onRemoveDocument = useCallback(
@@ -2428,7 +2433,14 @@ const ProvincialPermitDetailsPage = () => {
                       kind="secondary"
                       size="sm"
                       disabled={isSendingPermitEmail}
-                      onClick={() => void onSendPermitEmail('approval')}
+                      onClick={() => {
+                        const applicantEmail = detail?.blanketOic
+                          ? ownerClientData?.email
+                          : agentClientData?.email || ownerClientData?.email
+                        setPermitApprovalEmailAddress(applicantEmail?.trim() ?? '')
+                        setActionErrorMessage('')
+                        setPermitApprovalEmailOpen(true)
+                      }}
                     >
                       Email approval
                     </Button>
@@ -4200,6 +4212,33 @@ const ProvincialPermitDetailsPage = () => {
             </Tabs>
           </Column>
         </>
+      )}
+      {permitApprovalEmailOpen && (
+        <ConfirmationModal
+          open
+          title={`Email permit ${detail?.permitNumber ?? permitNumber ?? ''} approval?`}
+          description="Confirm the applicant email address for this notification."
+          confirmLabel="Send approval"
+          pendingLabel="Sending…"
+          confirmDisabled={!isValidEmail(permitApprovalEmailAddress)}
+          onClose={() => setPermitApprovalEmailOpen(false)}
+          onConfirm={async () => {
+            const sent = await onSendPermitEmail('approval', permitApprovalEmailAddress)
+            if (!sent) {
+              throw new Error('Permit approval email was not queued.')
+            }
+          }}
+        >
+          <TextInput
+            id="permit-approval-email-address"
+            type="email"
+            labelText="Applicant email address"
+            value={permitApprovalEmailAddress}
+            invalid={!isValidEmail(permitApprovalEmailAddress)}
+            invalidText="Enter one valid email address."
+            onChange={(event) => setPermitApprovalEmailAddress(event.target.value)}
+          />
+        </ConfirmationModal>
       )}
       <ConfirmationModal
         open={boicPackageNumberPendingDeletion !== null}

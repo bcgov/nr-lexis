@@ -5,6 +5,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -17,9 +18,11 @@ class PermitNotificationEmailServiceTest {
         org.mockito.Mockito.mock(EmailNotificationService.class);
     PermitNotificationEmailService service =
         new PermitNotificationEmailService(
-            notificationService, "review.one@gov.bc.ca; review.two@gov.bc.ca");
+            notificationService,
+            new RegionalMailRecipientResolver(
+                "review.one@gov.bc.ca; review.two@gov.bc.ca", "", "", ""));
 
-    assertThat(service.sendRequest(123L, "applicant@example.com")).isTrue();
+    assertThat(service.sendRequest(123L, 1835L)).isTrue();
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.PermitReview(
@@ -33,7 +36,8 @@ class PermitNotificationEmailServiceTest {
     EmailNotificationService notificationService =
         org.mockito.Mockito.mock(EmailNotificationService.class);
     PermitNotificationEmailService service =
-        new PermitNotificationEmailService(notificationService, "");
+        new PermitNotificationEmailService(
+            notificationService, new RegionalMailRecipientResolver("", "", "", ""));
 
     assertThat(
             service.sendApproval(
@@ -53,9 +57,10 @@ class PermitNotificationEmailServiceTest {
     EmailNotificationService notificationService =
         org.mockito.Mockito.mock(EmailNotificationService.class);
     PermitNotificationEmailService service =
-        new PermitNotificationEmailService(notificationService, "");
+        new PermitNotificationEmailService(
+            notificationService, new RegionalMailRecipientResolver("", "", "", ""));
 
-    assertThat(service.sendRequest(123L, "applicant@example.com")).isFalse();
+    assertThat(service.sendRequest(123L, 1835L)).isFalse();
 
     verify(notificationService, never()).publish(org.mockito.ArgumentMatchers.any());
   }

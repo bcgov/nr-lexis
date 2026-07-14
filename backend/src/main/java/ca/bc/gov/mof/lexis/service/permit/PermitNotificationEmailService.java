@@ -3,30 +3,29 @@ package ca.bc.gov.mof.lexis.service.permit;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
-import java.util.Arrays;
 import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class PermitNotificationEmailService {
 
   private final EmailNotificationService notificationService;
-  private final List<String> requestRecipients;
+  private final RegionalMailRecipientResolver regionalRecipientResolver;
 
   public PermitNotificationEmailService(
       EmailNotificationService notificationService,
-      @Value("${lexis.mail.permit-request-recipients:}") String requestRecipients) {
+      RegionalMailRecipientResolver regionalRecipientResolver) {
     this.notificationService = notificationService;
-    this.requestRecipients = parseRecipients(requestRecipients);
+    this.regionalRecipientResolver = regionalRecipientResolver;
   }
 
-  public boolean sendRequest(Long permitNumber, String copyToAddress) {
+  public boolean sendRequest(Long permitNumber, Long orgUnitNumber) {
+    List<String> requestRecipients = regionalRecipientResolver.resolve(orgUnitNumber);
     if (permitNumber == null || permitNumber < 1 || requestRecipients.isEmpty()) {
       return false;
     }
-    // Ignore the caller-supplied address; review mail is sent only to configured recipients.
     notificationService.publish(
         new WorkflowEmailEvent.PermitReview(
             permitNumber,
@@ -49,16 +48,5 @@ public class PermitNotificationEmailService {
             packages,
             recipient.trim()));
     return true;
-  }
-
-  private List<String> parseRecipients(String value) {
-    if (trimToNull(value) == null) {
-      return List.of();
-    }
-    return Arrays.stream(value.split("[,;]"))
-        .map(String::trim)
-        .filter(item -> !item.isEmpty())
-        .distinct()
-        .toList();
   }
 }

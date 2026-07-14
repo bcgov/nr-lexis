@@ -103,6 +103,9 @@ lexis:
     non-production: ${LEXIS_MAIL_NON_PRODUCTION:true}
     from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
     override-recipients: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS:}
+    region-rco-recipients: ${LEXIS_MAIL_REGION_RCO_RECIPIENTS:}
+    region-rni-recipients: ${LEXIS_MAIL_REGION_RNI_RECIPIENTS:}
+    region-rsi-recipients: ${LEXIS_MAIL_REGION_RSI_RECIPIENTS:}
     permit-request-recipients: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:}
   auth:
     cognito:

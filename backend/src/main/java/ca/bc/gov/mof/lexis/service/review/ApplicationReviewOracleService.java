@@ -19,6 +19,7 @@ import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalStatusMutationRequest;
+import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -451,10 +452,21 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Application status no longer matches the requested email status.");
     }
 
-    String clientEmail =
-        clientEmailResolver
-            .resolve(context.clientNumber(), context.locationCode())
-            .orElse(null);
+    String requestedRecipient = request == null ? null : trimToNull(request.clientEmailAddress());
+    String clientEmail;
+    if (requestedRecipient == null) {
+      clientEmail =
+          clientEmailResolver
+              .resolve(context.clientNumber(), context.locationCode())
+              .orElse(null);
+    } else {
+      clientEmail = MailRecipientValidator.normalize(requestedRecipient).orElse(null);
+      if (clientEmail == null) {
+        return new ApplicationReviewStatusEmailResultDto(
+            false,
+            "Client email address must contain one valid email address.");
+      }
+    }
     if (clientEmail == null) {
       return new ApplicationReviewStatusEmailResultDto(
           false,

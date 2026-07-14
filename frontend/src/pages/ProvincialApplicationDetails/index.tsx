@@ -143,10 +143,9 @@ const APPLICATION_DETAIL_TAB_INDEX = {
 } as const
 const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
   'Status email is only supported for rejected or withdrawn applications.'
-const REVIEW_EMAIL_REQUIRED_MESSAGE =
-  'No valid client email address is available. Update the authoritative client account before sending status email.'
+const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
 const REVIEW_EMAIL_PREVIEW_HELPER =
-  'This read-only preview is loaded from client data and revalidated from the authoritative client account at send time.'
+  'Defaults from client data. Changes apply only to this notification.'
 const APPLICATION_STATUS_LABELS: Record<string, string> = {
   APP: 'Approved',
   EXP: 'Expired',
@@ -451,10 +450,10 @@ const reviewEmailCandidate = (
   const agentEmail = normalizeReviewEmail(agentClientData?.email ?? '')
 
   if (isAgentApplicant(applicantTypeCode)) {
-    return agentEmail || ownerEmail
+    return agentEmail
   }
 
-  return ownerEmail || agentEmail
+  return ownerEmail
 }
 
 const latestPersistedRemark = (
@@ -572,11 +571,19 @@ const ProvincialApplicationDetailsPage = () => {
   const [reviewStatusRemark, setReviewStatusRemark] = useState('')
   const [reviewStatusBaselineCode, setReviewStatusBaselineCode] = useState('')
   const [reviewStatusRemarkBaseline, setReviewStatusRemarkBaseline] = useState('')
-  const reviewStatusEmailAddress = useMemo(
+  const reviewStatusEmailCandidate = useMemo(
     () =>
       reviewEmailCandidate(summaryForm?.applicantTypeCode ?? '', ownerClientData, agentClientData),
     [agentClientData, ownerClientData, summaryForm?.applicantTypeCode],
   )
+  const [reviewStatusEmailOverride, setReviewStatusEmailOverride] = useState<{
+    applicationNumber: string
+    value: string
+  } | null>(null)
+  const reviewStatusEmailAddress =
+    reviewStatusEmailOverride?.applicationNumber === (applicationNumber ?? '')
+      ? reviewStatusEmailOverride.value
+      : reviewStatusEmailCandidate
   const seededReviewFieldsApplicationRef = useRef<string | null>(null)
   const [reviewValidationMessage, setReviewValidationMessage] = useState('')
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
@@ -2685,7 +2692,15 @@ const ProvincialApplicationDetailsPage = () => {
             labelText="Client email address"
             helperText={REVIEW_EMAIL_PREVIEW_HELPER}
             value={reviewStatusEmailAddress}
-            readOnly
+            invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
+            invalidText={reviewValidationMessage}
+            onChange={(event) => {
+              setReviewStatusEmailOverride({
+                applicationNumber: applicationNumber ?? '',
+                value: event.target.value,
+              })
+              setReviewValidationMessage('')
+            }}
           />
         </div>
         <div className="legacy-search-grid">

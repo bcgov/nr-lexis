@@ -7,6 +7,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
+import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
@@ -791,9 +792,11 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (!active) {
       return false;
     }
-    // Retain the legacy request parameter for wire compatibility, but never trust it as a recipient.
+    String requestedRecipient = trimToNull(toEmailAddress);
     String recipient =
-        normalizedNumber == null ? null : resolveClientEmail(normalizedNumber).orElse(null);
+        requestedRecipient == null
+            ? resolveClientEmail(normalizedNumber).orElse(null)
+            : MailRecipientValidator.normalize(requestedRecipient).orElse(null);
     if (!stageExemptionApprovalEmail(normalizedNumber, recipient)) {
       return false;
     }

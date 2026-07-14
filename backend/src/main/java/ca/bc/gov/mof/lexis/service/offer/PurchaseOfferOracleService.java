@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.service.offer;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
@@ -15,6 +17,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
@@ -26,6 +29,8 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +39,8 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Service
 @Profile("oracle")
 public class PurchaseOfferOracleService implements PurchaseOfferService {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(PurchaseOfferOracleService.class);
 
   private static final String JURISDICTION_PROVINCIAL = "P";
   private static final String FAIR_OFFER_DEFAULT = "N";
@@ -55,24 +62,33 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   private final PurchaseOfferRepository repository;
   private final AuthoritativeClientEmailResolver clientEmailResolver;
   private final EmailNotificationService notificationService;
+  private final RegionalMailRecipientResolver regionalRecipientResolver;
   private final Clock clock;
 
   @Autowired
   public PurchaseOfferOracleService(
       PurchaseOfferRepository repository,
       AuthoritativeClientEmailResolver clientEmailResolver,
-      EmailNotificationService notificationService) {
-    this(repository, clientEmailResolver, notificationService, LexisBusinessTime.systemClock());
+      EmailNotificationService notificationService,
+      RegionalMailRecipientResolver regionalRecipientResolver) {
+    this(
+        repository,
+        clientEmailResolver,
+        notificationService,
+        regionalRecipientResolver,
+        LexisBusinessTime.systemClock());
   }
 
   PurchaseOfferOracleService(
       PurchaseOfferRepository repository,
       AuthoritativeClientEmailResolver clientEmailResolver,
       EmailNotificationService notificationService,
+      RegionalMailRecipientResolver regionalRecipientResolver,
       Clock clock) {
     this.repository = repository;
     this.clientEmailResolver = clientEmailResolver;
     this.notificationService = notificationService;
+    this.regionalRecipientResolver = regionalRecipientResolver;
     this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
   }
 
@@ -297,38 +313,57 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
 
   private EmailResult sendOfferEmail(
       Long applicationNumber, Long offerNumber, OfferEmailType type) {
-    String recipient = resolveApplicationRecipient(applicationNumber).orElse(null);
-    if (recipient == null) {
-      return new EmailResult(true, false, null, "Offer saved, but no client email address was found.");
+    try {
+      PurchaseOfferRepository.ApplicationRecipientRow context =
+          repository.findApplicationRecipient(applicationNumber).orElse(null);
+      String recipient = resolveApplicationRecipient(context).orElse(null);
+      if (recipient == null) {
+        return new EmailResult(
+            true, false, null, "Offer saved, but no client email address was found.");
+      }
+      List<String> regionalRecipients =
+          safeList(regionalRecipientResolver.resolve(context.orgUnitNumber()));
+      notificationService.publish(
+          new WorkflowEmailEvent.PurchaseOffer(
+              applicationNumber,
+              offerNumber,
+              switch (type) {
+                case NEW -> WorkflowEmailEvent.OfferAction.NEW;
+                case UPDATED -> WorkflowEmailEvent.OfferAction.UPDATED;
+                case WITHDRAWN -> WorkflowEmailEvent.OfferAction.WITHDRAWN;
+              },
+              recipient,
+              regionalRecipients));
+      String warning =
+          regionalRecipients.isEmpty()
+              ? "Offer saved and applicant email queued, but no ministry regional recipient was configured."
+              : null;
+      return new EmailResult(true, true, recipient, warning);
+    } catch (RuntimeException ex) {
+      LOGGER.warn(
+          "event=lexis_offer_email operation=prepare outcome=not_queued offerRef={} failureType={}",
+          fingerprint(offerNumber == null ? null : offerNumber.toString()),
+          exceptionType(ex));
+      return new EmailResult(
+          true, false, null, "Offer saved, but notification recipients could not be resolved.");
     }
-    notificationService.publish(
-        new WorkflowEmailEvent.PurchaseOffer(
-            applicationNumber,
-            offerNumber,
-            switch (type) {
-              case NEW -> WorkflowEmailEvent.OfferAction.NEW;
-              case UPDATED -> WorkflowEmailEvent.OfferAction.UPDATED;
-              case WITHDRAWN -> WorkflowEmailEvent.OfferAction.WITHDRAWN;
-            },
-            recipient));
-    return new EmailResult(true, true, recipient, null);
   }
 
-  private Optional<String> resolveApplicationRecipient(Long applicationNumber) {
-    return repository.findApplicationRecipient(applicationNumber)
-        .flatMap(
-            row -> {
-              String applicantType = trimToNull(row.applicantTypeCode());
-              if ("A".equalsIgnoreCase(applicantType)) {
-                return clientEmailResolver.resolve(
-                    row.agentClientNumber(), row.agentClientLocationCode());
-              }
-              if ("O".equalsIgnoreCase(applicantType)) {
-                return clientEmailResolver.resolve(
-                    row.ownerClientNumber(), row.ownerClientLocationCode());
-              }
-              return Optional.empty();
-            });
+  private Optional<String> resolveApplicationRecipient(
+      PurchaseOfferRepository.ApplicationRecipientRow row) {
+    if (row == null) {
+      return Optional.empty();
+    }
+    String applicantType = trimToNull(row.applicantTypeCode());
+    if ("A".equalsIgnoreCase(applicantType)) {
+      return clientEmailResolver.resolve(
+          row.agentClientNumber(), row.agentClientLocationCode());
+    }
+    if ("O".equalsIgnoreCase(applicantType)) {
+      return clientEmailResolver.resolve(
+          row.ownerClientNumber(), row.ownerClientLocationCode());
+    }
+    return Optional.empty();
   }
 
   private enum OfferEmailType {

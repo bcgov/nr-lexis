@@ -20,6 +20,7 @@ import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.Clock;
@@ -50,6 +51,7 @@ class PurchaseOfferOracleServiceTest {
   @Mock private PurchaseOfferRepository repository;
   @Mock private AuthoritativeClientEmailResolver clientEmailResolver;
   @Mock private EmailNotificationService notificationService;
+  @Mock private RegionalMailRecipientResolver regionalRecipientResolver;
   private PurchaseOfferOracleService service;
 
   @BeforeEach
@@ -58,7 +60,11 @@ class PurchaseOfferOracleServiceTest {
         Clock.fixed(Instant.parse("2026-03-11T06:30:00Z"), LexisBusinessTime.ZONE);
     service =
         new PurchaseOfferOracleService(
-            repository, clientEmailResolver, notificationService, clock);
+            repository,
+            clientEmailResolver,
+            notificationService,
+            regionalRecipientResolver,
+            clock);
   }
 
   @Test
@@ -432,7 +438,9 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.success()).isTrue();
     assertThat(response.clientHasEmail()).isTrue();
     assertThat(response.toEmails()).isEqualTo("client@example.com");
-    assertThat(response.warnings()).isEmpty();
+    assertThat(response.warnings())
+        .containsExactly(
+            "Offer saved and applicant email queued, but no ministry regional recipient was configured.");
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.PurchaseOffer(
@@ -441,6 +449,36 @@ class PurchaseOfferOracleServiceTest {
                 WorkflowEmailEvent.OfferAction.NEW,
                 "client@example.com"));
     verify(clientEmailResolver).resolve("00077881", "00");
+  }
+
+  @Test
+  void addOfferShouldCopyThePersistedApplicationsRegionalMailbox() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null, 1835L)));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("client@example.com"));
+    when(regionalRecipientResolver.resolve(1835L))
+        .thenReturn(List.of("coast.review@gov.bc.ca"));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.warnings()).isEmpty();
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.NEW,
+                "client@example.com",
+                List.of("coast.review@gov.bc.ca")));
   }
 
   @Test
@@ -514,7 +552,7 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
-  void addOfferShouldPropagateAuthoritativeResolverOutage() {
+  void addOfferShouldCommitAndWarnWhenAuthoritativeResolverIsUnavailable() {
     stubProvincialApplication(1000456L);
     when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
         .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
@@ -526,16 +564,22 @@ class PurchaseOfferOracleServiceTest {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("client lookup unavailable");
     when(clientEmailResolver.resolve("00077881", "00")).thenThrow(failure);
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
-    assertThatThrownBy(
-            () -> service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith"))
-        .isSameAs(failure);
+    PurchaseOfferService.CreateOfferResult response =
+        transactionalService(transactionManager)
+            .addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
 
+    assertThat(response.success()).isTrue();
+    assertThat(response.warnings())
+        .containsExactly("Offer saved, but notification recipients could not be resolved.");
+    assertThat(transactionManager.commits).isEqualTo(1);
+    assertThat(transactionManager.rollbacks).isZero();
     verifyNoInteractions(notificationService);
   }
 
   @Test
-  void addOfferShouldPropagateApplicationRecipientCursorOutage() {
+  void addOfferShouldWarnWhenApplicationRecipientLookupIsUnavailable() {
     stubProvincialApplication(1000456L);
     when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
         .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
@@ -543,10 +587,12 @@ class PurchaseOfferOracleServiceTest {
         new DataAccessResourceFailureException("application recipient unavailable");
     when(repository.findApplicationRecipient(1000456L)).thenThrow(failure);
 
-    assertThatThrownBy(
-            () -> service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith"))
-        .isSameAs(failure);
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
 
+    assertThat(response.success()).isTrue();
+    assertThat(response.warnings())
+        .containsExactly("Offer saved, but notification recipients could not be resolved.");
     verifyNoInteractions(clientEmailResolver, notificationService);
   }
 

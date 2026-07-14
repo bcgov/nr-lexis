@@ -62,8 +62,20 @@ class TestDeploymentTopologyConfigTest {
         .contains(
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}")
         .contains(
+            "LEXIS_MAIL_REGION_RCO_RECIPIENTS:"
+                + " ${{ secrets.LEXIS_MAIL_REGION_RCO_RECIPIENTS }}")
+        .contains(
+            "LEXIS_MAIL_REGION_RNI_RECIPIENTS:"
+                + " ${{ secrets.LEXIS_MAIL_REGION_RNI_RECIPIENTS }}")
+        .contains(
+            "LEXIS_MAIL_REGION_RSI_RECIPIENTS:"
+                + " ${{ secrets.LEXIS_MAIL_REGION_RSI_RECIPIENTS }}")
+        .contains(
             "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:"
                 + " ${{ secrets.LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS }}")
+        .contains("-p LEXIS_MAIL_REGION_RCO_RECIPIENTS=\"$LEXIS_MAIL_REGION_RCO_RECIPIENTS\"")
+        .contains("-p LEXIS_MAIL_REGION_RNI_RECIPIENTS=\"$LEXIS_MAIL_REGION_RNI_RECIPIENTS\"")
+        .contains("-p LEXIS_MAIL_REGION_RSI_RECIPIENTS=\"$LEXIS_MAIL_REGION_RSI_RECIPIENTS\"")
         .contains("-p MIN_CPU=\"${{ inputs.backend_cpu_request }}\"")
         .contains("-p MAX_MEM=\"${{ inputs.backend_memory_limit }}\"")
         .contains("-p MIN_CPU=\"${{ inputs.frontend_cpu_request }}\"")
@@ -78,6 +90,18 @@ class TestDeploymentTopologyConfigTest {
         .contains("- name: LEXIS_PERMIT_INVOICE_MODE\n                  value: ${LEXIS_PERMIT_INVOICE_MODE}")
         .contains("- name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\n    description: Requested timeout for each isolated GBMS transaction\n    value: \"60\"")
         .contains("- name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\n                  value: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS}")
+        .contains(
+            "- name: LEXIS_MAIL_REGION_RCO_RECIPIENTS\n"
+                + "    description: Externally managed RCO distribution list recipients\n"
+                + "    value: \"\"")
+        .contains(
+            "- name: LEXIS_MAIL_REGION_RNI_RECIPIENTS\n"
+                + "    description: Externally managed RNI distribution list recipients\n"
+                + "    value: \"\"")
+        .contains(
+            "- name: LEXIS_MAIL_REGION_RSI_RECIPIENTS\n"
+                + "    description: Externally managed RSI distribution list recipients\n"
+                + "    value: \"\"")
         .contains("cpu: ${MIN_CPU}")
         .contains("memory: ${MIN_MEM}")
         .contains("cpu: ${MAX_CPU}")
@@ -136,6 +160,9 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_NON_PRODUCTION",
             "LEXIS_MAIL_FROM",
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RCO_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RNI_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RSI_RECIPIENTS",
             "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS");
     assertThat(checkoutStep)
         .contains(
@@ -147,7 +174,14 @@ class TestDeploymentTopologyConfigTest {
         .contains("KC_SA_CLIENT_ID: ${{ secrets.keycloak_sa_client_id }}")
         .contains("KC_SA_CLIENT_SECRET: ${{ secrets.keycloak_sa_client_secret }}")
         .contains("NEXCOL_KEYCLOAK_CLIENT_ID: ${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}")
-        .doesNotContain("DATABASE_PASSWORD", "KEYSTORE_SECRET", "LEXIS_MAIL_OVERRIDE_RECIPIENTS");
+        .doesNotContain(
+            "DATABASE_PASSWORD",
+            "KEYSTORE_SECRET",
+            "LEXIS_MAIL_OVERRIDE_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RCO_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RNI_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RSI_RECIPIENTS",
+            "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS");
     assertThat(backendBeforeDeploy)
         .doesNotContain(
             "DATABASE_HOST",
@@ -163,6 +197,9 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_NON_PRODUCTION",
             "LEXIS_MAIL_FROM",
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RCO_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RNI_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RSI_RECIPIENTS",
             "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS");
     assertThat(backendDeployStep)
         .contains("DATABASE_HOST: ${{ secrets.database_host }}")
@@ -187,9 +224,25 @@ class TestDeploymentTopologyConfigTest {
                 + " ${{ vars.LEXIS_MAIL_FROM || 'Provincial.Log.Export.Analyst@gov.bc.ca' }}")
         .contains("LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}")
         .contains(
+            "LEXIS_MAIL_REGION_RCO_RECIPIENTS:"
+                + " ${{ secrets.LEXIS_MAIL_REGION_RCO_RECIPIENTS }}")
+        .contains(
+            "LEXIS_MAIL_REGION_RNI_RECIPIENTS:"
+                + " ${{ secrets.LEXIS_MAIL_REGION_RNI_RECIPIENTS }}")
+        .contains(
+            "LEXIS_MAIL_REGION_RSI_RECIPIENTS:"
+                + " ${{ secrets.LEXIS_MAIL_REGION_RSI_RECIPIENTS }}")
+        .contains(
             "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:"
                 + " ${{ secrets.LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS }}");
     assertThat(frontendBeforeDeploy).doesNotContain("LEXIS_PROD_RTM_ONLY");
+    assertThat(frontendJob)
+        .doesNotContain(
+            "LEXIS_MAIL_OVERRIDE_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RCO_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RNI_RECIPIENTS",
+            "LEXIS_MAIL_REGION_RSI_RECIPIENTS",
+            "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS");
     assertThat(logoutStep)
         .contains("CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}")
         .contains("LEXIS_SLOT: ${{ inputs.slot || inputs.target }}")
@@ -243,6 +296,24 @@ class TestDeploymentTopologyConfigTest {
                 + "                      name: ${NAME}-backend-secret-${ZONE}\n"
                 + "                      key: LEXIS_MAIL_OVERRIDE_RECIPIENTS")
         .contains(
+            "- name: LEXIS_MAIL_REGION_RCO_RECIPIENTS\n"
+                + "                  valueFrom:\n"
+                + "                    secretKeyRef:\n"
+                + "                      name: ${NAME}-backend-secret-${ZONE}\n"
+                + "                      key: LEXIS_MAIL_REGION_RCO_RECIPIENTS")
+        .contains(
+            "- name: LEXIS_MAIL_REGION_RNI_RECIPIENTS\n"
+                + "                  valueFrom:\n"
+                + "                    secretKeyRef:\n"
+                + "                      name: ${NAME}-backend-secret-${ZONE}\n"
+                + "                      key: LEXIS_MAIL_REGION_RNI_RECIPIENTS")
+        .contains(
+            "- name: LEXIS_MAIL_REGION_RSI_RECIPIENTS\n"
+                + "                  valueFrom:\n"
+                + "                    secretKeyRef:\n"
+                + "                      name: ${NAME}-backend-secret-${ZONE}\n"
+                + "                      key: LEXIS_MAIL_REGION_RSI_RECIPIENTS")
+        .contains(
             "- name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS\n"
                 + "                  valueFrom:\n"
                 + "                    secretKeyRef:\n"
@@ -254,11 +325,23 @@ class TestDeploymentTopologyConfigTest {
                 + "      DATABASE_PASSWORD: ${DATABASE_PASSWORD}\n"
                 + "      KEYSTORE_SECRET: ${KEYSTORE_SECRET}\n"
                 + "      LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS}\n"
+                + "      LEXIS_MAIL_REGION_RCO_RECIPIENTS:"
+                + " ${LEXIS_MAIL_REGION_RCO_RECIPIENTS}\n"
+                + "      LEXIS_MAIL_REGION_RNI_RECIPIENTS:"
+                + " ${LEXIS_MAIL_REGION_RNI_RECIPIENTS}\n"
+                + "      LEXIS_MAIL_REGION_RSI_RECIPIENTS:"
+                + " ${LEXIS_MAIL_REGION_RSI_RECIPIENTS}\n"
                 + "      LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:"
                 + " ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS}")
         .doesNotContain(
             "- name: LEXIS_MAIL_OVERRIDE_RECIPIENTS\n"
                 + "                  value: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS}",
+            "- name: LEXIS_MAIL_REGION_RCO_RECIPIENTS\n"
+                + "                  value: ${LEXIS_MAIL_REGION_RCO_RECIPIENTS}",
+            "- name: LEXIS_MAIL_REGION_RNI_RECIPIENTS\n"
+                + "                  value: ${LEXIS_MAIL_REGION_RNI_RECIPIENTS}",
+            "- name: LEXIS_MAIL_REGION_RSI_RECIPIENTS\n"
+                + "                  value: ${LEXIS_MAIL_REGION_RSI_RECIPIENTS}",
             "- name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS\n"
                 + "                  value: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS}");
   }

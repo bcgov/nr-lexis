@@ -2573,21 +2573,17 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void sendExemptionApprovalEmailShouldDeliverLegacyEquivalentMessage() {
+  void sendExemptionApprovalEmailShouldHonorAValidRequestedRecipient() {
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
-    ExemptionDetailsRpcRepository.ApplicationLinkRecord application =
-        application("EXE", "EX-205", "P");
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
         .thenReturn(
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
-    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
-    when(clientEmailResolver.resolve("00077881", "00"))
-        .thenReturn(Optional.of("owner@example.com"));
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
-        service.sendExemptionApprovalEmail("EX-205", "attacker@example.com");
+        service.sendExemptionApprovalEmail(
+            "EX-205", " Applicant <edited@example.com> ");
 
     assertThat(response.success()).isTrue();
     assertThat(response.message()).isEqualTo("Email queued successfully.");
@@ -2596,7 +2592,8 @@ class OracleExemptionDetailsRpcServiceTest {
             new WorkflowEmailEvent.ExemptionApproval(
                 "EX-205",
                 "1000456",
-                "owner@example.com"));
+                "edited@example.com"));
+    verifyNoInteractions(clientEmailResolver);
   }
 
   @Test
@@ -2604,16 +2601,11 @@ class OracleExemptionDetailsRpcServiceTest {
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
     when(repository.findExemptionRecord("EX-404")).thenReturn(Optional.empty());
-    ExemptionDetailsRpcRepository.ApplicationLinkRecord application =
-        application("EXE", "EX-205", "P");
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
         .thenReturn(
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
-    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
-    when(clientEmailResolver.resolve("00077881", "00"))
-        .thenReturn(Optional.of("owner@example.com"));
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmails("EX-205:attacker@example.com,EX-404:missing@example.com");
 
@@ -2623,11 +2615,8 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.ExemptionApproval(
-                "EX-205", "1000456", "owner@example.com"));
-    verify(notificationService, never())
-        .publish(
-            new WorkflowEmailEvent.ExemptionApproval(
                 "EX-205", "1000456", "attacker@example.com"));
+    verifyNoInteractions(clientEmailResolver);
   }
 
   @Test
@@ -2646,7 +2635,7 @@ class OracleExemptionDetailsRpcServiceTest {
         .thenReturn(Optional.of("agent@example.com"));
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
-        service.sendExemptionApprovalEmail("EX-205", "attacker@example.com");
+        service.sendExemptionApprovalEmail("EX-205", " ");
 
     assertThat(response.success()).isTrue();
     verify(notificationService)
@@ -2670,7 +2659,7 @@ class OracleExemptionDetailsRpcServiceTest {
     when(clientEmailResolver.resolve("00077881", "00")).thenReturn(Optional.empty());
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
-        service.sendExemptionApprovalEmail("EX-205", "attacker@example.com");
+        service.sendExemptionApprovalEmail("EX-205", " ");
 
     assertThat(response.success()).isFalse();
     verifyNoInteractions(notificationService);
@@ -2688,7 +2677,7 @@ class OracleExemptionDetailsRpcServiceTest {
     when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.empty());
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
-        service.sendExemptionApprovalEmail("EX-205", "attacker@example.com");
+        service.sendExemptionApprovalEmail("EX-205", " ");
 
     assertThat(response.success()).isFalse();
     verifyNoInteractions(clientEmailResolver);
@@ -2712,7 +2701,7 @@ class OracleExemptionDetailsRpcServiceTest {
     when(clientEmailResolver.resolve("00077881", "00")).thenThrow(failure);
 
     assertThatThrownBy(
-            () -> service.sendExemptionApprovalEmail("EX-205", "attacker@example.com"))
+            () -> service.sendExemptionApprovalEmail("EX-205", " "))
         .isSameAs(failure);
     verifyNoInteractions(notificationService);
   }
@@ -2724,6 +2713,19 @@ class OracleExemptionDetailsRpcServiceTest {
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmail("EX-205", "attacker@example.com");
+
+    assertThat(response.success()).isFalse();
+    verify(repository, never()).findApplicationSummariesByExemptionNumber(any());
+    verifyNoInteractions(clientEmailResolver, notificationService);
+  }
+
+  @Test
+  void sendExemptionApprovalEmailShouldRejectAMalformedRequestedRecipient() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+
+    ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
+        service.sendExemptionApprovalEmail("EX-205", "not-an-email");
 
     assertThat(response.success()).isFalse();
     verify(repository, never()).findApplicationSummariesByExemptionNumber(any());

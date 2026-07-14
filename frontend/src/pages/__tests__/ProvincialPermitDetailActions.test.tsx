@@ -2413,6 +2413,92 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
+  it('defaults approval mail to the represented applicant and sends an edited address', async () => {
+    renderPermitDetails()
+
+    const approvalButton = await screen.findByRole('button', { name: 'Email approval' })
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03')
+    })
+    await userEvent.click(approvalButton)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })
+    const recipient = within(dialog).getByLabelText('Applicant email address')
+    expect(recipient).toHaveValue('agent@example.test')
+
+    await userEvent.clear(recipient)
+    await userEvent.type(recipient, 'updated.applicant@example.ca')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send approval' }))
+
+    await waitFor(() => {
+      expect(mockedSendPermitApprovalEmail).toHaveBeenCalledWith(
+        '777',
+        'updated.applicant@example.ca',
+      )
+      expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull()
+    })
+    expect(screen.getByText('Permit approval email queued successfully.')).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('defaults Blanket OIC approval mail to the owner', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValueOnce({
+      ...permitDetail,
+      blanketOic: true,
+      oicApplicationNumber: 111,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Email approval' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })
+    expect(within(dialog).getByLabelText('Applicant email address')).toHaveValue(
+      'owner@example.test',
+    )
+  })
+
+  it('blocks an invalid approval recipient and cancels without changing the permit', async () => {
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Email approval' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })
+    const recipient = within(dialog).getByLabelText('Applicant email address')
+    await userEvent.clear(recipient)
+    await userEvent.type(recipient, 'not-an-email')
+
+    expect(within(dialog).getByText('Enter one valid email address.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Send approval' })).toBeDisabled()
+    expect(mockedSendPermitApprovalEmail).not.toHaveBeenCalled()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull()
+    })
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+  })
+
+  it('keeps the approval dialog open when notification delivery cannot be queued', async () => {
+    mockedSendPermitApprovalEmail.mockResolvedValueOnce({
+      success: false,
+      message: 'Permit approval notification is unavailable.',
+      permitRequestDate: '',
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Email approval' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send approval' }))
+
+    expect(
+      await screen.findByText('Permit approval notification is unavailable.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Email permit 777 approval?' })).toBeInTheDocument()
+    expect(mockedSendPermitApprovalEmail).toHaveBeenCalledWith('777', 'agent@example.test')
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+  })
+
   it('lets an eligible provincial submitter request permit review and records the first BOIC request date', async () => {
     const submitterAuth = createTestAuthContext()
     mockedUseAuth.mockReturnValue({
@@ -2487,6 +2573,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => {
       expect(mockedSendPermitReviewRequestEmail).toHaveBeenCalledWith('777')
+      expect(mockedSendPermitApprovalEmail).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog', { name: /Email permit .* approval/ })).toBeNull()
       expect(
         screen.getByText('Permit review request email queued successfully.'),
       ).toBeInTheDocument()

@@ -174,16 +174,24 @@ describe('Provincial Exemption Search Actions', () => {
     await userEvent.click(reopenedCertification)
     await userEvent.click(reopenedConfirm)
 
-    await waitFor(() => {
-      expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001'])
-      expect(mockedSendExemptionApprovalEmails).toHaveBeenCalledWith([
-        ['EX-1001', 'client@example.test'],
-      ])
-    })
+    await waitFor(() => expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001']))
     await waitFor(() =>
       expect(
         screen.queryByRole('dialog', { name: 'Approve selected exemptions' }),
       ).not.toBeInTheDocument(),
+    )
+    const notificationDialog = await screen.findByRole('dialog', {
+      name: 'Send approval notification',
+    })
+    const recipient = within(notificationDialog).getByLabelText('Recipient for exemption EX-1001')
+    expect(recipient).toHaveValue('client@example.test')
+    await userEvent.clear(recipient)
+    await userEvent.type(recipient, 'updated@example.test')
+    await userEvent.click(within(notificationDialog).getByRole('button', { name: 'Send' }))
+    await waitFor(() =>
+      expect(mockedSendExemptionApprovalEmails).toHaveBeenCalledWith([
+        ['EX-1001', 'updated@example.test'],
+      ]),
     )
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
@@ -200,6 +208,53 @@ describe('Provincial Exemption Search Actions', () => {
       'href',
       '/provincial/exemption/create',
     )
+  })
+
+  it('blocks invalid approval recipients and keeps a skipped notification separate from approval', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+
+    renderPage()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+
+    const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    await userEvent.click(
+      within(approvalDialog).getByRole('checkbox', {
+        name: 'I certify that this exemption has been approved.',
+      }),
+    )
+    await userEvent.click(
+      within(approvalDialog).getByRole('button', { name: 'Approve exemptions' }),
+    )
+
+    const notificationDialog = await screen.findByRole('dialog', {
+      name: 'Send approval notification',
+    })
+    const recipient = within(notificationDialog).getByLabelText('Recipient for exemption EX-1001')
+    await userEvent.clear(recipient)
+    await userEvent.type(recipient, 'not-an-email')
+    expect(within(notificationDialog).getByRole('button', { name: 'Send' })).toBeDisabled()
+    expect(within(notificationDialog).getByText('Enter one valid email address.')).toBeVisible()
+    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
+
+    await userEvent.click(
+      within(notificationDialog).getByRole('button', { name: 'Skip notification' }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Send approval notification' }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001'])
+    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
+    expect(screen.getByText('Approval completed with warnings')).toBeInTheDocument()
+    expect(
+      screen.getByText('Approved 1 exemption. Approval notification was skipped.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Approval failed')).not.toBeInTheDocument()
   })
 
   it('displays and prevents selection of an actively locked new exemption', async () => {

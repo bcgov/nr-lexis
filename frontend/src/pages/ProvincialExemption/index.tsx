@@ -21,6 +21,9 @@ import {
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
+import ExemptionApprovalEmailModal, {
+  type ExemptionApprovalRecipient,
+} from '@/components/ExemptionApprovalEmailModal'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -90,11 +93,19 @@ type ApprovalStatus = {
   message: string
 }
 
+type ApprovalEmailContext = {
+  approvedCount: number
+  partialFailure: string
+}
+
 const normalizeApprovalMessage = (message: string): string =>
   message
     .replace(/<\/?br\s*\/?\s*>/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+const approvedExemptionMessage = (count: number): string =>
+  `Approved ${count} ${count === 1 ? 'exemption' : 'exemptions'}.`
 
 const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
   applicationNumber: '',
@@ -180,6 +191,13 @@ const ProvincialExemptionPage = () => {
   const [approvalCertified, setApprovalCertified] = useState(false)
   const [approvalDate, setApprovalDate] = useState('')
   const [approving, setApproving] = useState(false)
+  const [approvalEmailRecipients, setApprovalEmailRecipients] = useState<
+    ExemptionApprovalRecipient[]
+  >([])
+  const [approvalEmailContext, setApprovalEmailContext] = useState<ApprovalEmailContext | null>(
+    null,
+  )
+  const [sendingApprovalEmail, setSendingApprovalEmail] = useState(false)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canApproveExemption = canPerform('approveExemption')
@@ -538,6 +556,60 @@ const ProvincialExemptionPage = () => {
     setApprovalDate('')
   }
 
+  const closeApprovalEmail = () => {
+    if (sendingApprovalEmail) return
+    const approvedCount = approvalEmailContext?.approvedCount ?? approvalEmailRecipients.length
+    const messages = [
+      approvedExemptionMessage(approvedCount),
+      approvedCount === 1
+        ? 'Approval notification was skipped.'
+        : 'Approval notifications were skipped.',
+    ]
+    if (approvalEmailContext?.partialFailure) {
+      messages.push(approvalEmailContext.partialFailure)
+    }
+    setApprovalStatus({ kind: 'warning', message: messages.join(' ') })
+    setApprovalEmailRecipients([])
+    setApprovalEmailContext(null)
+  }
+
+  const onSendApprovalEmails = async (recipients: ExemptionApprovalRecipient[]) => {
+    if (sendingApprovalEmail) return
+    const approvedCount = approvalEmailContext?.approvedCount ?? recipients.length
+    const partialFailure = approvalEmailContext?.partialFailure ?? ''
+    setSendingApprovalEmail(true)
+    try {
+      const email = await sendExemptionApprovalEmails(recipients)
+      const messages = [approvedExemptionMessage(approvedCount)]
+      messages.push(
+        email.success
+          ? email.message || 'Approval notifications queued.'
+          : email.message || 'Approval notifications could not be queued.',
+      )
+      if (partialFailure) {
+        messages.push(partialFailure)
+      }
+      setApprovalStatus({
+        kind: email.success && !partialFailure ? 'success' : 'warning',
+        message: messages.join(' '),
+      })
+    } catch (error) {
+      console.error(error)
+      const messages = [
+        approvedExemptionMessage(approvedCount),
+        'Approval notifications could not be queued.',
+      ]
+      if (partialFailure) {
+        messages.push(partialFailure)
+      }
+      setApprovalStatus({ kind: 'warning', message: messages.join(' ') })
+    } finally {
+      setSendingApprovalEmail(false)
+      setApprovalEmailRecipients([])
+      setApprovalEmailContext(null)
+    }
+  }
+
   const onConfirmApproval = async () => {
     const selectedNumbers = Object.keys(selectedRowsById)
     if (approving || !approvalCertified) {
@@ -563,40 +635,47 @@ const ProvincialExemptionPage = () => {
         return
       }
 
-      const missingRecipientCount = approval.sendGrid.filter(([, email]) => !email.trim()).length
-      const email = await sendExemptionApprovalEmails(approval.sendGrid)
       const partialFailure = normalizeApprovalMessage(approval.errorMessage)
-      const messages = [`Approved ${approval.sendGrid.length} exemption(s).`]
-      if (email.success) {
-        messages.push(email.message || 'Approval email(s) queued.')
-      } else {
-        messages.push(email.message || 'Approval email(s) could not be queued.')
-      }
-      if (missingRecipientCount > 0) {
-        messages.push(
-          `${missingRecipientCount} approved exemption(s) had no client email address and were not emailed.`,
-        )
-      }
+      const recipients = approval.sendGrid.map(
+        ([number, email]): ExemptionApprovalRecipient => [number, email],
+      )
+      const approvedCount = recipients.length || selectedNumbers.length
+      const messages = [approvedExemptionMessage(approvedCount)]
+      messages.push(
+        recipients.length > 0
+          ? 'Review the applicant recipients before sending notifications.'
+          : 'No applicant notification recipients were returned.',
+      )
       if (partialFailure) {
         messages.push(partialFailure)
       }
 
       setApprovalStatus({
-        kind:
-          email.success && missingRecipientCount === 0 && !partialFailure ? 'success' : 'warning',
+        kind: recipients.length > 0 && !partialFailure ? 'success' : 'warning',
         message: messages.join(' '),
       })
+      setApprovalConfirmationOpen(false)
+      setApprovalEmailContext(recipients.length > 0 ? { approvedCount, partialFailure } : null)
+      setApprovalEmailRecipients(recipients)
       setSelectedRowsById({})
-      await runSearch(
-        {
-          filters: urlState.filters,
-          page: urlState.page - 1,
-          pageSize: urlState.pageSize,
-          sortField: urlState.sortField,
-          sortDirection: urlState.sortDirection,
-        },
-        { force: true },
-      )
+      try {
+        await runSearch(
+          {
+            filters: urlState.filters,
+            page: urlState.page - 1,
+            pageSize: urlState.pageSize,
+            sortField: urlState.sortField,
+            sortDirection: urlState.sortDirection,
+          },
+          { force: true },
+        )
+      } catch (refreshError) {
+        console.error(refreshError)
+        setApprovalStatus((current) => ({
+          kind: 'warning',
+          message: `${current?.message || approvedExemptionMessage(approvedCount)} Refresh the page to see the latest status.`,
+        }))
+      }
     } catch (error) {
       console.error(error)
       setApprovalStatus({
@@ -942,6 +1021,15 @@ const ProvincialExemptionPage = () => {
             onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
           />
         </Modal>
+      )}
+      {approvalEmailRecipients.length > 0 && (
+        <ExemptionApprovalEmailModal
+          recipients={approvalEmailRecipients}
+          sending={sendingApprovalEmail}
+          onRecipientsChange={setApprovalEmailRecipients}
+          onSend={(recipients) => void onSendApprovalEmails(recipients)}
+          onSkip={closeApprovalEmail}
+        />
       )}
     </Grid>
   )

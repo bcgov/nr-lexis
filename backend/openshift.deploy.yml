@@ -71,8 +71,17 @@ parameters:
   - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
     description: Comma- or semicolon-separated TEST/DEV administrator email addresses
     value: ""
+  - name: LEXIS_MAIL_REGION_RCO_RECIPIENTS
+    description: Externally managed RCO distribution list recipients
+    value: ""
+  - name: LEXIS_MAIL_REGION_RNI_RECIPIENTS
+    description: Externally managed RNI distribution list recipients
+    value: ""
+  - name: LEXIS_MAIL_REGION_RSI_RECIPIENTS
+    description: Externally managed RSI distribution list recipients
+    value: ""
   - name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
-    description: Comma- or semicolon-separated ministry inboxes receiving permit review requests
+    description: Migration fallback for permit review recipients
     value: ""
   - name: AWS_COGNITO_ISSUER_URI
     required: true
@@ -239,6 +248,21 @@ objects:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
                       key: LEXIS_MAIL_OVERRIDE_RECIPIENTS
+                - name: LEXIS_MAIL_REGION_RCO_RECIPIENTS
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_REGION_RCO_RECIPIENTS
+                - name: LEXIS_MAIL_REGION_RNI_RECIPIENTS
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_REGION_RNI_RECIPIENTS
+                - name: LEXIS_MAIL_REGION_RSI_RECIPIENTS
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_REGION_RSI_RECIPIENTS
                 - name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
                   valueFrom:
                     secretKeyRef:
@@ -556,6 +580,9 @@ objects:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       KEYSTORE_SECRET: ${KEYSTORE_SECRET}
       LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS}
+      LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${LEXIS_MAIL_REGION_RCO_RECIPIENTS}
+      LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${LEXIS_MAIL_REGION_RNI_RECIPIENTS}
+      LEXIS_MAIL_REGION_RSI_RECIPIENTS: ${LEXIS_MAIL_REGION_RSI_RECIPIENTS}
       LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS}
 
   - apiVersion: networking.k8s.io/v1

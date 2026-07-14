@@ -59,7 +59,8 @@ class EmailEventDispatcherTest {
             1000456L,
             81001L,
             WorkflowEmailEvent.OfferAction.NEW,
-            "client@example.com"));
+            "client@example.com",
+            List.of("regional.reviewers@gov.bc.ca")));
     dispatcher.onWorkflowEmailEvent(
         new WorkflowEmailEvent.PurchaseOffer(
             1000456L,
@@ -86,7 +87,7 @@ class EmailEventDispatcherTest {
             "Please be advised an Offer to Purchase #81001 has been made on Application #1000456."
                 + " Details can be found in LEXIS.\n",
             List.of("client@example.com"),
-            List.of());
+            List.of("regional.reviewers@gov.bc.ca"));
     verify(mailService)
         .send(
             "Updated LEXIS offer to purchase",

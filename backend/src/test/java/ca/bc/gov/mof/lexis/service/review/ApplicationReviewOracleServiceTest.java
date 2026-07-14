@@ -515,30 +515,48 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void sendStatusEmailShouldIgnoreRequestedRecipientAndUseAuthoritativeApplicant() {
+  void sendStatusEmailShouldHonorAValidRequestedRecipient() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto(
-            " REJ ", " attacker@example.test ", " Missing docs ");
+            " REJ ", " Applicant <edited@example.test> ", " Missing docs ");
     AuthoritativeApplicantStatusContext applicant =
         new AuthoritativeApplicantStatusContext("REJ", "00077881", "00");
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(java.util.Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00"))
-        .thenReturn(java.util.Optional.of("owner@example.test"));
     when(repository.findLatestAuthoritativeRemark(1000456L))
         .thenReturn(
             Optional.of(
                 new ReviewRemarkRow(
                     77L, 1000456L, "Missing docs", "idir\\reviewer", Instant.EPOCH)));
-    when(repository.sendStatusEmail(1000456L, "REJ", "owner@example.test", "Missing docs"))
+    when(repository.sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs"))
         .thenReturn(true);
 
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
     assertThat(result.success()).isTrue();
     assertThat(result.message()).isEqualTo("Application status email queued.");
-    verify(repository).sendStatusEmail(1000456L, "REJ", "owner@example.test", "Missing docs");
-    verify(emailSender).sendStatusEmail(1000456L, "REJ", "owner@example.test", "Missing docs");
+    verify(repository).sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs");
+    verify(emailSender).sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs");
+    verifyNoInteractions(clientEmailResolver);
+  }
+
+  @Test
+  void sendStatusEmailShouldRejectAMalformedRequestedRecipient() {
+    AuthoritativeApplicantStatusContext applicant =
+        new AuthoritativeApplicantStatusContext("REJ", "00077881", "00");
+    when(repository.findAuthoritativeApplicantStatusContext(1000456L))
+        .thenReturn(Optional.of(applicant));
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto(
+                "REJ", "not-an-email", "Missing docs"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).contains("one valid email address");
+    verifyNoInteractions(clientEmailResolver, emailSender);
+    verify(repository, org.mockito.Mockito.never()).sendStatusEmail(any(), any(), any(), any());
   }
 
   @Test
@@ -561,7 +579,7 @@ class ApplicationReviewOracleServiceTest {
         service.sendStatusEmail(
             1000456L,
             new ApplicationReviewStatusEmailRequestDto(
-                "REJ", "attacker@example.test", "Missing docs"));
+                "REJ", " ", "Missing docs"));
 
     assertThat(result.success()).isFalse();
     assertThat(result.message()).isEqualTo("Application status email could not be prepared.");
@@ -580,7 +598,7 @@ class ApplicationReviewOracleServiceTest {
         service.sendStatusEmail(
             1000456L,
             new ApplicationReviewStatusEmailRequestDto(
-                "REJ", "attacker@example.test", "Missing docs"));
+                "REJ", " ", "Missing docs"));
 
     assertThat(result.success()).isFalse();
     assertThat(result.message()).contains("no longer matches");
@@ -608,7 +626,7 @@ class ApplicationReviewOracleServiceTest {
         service.sendStatusEmail(
             1000456L,
             new ApplicationReviewStatusEmailRequestDto(
-                "REJ", "attacker@example.test", "Missing docs"));
+                "REJ", " ", "Missing docs"));
 
     assertThat(result.success()).isFalse();
     assertThat(result.message()).contains("changed before the email");
@@ -634,7 +652,7 @@ class ApplicationReviewOracleServiceTest {
         service.sendStatusEmail(
             1000456L,
             new ApplicationReviewStatusEmailRequestDto(
-                "REJ", "attacker@example.test", "Altered later text"));
+                "REJ", " ", "Altered later text"));
 
     assertThat(result.success()).isFalse();
     assertThat(result.message()).contains("no longer matches");
@@ -656,7 +674,7 @@ class ApplicationReviewOracleServiceTest {
         service.sendStatusEmail(
             1000456L,
             new ApplicationReviewStatusEmailRequestDto(
-                "REJ", "attacker@example.test", "Missing docs"));
+                "REJ", " ", "Missing docs"));
 
     assertThat(result.success()).isFalse();
     assertThat(result.message()).contains("remark could not be verified");
@@ -685,7 +703,7 @@ class ApplicationReviewOracleServiceTest {
         service.sendStatusEmail(
             1000456L,
             new ApplicationReviewStatusEmailRequestDto(
-                "WDN", "ignored@example.test", " Withdrawn by applicant "));
+                "WDN", " ", " Withdrawn by applicant "));
 
     assertThat(result.success()).isTrue();
     verify(repository)
@@ -713,7 +731,7 @@ class ApplicationReviewOracleServiceTest {
                 service.sendStatusEmail(
                     1000456L,
                     new ApplicationReviewStatusEmailRequestDto(
-                        "REJ", "attacker@example.test", "Missing docs")))
+                        "REJ", " ", "Missing docs")))
         .isSameAs(failure);
 
     verify(repository, org.mockito.Mockito.never()).sendStatusEmail(any(), any(), any(), any());
@@ -741,7 +759,7 @@ class ApplicationReviewOracleServiceTest {
         service.sendStatusEmail(
             1000456L,
             new ApplicationReviewStatusEmailRequestDto(
-                "REJ", "attacker@example.test", "Missing docs"));
+                "REJ", " ", "Missing docs"));
 
     assertThat(result.success()).isFalse();
     assertThat(result.message()).contains("remark changed");
@@ -779,7 +797,7 @@ class ApplicationReviewOracleServiceTest {
         service.sendStatusEmail(
             1000456L,
             new ApplicationReviewStatusEmailRequestDto(
-                "WDN", "attacker@example.test", "Withdrawn"));
+                "WDN", " ", "Withdrawn"));
 
     assertThat(result.success()).isFalse();
     assertThat(result.message()).contains("No valid email address");
@@ -802,7 +820,7 @@ class ApplicationReviewOracleServiceTest {
                 service.sendStatusEmail(
                     1000456L,
                     new ApplicationReviewStatusEmailRequestDto(
-                        "REJ", "attacker@example.test", "Missing docs")))
+                        "REJ", " ", "Missing docs")))
         .isSameAs(failure);
 
     verify(repository, org.mockito.Mockito.never()).sendStatusEmail(any(), any(), any(), any());

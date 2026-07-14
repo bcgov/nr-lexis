@@ -33,7 +33,16 @@ class ApplicationYamlDefaultsTest {
         .containsEntry(
             "lexis.permit-invoice.mode", "${LEXIS_PERMIT_INVOICE_MODE:legacy-best-effort}")
         .containsEntry(
-            "lexis.mail.from", "${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}");
+            "lexis.mail.from", "${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}")
+        .containsEntry(
+            "lexis.mail.region-rco-recipients", "${LEXIS_MAIL_REGION_RCO_RECIPIENTS:}")
+        .containsEntry(
+            "lexis.mail.region-rni-recipients", "${LEXIS_MAIL_REGION_RNI_RECIPIENTS:}")
+        .containsEntry(
+            "lexis.mail.region-rsi-recipients", "${LEXIS_MAIL_REGION_RSI_RECIPIENTS:}")
+        .containsEntry(
+            "lexis.mail.permit-request-recipients",
+            "${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:}");
   }
 
   @Test

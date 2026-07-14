@@ -65,6 +65,7 @@ import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceLine;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceSnapshot;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceDetail;
@@ -207,7 +208,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           "The permit is not ready for review. An active permit must have an application, package, and scale detail.");
     }
 
-    boolean sent = permitEmailService.sendRequest(permitNumber, copyToAddress);
+    boolean sent = permitEmailService.sendRequest(permitNumber, permit.orgUnitNo());
     if (!sent) {
       return new PermitEmailResult(false, "Permit review request email could not be queued.");
     }
@@ -310,12 +311,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           false,
           "Permit approval email is only available for completed or payment-pending permits.");
     }
-    // Retain the legacy request parameter for wire compatibility, but resolve the recipient from
-    // the persisted permit every time.
-    String recipient = resolvePermitClientEmail(permit.get()).orElse(null);
+    String requestedRecipient = trimToNull(clientEmailAddress);
+    String recipient =
+        requestedRecipient == null
+            ? resolvePermitClientEmail(permit.get()).orElse(null)
+            : MailRecipientValidator.normalize(requestedRecipient).orElse(null);
     if (recipient == null) {
       return new PermitEmailResult(
-          false, "No valid email address is available for the permit applicant.");
+          false,
+          requestedRecipient == null
+              ? "No valid email address is available for the permit applicant."
+              : "Client email address must contain one valid email address.");
     }
     boolean sent =
         permitEmailService.sendApproval(
@@ -329,9 +335,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private Optional<String> resolvePermitClientEmail(PermitMutationRow permit) {
-    String clientNumber = trimToNull(permit.agentNumber());
-    String locationCode = trimToNull(permit.agentLocationCode());
-    if (clientNumber == null) {
+    String clientNumber = null;
+    String locationCode = null;
+    if (!isBlanketOicPermit(permit)) {
+      clientNumber = trimToNull(permit.agentNumber());
+      locationCode = trimToNull(permit.agentLocationCode());
+    }
+    if (clientNumber == null || locationCode == null) {
       clientNumber = trimToNull(permit.clientNumber());
       locationCode = trimToNull(permit.clientLocationCode());
     }

@@ -3992,12 +3992,46 @@ describe('Provincial Application Detail Document Actions', () => {
         'agent@example.test',
       )
     })
-    expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveAttribute('readonly')
+    expect(within(reviewTile).getByLabelText(/client email address/i)).not.toHaveAttribute(
+      'readonly',
+    )
     expect(
       within(reviewTile).getByText(
-        'This read-only preview is loaded from client data and revalidated from the authoritative client account at send time.',
+        'Defaults from client data. Changes apply only to this notification.',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('does not substitute the owner email when an agent applicant has no email', async () => {
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
+      clientNumber,
+      companyName: clientNumber === '00033344' ? 'Agent without email' : 'Owner Forestry Ltd.',
+      address: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      country: '',
+      phone: '',
+      fax: '',
+      email: clientNumber === '00033344' ? '' : 'owner@example.test',
+      notfound: '',
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewTile = await selectApplicationReviewTile()
+    await waitFor(() =>
+      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(''),
+    )
   })
 
   it('updates a single rejection with the loaded client email without sending email', async () => {
@@ -4144,10 +4178,8 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     expect(
-      await screen.findByText(
-        'No valid client email address is available. Update the authoritative client account before sending status email.',
-      ),
-    ).toBeInTheDocument()
+      (await screen.findAllByText('Enter one valid client email address.')).length,
+    ).toBeGreaterThan(0)
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
@@ -4195,11 +4227,11 @@ describe('Provincial Application Detail Document Actions', () => {
       'Rejected',
     )
     fireEvent.change(within(reviewTile).getByLabelText(/client email address/i), {
-      target: { value: 'attacker@example.test' },
+      target: { value: 'edited.client@example.test' },
     })
     await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-      'agent@example.test',
+      'edited.client@example.test',
     )
     mockedSendApplicationReviewStatusEmail.mockResolvedValueOnce({
       success: false,
@@ -4213,12 +4245,12 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
         statusCode: 'REJ',
         remark: 'Needs correction',
-        clientEmailAddress: 'agent@example.test',
+        clientEmailAddress: 'edited.client@example.test',
       })
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('321', {
         statusCode: 'REJ',
         remark: 'Needs correction',
-        clientEmailAddress: 'agent@example.test',
+        clientEmailAddress: 'edited.client@example.test',
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
@@ -4228,7 +4260,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ),
     ).toBeInTheDocument()
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-      'agent@example.test',
+      'edited.client@example.test',
     )
     expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Needs correction')
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)

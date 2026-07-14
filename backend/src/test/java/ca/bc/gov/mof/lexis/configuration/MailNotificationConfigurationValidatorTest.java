@@ -12,7 +12,7 @@ class MailNotificationConfigurationValidatorTest {
     assertThatCode(
             () ->
                 new MailNotificationConfigurationValidator(
-                    false, true, "invalid", "", ""))
+                    false, true, "invalid", "", "", "", "", ""))
         .doesNotThrowAnyException();
   }
 
@@ -25,7 +25,10 @@ class MailNotificationConfigurationValidatorTest {
                     true,
                     "Provincial.Log.Export.Analyst@gov.bc.ca",
                     "admin.one@gov.bc.ca;admin.two@gov.bc.ca",
-                    "reviewers@gov.bc.ca"))
+                    "",
+                    "coast.reviewers@gov.bc.ca",
+                    "north.reviewers@gov.bc.ca",
+                    "south.reviewers@gov.bc.ca"))
         .doesNotThrowAnyException();
   }
 
@@ -38,7 +41,10 @@ class MailNotificationConfigurationValidatorTest {
                     false,
                     "Provincial.Log.Export.Analyst@gov.bc.ca",
                     "",
-                    "reviewers@gov.bc.ca"))
+                    "reviewers@gov.bc.ca",
+                    "",
+                    "",
+                    ""))
         .doesNotThrowAnyException();
   }
 
@@ -47,7 +53,7 @@ class MailNotificationConfigurationValidatorTest {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
-                    true, false, "invalid", "", "reviewers@gov.bc.ca"))
+                    true, false, "invalid", "", "reviewers@gov.bc.ca", "", "", ""))
         .isInstanceOf(IllegalStateException.class)
         .hasMessage("Enabled mail requires one valid from address.");
   }
@@ -61,13 +67,16 @@ class MailNotificationConfigurationValidatorTest {
                     true,
                     "Provincial.Log.Export.Analyst@gov.bc.ca",
                     "admin@gov.bc.ca;invalid",
-                    "reviewers@gov.bc.ca"))
+                    "reviewers@gov.bc.ca",
+                    "",
+                    "",
+                    ""))
         .isInstanceOf(IllegalStateException.class)
         .hasMessage("Enabled non-production mail requires valid override recipients.");
   }
 
   @Test
-  void enabledMailShouldRejectMissingPermitReviewRecipients() {
+  void enabledMailShouldRejectMissingRegionalAndFallbackRecipients() {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
@@ -75,9 +84,13 @@ class MailNotificationConfigurationValidatorTest {
                     false,
                     "Provincial.Log.Export.Analyst@gov.bc.ca",
                     "",
+                    "",
+                    "",
+                    "",
                     ""))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessage("Enabled mail requires valid permit-review recipients.");
+        .hasMessage(
+            "Enabled mail requires all regional recipient lists or fallback permit-review recipients.");
   }
 
   @Test
@@ -89,8 +102,44 @@ class MailNotificationConfigurationValidatorTest {
                     false,
                     "Provincial.Log.Export.Analyst@gov.bc.ca",
                     "",
-                    "review.one@gov.bc.ca,,review.two@gov.bc.ca"))
+                    "review.one@gov.bc.ca,,review.two@gov.bc.ca",
+                    "",
+                    "",
+                    ""))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessage("Enabled mail requires valid permit-review recipients.");
+        .hasMessage("Enabled mail requires valid fallback permit-review recipients.");
+  }
+
+  @Test
+  void enabledMailShouldAllowRegionalMigrationThroughFallback() {
+    assertThatCode(
+            () ->
+                new MailNotificationConfigurationValidator(
+                    true,
+                    false,
+                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "",
+                    "reviewers@gov.bc.ca",
+                    "coast.reviewers@gov.bc.ca",
+                    "",
+                    ""))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void enabledMailShouldRejectAnInvalidConfiguredRegion() {
+    assertThatThrownBy(
+            () ->
+                new MailNotificationConfigurationValidator(
+                    true,
+                    false,
+                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "",
+                    "reviewers@gov.bc.ca",
+                    "invalid",
+                    "",
+                    ""))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Enabled mail requires valid RCO recipients.");
   }
 }

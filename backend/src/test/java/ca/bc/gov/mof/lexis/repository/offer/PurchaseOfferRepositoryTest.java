@@ -276,6 +276,19 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
+  void applicationRecipientLookupShouldReturnThePersistedOrganizationUnit() {
+    PurchaseOfferRepository repository = new ApplicationRecipientPurchaseOfferRepository();
+
+    assertThat(repository.findApplicationRecipient(1000456L))
+        .hasValueSatisfying(
+            recipient -> {
+              assertThat(recipient.ownerClientNumber()).isEqualTo("00077881");
+              assertThat(recipient.ownerClientLocationCode()).isEqualTo("00");
+              assertThat(recipient.orgUnitNumber()).isEqualTo(1903L);
+            });
+  }
+
+  @Test
   void insertShouldPropagateOracleFailure() {
     FailingPurchaseOfferRepository repository = new FailingPurchaseOfferRepository();
 
@@ -478,6 +491,33 @@ class PurchaseOfferRepositoryTest {
         when(resultSet.getString("ORG_UNIT_CODE"))
             .thenThrow(new SQLException("Column is not present in the legacy detail cursor"));
         when(resultSet.wasNull()).thenReturn(false, false, false, true);
+        return Optional.of(rowMapper.map(resultSet));
+      } catch (SQLException exception) {
+        throw new AssertionError(exception);
+      }
+    }
+  }
+
+  private static final class ApplicationRecipientPurchaseOfferRepository
+      extends PurchaseOfferRepository {
+
+    ApplicationRecipientPurchaseOfferRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      ResultSet resultSet = mock(ResultSet.class);
+      try {
+        when(resultSet.getString("EXPORT_APPLICANT_TYPE_CODE")).thenReturn("O");
+        when(resultSet.getString("OWNER_CLIENT_NUMBER")).thenReturn("00077881");
+        when(resultSet.getString("OWNER_CLIENT_LOCATION_CODE")).thenReturn("00");
+        when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L);
+        when(resultSet.wasNull()).thenReturn(false);
         return Optional.of(rowMapper.map(resultSet));
       } catch (SQLException exception) {
         throw new AssertionError(exception);

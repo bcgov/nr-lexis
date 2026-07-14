@@ -138,9 +138,9 @@ const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
 const REJECT_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating.'
 const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
 const REJECT_EMAIL_REQUIRED_MESSAGE =
-  'No valid client email address is available. Update the authoritative client account or deselect Send status email.'
+  'Enter one valid client email address or deselect Send status email.'
 const REJECT_EMAIL_PREVIEW_HELPER =
-  'This read-only preview is loaded from client data and revalidated from the authoritative client account at send time.'
+  'Defaults from client data. Changes apply only to this notification.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
 const isReviewableSourceStatus = (status: string | null | undefined): boolean =>
@@ -161,10 +161,10 @@ const reviewEmailCandidate = (
   const agentEmail = normalizeReviewEmail(agentClientData?.email ?? '')
 
   if (isAgentApplicant(summary.applicantTypeCode)) {
-    return agentEmail || ownerEmail
+    return agentEmail
   }
 
-  return ownerEmail || agentEmail
+  return ownerEmail
 }
 
 const buildSearchParams = (
@@ -922,8 +922,13 @@ const ProvincialReviewPage = () => {
                 loadingRejectEmail ? 'Loading from client account...' : REJECT_EMAIL_PREVIEW_HELPER
               }
               value={rejectEmailAddress}
-              readOnly
               disabled={loadingRejectEmail || submittingReject}
+              invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
+              invalidText={rejectValidationMessage}
+              onChange={(event) => {
+                setRejectEmailAddress(event.target.value)
+                setRejectValidationMessage('')
+              }}
             />
             {!!rejectValidationMessage &&
               rejectValidationMessage !== REJECT_STATUS_REQUIRED_MESSAGE &&

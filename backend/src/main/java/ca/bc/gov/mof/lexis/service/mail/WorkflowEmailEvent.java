@@ -82,8 +82,21 @@ public sealed interface WorkflowEmailEvent {
       long applicationNumber,
       long offerNumber,
       OfferAction action,
-      String recipient)
+      String recipient,
+      List<String> copyRecipients)
       implements WorkflowEmailEvent {
+
+    public PurchaseOffer {
+      copyRecipients = copyRecipients == null ? List.of() : List.copyOf(copyRecipients);
+    }
+
+    public PurchaseOffer(
+        long applicationNumber,
+        long offerNumber,
+        OfferAction action,
+        String recipient) {
+      this(applicationNumber, offerNumber, action, recipient, List.of());
+    }
 
     @Override
     public String subject() {
