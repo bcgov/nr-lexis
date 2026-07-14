@@ -32,8 +32,14 @@ describe('search-options-service', () => {
         { code: 'B', name: 'Type B' },
       ],
       exemptionReasons: [{ code: 'U', name: 'Unadvertised' }],
-      applicationStatuses: [{ code: 'NEW', name: 'New' }],
-      productTypes: [{ code: 'LOG', name: 'Logs' }],
+      applicationStatuses: [
+        { code: '', name: 'All' },
+        { code: 'NEW', name: 'New' },
+      ],
+      productTypes: [
+        { code: '', name: 'All' },
+        { code: 'LOG', name: 'Logs' },
+      ],
       growthTypes: [{ code: 'O', name: 'Old Growth' }],
       regions: [
         { code: '11', name: 'District' },
@@ -70,6 +76,23 @@ describe('search-options-service', () => {
         { value: '987', label: '2026-01-11' },
         { value: '', label: 'Blank' },
       ],
+    })
+  })
+
+  it('accepts and removes the legacy All product type from review options', async () => {
+    getCachedDataMock.mockResolvedValue({
+      productTypes: [
+        { code: '', name: 'All' },
+        { code: 'LOG', name: 'Logs' },
+      ],
+      regions: [{ code: '1903', name: 'Cariboo Natural Resource Region' }],
+      reviewStatuses: [{ code: 'REJ', name: 'Rejected' }],
+    })
+
+    await expect(fetchApplicationReviewOptions()).resolves.toEqual({
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
+      reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
     })
   })
 

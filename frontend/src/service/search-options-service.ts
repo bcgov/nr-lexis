@@ -139,8 +139,8 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
   const data = await fetchOptions('/lexis/applications/search/options', [
     { name: 'exemptionTypes' },
     { name: 'exemptionReasons' },
-    { name: 'applicationStatuses' },
-    { name: 'productTypes' },
+    { name: 'applicationStatuses', allowEmptyCode: true },
+    { name: 'productTypes', allowEmptyCode: true },
     { name: 'growthTypes' },
     { name: 'regions' },
     { name: 'currentSchedules', allowEmptyCode: true },
@@ -268,7 +268,7 @@ export const fetchApplicationReviewOptions = async (): Promise<{
   reviewStatuses: SearchOption[]
 }> => {
   const data = await fetchOptions('/lexis/application-reviews/search/options', [
-    { name: 'productTypes' },
+    { name: 'productTypes', allowEmptyCode: true },
     { name: 'regions' },
     { name: 'reviewStatuses' },
   ])
