@@ -99,7 +99,7 @@ class TestDeploymentTopologyConfigTest {
         between(
             backendJob,
             "      - uses: actions/checkout@",
-            "      - name: Enforce single-backend lock topology");
+            "      - name: Require Gold OpenShift target");
     String keycloakStep =
         between(
             backendJob,

@@ -124,6 +124,15 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Require Gold OpenShift target
+        env:
+          OC_SERVER: ${{ vars.oc_server }}
+        run: |
+          if [ "${OC_SERVER}" != "https://api.gold.devops.gov.bc.ca:6443" ]; then
+            echo "::error title=Unexpected OpenShift cluster::OC_SERVER must target the Gold cluster."
+            exit 1
+          fi
+
       - name: Enforce single-backend lock topology
         if: ${{ inputs.backend_replicas != '1' }}
         shell: bash
@@ -211,6 +220,15 @@ jobs:
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
     steps:
+      - name: Require Gold OpenShift target
+        env:
+          OC_SERVER: ${{ vars.oc_server }}
+        run: |
+          if [ "${OC_SERVER}" != "https://api.gold.devops.gov.bc.ca:6443" ]; then
+            echo "::error title=Unexpected OpenShift cluster::OC_SERVER must target the Gold cluster."
+            exit 1
+          fi
+
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
         env:

@@ -45,6 +45,15 @@ jobs:
     timeout-minutes: 10
     environment: dev
     steps:
+      - name: Require Gold OpenShift target
+        env:
+          OC_SERVER: ${{ vars.oc_server }}
+        run: |
+          if [ "${OC_SERVER}" != "https://api.gold.devops.gov.bc.ca:6443" ]; then
+            echo "::error title=Unexpected OpenShift cluster::OC_SERVER must target the Gold cluster."
+            exit 1
+          fi
+
       - name: Clean up PR Deployments
         uses: bcgov/action-oc-runner@d2fc921aaa9d70684c186dbb7754e6985d44d86f # v1.4.1
         with:
