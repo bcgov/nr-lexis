@@ -375,47 +375,6 @@ class OracleRepositorySupportTest {
   }
 
   @Test
-  void loadOrgUnitOptionsShouldFallbackWhenCodePackageReturnsEmpty() {
-    TestRepository repository = new TestRepository(List.of());
-
-    List<CodeNameDto> options = repository.loadRegions();
-
-    assertThat(options)
-        .containsExactly(
-            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
-            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
-            new CodeNameDto("1905", "Northeast Natural Resource Region"),
-            new CodeNameDto("1906", "Omineca Natural Resource Region"),
-            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
-            new CodeNameDto("1908", "Skeena Natural Resource Region"),
-            new CodeNameDto("1909", "South Coast Natural Resource Region"),
-            new CodeNameDto("1910", "West Coast Natural Resource Region"));
-  }
-
-  @Test
-  void loadOrgUnitOptionsShouldFallbackWhenCodePackageReturnsNoNaturalResourceRegions() {
-    TestRepository repository =
-        new TestRepository(
-            List.of(),
-            List.of(
-                new CodeNameDto("12", "Coast"),
-                new CodeNameDto("24", "Skeena")));
-
-    List<CodeNameDto> options = repository.loadRegions();
-
-    assertThat(options)
-        .containsExactly(
-            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
-            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
-            new CodeNameDto("1905", "Northeast Natural Resource Region"),
-            new CodeNameDto("1906", "Omineca Natural Resource Region"),
-            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
-            new CodeNameDto("1908", "Skeena Natural Resource Region"),
-            new CodeNameDto("1909", "South Coast Natural Resource Region"),
-            new CodeNameDto("1910", "West Coast Natural Resource Region"));
-  }
-
-  @Test
   void requiredCursorQueryShouldPropagateDependencyFailure() {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     DataAccessResourceFailureException failure =
@@ -651,18 +610,12 @@ class OracleRepositorySupportTest {
 
   private static final class TestRepository extends OracleRepositorySupport {
     private final List<List<String>> pages;
-    private final List<CodeNameDto> orgUnitOptions;
     private final List<Integer> requestedPages = Collections.synchronizedList(new java.util.ArrayList<>());
     private final AtomicInteger pageCalls = new AtomicInteger();
 
     TestRepository(List<List<String>> pages) {
-      this(pages, List.of());
-    }
-
-    TestRepository(List<List<String>> pages, List<CodeNameDto> orgUnitOptions) {
       super(null);
       this.pages = pages;
-      this.orgUnitOptions = orgUnitOptions;
     }
 
     Page<String> loadPage(int page, int size) {
@@ -686,10 +639,6 @@ class OracleRepositorySupportTest {
 
     List<CodeNameDto> loadApplicationStatuses() {
       return loadCodeNameOptions(LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)");
-    }
-
-    List<CodeNameDto> loadRegions() {
-      return loadOrgUnitOptions(false);
     }
 
     List<CodeNameDto> loadExemptionReasons() {
@@ -735,15 +684,11 @@ class OracleRepositorySupportTest {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     protected <T> List<T> queryCursorProcedure(
         String procedureSignature,
         SqlConsumer<CallableStatement> binder,
         int cursorOutIndex,
         SqlRowMapper<T> rowMapper) {
-      if ((LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)").equals(procedureSignature)) {
-        return (List<T>) orgUnitOptions;
-      }
       return List.of();
     }
 

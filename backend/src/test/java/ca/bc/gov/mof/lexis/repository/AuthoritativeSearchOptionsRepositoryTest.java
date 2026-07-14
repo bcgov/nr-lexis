@@ -11,6 +11,7 @@ import ca.bc.gov.mof.lexis.repository.exemption.ExemptionRepository;
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,9 @@ class AuthoritativeSearchOptionsRepositoryTest {
 
     PurchaseOfferRepository offers = new PurchaseOfferRepository(jdbcTemplate);
     assertUnavailable(offers::loadRegionOptions);
+
+    LexisReportScheduleRepository reports = new LexisReportScheduleRepository(jdbcTemplate);
+    assertUnavailable(reports::loadRegionOptions);
 
     FederalApplicationRepository federal = new FederalApplicationRepository(jdbcTemplate);
     assertUnavailable(federal::loadApplicationStatusOptions);

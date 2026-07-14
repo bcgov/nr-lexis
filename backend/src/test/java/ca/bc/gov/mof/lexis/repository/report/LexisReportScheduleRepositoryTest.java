@@ -6,6 +6,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -38,14 +39,33 @@ class LexisReportScheduleRepositoryTest {
   @Mock private PreparedStatement preparedStatement;
 
   @Test
-  void loadRegionOptionsShouldUseOrgUnitNameLabelsLikeLegacyReportSelects() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_ORG_UNITS(?) }");
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L, 1904L);
+  void loadRegionOptionsShouldResolveEachLegacyConfiguredRegionByNumber() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_ORG_UNIT_BY_NUMBER(?,?) }", 2);
+    when(resultSet.next())
+        .thenReturn(
+            true, false,
+            true, false,
+            true, false,
+            true, false,
+            true, false,
+            true, false,
+            true, false,
+            true, false);
+    when(resultSet.getLong("ORG_UNIT_NO"))
+        .thenReturn(1903L, 1904L, 1905L, 1906L, 1907L, 1908L, 1909L, 1910L);
     when(resultSet.wasNull()).thenReturn(false);
-    when(resultSet.getString("ORG_UNIT_CODE")).thenReturn("RCB", "RKB");
+    when(resultSet.getString("ORG_UNIT_CODE"))
+        .thenReturn("RCB", "RKB", "RNO", "ROM", "RTO", "RSK", "RSC", "RWC");
     when(resultSet.getString("ORG_UNIT_NAME"))
-        .thenReturn("Cariboo Natural Resource Region", "Kootenay-Boundary Natural Resource Region");
+        .thenReturn(
+            "Cariboo Natural Resource Region",
+            "Kootenay-Boundary Natural Resource Region",
+            "Northeast Natural Resource Region",
+            "Omineca Natural Resource Region",
+            "Thompson-Okanagan Natural Resource Region",
+            "Skeena Natural Resource Region",
+            "South Coast Natural Resource Region",
+            "West Coast Natural Resource Region");
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
@@ -55,8 +75,43 @@ class LexisReportScheduleRepositoryTest {
         .extracting("code", "name")
         .containsExactly(
             tuple("1903", "Cariboo Natural Resource Region"),
-            tuple("1904", "Kootenay-Boundary Natural Resource Region"));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+            tuple("1904", "Kootenay-Boundary Natural Resource Region"),
+            tuple("1905", "Northeast Natural Resource Region"),
+            tuple("1906", "Omineca Natural Resource Region"),
+            tuple("1907", "Thompson-Okanagan Natural Resource Region"),
+            tuple("1908", "Skeena Natural Resource Region"),
+            tuple("1909", "South Coast Natural Resource Region"),
+            tuple("1910", "West Coast Natural Resource Region"));
+    verify(callableStatement, times(8)).registerOutParameter(2, Types.REF_CURSOR);
+    for (long orgUnitNumber = 1903L; orgUnitNumber <= 1910L; orgUnitNumber++) {
+      verify(callableStatement).setString(1, Long.toString(orgUnitNumber));
+    }
+  }
+
+  @Test
+  void loadRegionOptionsShouldNotSynthesizeAnUnresolvedRegion() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_ORG_UNIT_BY_NUMBER(?,?) }", 2);
+    when(resultSet.next())
+        .thenReturn(
+            true, false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false);
+    when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("ORG_UNIT_CODE")).thenReturn("RCB");
+    when(resultSet.getString("ORG_UNIT_NAME")).thenReturn("Cariboo Natural Resource Region");
+
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.loadRegionOptions())
+        .extracting("code", "name")
+        .containsExactly(tuple("1903", "Cariboo Natural Resource Region"));
+    verify(callableStatement, times(8)).registerOutParameter(2, Types.REF_CURSOR);
   }
 
   @Test

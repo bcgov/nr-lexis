@@ -59,6 +59,8 @@ public abstract class OracleRepositorySupport {
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
   private static final int LEGACY_DYNAMIC_PAGE_SIZE = 10;
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
+  private static final String FIND_ORG_UNIT_BY_NUMBER =
+      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
   private static final List<String> NATURAL_RESOURCE_REGION_CODES =
       List.of("1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910");
 
@@ -143,56 +145,38 @@ public abstract class OracleRepositorySupport {
         });
   }
 
-  protected List<CodeNameDto> loadOrgUnitOptions(boolean displayName) {
-    List<CodeNameDto> options =
-        queryCursorProcedure(
-            LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)",
-            null,
-            1,
-            rs -> {
-              Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-              String regionCode = getString(rs, "ORG_UNIT_CODE");
-              String regionName = getString(rs, "ORG_UNIT_NAME");
-              return new CodeNameDto(
-                  orgUnitNo == null ? null : orgUnitNo.toString(),
-                  displayName
-                      ? firstPresent(regionName, regionCode)
-                      : firstPresent(regionCode, regionName));
-            });
-    List<CodeNameDto> naturalResourceRegions = naturalResourceRegions(options);
-    if (!naturalResourceRegions.isEmpty()) {
-      return naturalResourceRegions;
-    }
-    return naturalResourceRegions(fallbackOrgUnitOptions(displayName));
-  }
-
   /**
-   * Loads authoritative natural-resource regions without production fallback data. An empty
-   * cursor remains empty; Oracle and cursor failures propagate to the API boundary.
+   * Loads the legacy configured natural-resource regions without production fallback data.
+   * Oracle and cursor failures propagate to the API boundary.
    */
   protected List<CodeNameDto> loadOrgUnitOptionsRequired(boolean displayName) {
-    List<CodeNameDto> options =
-        queryCursorProcedureFailClosed(
-            LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)",
-            null,
-            1,
-            rs -> {
-              Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-              String regionCode = getString(rs, "ORG_UNIT_CODE");
-              String regionName = getString(rs, "ORG_UNIT_NAME");
-              return new CodeNameDto(
-                  orgUnitNo == null ? null : orgUnitNo.toString(),
-                  displayName
-                      ? firstPresent(regionName, regionCode)
-                      : firstPresent(regionCode, regionName));
-            });
-    return naturalResourceRegions(options);
+    return loadNaturalResourceRegions(displayName);
   }
 
-  private List<CodeNameDto> naturalResourceRegions(List<CodeNameDto> options) {
-    return options.stream()
-        .filter(option -> NATURAL_RESOURCE_REGION_CODES.contains(option.code()))
-        .toList();
+  private List<CodeNameDto> loadNaturalResourceRegions(boolean displayName) {
+    List<CodeNameDto> regions = new ArrayList<>();
+    for (String orgUnitNumber : NATURAL_RESOURCE_REGION_CODES) {
+      SqlConsumer<CallableStatement> binder = cs -> cs.setString(1, orgUnitNumber);
+      SqlRowMapper<CodeNameDto> mapper = rs -> mapOrgUnitOption(rs, displayName);
+      List<CodeNameDto> rows =
+          queryCursorProcedureFailClosed(FIND_ORG_UNIT_BY_NUMBER, binder, 2, mapper);
+      rows.stream()
+          .filter(option -> orgUnitNumber.equals(option.code()))
+          .findFirst()
+          .ifPresent(regions::add);
+    }
+    return List.copyOf(regions);
+  }
+
+  private CodeNameDto mapOrgUnitOption(ResultSet rs, boolean displayName) throws SQLException {
+    Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
+    String regionCode = getString(rs, "ORG_UNIT_CODE");
+    String regionName = getString(rs, "ORG_UNIT_NAME");
+    return new CodeNameDto(
+        orgUnitNo == null ? null : orgUnitNo.toString(),
+        displayName
+            ? firstPresent(regionName, regionCode)
+            : firstPresent(regionCode, regionName));
   }
 
   protected <T> List<T> queryCursorProcedure(
@@ -783,25 +767,6 @@ public abstract class OracleRepositorySupport {
               new CodeNameDto("OT", "Other"));
       default -> List.of();
     };
-  }
-
-  private List<CodeNameDto> fallbackOrgUnitOptions(boolean displayName) {
-    List<CodeNameDto> regions =
-        List.of(
-            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
-            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
-            new CodeNameDto("1905", "Northeast Natural Resource Region"),
-            new CodeNameDto("1906", "Omineca Natural Resource Region"),
-            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
-            new CodeNameDto("1908", "Skeena Natural Resource Region"),
-            new CodeNameDto("1909", "South Coast Natural Resource Region"),
-            new CodeNameDto("1910", "West Coast Natural Resource Region"));
-    if (displayName) {
-      return regions;
-    }
-    return regions.stream()
-        .map(option -> new CodeNameDto(option.code(), option.name().split(" - ", 2)[0]))
-        .toList();
   }
 
   protected String trim(String value) {
