@@ -688,6 +688,44 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('shows missing summary options only on the editable Application tab', async () => {
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [],
+      applicationStatuses: [{ value: 'APP', label: 'Approved' }],
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '12', label: 'Coast' }],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled())
+    expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
+
+    await selectApplicationDetailTab('Application')
+    expect(await screen.findByText('Application summary options unavailable')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Missing required options: exemption reason. Summary changes cannot be saved.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Summary' })).toBeDisabled()
+
+    await selectApplicationDetailTab('Owner')
+    expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
+  })
+
   it('uses semantic empty states for unavailable clients and truly empty tab data', async () => {
     mockedFetchApplicationClientData.mockResolvedValue(null)
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -1343,6 +1381,15 @@ describe('Provincial Application Detail Document Actions', () => {
       canAddPackages: true,
       canAddScales: true,
     })
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [],
+      applicationStatuses: [{ value: 'APP', label: 'Approved' }],
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '12', label: 'Coast' }],
+      currentSchedules: [],
+    })
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1358,6 +1405,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await selectApplicationDetailTab('Application')
     expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
     expect(within(getApplicationSummaryTile()).queryByLabelText('Exemption reason')).toBeNull()
+    expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Items')
     await waitFor(() => {

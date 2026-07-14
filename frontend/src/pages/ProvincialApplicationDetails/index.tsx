@@ -972,13 +972,19 @@ const ProvincialApplicationDetailsPage = () => {
     summaryRegionOptions,
     summaryForm?.orgUnitNumber ?? '',
   )
+  const missingSummaryOptionLabels = [
+    summaryExemptionReasonOptions.length === 0 ? 'exemption reason' : null,
+    summaryProductTypeOptions.length === 0 ? 'product type' : null,
+    summaryRegionOptions.length === 0 ? 'region' : null,
+    productTypeRequiresGrowthType(summaryForm?.productTypeCode ?? '') &&
+    summaryGrowthTypeOptions.length === 0
+      ? 'growth type'
+      : null,
+  ].filter((label): label is string => label !== null)
   const requiredSummaryOptionsMissing =
+    canEditSummary &&
     summaryOptionsAvailability === 'available' &&
-    (summaryExemptionReasonOptions.length === 0 ||
-      summaryProductTypeOptions.length === 0 ||
-      summaryRegionOptions.length === 0 ||
-      (productTypeRequiresGrowthType(summaryForm?.productTypeCode ?? '') &&
-        summaryGrowthTypeOptions.length === 0))
+    missingSummaryOptionLabels.length > 0
   const packageReferenceOptionsAvailability =
     summaryOptionsAvailability === 'idle'
       ? 'loading'
@@ -2833,14 +2839,15 @@ const ProvincialApplicationDetailsPage = () => {
           {summaryOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Application options unavailable" />
           )}
-          {requiredSummaryOptionsMissing && (
-            <AppNotification
-              kind="warning"
-              title="Required application options not configured"
-              subtitle="A required exemption reason, product type, growth type, or region list is empty. Summary saves are disabled."
-              lowContrast
-            />
-          )}
+          {selectedApplicationTabIndex === APPLICATION_DETAIL_TAB_INDEX.application &&
+            requiredSummaryOptionsMissing && (
+              <AppNotification
+                kind="warning"
+                title="Application summary options unavailable"
+                subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
+                lowContrast
+              />
+            )}
           {canReviewApplication && reviewOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Review options unavailable" />
           )}
