@@ -28,6 +28,7 @@ import {
 } from '@/service/provincial-offer-create-service'
 import type { SearchOption } from '@/service/search-options-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { displayAuditIdentity } from '@/utils/text'
 import {
   OFFER_COMPANY_NAME_MAX_LENGTH,
   OFFER_CONDITION_MAX_LENGTH,
@@ -259,7 +260,7 @@ const ProvincialOfferCreatePage = () => {
   const scopedClientLookupError = scopedClientContextIsCurrent
     ? scopedClientContext.errorMessage
     : ''
-  const author = capabilities.principal ?? ''
+  const author = displayAuditIdentity(capabilities.principal)
   const receivedDate = formatBusinessIsoDate()
   const hasApplicationNumber = form.applicationNumber.trim().length > 0
   const hasNoPackagesForApplication =
@@ -973,7 +974,7 @@ const ProvincialOfferCreatePage = () => {
               </div>
               <div className="detail-field-item">
                 <dt className="detail-field-label">Author</dt>
-                <dd className="detail-field-value">{author || 'Not available'}</dd>
+                <dd className="detail-field-value">{author}</dd>
               </div>
             </dl>
             <div

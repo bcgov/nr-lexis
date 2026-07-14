@@ -64,6 +64,7 @@ import {
   type ApplicationPackageScaleRow,
 } from '@/service/provincial-application-items-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { displayAuditIdentity } from '@/utils/text'
 import {
   firstValidationError,
   isoDateFieldError,
@@ -962,7 +963,7 @@ const FederalApplicationDetailsPage = () => {
                           },
                           {
                             label: 'Author',
-                            value: displayValue(detail.author),
+                            value: displayAuditIdentity(detail.author),
                           },
                           {
                             label: 'Exemption number',

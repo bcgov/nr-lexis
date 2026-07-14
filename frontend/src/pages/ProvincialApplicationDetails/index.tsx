@@ -115,6 +115,7 @@ import {
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
 import { triggerBrowserDownload } from '@/utils/download'
+import { displayAuditIdentity } from '@/utils/text'
 import {
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
@@ -2788,7 +2789,7 @@ const ProvincialApplicationDetailsPage = () => {
             >
               <div>
                 <dt>Author</dt>
-                <dd>{displayValue(detail.author)}</dd>
+                <dd>{displayAuditIdentity(detail.author)}</dd>
               </div>
               <div>
                 <dt>Package count</dt>

@@ -199,7 +199,7 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
-  void detailShouldMapLegacyEntryUserIdAsAuthor() {
+  void detailShouldMapLegacyLatestUserIdAsAuthor() {
     DetailReadLexisApplicationRepository repository =
         new DetailReadLexisApplicationRepository(null, true);
 
@@ -207,7 +207,7 @@ class LexisApplicationRepositoryTest {
         .isPresent()
         .get()
         .extracting(LexisApplicationDetailDto::author)
-        .isEqualTo("idir\\application-author");
+        .isEqualTo("idir\\application-editor");
   }
 
   @ParameterizedTest
@@ -384,6 +384,7 @@ class LexisApplicationRepositoryTest {
     when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(900123L);
     when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
     when(resultSet.getString("ENTRY_USERID")).thenReturn("idir\\application-author");
+    when(resultSet.getString("UPDATE_USERID")).thenReturn("idir\\application-editor");
     when(resultSet.wasNull()).thenReturn(false);
     return resultSet;
   }

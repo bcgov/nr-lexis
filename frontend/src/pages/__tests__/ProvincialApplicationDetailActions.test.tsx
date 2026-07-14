@@ -637,6 +637,28 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(within(highlights).getByText('idir\\application-author')).toBeInTheDocument()
   })
 
+  it('does not display a historical Cognito subject as the application author', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      author: '8c5df5b8-c041-7016-0f61-92b0d0000000',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const highlights = await screen.findByRole('group', { name: 'Application highlights' })
+    expect(within(highlights).getByText('Not available')).toBeInTheDocument()
+    expect(within(highlights).queryByText(/8c5df5b8/i)).not.toBeInTheDocument()
+  })
+
   it('uses the legacy application detail tab order', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>

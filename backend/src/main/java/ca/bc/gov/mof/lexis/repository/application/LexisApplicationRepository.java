@@ -565,7 +565,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
         getDouble(rs, "AVERAGE_LOG_VOLUME"),
         getString(rs, "EXPORT_JURISDICTION_CODE"),
-        getString(rs, "ENTRY_USERID"));
+        firstNonNull(getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID")));
   }
 
   private String buildSortOrder(String sortField) {

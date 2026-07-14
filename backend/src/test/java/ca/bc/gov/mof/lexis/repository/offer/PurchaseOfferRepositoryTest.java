@@ -250,7 +250,11 @@ class PurchaseOfferRepositoryTest {
     NullVolumePurchaseOfferRepository repository = new NullVolumePurchaseOfferRepository();
 
     assertThat(repository.findByOfferNumber(81001L))
-        .hasValueSatisfying(detail -> assertThat(detail.offerVolume()).isNull());
+        .hasValueSatisfying(
+            detail -> {
+              assertThat(detail.offerVolume()).isNull();
+              assertThat(detail.region()).isEqualTo("Cariboo Natural Resource Region");
+            });
   }
 
   @Test
@@ -470,6 +474,9 @@ class PurchaseOfferRepositoryTest {
         when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
         when(resultSet.getDouble("PURCHASE_OFFER_AMOUNT")).thenReturn(12500.25d);
         when(resultSet.getDouble("EXPORT_PURCHASE_VOLUME")).thenReturn(0.0d);
+        when(resultSet.getString("REGION")).thenReturn("Cariboo Natural Resource Region");
+        when(resultSet.getString("ORG_UNIT_CODE"))
+            .thenThrow(new SQLException("Column is not present in the legacy detail cursor"));
         when(resultSet.wasNull()).thenReturn(false, false, false, true);
         return Optional.of(rowMapper.map(resultSet));
       } catch (SQLException exception) {
