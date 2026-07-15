@@ -1284,11 +1284,11 @@ test.describe('TEST IDIR admin regression', () => {
 
     await gradeARow.hover()
     await expect.poll(async () => tableRowBackgrounds(gradeARow)).not.toEqual(gradeABaseline)
-    expect(new Set(await tableRowBackgrounds(gradeARow))).toHaveLength(1)
+    expect(new Set(await tableRowBackgrounds(gradeARow)).size).toBe(1)
 
     await gradeBRow.hover()
     await expect.poll(async () => tableRowBackgrounds(gradeBRow)).not.toEqual(gradeBBaseline)
-    expect(new Set(await tableRowBackgrounds(gradeBRow))).toHaveLength(1)
+    expect(new Set(await tableRowBackgrounds(gradeBRow)).size).toBe(1)
     await expect.poll(async () => tableRowBackgrounds(gradeARow)).toEqual(gradeABaseline)
 
     await balsamGradeA.focus()
