@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import {
   expect,
   type APIResponse,
@@ -858,29 +857,44 @@ const createRegressionExportSchedule = async (
   createdSchedule: Record<string, unknown>
 }> => {
   const latestAdvertisingDate = await latestExportScheduleAdvertisingDate(page)
-  const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(
-    latestAdvertisingDate,
-    0,
-  )
-  const created = await readJsonResponse<ExportScheduleMutationResponse>(
-    await postWithCsrf(page, '/api/lexis/admin/schedules', {
-      data: createRequest,
-    }),
-  )
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(
+      latestAdvertisingDate,
+      attempt,
+    )
+    const created = await readJsonResponseWithStatuses<ExportScheduleMutationResponse>(
+      await postWithCsrf(page, '/api/lexis/admin/schedules', {
+        data: createRequest,
+      }),
+      [200, 400],
+    )
 
-  expect(created.success).toBe(true)
-  expect(created.message ?? '').toContain('added')
+    if (created.status === 400) {
+      const message = created.payload.message ?? ''
+      if (!message.includes('A schedule already exists for that advertising date.')) {
+        throw new Error(
+          `Export schedule create failed for ${createRequest.advertisingDate}: ${message}`,
+        )
+      }
+      continue
+    }
 
-  const createdSchedule = asRecord(created.schedule)
-  const scheduleId = String(createdSchedule.exportScheduleId ?? '').trim()
-  expect(scheduleId).not.toBe('')
+    expect(created.payload.success).toBe(true)
+    expect(created.payload.message ?? '').toContain('added')
 
-  return {
-    scheduleId,
-    createRequest,
-    updateRequest,
-    createdSchedule,
+    const createdSchedule = asRecord(created.payload.schedule)
+    const scheduleId = String(createdSchedule.exportScheduleId ?? '').trim()
+    expect(scheduleId).not.toBe('')
+
+    return {
+      scheduleId,
+      createRequest,
+      updateRequest,
+      createdSchedule,
+    }
   }
+
+  throw new Error('Unable to find an unused future export schedule date for regression.')
 }
 
 const deleteRegressionExportSchedule = async (page: Page, scheduleId: string): Promise<void> => {
@@ -1276,11 +1290,11 @@ test.describe('TEST IDIR admin regression', () => {
 
     await gradeARow.hover()
     await expect.poll(async () => tableRowBackgrounds(gradeARow)).not.toEqual(gradeABaseline)
-    expect(new Set(await tableRowBackgrounds(gradeARow))).toHaveLength(1)
+    expect(new Set(await tableRowBackgrounds(gradeARow)).size).toBe(1)
 
     await gradeBRow.hover()
     await expect.poll(async () => tableRowBackgrounds(gradeBRow)).not.toEqual(gradeBBaseline)
-    expect(new Set(await tableRowBackgrounds(gradeBRow))).toHaveLength(1)
+    expect(new Set(await tableRowBackgrounds(gradeBRow)).size).toBe(1)
     await expect.poll(async () => tableRowBackgrounds(gradeARow)).toEqual(gradeABaseline)
 
     await balsamGradeA.focus()
@@ -1791,6 +1805,38 @@ test.describe('TEST IDIR admin regression', () => {
     expect(exportSchedules.size).toBe(100)
   })
 
+  test('can page and sort all export schedules', async () => {
+    const page = await authenticatedIdirPage()
+
+    const schedules = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/admin/schedules', {
+        params: {
+          page: 0,
+          size: 20,
+          sortField: 'advertisingDate',
+          sortDirection: 'desc',
+        },
+      }),
+    )
+    const rows = asRecordArray(schedules.results)
+
+    expect(schedules.total, 'TEST should include historical export schedules').toBeGreaterThan(25)
+    expect(schedules.page).toBe(0)
+    expect(schedules.size).toBe(20)
+    expect(rows.length).toBeLessThanOrEqual(20)
+
+    let previousAdvertisingDate: string | null = null
+    for (const row of rows) {
+      const advertisingDate = String(row.advertisingDate ?? '').trim()
+      expect(advertisingDate).toMatch(isoDatePattern)
+      expect(row.mutable).toBe(Number(row.applicationCount ?? 0) === 0)
+      if (previousAdvertisingDate) {
+        expect(previousAdvertisingDate >= advertisingDate).toBe(true)
+      }
+      previousAdvertisingDate = advertisingDate
+    }
+  })
+
   test('shows report advertising date selector from current list dates', async () => {
     const page = await authenticatedIdirPage()
 
@@ -1881,9 +1927,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
   })
 
-  // TODO: Re-enable this EXPORT_SCHEDULE write regression once TEST grants allow
-  // INSERT/UPDATE/DELETE on EXPORT_SCHEDULE and access to EXPORT_SCHEDULE_SEQ.
-  test.skip('can create, update, and delete future export schedule rows', async () => {
+  test('can create, update, and delete future export schedule rows', async () => {
     const page = await authenticatedIdirPage()
     let scheduleId: string | null = null
     let deleted = false

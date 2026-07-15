@@ -411,7 +411,7 @@ describe('Admin policy action states', () => {
     {
       area: 'schedule',
       heading: 'Export schedule administration',
-      subtitle: 'Manage upcoming advertising, receipt, offer, and TEAC schedule dates.',
+      subtitle: 'Manage advertising, receipt, offer, and TEAC schedule dates.',
       absentHeadings: ['Fee policy administration', 'Fee in lieu percent policy administration'],
       fetchPage: mockedFetchExportSchedulePage,
       untouchedFetches: [mockedFetchFeePolicyPage, mockedFetchFilPolicyPage],
@@ -435,7 +435,16 @@ describe('Admin policy action states', () => {
         ).not.toBeInTheDocument()
       }
 
-      expect(fetchPage).toHaveBeenCalledWith(0, 100)
+      if (area === 'schedule') {
+        expect(mockedFetchExportSchedulePage).toHaveBeenCalledWith(
+          0,
+          100,
+          'advertisingDate',
+          'desc',
+        )
+      } else {
+        expect(fetchPage).toHaveBeenCalledWith(0, 100)
+      }
       for (const untouchedFetch of untouchedFetches) {
         expect(untouchedFetch).not.toHaveBeenCalled()
       }
@@ -520,7 +529,16 @@ describe('Admin policy action states', () => {
 
       await screen.findByRole('heading', { level: 1, name: heading })
 
-      expect(fetchPage).toHaveBeenLastCalledWith(0, 100)
+      if (area === 'schedule') {
+        expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+          0,
+          100,
+          'advertisingDate',
+          'desc',
+        )
+      } else {
+        expect(fetchPage).toHaveBeenLastCalledWith(0, 100)
+      }
       expect(screen.getByText('220 results found')).toBeInTheDocument()
 
       const rowsPerPage = screen.getByLabelText('Rows per page')
@@ -534,13 +552,31 @@ describe('Admin policy action states', () => {
       fireEvent.change(rowsPerPage, { target: { value: '20' } })
 
       await waitFor(() => {
-        expect(fetchPage).toHaveBeenLastCalledWith(0, 20)
+        if (area === 'schedule') {
+          expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+            0,
+            20,
+            'advertisingDate',
+            'desc',
+          )
+        } else {
+          expect(fetchPage).toHaveBeenLastCalledWith(0, 20)
+        }
       })
 
       await userEvent.click(screen.getByLabelText('Next page'))
 
       await waitFor(() => {
-        expect(fetchPage).toHaveBeenLastCalledWith(1, 20)
+        if (area === 'schedule') {
+          expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+            1,
+            20,
+            'advertisingDate',
+            'desc',
+          )
+        } else {
+          expect(fetchPage).toHaveBeenLastCalledWith(1, 20)
+        }
       })
     },
   )
@@ -548,7 +584,7 @@ describe('Admin policy action states', () => {
   it.each([
     { area: 'fee' as const, title: 'No fee policies found' },
     { area: 'fil' as const, title: 'No fee-in-lieu policies found' },
-    { area: 'schedule' as const, title: 'No upcoming export schedules found' },
+    { area: 'schedule' as const, title: 'No export schedules found' },
   ])('renders a semantic empty workspace for $area administration', async ({ area, title }) => {
     if (area === 'fee') {
       mockedFetchFeePolicyPage.mockResolvedValue({ rows: [], total: 0, page: 0, size: 100 })
@@ -587,6 +623,63 @@ describe('Admin policy action states', () => {
       expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveAttribute(
         'aria-busy',
         'false',
+      )
+    })
+  })
+
+  it('loads historical schedules in the paginated table and sorts them on the server', async () => {
+    const historicalRow = {
+      exportScheduleId: '17',
+      advertisingDate: '2026-06-24',
+      applicationReceiptDate: '2026-06-24',
+      offerReceiptDate: '2026-07-08',
+      offerEndDate: '2026-08-07',
+      offerWithdrawalDate: '2026-07-28',
+      teacMeetingDate: '2026-07-31',
+      applicationCount: 0,
+      mutable: true,
+    }
+    mockedFetchExportSchedulePage.mockResolvedValue({
+      rows: [historicalRow],
+      total: 2154,
+      page: 0,
+      size: 100,
+    })
+
+    renderPage('schedule')
+
+    await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'advertisingDate',
+        'desc',
+      )
+    })
+    expect(screen.getByLabelText('Advertising date')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting' }))
+
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'teacMeetingDate',
+        'asc',
+      )
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting (ASC)' }))
+
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'teacMeetingDate',
+        'desc',
       )
     })
   })
@@ -683,7 +776,46 @@ describe('Admin policy action states', () => {
     expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
   })
 
-  it('shows backend schedule mutation guardrails without reloading the table', async () => {
+  it('links application counts to an auto-filtered application search', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === '/lexisPolicyAdmin' ||
+          action === '/lexisFILAdmin' ||
+          action === '/applicationSearch',
+      }),
+    )
+    mockedFetchExportSchedulePage.mockResolvedValueOnce({
+      rows: [
+        {
+          exportScheduleId: '1002',
+          advertisingDate: '2026-07-15',
+          applicationReceiptDate: '2026-07-15',
+          offerReceiptDate: '2026-07-29',
+          offerEndDate: '2026-08-14',
+          offerWithdrawalDate: '2026-08-04',
+          teacMeetingDate: '2026-08-07',
+          applicationCount: 3,
+          mutable: false,
+        },
+      ],
+      total: 1,
+      page: 0,
+      size: 100,
+    })
+
+    renderPage('schedule')
+
+    const applicationLink = await screen.findByRole('link', {
+      name: 'View 3 applications advertised on 2026-07-15',
+    })
+    expect(applicationLink).toHaveAttribute(
+      'href',
+      '/provincial/application?listingFromDate=2026-07-15&listingToDate=2026-07-15',
+    )
+  })
+
+  it('shows backend schedule guardrail messages without reloading the table', async () => {
     mockedCreateExportSchedule.mockResolvedValueOnce({
       success: false,
       message: 'Export schedule is used by existing applications and cannot be changed.',
@@ -736,18 +868,18 @@ describe('Admin policy action states', () => {
     expect(mockedFetchExportSchedulePage).toHaveBeenCalledTimes(1)
   })
 
-  it('updates and deletes only mutable export schedule rows', async () => {
+  it('updates and deletes unreferenced export schedule rows regardless of date', async () => {
     mockedFetchExportSchedulePage
       .mockResolvedValueOnce({
         rows: [
           {
             exportScheduleId: '1001',
-            advertisingDate: '2026-07-01',
-            applicationReceiptDate: '2026-06-25',
-            offerReceiptDate: '2026-07-08',
+            advertisingDate: '2026-06-24',
+            applicationReceiptDate: '2026-06-20',
+            offerReceiptDate: '2026-06-30',
             offerEndDate: '2026-07-09',
-            offerWithdrawalDate: '2026-07-10',
-            teacMeetingDate: '2026-07-15',
+            offerWithdrawalDate: '2026-07-05',
+            teacMeetingDate: '2026-07-07',
             applicationCount: 0,
             mutable: true,
           },
@@ -771,12 +903,12 @@ describe('Admin policy action states', () => {
         rows: [
           {
             exportScheduleId: '1001',
-            advertisingDate: '2026-07-01',
+            advertisingDate: '2026-06-24',
             applicationReceiptDate: '2026-06-26',
-            offerReceiptDate: '2026-07-08',
+            offerReceiptDate: '2026-06-30',
             offerEndDate: '2026-07-09',
-            offerWithdrawalDate: '2026-07-10',
-            teacMeetingDate: '2026-07-15',
+            offerWithdrawalDate: '2026-07-05',
+            teacMeetingDate: '2026-07-07',
             applicationCount: 0,
             mutable: true,
           },
@@ -805,12 +937,12 @@ describe('Admin policy action states', () => {
 
     await waitFor(() => {
       expect(mockedUpdateExportSchedule).toHaveBeenCalledWith('1001', {
-        advertisingDate: '2026-07-01',
+        advertisingDate: '2026-06-24',
         applicationReceiptDate: '2026-06-26',
-        offerReceiptDate: '2026-07-08',
+        offerReceiptDate: '2026-06-30',
         offerEndDate: '2026-07-09',
-        offerWithdrawalDate: '2026-07-10',
-        teacMeetingDate: '2026-07-15',
+        offerWithdrawalDate: '2026-07-05',
+        teacMeetingDate: '2026-07-07',
       })
     })
     expect(await screen.findByText('Export schedule updated.')).toBeInTheDocument()

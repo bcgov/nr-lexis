@@ -79,13 +79,24 @@ public class LexisAdminScheduleService {
         normalizedSize);
   }
 
+  public LexisAdminPagedResponseDto<ExportScheduleRowDto> schedules(
+      int page, int size, String sortField, String sortDirection) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+    return new LexisAdminPagedResponseDto<>(
+        repository.findExportSchedules(normalizedPage, normalizedSize, sortField, sortDirection),
+        repository.countExportSchedules(),
+        normalizedPage,
+        normalizedSize);
+  }
+
   public ExportScheduleMutationResultDto createSchedule(ExportScheduleCreateRequestDto request) {
     return executeScheduleMutation(() -> createScheduleInTransaction(request));
   }
 
   private ExportScheduleMutationResultDto createScheduleInTransaction(
       ExportScheduleCreateRequestDto request) {
-    String validationError = validate(request);
+    String validationError = validate(request, true);
     if (validationError != null) {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
@@ -101,7 +112,7 @@ public class LexisAdminScheduleService {
 
   private ExportScheduleMutationResultDto updateScheduleInTransaction(
       long exportScheduleId, ExportScheduleCreateRequestDto request) {
-    String validationError = validate(request);
+    String validationError = validate(request, false);
     if (validationError != null) {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
@@ -134,7 +145,8 @@ public class LexisAdminScheduleService {
   private ExportScheduleMutationResultDto executeScheduleMutation(
       Supplier<ExportScheduleMutationResultDto> mutation) {
     if (redisLeases != null) {
-      return redisLeases.execute(List.of("admin:export-schedule"), () -> executeTransaction(mutation));
+      return redisLeases.execute(
+          List.of("admin:export-schedule"), () -> executeTransaction(mutation));
     }
     scheduleMutationGuard.lock();
     try {
@@ -172,11 +184,6 @@ public class LexisAdminScheduleService {
       return "Export schedule not found.";
     }
 
-    LocalDate today = LocalDate.now(clock);
-    if (existing.advertisingDate() == null || existing.advertisingDate().isBefore(today)) {
-      return "Only current or future export schedules can be changed.";
-    }
-
     long usageCount = repository.countApplicationsForExportSchedule(exportScheduleId);
     if (usageCount > 0L) {
       return "Export schedule is used by existing applications and cannot be changed.";
@@ -185,7 +192,8 @@ public class LexisAdminScheduleService {
     return null;
   }
 
-  private String validate(ExportScheduleCreateRequestDto request) {
+  private String validate(
+      ExportScheduleCreateRequestDto request, boolean requireFutureAdvertisingDate) {
     if (request == null) {
       return "Export schedule details are required.";
     }
@@ -194,7 +202,7 @@ public class LexisAdminScheduleService {
     if (advertisingDate == null) {
       return "Advertising date is required.";
     }
-    if (advertisingDate.isBefore(LocalDate.now(clock))) {
+    if (requireFutureAdvertisingDate && advertisingDate.isBefore(LocalDate.now(clock))) {
       return "Advertising date must be today or a future date.";
     }
     if (request.applicationReceiptDate() == null) {
