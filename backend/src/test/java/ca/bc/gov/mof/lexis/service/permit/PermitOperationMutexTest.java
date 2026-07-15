@@ -285,7 +285,7 @@ class PermitOperationMutexTest {
                         mutex.executeApplications(
                             List.of(1000456L), () -> "not reached")))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("exemption-then-application-then-permit order");
+        .hasMessageContaining("exemption-then-application-then-offer-then-permit order");
 
     assertThat(mutex.trackedOperationCount()).isZero();
     assertThat(mutex.executeApplications(List.of(1000456L), () -> "recovered"))

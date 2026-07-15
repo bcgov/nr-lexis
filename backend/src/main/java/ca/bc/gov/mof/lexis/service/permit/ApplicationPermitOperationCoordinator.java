@@ -10,7 +10,7 @@ import java.util.function.Supplier;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.stereotype.Service;
 
-/** Coordinates exemption, application, and permit mutations in a consistent lock order. */
+/** Coordinates exemption, application, offer, and permit mutations in a consistent lock order. */
 @Service
 public final class ApplicationPermitOperationCoordinator {
 
@@ -82,15 +82,31 @@ public final class ApplicationPermitOperationCoordinator {
     Objects.requireNonNull(permitDiscovery, "permitDiscovery");
     Objects.requireNonNull(operation, "operation");
 
-    return operationMutex.executeApplications(
-        List.of(applicationNumber),
-        () -> {
-          NavigableSet<Long> permitNumbers =
-              normalizeNumbers(permitDiscovery.get(), "permit");
-          return permitNumbers.isEmpty()
-              ? operation.get()
-              : operationMutex.executeAll(permitNumbers, operation);
-        });
+    NavigableSet<Long> expectedPermits =
+        normalizeNumbers(permitDiscovery.get(), "permit");
+    for (int attempt = 0; attempt < MAX_DISCOVERY_ATTEMPTS; attempt++) {
+      NavigableSet<Long> lockedPermits = new TreeSet<>(expectedPermits);
+      DiscoveryAttempt<T> result =
+          operationMutex.executeAggregate(
+              List.of(),
+              List.of(applicationNumber),
+              lockedPermits,
+              () -> {
+                NavigableSet<Long> actualPermits =
+                    normalizeNumbers(permitDiscovery.get(), "permit");
+                if (!lockedPermits.containsAll(actualPermits)) {
+                  return DiscoveryAttempt.retry(
+                      new TreeSet<>(), new TreeSet<>(), actualPermits);
+                }
+                return DiscoveryAttempt.completed(operation.get());
+              });
+      if (!result.retry()) {
+        return result.value();
+      }
+      expectedPermits.addAll(result.discoveredPermits());
+    }
+    throw new DataRetrievalFailureException(
+        "Application permit relationships changed repeatedly during mutation.");
   }
 
   public <T> T executeExemptionMutation(
@@ -162,6 +178,15 @@ public final class ApplicationPermitOperationCoordinator {
     validateNumber(applicationNumber, "application");
     Objects.requireNonNull(operation, "operation");
     return operationMutex.executeApplications(List.of(applicationNumber), operation);
+  }
+
+  public <T> T executeApplicationOfferMutation(
+      Long applicationNumber, Long offerNumber, Supplier<T> operation) {
+    validateNumber(applicationNumber, "application");
+    validateNumber(offerNumber, "offer");
+    Objects.requireNonNull(operation, "operation");
+    return operationMutex.executeAggregate(
+        List.of(), List.of(applicationNumber), List.of(offerNumber), List.of(), operation);
   }
 
   private NavigableSet<Long> normalizeNumbers(Collection<Long> numbers, String label) {

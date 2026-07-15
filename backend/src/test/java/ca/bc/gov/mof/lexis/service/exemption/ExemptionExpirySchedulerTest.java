@@ -7,7 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -16,15 +16,20 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.core.SimpleLock;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,18 +42,21 @@ class ExemptionExpirySchedulerTest {
   private static final Instant RUN_INSTANT = Instant.parse("2026-07-11T08:00:00Z");
   private static final ZoneId VANCOUVER = ZoneId.of("America/Vancouver");
   private static final Duration LOCK_AT_MOST_FOR = Duration.ofHours(6);
-  private static final Duration LOCK_AT_LEAST_FOR = Duration.ZERO;
+  private static final Duration LOCK_AT_LEAST_FOR = Duration.ofMinutes(5);
 
   @Mock private ExemptionExpiryService expiryService;
   @Mock private LockProvider lockProvider;
   @Mock private SimpleLock distributedLock;
-  @Mock private RedisExpiryRunLedger completionLedger;
+
+  @BeforeEach
+  void allowDistributedLockByDefault() {
+    lenient().when(lockProvider.lock(any())).thenReturn(Optional.of(distributedLock));
+  }
 
   @Test
   void shouldRecordCompletedRunAndResultCounts() {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     ExemptionExpiryScheduler scheduler = scheduler(registry);
-    allowLock();
     doReturn(
             new ExemptionExpiryService.ExpiryRunResult(
                 3, List.of("EX-1", "EX-2"), List.of("EX-3")))
@@ -58,7 +66,6 @@ class ExemptionExpirySchedulerTest {
     scheduler.expireDueExemptions();
 
     verify(expiryService).expireDueExemptions();
-    verify(completionLedger).markCompleted(LocalDate.of(2026, 7, 11));
     verify(distributedLock).unlock();
     assertThat(counter(registry, "completed")).isEqualTo(1d);
     assertThat(counter(registry, "failed")).isZero();
@@ -75,7 +82,6 @@ class ExemptionExpirySchedulerTest {
   void shouldRecordSkippedReentryWithoutRunningServiceTwice() {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     ExemptionExpiryScheduler scheduler = scheduler(registry);
-    allowLock();
     doAnswer(
             invocation -> {
               scheduler.expireDueExemptions();
@@ -93,10 +99,100 @@ class ExemptionExpirySchedulerTest {
   }
 
   @Test
+  void shouldUseOneNamedSixHourOracleLeaseWithFiveMinuteMinimum() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
+
+    scheduler.expireDueExemptions();
+
+    var lockCaptor = ArgumentCaptor.forClass(LockConfiguration.class);
+    verify(lockProvider).lock(lockCaptor.capture());
+    assertThat(lockCaptor.getValue().getName()).isEqualTo("lexis-exemption-expiry");
+    assertThat(lockCaptor.getValue().getLockAtMostFor()).isEqualTo(LOCK_AT_MOST_FOR);
+    assertThat(lockCaptor.getValue().getLockAtLeastFor()).isEqualTo(LOCK_AT_LEAST_FOR);
+  }
+
+  @Test
+  void heldDistributedLockShouldSkipWithoutRunningExpiry() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doReturn(Optional.empty()).when(lockProvider).lock(any());
+
+    scheduler.expireDueExemptions();
+
+    verifyNoInteractions(expiryService);
+    assertThat(counter(registry, "completed")).isZero();
+    assertThat(counter(registry, "failed")).isZero();
+    assertThat(counter(registry, "skipped")).isEqualTo(1d);
+  }
+
+  @Test
+  void sharedProviderShouldAllowOnlyOneSchedulerWhileFirstRunIsOpen() throws Exception {
+    ExemptionExpiryService firstService = org.mockito.Mockito.mock(ExemptionExpiryService.class);
+    ExemptionExpiryService secondService = org.mockito.Mockito.mock(ExemptionExpiryService.class);
+    LockProvider sharedProvider = new SingleHolderLockProvider();
+    SimpleMeterRegistry firstRegistry = new SimpleMeterRegistry();
+    SimpleMeterRegistry secondRegistry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler firstScheduler =
+        scheduler(firstService, sharedProvider, firstRegistry, fixedClock());
+    ExemptionExpiryScheduler secondScheduler =
+        scheduler(secondService, sharedProvider, secondRegistry, fixedClock());
+    CountDownLatch firstRunStarted = new CountDownLatch(1);
+    CountDownLatch releaseFirstRun = new CountDownLatch(1);
+    doAnswer(
+            invocation -> {
+              firstRunStarted.countDown();
+              if (!releaseFirstRun.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting to release first expiry run");
+              }
+              return emptyResult();
+            })
+        .when(firstService)
+        .expireDueExemptions();
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    try {
+      Future<?> firstRun = executor.submit(firstScheduler::expireDueExemptions);
+      assertThat(firstRunStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+      secondScheduler.expireDueExemptions();
+
+      verifyNoInteractions(secondService);
+      assertThat(counter(secondRegistry, "skipped")).isEqualTo(1d);
+      releaseFirstRun.countDown();
+      firstRun.get(5, TimeUnit.SECONDS);
+      verify(firstService).expireDueExemptions();
+      assertThat(counter(firstRegistry, "completed")).isEqualTo(1d);
+    } finally {
+      releaseFirstRun.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void unavailableLockTableShouldSkipAndAllowLaterRetry() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doThrow(new IllegalStateException("ORA-00942"))
+        .doReturn(Optional.of(distributedLock))
+        .when(lockProvider)
+        .lock(any());
+    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
+
+    assertThatCode(scheduler::expireDueExemptions).doesNotThrowAnyException();
+    scheduler.expireDueExemptions();
+
+    verify(expiryService, times(1)).expireDueExemptions();
+    assertThat(counter(registry, "completed")).isEqualTo(1d);
+    assertThat(counter(registry, "failed")).isZero();
+    assertThat(counter(registry, "skipped")).isEqualTo(1d);
+  }
+
+  @Test
   void shouldRecordFailureAndReleaseLocalGuard() {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     ExemptionExpiryScheduler scheduler = scheduler(registry);
-    allowLock();
     doThrow(new IllegalStateException("Oracle failed"))
         .doReturn(emptyResult())
         .when(expiryService)
@@ -115,11 +211,48 @@ class ExemptionExpirySchedulerTest {
   }
 
   @Test
+  void unlockFailureAfterSuccessfulExpiryShouldFailTheRun() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
+    doThrow(new IllegalStateException("Unlock failed")).when(distributedLock).unlock();
+
+    assertThatThrownBy(scheduler::expireDueExemptions)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Unlock failed");
+
+    assertThat(counter(registry, "completed")).isZero();
+    assertThat(counter(registry, "failed")).isEqualTo(1d);
+    assertThat(counter(registry, "skipped")).isZero();
+  }
+
+  @Test
+  void unlockFailureShouldBeSuppressedOnOriginalExpiryFailure() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    IllegalStateException expiryFailure = new IllegalStateException("Expiry failed");
+    IllegalStateException unlockFailure = new IllegalStateException("Unlock failed");
+    doThrow(expiryFailure).when(expiryService).expireDueExemptions();
+    doThrow(unlockFailure).when(distributedLock).unlock();
+
+    RuntimeException thrown = null;
+    try {
+      scheduler.expireDueExemptions();
+    } catch (RuntimeException ex) {
+      thrown = ex;
+    }
+
+    assertThat(thrown).isSameAs(expiryFailure);
+    assertThat(thrown.getSuppressed()).containsExactly(unlockFailure);
+    assertThat(counter(registry, "completed")).isZero();
+    assertThat(counter(registry, "failed")).isEqualTo(1d);
+  }
+
+  @Test
   void failureShouldPreserveLastCompletedRunGauges() {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     MutableClock clock = new MutableClock(RUN_INSTANT);
     ExemptionExpiryScheduler scheduler = scheduler(registry, clock);
-    allowLock();
     doReturn(
             new ExemptionExpiryService.ExpiryRunResult(
                 2, List.of("EX-1"), List.of("EX-2")))
@@ -166,7 +299,6 @@ class ExemptionExpirySchedulerTest {
         scheduler(
             registry,
             Clock.fixed(Instant.parse("2026-07-11T07:00:31Z"), ZoneOffset.UTC));
-    allowLock();
     doReturn(emptyResult()).when(expiryService).expireDueExemptions();
 
     scheduler.catchUpExpiryAfterStartup();
@@ -183,7 +315,6 @@ class ExemptionExpirySchedulerTest {
   void startupFailureShouldNotEscapeAndShouldReleaseDateForCronRetry() {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     ExemptionExpiryScheduler scheduler = scheduler(registry);
-    allowLock();
     doThrow(new IllegalStateException("Oracle failed"))
         .doReturn(emptyResult())
         .when(expiryService)
@@ -199,106 +330,35 @@ class ExemptionExpirySchedulerTest {
   }
 
   @Test
-  void distributedLockContentionShouldSkipWithoutClaimingTheDate() {
+  void startupWithUnavailableLockTableShouldSkipWithoutFailingApplicationReady() {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     ExemptionExpiryScheduler scheduler = scheduler(registry);
-    doReturn(Optional.empty(), Optional.of(distributedLock))
-        .when(lockProvider)
-        .lock(any(LockConfiguration.class));
-    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
-
-    scheduler.expireDueExemptions();
-    scheduler.expireDueExemptions();
-
-    verify(expiryService).expireDueExemptions();
-    verify(distributedLock).unlock();
-    assertThat(counter(registry, "completed")).isEqualTo(1d);
-    assertThat(counter(registry, "skipped")).isEqualTo(1d);
-  }
-
-  @Test
-  void completedDateShouldBeSharedAcrossSchedulerInstances() {
-    AtomicBoolean completed = new AtomicBoolean();
-    doAnswer(invocation -> completed.get())
-        .when(completionLedger)
-        .completed(any(LocalDate.class));
-    doAnswer(
-            invocation -> {
-              completed.set(true);
-              return null;
-            })
-        .when(completionLedger)
-        .markCompleted(any(LocalDate.class));
-    allowLock();
-    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
-    SimpleMeterRegistry firstRegistry = new SimpleMeterRegistry();
-    SimpleMeterRegistry secondRegistry = new SimpleMeterRegistry();
-
-    scheduler(firstRegistry).expireDueExemptions();
-    scheduler(secondRegistry).expireDueExemptions();
-
-    verify(expiryService).expireDueExemptions();
-    verify(distributedLock, times(2)).unlock();
-    assertThat(counter(firstRegistry, "completed")).isEqualTo(1d);
-    assertThat(counter(secondRegistry, "skipped")).isEqualTo(1d);
-  }
-
-  @Test
-  void redisFailureShouldFailClosedForScheduledRun() {
-    SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    ExemptionExpiryScheduler scheduler = scheduler(registry);
-    doThrow(new IllegalStateException("Redis unavailable"))
-        .when(lockProvider)
-        .lock(any(LockConfiguration.class));
-
-    assertThatThrownBy(scheduler::expireDueExemptions).isInstanceOf(IllegalStateException.class);
-
-    verifyNoInteractions(expiryService);
-    verify(distributedLock, never()).unlock();
-    assertThat(counter(registry, "failed")).isEqualTo(1d);
-    assertThat(counter(registry, "completed")).isZero();
-  }
-
-  @Test
-  void redisFailureDuringStartupCatchUpShouldNotFailApplicationStartup() {
-    SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    ExemptionExpiryScheduler scheduler = scheduler(registry);
-    doThrow(new IllegalStateException("Redis unavailable"))
-        .when(lockProvider)
-        .lock(any(LockConfiguration.class));
+    doThrow(new IllegalStateException("ORA-00942")).when(lockProvider).lock(any());
 
     assertThatCode(scheduler::catchUpExpiryAfterStartup).doesNotThrowAnyException();
 
     verifyNoInteractions(expiryService);
-    assertThat(counter(registry, "failed")).isEqualTo(1d);
-  }
-
-  @Test
-  void shouldUseTheConfiguredShedLockNameAndDurations() {
-    SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    ExemptionExpiryScheduler scheduler = scheduler(registry);
-    allowLock();
-    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
-
-    scheduler.expireDueExemptions();
-
-    ArgumentCaptor<LockConfiguration> configuration =
-        ArgumentCaptor.forClass(LockConfiguration.class);
-    verify(lockProvider).lock(configuration.capture());
-    assertThat(configuration.getValue().getName()).isEqualTo("lexis-exemption-expiry");
-    assertThat(configuration.getValue().getLockAtMostFor()).isEqualTo(LOCK_AT_MOST_FOR);
-    assertThat(configuration.getValue().getLockAtLeastFor()).isEqualTo(LOCK_AT_LEAST_FOR);
+    assertThat(counter(registry, "completed")).isZero();
+    assertThat(counter(registry, "failed")).isZero();
+    assertThat(counter(registry, "skipped")).isEqualTo(1d);
   }
 
   private ExemptionExpiryScheduler scheduler(SimpleMeterRegistry registry) {
-    return scheduler(registry, Clock.fixed(RUN_INSTANT, ZoneOffset.UTC));
+    return scheduler(registry, fixedClock());
   }
 
   private ExemptionExpiryScheduler scheduler(SimpleMeterRegistry registry, Clock clock) {
+    return scheduler(expiryService, lockProvider, registry, clock);
+  }
+
+  private ExemptionExpiryScheduler scheduler(
+      ExemptionExpiryService service,
+      LockProvider provider,
+      SimpleMeterRegistry registry,
+      Clock clock) {
     return new ExemptionExpiryScheduler(
-        expiryService,
-        lockProvider,
-        completionLedger,
+        service,
+        provider,
         registry,
         clock,
         VANCOUVER,
@@ -306,10 +366,8 @@ class ExemptionExpirySchedulerTest {
         LOCK_AT_LEAST_FOR);
   }
 
-  private void allowLock() {
-    doReturn(Optional.of(distributedLock))
-        .when(lockProvider)
-        .lock(any(LockConfiguration.class));
+  private Clock fixedClock() {
+    return Clock.fixed(RUN_INSTANT, ZoneOffset.UTC);
   }
 
   private ExemptionExpiryService.ExpiryRunResult emptyResult() {
@@ -353,6 +411,19 @@ class ExemptionExpirySchedulerTest {
     @Override
     public Instant instant() {
       return instant;
+    }
+  }
+
+  private static final class SingleHolderLockProvider implements LockProvider {
+
+    private final AtomicBoolean held = new AtomicBoolean();
+
+    @Override
+    public Optional<SimpleLock> lock(LockConfiguration lockConfiguration) {
+      if (!held.compareAndSet(false, true)) {
+        return Optional.empty();
+      }
+      return Optional.of(() -> held.set(false));
     }
   }
 }

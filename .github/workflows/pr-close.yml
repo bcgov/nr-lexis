@@ -82,6 +82,7 @@ jobs:
             delete_preview() {
               local pr_number="$1"
 
+              # Redis is cleanup-only for previews created before coordination was removed.
               for component in backend frontend clamav redis; do
                 local label="${REPO}-${component}-${pr_number}"
                 echo "Deleting PR resources matching app=${label}"

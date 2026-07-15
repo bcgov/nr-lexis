@@ -41,10 +41,6 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `DATABASE_SERVICE_NAME` | Oracle service name used in the JDBC connection descriptor | Required |
 | `DATABASE_USER` | Least-privilege Oracle application account | Required |
 | `DATABASE_PASSWORD` | Oracle application-account password | Required |
-| `SPRING_DATA_REDIS_HOST` | Cluster-local Redis coordination service hostname | Required in OpenShift |
-| `SPRING_DATA_REDIS_PORT` | Redis coordination service port | 6379 |
-| `SPRING_DATA_REDIS_PASSWORD` | Redis coordination password | Required in OpenShift |
-| `LEXIS_COORDINATION_NAMESPACE` | Environment prefix for edit, mutation, scheduler, and idempotency keys | local |
 | `TRUSTSTORE_PATH` | Path to `jssecacerts` JKS | - |
 | `KEYSTORE_SECRET` | Password used to create and open the JVM Oracle truststore | Required |
 | `ALLOWED_ORIGINS` | Frontend CORS origins | http://localhost:3000 |
@@ -54,14 +50,11 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
 | `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
 | `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
-| `LEXIS_EXPIRY_ENABLED` | Enables the Redis-coordinated daily exemption-expiry scheduler | false |
+| `LEXIS_EXPIRY_ENABLED` | Enables the daily exemption-expiry scheduler | false |
 | `LEXIS_EXPIRY_CRON` | Spring six-field cron expression for the expiry scheduler | `30 0 0 * * *` |
 | `LEXIS_EXPIRY_ZONE` | Business time zone for the expiry scheduler | America/Vancouver |
-| `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Maximum Redis scheduler lease duration | PT6H |
-| `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Minimum Redis scheduler lease duration | PT0S |
-| `LEXIS_EXPIRY_COMPLETION_RETENTION` | Retention for successful expiry business-date markers | 3d |
-| `LEXIS_FEDERAL_IN_FLIGHT_TTL` | Renewable lifetime for a federal submission claim; abandoned claims expire after this interval | 5m |
-| `LEXIS_FEDERAL_REPLAY_TTL` | Lifetime for replaying a completed federal submission response | 24h |
+| `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Maximum Oracle ShedLock duration; releases a crashed run | PT6H |
+| `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Minimum Oracle ShedLock duration; absorbs multi-pod trigger skew | PT5M |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
 | `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | legacy-best-effort |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Requested timeout in seconds for each isolated GBMS transaction (1-3600); cancellation can leave the outcome unknown | 60 |
@@ -89,19 +82,12 @@ The reusable deployment workflow maps these GitHub settings:
 | `DATABASE_USER` | Secret `database_user` |
 | `DATABASE_PASSWORD` | Secret `database_password` |
 | `KEYSTORE_SECRET` | Secret `keystore_secret` |
-| `SPRING_DATA_REDIS_HOST` | Generated cluster-local Redis service name |
-| `SPRING_DATA_REDIS_PORT` | OpenShift template value `6379` |
-| `SPRING_DATA_REDIS_PASSWORD` | Secret `redis_password` |
-| `LEXIS_COORDINATION_NAMESPACE` | Deployment target (`dev` preview, `test`, or `prod`) |
 | `LEXIS_PROD_RTM_ONLY` | Secret `lexis_prod_rtm_only` |
 | `LEXIS_EXPIRY_ENABLED` | Workflow input `expiry_enabled` |
 | `LEXIS_EXPIRY_CRON` | Variable `LEXIS_EXPIRY_CRON` |
 | `LEXIS_EXPIRY_ZONE` | Variable `LEXIS_EXPIRY_ZONE` |
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` |
-| `LEXIS_EXPIRY_COMPLETION_RETENTION` | Variable `LEXIS_EXPIRY_COMPLETION_RETENTION` |
-| `LEXIS_FEDERAL_IN_FLIGHT_TTL` | Variable `LEXIS_FEDERAL_IN_FLIGHT_TTL` |
-| `LEXIS_FEDERAL_REPLAY_TTL` | Variable `LEXIS_FEDERAL_REPLAY_TTL` |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Variable `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` |
 | `LEXIS_PERMIT_INVOICE_MODE` | Variable `LEXIS_PERMIT_INVOICE_MODE` |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Variable `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` |
@@ -118,19 +104,12 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RSI_RECIPIENTS` |
 | `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Secret `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` |
 
-OpenShift deploys one password-protected Redis coordination service per environment or preview.
-It has no public Route, accepts traffic only from that environment's backend pods, and stores no
-authoritative LEXIS business records. Backend replicas use it for distributed leases and cached
-idempotency responses. Available Oracle transactions, constraints, and conditional writes remain
-the final data-integrity boundary. Configure a
-strong `REDIS_PASSWORD` GitHub environment secret before deployment. The optional
-`LEXIS_REDIS_IMAGE` environment variable selects the version-tagged Redis image. Change
-`LEXIS_REDIS_CONFIG_VERSION` only when that image, its password, or its runtime configuration must
-roll; ordinary application deployments leave Redis running. Redis uses append-only
-persistence on a 1 GiB RWO volume so idempotency responses survive pod replacement; its single-pod
-`Recreate` rollout prevents two writers from mounting the same volume. The `everysec` fsync policy
-can lose roughly the newest second after an abrupt node or storage failure; coordinated operations
-fail closed while Redis is unavailable.
+Backend replicas use optimistic version checks for interactive saves. A stale save returns a
+conflict so the user can refresh or explicitly overwrite after reviewing newer changes. Short
+multi-row mutations take Oracle row locks in a consistent order, with Oracle transactions,
+constraints, and conditional writes as the data-integrity boundary. The application has no Redis
+runtime dependency. When expiry is enabled, its scheduler uses `THE.LEXIS_SHEDLOCK` through the
+existing Oracle connection.
 
 ### Spring Profiles
 

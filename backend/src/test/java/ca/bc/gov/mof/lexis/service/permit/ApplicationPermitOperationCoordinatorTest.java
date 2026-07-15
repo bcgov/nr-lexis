@@ -236,6 +236,46 @@ class ApplicationPermitOperationCoordinatorTest {
   }
 
   @Test
+  void applicationMutationShouldRetryWhenPermitRelationshipsGrow() {
+    AtomicInteger discoveries = new AtomicInteger();
+    AtomicInteger operations = new AtomicInteger();
+
+    String result =
+        coordinator.executeApplicationMutation(
+            1000456L,
+            () ->
+                discoveries.incrementAndGet() == 1
+                    ? List.of(7000123L)
+                    : List.of(7000123L, 7000124L),
+            () -> {
+              operations.incrementAndGet();
+              assertThat(mutex.trackedOperationCount()).isEqualTo(3);
+              return "completed";
+            });
+
+    assertThat(result).isEqualTo("completed");
+    assertThat(discoveries).hasValue(3);
+    assertThat(operations).hasValue(1);
+    assertThat(mutex.trackedOperationCount()).isZero();
+  }
+
+  @Test
+  void offerMutationShouldLockTheApplicationAndOffer() {
+    String result =
+        coordinator.executeApplicationOfferMutation(
+            1000456L,
+            3000123L,
+            () -> {
+              assertThat(mutex.trackedOperationCount()).isEqualTo(2);
+              assertThat(mutex.trackedOfferCount()).isEqualTo(1);
+              return "completed";
+            });
+
+    assertThat(result).isEqualTo("completed");
+    assertThat(mutex.trackedOperationCount()).isZero();
+  }
+
+  @Test
   void linkedPermitAndApplicationMutationsShouldSerializeWithoutBlockingUnrelatedAggregate()
       throws Exception {
     ExecutorService executor = Executors.newFixedThreadPool(3);

@@ -17,7 +17,6 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
-import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
@@ -757,7 +756,7 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
-  void updateOfferLegacyShouldRejectAUserWithoutTheExistingOfferLock() {
+  void updateOfferLegacyShouldNotDependOnTheRemovedInteractiveEditLock() {
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(authentication.getName()).thenReturn("idir\\reviewer2");
     when(sessionService.parseRolesFromPrincipal(authentication))
@@ -767,24 +766,23 @@ class OfferDetailsRpcControllerTest {
         .thenReturn(true);
     when(purchaseOfferService.findByOfferNumber(81001L))
         .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
-    when(editLockService.touchOffer(81001L, "idir\\reviewer2")).thenReturn(false);
-    when(editLockService.snapshotOffer(81001L, "idir\\reviewer2", false))
+    when(purchaseOfferService.updateOfferSnapshot(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\reviewer2")))
         .thenReturn(
-            new ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto(
-                true,
-                false,
-                null,
-                "This offer is currently locked for editing by another user.",
-                null));
+            new PurchaseOfferService.CreateOfferResult(
+                true, "updated", 1000456L, 81001L, false, null, true, true, List.of(), List.of()));
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("exportPurchaseOfferNumber", "81001");
     params.add("purchaseOfferAmount", "13000.00");
 
-    assertThatThrownBy(() -> controller.updateOfferLegacy(params, authentication))
-        .isInstanceOf(EditLockConflictException.class)
-        .hasMessageContaining("locked for editing by another user");
-    verify(purchaseOfferService, never())
-        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(purchaseOfferService)
+        .updateOfferSnapshot(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\reviewer2"));
+    verify(editLockService, never()).touchOffer(anyLong(), nullable(String.class));
   }
 
   @Test

@@ -28,6 +28,7 @@ import {
   hasRole,
 } from '@/context/auth/role-utils'
 import { syncAppNotificationRegionTheme } from '@/components/AppNotification'
+import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
@@ -523,6 +524,7 @@ function Layout({ children }: LayoutProps) {
 
   return (
     <Theme theme={isDarkTheme ? 'g100' : 'white'}>
+      <OptimisticConflictModal />
       <div
         className={`app-shell${isDesktopSideNavCollapsed ? ' is-side-nav-collapsed' : ''}${isMobileNavOpen ? ' is-mobile-nav-open' : ''}`}
       >

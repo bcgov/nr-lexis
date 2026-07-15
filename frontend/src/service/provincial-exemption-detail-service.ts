@@ -167,11 +167,10 @@ export const fetchExemptionBlanketOicTotals = async (
 export const fetchExemptionEditContext = async (
   exemptionNumber: string,
 ): Promise<ExemptionEditContext> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<unknown>('/lexis/rpc/exemption-details/edit-context', {
-      params: { exemptionNumber: exemptionNumber.trim() },
-    })
+  const normalizedExemptionNumber = exemptionNumber.trim()
+  const path = '/lexis/rpc/exemption-details/edit-context'
+  const config = { params: { exemptionNumber: normalizedExemptionNumber } }
+  const response = await apiService.getAxiosInstance().get<unknown>(path, config)
   if (
     !isRecord(response.data) ||
     !Object.hasOwn(response.data, 'rateOverrideEnabled') ||
@@ -180,6 +179,7 @@ export const fetchExemptionEditContext = async (
   ) {
     throw new Error('Unexpected exemption edit context payload.')
   }
+  apiService.registerRecordVersion('exemption', normalizedExemptionNumber, response, path, config)
   const payload = response.data
   return {
     rateOverrideEnabled: asBoolean(payload.rateOverrideEnabled),

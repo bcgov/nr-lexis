@@ -41,11 +41,13 @@ export const fetchProvincialApplicationDetail = async (
   applicationNumber: string,
 ): Promise<ProvincialApplicationDetail | null> => {
   try {
+    const path = `/lexis/applications/${applicationNumber}`
     const response = await apiService.getCachedResponse<ProvincialApplicationDetail>(
-      `/lexis/applications/${applicationNumber}`,
+      path,
       undefined,
       { ttlMs: 0 },
     )
+    apiService.registerRecordVersion('application', applicationNumber, response, path)
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -69,11 +71,13 @@ export const fetchProvincialExemptionDetail = async (
   exemptionNumber: string,
 ): Promise<ProvincialExemptionDetail | null> => {
   try {
+    const path = `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`
     const response = await apiService.getCachedResponse<ProvincialExemptionDetail>(
-      `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+      path,
       undefined,
       { ttlMs: 0 },
     )
+    apiService.registerRecordVersion('exemption', exemptionNumber, response, path)
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -87,11 +91,11 @@ export const fetchProvincialOfferDetail = async (
   offerNumber: string,
 ): Promise<ProvincialOfferDetail | null> => {
   try {
-    const response = await apiService.getCachedResponse<ProvincialOfferDetail>(
-      `/lexis/purchase-offers/${offerNumber}`,
-      undefined,
-      { ttlMs: 0 },
-    )
+    const path = `/lexis/purchase-offers/${offerNumber}`
+    const response = await apiService.getCachedResponse<ProvincialOfferDetail>(path, undefined, {
+      ttlMs: 0,
+    })
+    apiService.registerRecordVersion('offer', offerNumber, response, path)
     const detail = response.data
     if (!detail) {
       return null
@@ -205,11 +209,11 @@ export const fetchProvincialPermitDetail = async (
   permitNumber: string,
 ): Promise<ProvincialPermitDetail | null> => {
   try {
-    const response = await apiService.getCachedResponse<ProvincialPermitDetail>(
-      `/lexis/permits/${permitNumber}`,
-      undefined,
-      { ttlMs: DETAIL_CACHE_TTL_MS },
-    )
+    const path = `/lexis/permits/${permitNumber}`
+    const response = await apiService.getCachedResponse<ProvincialPermitDetail>(path, undefined, {
+      ttlMs: DETAIL_CACHE_TTL_MS,
+    })
+    apiService.registerRecordVersion('permit', permitNumber, response, path)
     const permitDetail = response.data
     if (!permitDetail.exemptionNumber) {
       return {
@@ -246,11 +250,11 @@ export const fetchFederalApplicationDetail = async (
   applicationNumber: string,
 ): Promise<FederalApplicationDetail | null> => {
   try {
-    const response = await apiService.getCachedResponse<FederalApplicationDetail>(
-      `/lexis/federal/applications/${applicationNumber}`,
-      undefined,
-      { ttlMs: 0 },
-    )
+    const path = `/lexis/federal/applications/${applicationNumber}`
+    const response = await apiService.getCachedResponse<FederalApplicationDetail>(path, undefined, {
+      ttlMs: 0,
+    })
+    apiService.registerRecordVersion('federal-application', applicationNumber, response, path)
     const detail = response.data
     if (!detail) {
       return null

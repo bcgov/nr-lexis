@@ -21,6 +21,7 @@ import net.javacrumbs.shedlock.core.SimpleLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -41,7 +42,6 @@ public class ExemptionExpiryScheduler {
 
   private final ExemptionExpiryService expiryService;
   private final LockProvider lockProvider;
-  private final RedisExpiryRunLedger completionLedger;
   private final Clock clock;
   private final ZoneId expiryZone;
   private final Duration lockAtMostFor;
@@ -60,16 +60,14 @@ public class ExemptionExpiryScheduler {
   @Autowired
   public ExemptionExpiryScheduler(
       ExemptionExpiryService expiryService,
-      LockProvider lockProvider,
-      RedisExpiryRunLedger completionLedger,
+      @Qualifier("expiryLockProvider") LockProvider lockProvider,
       MeterRegistry meterRegistry,
       @Value("${lexis.expiry.zone:America/Vancouver}") String expiryZone,
       @Value("${lexis.expiry.lock-at-most-for:PT6H}") String lockAtMostFor,
-      @Value("${lexis.expiry.lock-at-least-for:PT0S}") String lockAtLeastFor) {
+      @Value("${lexis.expiry.lock-at-least-for:PT5M}") String lockAtLeastFor) {
     this(
         expiryService,
         lockProvider,
-        completionLedger,
         meterRegistry,
         Clock.systemUTC(),
         ZoneId.of(expiryZone),
@@ -80,7 +78,6 @@ public class ExemptionExpiryScheduler {
   ExemptionExpiryScheduler(
       ExemptionExpiryService expiryService,
       LockProvider lockProvider,
-      RedisExpiryRunLedger completionLedger,
       MeterRegistry meterRegistry,
       Clock clock,
       ZoneId expiryZone,
@@ -88,7 +85,6 @@ public class ExemptionExpiryScheduler {
       Duration lockAtLeastFor) {
     this.expiryService = Objects.requireNonNull(expiryService, "expiryService");
     this.lockProvider = Objects.requireNonNull(lockProvider, "lockProvider");
-    this.completionLedger = Objects.requireNonNull(completionLedger, "completionLedger");
     MeterRegistry registry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.expiryZone = Objects.requireNonNull(expiryZone, "expiryZone");
@@ -149,10 +145,20 @@ public class ExemptionExpiryScheduler {
         return;
       }
 
-      Optional<SimpleLock> distributedLock =
-          lockProvider.lock(
-              new LockConfiguration(
-                  clock.instant(), LOCK_NAME, lockAtMostFor, lockAtLeastFor));
+      Optional<SimpleLock> distributedLock;
+      try {
+        distributedLock =
+            lockProvider.lock(
+                new LockConfiguration(
+                    clock.instant(), LOCK_NAME, lockAtMostFor, lockAtLeastFor));
+      } catch (RuntimeException ex) {
+        skippedRuns.increment();
+        LOGGER.warn(
+            "event=lexis_exemption_expiry operation={} outcome=skipped reason=lock_unavailable failureType={}",
+            operation,
+            exceptionType(ex));
+        return;
+      }
       if (distributedLock.isEmpty()) {
         skippedRuns.increment();
         LOGGER.info(
@@ -164,19 +170,11 @@ public class ExemptionExpiryScheduler {
       claimedRunDate.set(runDate);
       dateClaimed = true;
 
-      Optional<ExemptionExpiryService.ExpiryRunResult> result =
-          expireDueExemptionsAndRelease(distributedLock.orElseThrow(), runDate);
-      if (result.isEmpty()) {
-        skippedRuns.increment();
-        LOGGER.info(
-            "event=lexis_exemption_expiry operation={} outcome=skipped reason=date_already_processed",
-            operation);
-        return;
-      }
-      ExemptionExpiryService.ExpiryRunResult completedResult = result.orElseThrow();
-      lastCandidateCount.set(completedResult.candidateCount());
-      lastExpiredCount.set(completedResult.expiredExemptions().size());
-      lastDeferredCount.set(completedResult.deferredExemptions().size());
+      ExemptionExpiryService.ExpiryRunResult result =
+          expireDueExemptionsAndRelease(distributedLock.orElseThrow());
+      lastCandidateCount.set(result.candidateCount());
+      lastExpiredCount.set(result.expiredExemptions().size());
+      lastDeferredCount.set(result.deferredExemptions().size());
       lastCompletedTimestamp.set(clock.instant().getEpochSecond());
       completedRuns.increment();
     } catch (RuntimeException ex) {
@@ -195,16 +193,10 @@ public class ExemptionExpiryScheduler {
     }
   }
 
-  private Optional<ExemptionExpiryService.ExpiryRunResult> expireDueExemptionsAndRelease(
-      SimpleLock lock, LocalDate runDate) {
+  private ExemptionExpiryService.ExpiryRunResult expireDueExemptionsAndRelease(SimpleLock lock) {
     RuntimeException failure = null;
     try {
-      if (completionLedger.completed(runDate)) {
-        return Optional.empty();
-      }
-      ExemptionExpiryService.ExpiryRunResult result = expiryService.expireDueExemptions();
-      completionLedger.markCompleted(runDate);
-      return Optional.of(result);
+      return expiryService.expireDueExemptions();
     } catch (RuntimeException ex) {
       failure = ex;
       throw ex;

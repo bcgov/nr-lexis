@@ -1,6 +1,5 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
-import ca.bc.gov.mof.lexis.service.coordination.RedisLeaseService;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -15,22 +14,23 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-/** Serializes exemption, application, and permit updates across backend pods. */
+/** Serializes local aggregate work and delegates cross-pod correctness to Oracle row locks. */
 @Service
 public final class PermitOperationMutex {
 
   private final ConcurrentHashMap<OperationKey, Entry> entries = new ConcurrentHashMap<>();
   private final ThreadLocal<NavigableSet<OperationKey>> heldKeys = new ThreadLocal<>();
-  private final RedisLeaseService redisLeases;
+  private final OracleAggregateRowLockService oracleRowLocks;
 
   public PermitOperationMutex() {
-    this.redisLeases = null;
+    this.oracleRowLocks = null;
   }
 
   @Autowired
-  public PermitOperationMutex(ObjectProvider<RedisLeaseService> redisLeaseProvider) {
-    this.redisLeases =
-        redisLeaseProvider == null ? null : redisLeaseProvider.getIfAvailable();
+  public PermitOperationMutex(
+      ObjectProvider<OracleAggregateRowLockService> oracleRowLockProvider) {
+    this.oracleRowLocks =
+        oracleRowLockProvider == null ? null : oracleRowLockProvider.getIfAvailable();
   }
 
   public <T> T execute(Long permitNumber, Supplier<T> operation) {
@@ -64,14 +64,26 @@ public final class PermitOperationMutex {
       Collection<Long> applicationNumbers,
       Collection<Long> permitNumbers,
       Supplier<T> operation) {
+    return executeAggregate(
+        exemptionNumbers, applicationNumbers, List.of(), permitNumbers, operation);
+  }
+
+  public <T> T executeAggregate(
+      Collection<String> exemptionNumbers,
+      Collection<Long> applicationNumbers,
+      Collection<Long> offerNumbers,
+      Collection<Long> permitNumbers,
+      Supplier<T> operation) {
     Objects.requireNonNull(exemptionNumbers, "exemptionNumbers");
     Objects.requireNonNull(applicationNumbers, "applicationNumbers");
+    Objects.requireNonNull(offerNumbers, "offerNumbers");
     Objects.requireNonNull(permitNumbers, "permitNumbers");
     Objects.requireNonNull(operation, "operation");
 
     NavigableSet<OperationKey> keys = new TreeSet<>();
     addExemptionKeys(keys, exemptionNumbers);
     addKeys(keys, applicationNumbers, OperationType.APPLICATION, "application");
+    addKeys(keys, offerNumbers, OperationType.OFFER, "offer");
     addKeys(keys, permitNumbers, OperationType.PERMIT, "permit");
     if (keys.isEmpty()) {
       throw new IllegalArgumentException("At least one aggregate key is required.");
@@ -81,56 +93,13 @@ public final class PermitOperationMutex {
 
   private <T> T executeKeys(List<OperationKey> keys, Supplier<T> operation) {
     Objects.requireNonNull(operation, "operation");
-    if (redisLeases != null) {
-      return executeDistributed(keys, operation);
-    }
     return executeInOrder(keys, 0, operation);
-  }
-
-  private <T> T executeDistributed(List<OperationKey> keys, Supplier<T> operation) {
-    NavigableSet<OperationKey> currentHeldKeys = heldKeys.get();
-    NavigableSet<OperationKey> newlyHeldKeys = new TreeSet<>();
-    for (OperationKey key : keys) {
-      if (currentHeldKeys != null && currentHeldKeys.contains(key)) {
-        continue;
-      }
-      if (currentHeldKeys != null
-          && !currentHeldKeys.isEmpty()
-          && key.compareTo(currentHeldKeys.last()) < 0) {
-        throw new IllegalStateException(
-            "Aggregate operation locks must be acquired in exemption-then-application-then-permit order.");
-      }
-      newlyHeldKeys.add(key);
-    }
-    if (newlyHeldKeys.isEmpty()) {
-      return operation.get();
-    }
-
-    try (RedisLeaseService.Lease lease =
-        redisLeases.acquire(newlyHeldKeys.stream().map(OperationKey::redisResource).toList())) {
-      NavigableSet<OperationKey> updatedHeldKeys = heldKeys.get();
-      if (updatedHeldKeys == null) {
-        updatedHeldKeys = new TreeSet<>();
-        heldKeys.set(updatedHeldKeys);
-      }
-      updatedHeldKeys.addAll(newlyHeldKeys);
-      try {
-        T result = operation.get();
-        lease.requireValid();
-        return result;
-      } finally {
-        updatedHeldKeys.removeAll(newlyHeldKeys);
-        if (updatedHeldKeys.isEmpty()) {
-          heldKeys.remove();
-        }
-      }
-    }
   }
 
   private <T> T executeInOrder(
       List<OperationKey> keys, int index, Supplier<T> operation) {
     if (index >= keys.size()) {
-      return operation.get();
+      return executeWithOracleRowLocks(keys, operation);
     }
     return executeKey(
         keys.get(index), () -> executeInOrder(keys, index + 1, operation));
@@ -145,7 +114,7 @@ public final class PermitOperationMutex {
         && !currentHeldKeys.isEmpty()
         && key.compareTo(currentHeldKeys.last()) < 0) {
       throw new IllegalStateException(
-          "Aggregate operation locks must be acquired in exemption-then-application-then-permit order.");
+          "Aggregate operation locks must be acquired in exemption-then-application-then-offer-then-permit order.");
     }
 
     Entry entry =
@@ -195,6 +164,10 @@ public final class PermitOperationMutex {
     return (int) entries.keySet().stream().filter(OperationKey::exemption).count();
   }
 
+  int trackedOfferCount() {
+    return (int) entries.keySet().stream().filter(OperationKey::offer).count();
+  }
+
   private void addExemptionKeys(
       Collection<OperationKey> keys, Collection<String> exemptionNumbers) {
     List<String> snapshot = new ArrayList<>(exemptionNumbers);
@@ -241,6 +214,39 @@ public final class PermitOperationMutex {
         });
   }
 
+  private <T> T executeWithOracleRowLocks(
+      Collection<OperationKey> keys, Supplier<T> operation) {
+    if (oracleRowLocks == null) {
+      return operation.get();
+    }
+    List<String> exemptionNumbers =
+        keys.stream()
+            .filter(key -> key.type == OperationType.EXEMPTION)
+            .map(OperationKey::textValue)
+            .toList();
+    List<Long> applicationNumbers =
+        keys.stream()
+            .filter(key -> key.type == OperationType.APPLICATION)
+            .map(OperationKey::numericValue)
+            .toList();
+    List<Long> permitNumbers =
+        keys.stream()
+            .filter(key -> key.type == OperationType.PERMIT)
+            .map(OperationKey::numericValue)
+            .toList();
+    List<Long> offerNumbers =
+        keys.stream()
+            .filter(key -> key.type == OperationType.OFFER)
+            .map(OperationKey::numericValue)
+            .toList();
+    try {
+      return oracleRowLocks.execute(
+          exemptionNumbers, applicationNumbers, offerNumbers, permitNumbers, operation);
+    } catch (CoordinatedRollbackResultException exception) {
+      return exception.result();
+    }
+  }
+
   private static final class Entry {
     private final ReentrantLock lock = new ReentrantLock();
     // Accessed only while ConcurrentHashMap.compute holds this permit key.
@@ -250,6 +256,7 @@ public final class PermitOperationMutex {
   private enum OperationType {
     EXEMPTION,
     APPLICATION,
+    OFFER,
     PERMIT
   }
 
@@ -283,12 +290,9 @@ public final class PermitOperationMutex {
       return type == OperationType.EXEMPTION;
     }
 
-    String redisResource() {
-      return switch (type) {
-        case EXEMPTION -> "exemption:" + textValue;
-        case APPLICATION -> "application:" + numericValue;
-        case PERMIT -> "permit:" + numericValue;
-      };
+    boolean offer() {
+      return type == OperationType.OFFER;
     }
+
   }
 }

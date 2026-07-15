@@ -11,8 +11,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import ca.bc.gov.mof.lexis.service.coordination.InvalidRecordVersionException;
+import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordType;
+import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordVersion;
+import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportRequestNormalizer;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -128,6 +133,31 @@ class LexisApiExceptionHandlerTest {
         .andExpect(content().string(not(containsString("MismatchedInputException"))));
   }
 
+  @Test
+  void staleSaveShouldReturnConflictMetadataForRefreshOrOverwrite() throws Exception {
+    mockMvc
+        .perform(get("/test/stale-record"))
+        .andExpect(status().isConflict())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.code").value("STALE_RECORD"))
+        .andExpect(jsonPath("$.recordType").value("application"))
+        .andExpect(jsonPath("$.recordId").value("10"))
+        .andExpect(jsonPath("$.expectedVersion").value("expected-version"))
+        .andExpect(jsonPath("$.currentVersion").isNotEmpty())
+        .andExpect(jsonPath("$.savedAt").value("2026-07-15T18:01:00Z"))
+        .andExpect(jsonPath("$.updatedBy").value("IDIR\\SECOND"))
+        .andExpect(jsonPath("$.changedFields").isArray())
+        .andExpect(jsonPath("$.overwriteAllowed").value(true));
+  }
+
+  @Test
+  void invalidVersionShouldReturnBadRequest() throws Exception {
+    mockMvc
+        .perform(get("/test/invalid-record-version"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_RECORD_VERSION"));
+  }
+
   @RestController
   private static final class FailingDatabaseController {
 
@@ -145,6 +175,24 @@ class LexisApiExceptionHandlerTest {
     @GetMapping("/test/report-validation-failure")
     String rejectReport() {
       throw new LexisReportValidationException("Report date range must not be reversed.");
+    }
+
+    @GetMapping("/test/stale-record")
+    String staleRecord() {
+      OptimisticRecordVersion current =
+          new OptimisticRecordVersion(
+              OptimisticRecordType.APPLICATION,
+              "10",
+              Instant.parse("2026-07-15T18:01:00Z"),
+              "IDIR\\SECOND",
+              "current-fingerprint");
+      throw new StaleRecordException(
+          OptimisticRecordType.APPLICATION, "10", "expected-version", current);
+    }
+
+    @GetMapping("/test/invalid-record-version")
+    String invalidRecordVersion() {
+      throw new InvalidRecordVersionException("Invalid version", null);
     }
 
     @PostMapping("/test/report-request")

@@ -262,6 +262,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       apiService.clearCachedGetData()
+      apiService.clearRecordVersions()
       clearAllPageDataCache()
       authenticatedSessionRef.current = false
       setCapabilities(DEFAULT_CAPABILITIES)
@@ -413,6 +414,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       apiService.clearCachedGetData()
+      apiService.clearRecordVersions()
       clearAllPageDataCache()
       authenticatedSessionRef.current = false
       setCapabilities(DEFAULT_CAPABILITIES)

@@ -3,7 +3,11 @@ package ca.bc.gov.mof.lexis.controller;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
+import ca.bc.gov.mof.lexis.service.coordination.InvalidRecordVersionException;
+import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
+import java.util.List;
+import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskRejectedException;
@@ -31,6 +35,7 @@ class LexisApiExceptionHandler {
   private static final String INVALID_REQUEST_TITLE = "Invalid request";
   private static final String MALFORMED_REQUEST_DETAIL =
       "The request body is malformed or contains a value with the wrong type.";
+  private static final String STALE_RECORD_TITLE = "Record changed by another user";
 
   @ExceptionHandler(LexisReportValidationException.class)
   ResponseEntity<ProblemDetail> handleReportValidationException(
@@ -54,6 +59,40 @@ class LexisApiExceptionHandler {
         ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, MALFORMED_REQUEST_DETAIL);
     problem.setTitle(INVALID_REQUEST_TITLE);
     return ResponseEntity.badRequest()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .body(problem);
+  }
+
+  @ExceptionHandler(InvalidRecordVersionException.class)
+  ResponseEntity<ProblemDetail> handleInvalidRecordVersionException(
+      InvalidRecordVersionException exception) {
+    ProblemDetail problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
+    problem.setTitle(INVALID_REQUEST_TITLE);
+    problem.setProperty("code", "INVALID_RECORD_VERSION");
+    return ResponseEntity.badRequest()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .body(problem);
+  }
+
+  @ExceptionHandler(StaleRecordException.class)
+  ResponseEntity<ProblemDetail> handleStaleRecordException(StaleRecordException exception) {
+    ProblemDetail problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+    problem.setTitle(STALE_RECORD_TITLE);
+    problem.setProperty("code", "STALE_RECORD");
+    problem.setProperty(
+        "recordType", exception.recordType().name().toLowerCase(Locale.ROOT));
+    problem.setProperty("recordId", exception.recordId());
+    problem.setProperty("expectedVersion", exception.expectedVersion());
+    problem.setProperty("currentVersion", exception.currentVersion());
+    problem.setProperty(
+        "savedAt",
+        exception.currentSavedAt() == null ? null : exception.currentSavedAt().toString());
+    problem.setProperty("updatedBy", exception.currentUpdatedBy());
+    problem.setProperty("changedFields", List.of());
+    problem.setProperty("overwriteAllowed", true);
+    return ResponseEntity.status(HttpStatus.CONFLICT)
         .contentType(MediaType.APPLICATION_PROBLEM_JSON)
         .body(problem);
   }

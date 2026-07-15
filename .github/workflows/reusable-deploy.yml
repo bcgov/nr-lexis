@@ -62,7 +62,7 @@ on:
         default: "128Mi"
         type: string
       expiry_enabled:
-        description: Enable the Redis-coordinated exemption expiry scheduler
+        description: Enable the daily exemption expiry scheduler
         default: false
         type: boolean
       tag:
@@ -96,9 +96,6 @@ on:
       keystore_secret:
         description: Oracle keystore passphrase
         required: true
-      redis_password:
-        description: Password for the in-namespace Redis coordination service
-        required: true
       lexis_prod_rtm_only:
         description: Enables PROD RTM-only feature restriction when set to true
         required: false
@@ -107,6 +104,21 @@ on:
         required: false
       keycloak_sa_client_secret:
         description: Keycloak service-account client secret used to provision LEXIS clients/scopes
+        required: false
+      lexis_mail_override_recipients:
+        description: Non-production recipient override
+        required: false
+      lexis_mail_region_rco_recipients:
+        description: RCO workflow distribution list
+        required: false
+      lexis_mail_region_rni_recipients:
+        description: RNI workflow distribution list
+        required: false
+      lexis_mail_region_rsi_recipients:
+        description: RSI workflow distribution list
+        required: false
+      lexis_mail_permit_request_recipients:
+        description: Permit-review migration fallback recipients
         required: false
 
     outputs:
@@ -148,16 +160,6 @@ jobs:
           NEXCOL_KEYCLOAK_CLIENT_ID: ${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}
         run: bash ./.github/scripts/ensure-keycloak-scopes.sh
 
-      - name: Require Redis coordination password
-        env:
-          REDIS_PASSWORD: ${{ secrets.redis_password }}
-        shell: bash
-        run: |
-          if [[ -z "$REDIS_PASSWORD" ]]; then
-            echo "::error title=Missing Redis password::Configure REDIS_PASSWORD in the GitHub environment."
-            exit 1
-          fi
-
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
         env:
@@ -166,18 +168,12 @@ jobs:
           DATABASE_USER: ${{ secrets.database_user }}
           DATABASE_PASSWORD: ${{ secrets.database_password }}
           KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
-          REDIS_PASSWORD: ${{ secrets.redis_password }}
-          REDIS_IMAGE: ${{ vars.LEXIS_REDIS_IMAGE || 'redis:7.4.2-alpine' }}
-          REDIS_CONFIG_VERSION: ${{ vars.LEXIS_REDIS_CONFIG_VERSION || '1' }}
           LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
           LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}
           LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}
           LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}
           LEXIS_EXPIRY_LOCK_AT_MOST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_MOST_FOR || 'PT6H' }}
-          LEXIS_EXPIRY_LOCK_AT_LEAST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_LEAST_FOR || 'PT0S' }}
-          LEXIS_EXPIRY_COMPLETION_RETENTION: ${{ vars.LEXIS_EXPIRY_COMPLETION_RETENTION || '3d' }}
-          LEXIS_FEDERAL_IN_FLIGHT_TTL: ${{ vars.LEXIS_FEDERAL_IN_FLIGHT_TTL || '5m' }}
-          LEXIS_FEDERAL_REPLAY_TTL: ${{ vars.LEXIS_FEDERAL_REPLAY_TTL || '24h' }}
+          LEXIS_EXPIRY_LOCK_AT_LEAST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_LEAST_FOR || 'PT5M' }}
           LEXIS_REPORT_QUERY_TIMEOUT_SECONDS: ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}
           LEXIS_PERMIT_INVOICE_MODE: ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}
           LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS: ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}
@@ -185,11 +181,11 @@ jobs:
           LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED: ${{ vars.LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED || 'false' }}
           LEXIS_MAIL_NON_PRODUCTION: ${{ inputs.environment == 'prod' && 'false' || 'true' }}
           LEXIS_MAIL_FROM: ${{ vars.LEXIS_MAIL_FROM || 'Provincial.Log.Export.Analyst@gov.bc.ca' }}
-          LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}
-          LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${{ secrets.LEXIS_MAIL_REGION_RCO_RECIPIENTS }}
-          LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${{ secrets.LEXIS_MAIL_REGION_RNI_RECIPIENTS }}
-          LEXIS_MAIL_REGION_RSI_RECIPIENTS: ${{ secrets.LEXIS_MAIL_REGION_RSI_RECIPIENTS }}
-          LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${{ secrets.LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS }}
+          LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}
+          LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${{ secrets.lexis_mail_region_rco_recipients }}
+          LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${{ secrets.lexis_mail_region_rni_recipients }}
+          LEXIS_MAIL_REGION_RSI_RECIPIENTS: ${{ secrets.lexis_mail_region_rsi_recipients }}
+          LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${{ secrets.lexis_mail_permit_request_recipients }}
         with:
           file: backend/openshift.deploy.yml
           oc_namespace: ${{ secrets.oc_namespace }}
@@ -218,9 +214,6 @@ jobs:
             -p DATABASE_USER="$DATABASE_USER"
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
-            -p REDIS_PASSWORD="$REDIS_PASSWORD"
-            -p REDIS_IMAGE="$REDIS_IMAGE"
-            -p REDIS_CONFIG_VERSION="$REDIS_CONFIG_VERSION"
             -p CLAMAV_REGISTRY="ghcr.io/${{ github.repository }}/clamav"
             -p CLAMAV_IMAGE_TAG="${{ inputs.tag }}"
             -p LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
@@ -229,9 +222,6 @@ jobs:
             -p LEXIS_EXPIRY_ZONE="$LEXIS_EXPIRY_ZONE"
             -p LEXIS_EXPIRY_LOCK_AT_MOST_FOR="$LEXIS_EXPIRY_LOCK_AT_MOST_FOR"
             -p LEXIS_EXPIRY_LOCK_AT_LEAST_FOR="$LEXIS_EXPIRY_LOCK_AT_LEAST_FOR"
-            -p LEXIS_EXPIRY_COMPLETION_RETENTION="$LEXIS_EXPIRY_COMPLETION_RETENTION"
-            -p LEXIS_FEDERAL_IN_FLIGHT_TTL="$LEXIS_FEDERAL_IN_FLIGHT_TTL"
-            -p LEXIS_FEDERAL_REPLAY_TTL="$LEXIS_FEDERAL_REPLAY_TTL"
             -p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS="$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS"
             -p LEXIS_PERMIT_INVOICE_MODE="$LEXIS_PERMIT_INVOICE_MODE"
             -p LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS="$LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS"

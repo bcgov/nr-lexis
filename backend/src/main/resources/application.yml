@@ -29,13 +29,6 @@ spring:
           writetimeout: ${SMTP_WRITE_TIMEOUT_MS:10000}
           starttls:
             enable: false
-  data:
-    redis:
-      host: ${SPRING_DATA_REDIS_HOST:localhost}
-      port: ${SPRING_DATA_REDIS_PORT:6379}
-      password: ${SPRING_DATA_REDIS_PASSWORD:}
-      connect-timeout: ${LEXIS_REDIS_CONNECT_TIMEOUT:2s}
-      timeout: ${LEXIS_REDIS_COMMAND_TIMEOUT:2s}
   servlet:
     multipart:
       max-file-size: 20MB
@@ -68,8 +61,6 @@ ca:
           base-url: ${IDENTITY_LOOKUP_BASE_URL:}
 
 lexis:
-  coordination:
-    namespace: ${LEXIS_COORDINATION_NAMESPACE:local}
   runtime:
     require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}
   reports:
@@ -82,8 +73,7 @@ lexis:
     cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}
     zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}
     lock-at-most-for: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR:PT6H}
-    lock-at-least-for: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR:PT0S}
-    completion-retention: ${LEXIS_EXPIRY_COMPLETION_RETENTION:3d}
+    lock-at-least-for: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR:PT5M}
   permit-invoice:
     mode: ${LEXIS_PERMIT_INVOICE_MODE:legacy-best-effort}
     gbms-timeout-seconds: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:60}
@@ -199,8 +189,6 @@ lexis:
         - "uploadApplicationSubmission"
       LEXIS_DELEGATED_ADMIN: []
   federal-submission:
-    in-flight-ttl: ${LEXIS_FEDERAL_IN_FLIGHT_TTL:5m}
-    replay-ttl: ${LEXIS_FEDERAL_REPLAY_TTL:24h}
     # Federal submission creation is disabled by default and must be enabled explicitly.
     create-enabled: false
     require-request-id: false

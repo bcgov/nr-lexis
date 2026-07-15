@@ -13,25 +13,37 @@ Failed aggregates remain eligible for the next daily run. Logs report candidate,
 
 ## Deployment safety
 
-The scheduler uses a Redis-backed ShedLock lease. All backend replicas may trigger the schedule, but
-only the replica holding the shared lease runs the expiry process. A successful business-date marker
-prevents a later pod start from repeating that day's completed run. Redis failures fail closed
-without preventing the application from starting.
+Each backend replica receives the schedule, but JDBC ShedLock allows only the replica holding
+`THE.LEXIS_SHEDLOCK` to run the expiry service. The provider uses Oracle time through the existing
+application datasource. A six-hour maximum releases the lock after a crashed run, while a
+five-minute minimum absorbs trigger skew when a run has no work and completes immediately.
+The six-hour maximum is a monitored hard runtime bound; the lock is not renewed. Operations must
+monitor runtime and keep runs comfortably below that duration so another replica cannot acquire an
+expired lock.
+
+If the table, grants, or Oracle lock provider are temporarily unavailable, the trigger and startup
+catch-up are skipped and logged; expiry never falls back to an uncoordinated run. API startup and
+traffic remain available while the database migration is deployed.
+
+ShedLock prevents concurrent runs but is not a durable per-day completion ledger. A backend pod
+starting later than the five-minute minimum can repeat an already completed same-day candidate
+scan. This is safe because expiry re-reads and locks each aggregate and converges on the same final
+state, but operators should expect the possible additional scan.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LEXIS_EXPIRY_ENABLED` | `false` | Creates the Redis-coordinated scheduled job when true. |
+| `LEXIS_EXPIRY_ENABLED` | `false` | Creates the scheduled job when true. |
 | `LEXIS_EXPIRY_CRON` | `30 0 0 * * *` | Spring six-field cron expression. |
 | `LEXIS_EXPIRY_ZONE` | `America/Vancouver` | Scheduler time zone. |
-| `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | `PT6H` | Maximum Redis lease duration for one run. |
-| `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | `PT0S` | Minimum Redis lease duration after a run starts. |
-| `LEXIS_EXPIRY_COMPLETION_RETENTION` | `3d` | Retention for successful business-date markers. |
+| `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | `PT6H` | Maximum duration of one Oracle scheduler lock. |
+| `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | `PT5M` | Minimum duration of one Oracle scheduler lock. |
 
 ## Operations
 
-Prometheus exposes completed, failed, lock-skipped, and locally skipped run counters plus gauges for
+Prometheus exposes completed, failed, and skipped run counters plus gauges for
 the last completed run's timestamp, candidate count, expired count, and deferred count. A separate
 gauge records the last top-level failure timestamp. These metrics are process-local and reset when
-the backend pod restarts; deferred exemptions remain eligible for the next run.
+the backend pod restarts. Lock contention and lock-provider failures increment the skipped counter;
+deferred exemptions remain eligible for the next run.

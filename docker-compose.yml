@@ -1,8 +1,7 @@
 # Local-dev Compose for nr-lexis.
 #
-# Three-service stack: Redis coordination + Spring Boot backend (port 8080) +
-# Vite frontend (port 3000), with an optional Caddy production-image variant
-# (profile `caddy`, port 3005).
+# Two-service stack: Spring Boot backend (port 8080) + Vite frontend (port 3000),
+# with an optional Caddy production-image variant (profile `caddy`, port 3005).
 # No database service: LEXIS connects to shared Oracle directly.
 #
 # Prereqs (host machine):
@@ -24,17 +23,6 @@ x-var:
   - &node-image node:24-alpine
 
 services:
-  redis:
-    image: redis:7.4.2-alpine
-    container_name: redis
-    command: ["redis-server", "--appendonly", "no"]
-    ports: ["127.0.0.1:6379:6379"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   backend:
     image: *java-image
     container_name: backend
@@ -42,9 +30,6 @@ services:
     entrypoint: sh -c "mvn -DskipTests spring-boot:run"
     environment:
       SPRING_PROFILES_ACTIVE: local,oracle
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-      LEXIS_COORDINATION_NAMESPACE: local
       TRUSTSTORE_PATH: /app/src/main/resources/cert/jssecacerts
     ports: ["8080:8080"]
     volumes:
@@ -56,10 +41,6 @@ services:
       timeout: 5s
       start_period: 90s
       retries: 5
-    depends_on:
-      redis:
-        condition: service_healthy
-
   frontend:
     image: *node-image
     container_name: frontend

@@ -25,15 +25,17 @@ import {
   updatePermitDetail,
 } from '@/service/provincial-permit-documents-invoices-service'
 
-const { getCachedResponseMock, getMock, postMock } = vi.hoisted(() => ({
+const { getCachedResponseMock, getMock, postMock, registerRecordVersionMock } = vi.hoisted(() => ({
   getCachedResponseMock: vi.fn(),
   getMock: vi.fn(),
   postMock: vi.fn(),
+  registerRecordVersionMock: vi.fn(),
 }))
 
 vi.mock('@/service/api-service', () => ({
   default: {
     getCachedResponse: getCachedResponseMock,
+    registerRecordVersion: registerRecordVersionMock,
     getAxiosInstance: () => ({
       get: getMock,
       post: postMock,
@@ -854,6 +856,13 @@ describe('provincial permit detail services', () => {
       locked: false,
       lockMessage: '',
     })
+    expect(registerRecordVersionMock).toHaveBeenCalledWith(
+      'permit',
+      '777',
+      expect.any(Object),
+      '/lexis/rpc/permit-details/edit-context',
+      { params: { permitNumber: '777' } },
+    )
   })
 
   it('rejects an empty permit edit context instead of treating it as unlocked', async () => {

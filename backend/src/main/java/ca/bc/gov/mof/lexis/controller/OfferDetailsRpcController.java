@@ -9,14 +9,12 @@ import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentF
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
-import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
-import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
@@ -415,8 +413,9 @@ public class OfferDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     Long applicationNumber = currentOffer.get().applicationNumber();
-    return operationCoordinator.executeApplicationLocalMutation(
+    return operationCoordinator.executeApplicationOfferMutation(
         applicationNumber,
+        offerNumber,
         () ->
             updateOfferWhileSerialized(
                 service,
@@ -469,7 +468,6 @@ public class OfferDetailsRpcController {
     }
 
     String userId = userId(authentication);
-    requireOwnedOfferLock(currentOffer.get().offerNumber(), userId);
     PurchaseOfferService.CreateOfferResult result =
         service.updateOfferSnapshot(request, userId);
     return ResponseEntity.ok(toPersistenceResponse(result));
@@ -519,18 +517,6 @@ public class OfferDetailsRpcController {
       return principalService.resolvePrincipalName(authentication);
     }
     return authentication == null ? null : authentication.getName();
-  }
-
-  private void requireOwnedOfferLock(Long offerNumber, String userId) {
-    if (editLockService.touchOffer(offerNumber, userId)) {
-      return;
-    }
-    ApplicationEditLockDto current = editLockService.snapshotOffer(offerNumber, userId, false);
-    String message =
-        current.locked() && trimToNull(current.message()) != null
-            ? current.message()
-            : "The offer lock has expired or is no longer valid. Please close and re-open the offer to acquire a new lock.";
-    throw new EditLockConflictException(message);
   }
 
   private Authentication currentAuthentication() {

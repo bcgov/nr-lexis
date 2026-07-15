@@ -5,7 +5,6 @@ import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
-import ca.bc.gov.mof.lexis.service.coordination.RedisLeaseService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -13,7 +12,6 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -31,38 +29,25 @@ public class LexisAdminScheduleService {
   private final LexisReportScheduleRepository repository;
   private final Clock clock;
   private final TransactionOperations transactionOperations;
-  private final RedisLeaseService redisLeases;
-
   private final ReentrantLock scheduleMutationGuard = new ReentrantLock(true);
 
   @Autowired
   public LexisAdminScheduleService(
       LexisReportScheduleRepository repository,
-      PlatformTransactionManager transactionManager,
-      ObjectProvider<RedisLeaseService> redisLeaseProvider) {
+      PlatformTransactionManager transactionManager) {
     this(
         repository,
         LexisBusinessTime.systemClock(),
-        scheduleTransactionOperations(transactionManager),
-        redisLeaseProvider == null ? null : redisLeaseProvider.getIfAvailable());
+        scheduleTransactionOperations(transactionManager));
   }
 
   LexisAdminScheduleService(
       LexisReportScheduleRepository repository,
       Clock clock,
       TransactionOperations transactionOperations) {
-    this(repository, clock, transactionOperations, null);
-  }
-
-  LexisAdminScheduleService(
-      LexisReportScheduleRepository repository,
-      Clock clock,
-      TransactionOperations transactionOperations,
-      RedisLeaseService redisLeases) {
     this.repository = repository;
     this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
     this.transactionOperations = transactionOperations;
-    this.redisLeases = redisLeases;
   }
 
   public List<ExportScheduleRowDto> upcomingSchedules() {
@@ -144,10 +129,6 @@ public class LexisAdminScheduleService {
 
   private ExportScheduleMutationResultDto executeScheduleMutation(
       Supplier<ExportScheduleMutationResultDto> mutation) {
-    if (redisLeases != null) {
-      return redisLeases.execute(
-          List.of("admin:export-schedule"), () -> executeTransaction(mutation));
-    }
     scheduleMutationGuard.lock();
     try {
       return executeTransaction(mutation);

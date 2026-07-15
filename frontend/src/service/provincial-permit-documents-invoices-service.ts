@@ -429,11 +429,10 @@ const normalizePermitDetailMutationPayload = (
 export const fetchPermitFeeOverrideContext = async (
   permitNumber: string,
 ): Promise<PermitFeeOverrideContext> => {
-  const response = await apiService.getCachedResponse<unknown>(
-    '/lexis/rpc/permit-details/edit-context',
-    { params: { permitNumber: permitNumber.trim() } },
-    { ttlMs: 0 },
-  )
+  const normalizedPermitNumber = permitNumber.trim()
+  const path = '/lexis/rpc/permit-details/edit-context'
+  const config = { params: { permitNumber: normalizedPermitNumber } }
+  const response = await apiService.getCachedResponse<unknown>(path, config, { ttlMs: 0 })
   if (
     response.status === 204 ||
     !isRecord(response.data) ||
@@ -442,6 +441,7 @@ export const fetchPermitFeeOverrideContext = async (
   ) {
     throw new Error('Unexpected permit edit context payload.')
   }
+  apiService.registerRecordVersion('permit', normalizedPermitNumber, response, path, config)
   const payload = response.data
   return {
     overrideEnabled: asBoolean(payload.overrideEnabled),

@@ -1,20 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchFederalApplicationDetail,
+  fetchProvincialApplicationDetail,
+  fetchProvincialExemptionDetail,
   fetchProvincialOfferDetail,
   fetchProvincialPermitDetail,
   releaseOfferEditLock,
 } from '@/service/lexis-detail-service'
 
-const { getCachedResponseMock, postMock } = vi.hoisted(() => ({
+const { getCachedResponseMock, postMock, registerRecordVersionMock } = vi.hoisted(() => ({
   getCachedResponseMock: vi.fn(),
   postMock: vi.fn(),
+  registerRecordVersionMock: vi.fn(),
 }))
 
 vi.mock('@/service/api-service', () => ({
   default: {
     getCachedResponse: getCachedResponseMock,
     getAxiosInstance: () => ({ post: postMock }),
+    registerRecordVersion: registerRecordVersionMock,
   },
 }))
 
@@ -79,6 +83,36 @@ describe('lexis detail service', () => {
       exemptionTypeDescription: 'Blanket OIC',
       blanketOic: true,
     })
+    expect(registerRecordVersionMock).toHaveBeenCalledWith(
+      'permit',
+      '777',
+      expect.objectContaining({ data: expect.objectContaining({ permitNumber: 777 }) }),
+      '/lexis/permits/777',
+    )
+  })
+
+  it('registers application and exemption detail versions against their authoritative URLs', async () => {
+    getCachedResponseMock
+      .mockResolvedValueOnce(response({ applicationNumber: 46079 }))
+      .mockResolvedValueOnce(response({ exemptionNumber: 'EX-9' }))
+
+    await fetchProvincialApplicationDetail('46079')
+    await fetchProvincialExemptionDetail('EX-9')
+
+    expect(registerRecordVersionMock).toHaveBeenNthCalledWith(
+      1,
+      'application',
+      '46079',
+      expect.any(Object),
+      '/lexis/applications/46079',
+    )
+    expect(registerRecordVersionMock).toHaveBeenNthCalledWith(
+      2,
+      'exemption',
+      'EX-9',
+      expect.any(Object),
+      '/lexis/exemptions/EX-9',
+    )
   })
 
   it.each([
@@ -155,6 +189,12 @@ describe('lexis detail service', () => {
       lockedBy: null,
       lockMessage: null,
     })
+    expect(registerRecordVersionMock).toHaveBeenCalledWith(
+      'federal-application',
+      '700123',
+      expect.any(Object),
+      '/lexis/federal/applications/700123',
+    )
   })
 
   it('fails federal detail editing closed when lock state is absent', async () => {
@@ -195,6 +235,12 @@ describe('lexis detail service', () => {
       canEditOfferDetails: true,
       lockMessage: null,
     })
+    expect(registerRecordVersionMock).toHaveBeenCalledWith(
+      'offer',
+      '81001',
+      expect.any(Object),
+      '/lexis/purchase-offers/81001',
+    )
   })
 
   it('fails closed when the offer detail omits lock state', async () => {

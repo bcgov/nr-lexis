@@ -55,9 +55,9 @@ When a failure occurs after GBMS processing starts:
 3. Complete or reverse the partial work through the supported operational process.
 4. Retry only after both histories agree.
 
-LEXIS uses Redis aggregate leases to serialize overlapping permit operations across backend pods.
-Those leases do not coordinate with other GBMS writers, so the operational reconciliation path is
-still required for unknown or partial GBMS outcomes.
+LEXIS locks the relevant Oracle parent rows in a consistent order to serialize overlapping permit
+operations across backend pods. These locks do not coordinate with other GBMS writers, so the
+operational reconciliation path is still required for unknown or partial GBMS outcomes.
 
 ## Future hardening
 

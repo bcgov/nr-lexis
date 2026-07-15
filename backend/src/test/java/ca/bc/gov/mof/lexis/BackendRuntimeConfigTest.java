@@ -124,17 +124,43 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void redisExpiryCoordinationShouldRetainSuccessfulBusinessDates() throws IOException {
+  void expirySchedulerShouldUseOracleShedLockWithoutRedis() throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
     String deployment =
         Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
+    String shedLockConfiguration =
+        Files.readString(
+            resolve(
+                Path.of(
+                    "backend",
+                    "src",
+                    "main",
+                    "java",
+                    "ca",
+                    "bc",
+                    "gov",
+                    "mof",
+                    "lexis",
+                    "configuration",
+                    "OracleShedLockConfiguration.java")));
 
     assertThat(applicationConfig)
-        .contains("completion-retention: ${LEXIS_EXPIRY_COMPLETION_RETENTION:3d}");
+        .contains("cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}")
+        .contains("zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}")
+        .contains("lock-at-most-for: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR:PT6H}")
+        .contains("lock-at-least-for: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR:PT5M}")
+        .doesNotContain("SPRING_DATA_REDIS");
     assertThat(deployment)
-        .contains("- name: LEXIS_EXPIRY_COMPLETION_RETENTION")
-        .contains("value: ${LEXIS_EXPIRY_COMPLETION_RETENTION}");
+        .contains("- name: LEXIS_EXPIRY_CRON")
+        .contains("- name: LEXIS_EXPIRY_ZONE")
+        .contains("- name: LEXIS_EXPIRY_LOCK_AT_MOST_FOR")
+        .contains("- name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR")
+        .doesNotContain("REDIS_PASSWORD", "SPRING_DATA_REDIS");
+    assertThat(shedLockConfiguration)
+        .contains(".withTableName(\"THE.LEXIS_SHEDLOCK\")")
+        .contains(".usingDbTime()")
+        .doesNotContain("Redis");
   }
 
   @Test

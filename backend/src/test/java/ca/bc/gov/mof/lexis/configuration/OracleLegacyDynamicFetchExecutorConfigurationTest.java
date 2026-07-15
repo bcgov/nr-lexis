@@ -1,10 +1,12 @@
 package ca.bc.gov.mof.lexis.configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -77,6 +79,8 @@ class OracleLegacyDynamicFetchExecutorConfigurationTest {
       CompletableFuture<Void> shutdown = CompletableFuture.runAsync(executor::shutdown);
 
       assertThat(workersInterrupted.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThatThrownBy(() -> queuedRead.get(2, TimeUnit.SECONDS))
+          .isInstanceOf(CancellationException.class);
       assertThat(queuedRead).isCancelled();
       assertThat(queuedReadExecuted).isFalse();
       releaseWorkers.countDown();

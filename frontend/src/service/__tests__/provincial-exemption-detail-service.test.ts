@@ -12,12 +12,16 @@ import {
   updateExemption,
 } from '@/service/provincial-exemption-detail-service'
 
-const getMock = vi.fn()
-const postMock = vi.fn()
-const deleteMock = vi.fn()
+const { getMock, postMock, deleteMock, registerRecordVersionMock } = vi.hoisted(() => ({
+  getMock: vi.fn(),
+  postMock: vi.fn(),
+  deleteMock: vi.fn(),
+  registerRecordVersionMock: vi.fn(),
+}))
 
 vi.mock('@/service/api-service', () => ({
   default: {
+    registerRecordVersion: registerRecordVersionMock,
     getAxiosInstance: () => ({
       get: getMock,
       post: postMock,
@@ -60,6 +64,13 @@ describe('provincial exemption detail service', () => {
     expect(getMock).toHaveBeenCalledWith('/lexis/rpc/exemption-details/edit-context', {
       params: { exemptionNumber: 'BOIC-205' },
     })
+    expect(registerRecordVersionMock).toHaveBeenCalledWith(
+      'exemption',
+      'BOIC-205',
+      expect.any(Object),
+      '/lexis/rpc/exemption-details/edit-context',
+      { params: { exemptionNumber: 'BOIC-205' } },
+    )
   })
 
   it('parses authoritative permit rows including record-specific visibility', async () => {
