@@ -460,6 +460,45 @@ describe('Admin policy action states', () => {
     expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
   })
 
+  it('links application counts to an auto-filtered application search', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === '/lexisPolicyAdmin' ||
+          action === '/lexisFILAdmin' ||
+          action === '/applicationSearch',
+      }),
+    )
+    mockedFetchExportSchedulePage.mockResolvedValueOnce({
+      rows: [
+        {
+          exportScheduleId: '1002',
+          advertisingDate: '2026-07-15',
+          applicationReceiptDate: '2026-07-15',
+          offerReceiptDate: '2026-07-29',
+          offerEndDate: '2026-08-14',
+          offerWithdrawalDate: '2026-08-04',
+          teacMeetingDate: '2026-08-07',
+          applicationCount: 3,
+          mutable: false,
+        },
+      ],
+      total: 1,
+      page: 0,
+      size: 100,
+    })
+
+    renderPage('schedule')
+
+    const applicationLink = await screen.findByRole('link', {
+      name: 'View 3 applications advertised on 2026-07-15',
+    })
+    expect(applicationLink).toHaveAttribute(
+      'href',
+      '/provincial/application?listingFromDate=2026-07-15&listingToDate=2026-07-15',
+    )
+  })
+
   it('shows backend schedule guardrail messages without reloading the table', async () => {
     mockedCreateExportSchedule.mockResolvedValueOnce({
       success: false,

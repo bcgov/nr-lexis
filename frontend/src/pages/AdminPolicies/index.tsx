@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -67,10 +68,19 @@ type AdminPoliciesPageProps = {
 const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
 const DEFAULT_ADMIN_PAGE_SIZE = 100
 
+const applicationSearchPathForAdvertisingDate = (advertisingDate: string): string => {
+  const searchParams = new URLSearchParams({
+    listingFromDate: advertisingDate,
+    listingToDate: advertisingDate,
+  })
+  return `/provincial/application?${searchParams.toString()}`
+}
+
 const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const { canPerform } = useAuth()
   const canManageFeePolicy = canPerform('/lexisPolicyAdmin')
   const canManageFilPolicy = canPerform('/lexisFILAdmin')
+  const canSearchApplications = canPerform('/applicationSearch')
   const canAccessArea = area === 'fil' ? canManageFilPolicy : canManageFeePolicy
 
   const [feePolicies, setFeePolicies] = useState<FeePolicyRow[]>([])
@@ -910,7 +920,18 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                     <TableCell>{row.offerEndDate}</TableCell>
                     <TableCell>{row.offerWithdrawalDate}</TableCell>
                     <TableCell>{row.teacMeetingDate}</TableCell>
-                    <TableCell>{row.applicationCount}</TableCell>
+                    <TableCell>
+                      {canSearchApplications ? (
+                        <Link
+                          to={applicationSearchPathForAdvertisingDate(row.advertisingDate)}
+                          aria-label={`View ${row.applicationCount} applications advertised on ${row.advertisingDate}`}
+                        >
+                          {row.applicationCount}
+                        </Link>
+                      ) : (
+                        row.applicationCount
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Button
                         kind="ghost"

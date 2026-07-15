@@ -1894,9 +1894,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
   })
 
-  // TODO: Re-enable this EXPORT_SCHEDULE write regression once TEST grants allow
-  // INSERT/UPDATE/DELETE on EXPORT_SCHEDULE and access to EXPORT_SCHEDULE_SEQ.
-  test.skip('can create, update, and delete future export schedule rows', async () => {
+  test('can create, update, and delete future export schedule rows', async () => {
     const page = await authenticatedIdirPage()
     let scheduleId: string | null = null
     let deleted = false
@@ -1936,9 +1934,7 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
-  // TODO: Re-enable this EXPORT_SCHEDULE write regression once TEST grants allow
-  // INSERT/UPDATE/DELETE on EXPORT_SCHEDULE and access to EXPORT_SCHEDULE_SEQ.
-  test.skip('rejects duplicate future export schedule advertising dates', async () => {
+  test('rejects duplicate future export schedule advertising dates', async () => {
     const page = await authenticatedIdirPage()
     let scheduleId: string | null = null
 
