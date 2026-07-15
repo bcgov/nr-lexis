@@ -146,6 +146,29 @@ jobs:
     env:
       LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
     steps:
+      - name: Resolve frontend logout URL
+        env:
+          CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          LEXIS_SLOT: ${{ inputs.slot || inputs.target }}
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          if [ "${DEPLOY_ENVIRONMENT}" = "dev" ]; then
+            if [[ ! "${LEXIS_SLOT}" =~ ^([0-9]|[1-4][0-9])$ ]]; then
+              echo "::error title=Invalid DEV logout slot::Expected a Cognito slot from 0 through 49."
+              exit 1
+            fi
+            sign_out="https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2F${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca%2F"
+          else
+            sign_out="${CONFIGURED_SIGN_OUT}"
+          fi
+          if [ -z "${sign_out}" ]; then
+            echo "::error title=Missing logout URL::VITE_REDIRECT_SIGN_OUT is required outside DEV."
+            exit 1
+          fi
+          printf 'VITE_REDIRECT_SIGN_OUT=%s\n' "${sign_out}" >> "${GITHUB_ENV}"
+
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
         with:
@@ -166,7 +189,7 @@ jobs:
             -p VITE_USER_POOLS_WEB_CLIENT_ID="${{ vars.VITE_USER_POOLS_WEB_CLIENT_ID }}"
             -p VITE_COGNITO_DOMAIN="${{ vars.VITE_COGNITO_DOMAIN }}"
             -p VITE_REDIRECT_SIGN_IN="${{ vars.VITE_REDIRECT_SIGN_IN }}"
-            -p VITE_REDIRECT_SIGN_OUT="${{ vars.VITE_REDIRECT_SIGN_OUT }}"
+            -p VITE_REDIRECT_SIGN_OUT="$VITE_REDIRECT_SIGN_OUT"
             -p VITE_COGNITO_SCOPES="${{ vars.VITE_COGNITO_SCOPES }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
             -p VITE_LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
