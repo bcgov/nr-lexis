@@ -127,6 +127,27 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
+  void reportRenderingShouldHaveWritableFontCachesAndEnoughRouteTime() throws IOException {
+    String dockerfile = Files.readString(resolve(Path.of("backend", "Dockerfile")));
+    String backendDeployment =
+        Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
+    String frontendDeployment =
+        Files.readString(resolve(Path.of("frontend", "openshift.deploy.yml")));
+
+    assertThat(dockerfile)
+        .contains("ENV HOME=/tmp")
+        .contains("XDG_CACHE_HOME=/tmp/.cache")
+        .contains("-Duser.home=/tmp")
+        .contains("-Djava.io.tmpdir=/tmp")
+        .contains("-Djava.awt.headless=true");
+    assertThat(backendDeployment)
+        .contains("- name: HOME\n                  value: /tmp")
+        .contains("- name: XDG_CACHE_HOME\n                  value: /tmp/.cache");
+    assertThat(frontendDeployment)
+        .contains("haproxy.router.openshift.io/timeout: 300s");
+  }
+
+  @Test
   void applicantEmailCaptureShouldRemainOffUntilTheOraclePackageIsDeployed()
       throws IOException {
     String applicationConfig =
