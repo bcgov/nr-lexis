@@ -77,16 +77,6 @@ class ApplicationYamlDefaultsTest {
             "lexis.fam.admin.read-timeout");
   }
 
-  @Test
-  void applicationYamlShouldKeepDedicatedFederalCreateDisabledByDefault() {
-    Properties properties = loadApplicationYaml();
-
-    assertThat(properties)
-        .containsEntry(
-            "lexis.federal-submission.create-enabled",
-            "${LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED:false}");
-  }
-
   private static Properties loadApplicationYaml() {
     YamlPropertiesFactoryBean factory = new YamlPropertiesFactoryBean();
     factory.setResources(new ClassPathResource("application.yml"));

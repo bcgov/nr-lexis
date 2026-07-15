@@ -26,22 +26,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("frontend_memory_request: \"128Mi\"")
         .contains("frontend_cpu_limit: \"500m\"")
         .contains("frontend_memory_limit: \"256Mi\"")
-        .contains("expiry_enabled: true")
-        .contains("federal_submission_create_enabled: true");
-  }
-
-  @Test
-  void devPreviewShouldKeepFederalSubmissionCreateDisabled() throws IOException {
-    String prWorkflow = Files.readString(resolve(".github/workflows/pr-open.yml"));
-    String devDeploy = workflowJob(prWorkflow, "deploys", "tests");
-    String reusableWorkflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
-    String federalCreateInput =
-        between(reusableWorkflow, "      federal_submission_create_enabled:", "      tag:");
-
-    assertThat(devDeploy)
-        .contains("environment: dev")
-        .doesNotContain("federal_submission_create_enabled:");
-    assertThat(federalCreateInput).contains("default: false", "type: boolean");
+        .contains("expiry_enabled: true");
   }
 
   @Test
@@ -54,8 +39,23 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_min_replicas: \"3\"")
         .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
-        .contains("federal_submission_create_enabled: true")
         .doesNotContain("expiry_enabled: true");
+  }
+
+  @Test
+  void federalSubmissionCreateShouldNotBeFeatureGated() throws IOException {
+    String deploymentConfiguration =
+        Files.readString(resolve(".github/workflows/reusable-deploy.yml"))
+            + Files.readString(resolve(".github/workflows/merge.yml"))
+            + Files.readString(resolve(".github/workflows/pr-open.yml"))
+            + Files.readString(resolve("backend/openshift.deploy.yml"))
+            + Files.readString(resolve("backend/src/main/resources/application.yml"));
+
+    assertThat(deploymentConfiguration)
+        .doesNotContain(
+            "LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED",
+            "federal_submission_create_enabled",
+            "lexis.federal-submission.create-enabled");
   }
 
   @Test
@@ -71,9 +71,6 @@ class TestDeploymentTopologyConfigTest {
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
         .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
-        .contains(
-            "LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED:"
-                + " ${{ inputs.federal_submission_create_enabled && 'true' || 'false' }}")
         .contains("LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}")
         .contains("LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}")
         .contains(
@@ -86,9 +83,6 @@ class TestDeploymentTopologyConfigTest {
             "-p LEXIS_EXPIRY_LOCK_AT_MOST_FOR=\"$LEXIS_EXPIRY_LOCK_AT_MOST_FOR\"")
         .contains(
             "-p LEXIS_EXPIRY_LOCK_AT_LEAST_FOR=\"$LEXIS_EXPIRY_LOCK_AT_LEAST_FOR\"")
-        .contains(
-            "-p LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED="
-                + "\"$LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED\"")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")
@@ -130,10 +124,8 @@ class TestDeploymentTopologyConfigTest {
         .contains("- name: MAX_REPLICAS\n    value: \"3\"")
         .contains("- name: LEXIS_EXPIRY_LOCK_AT_MOST_FOR")
         .contains("- name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR")
-        .contains("- name: LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED")
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR}")
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}")
-        .contains("value: ${LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED}")
         .contains("type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 0\n          maxSurge: 1")
         .contains("averageUtilization: 70")
         .contains("topologySpreadConstraints:")

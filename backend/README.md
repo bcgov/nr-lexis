@@ -55,7 +55,6 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_EXPIRY_ZONE` | Business time zone for the expiry scheduler | America/Vancouver |
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Maximum Oracle ShedLock duration; releases a crashed run | PT6H |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Minimum Oracle ShedLock duration; absorbs multi-pod trigger skew | PT5M |
-| `LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED` | Enables scoped NEXCOL federal CREATE; validation remains available when false | false |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
 | `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | legacy-best-effort |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Requested timeout in seconds for each isolated GBMS transaction (1-3600); cancellation can leave the outcome unknown | 60 |
@@ -89,7 +88,6 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_EXPIRY_ZONE` | Variable `LEXIS_EXPIRY_ZONE` |
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` |
-| `LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED` | Workflow input `federal_submission_create_enabled` |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Variable `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` |
 | `LEXIS_PERMIT_INVOICE_MODE` | Variable `LEXIS_PERMIT_INVOICE_MODE` |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Variable `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` |

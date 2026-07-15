@@ -79,9 +79,7 @@ public class LexisUploadController {
   private LexisPrincipalService principalService;
   private boolean requireFederalRequestId;
   private boolean requireFederalCreateUserReference;
-  private boolean requireFederalCreateIdempotencyKey;
   private boolean requireFederalSourceSystem;
-  private boolean federalCreateEnabled;
   private long federalSubmissionRetryAfterSeconds = 60L;
 
   @Autowired
@@ -111,11 +109,6 @@ public class LexisUploadController {
         new PermitOperationMutex());
   }
 
-  @Value("${lexis.federal-submission.require-idempotency-key:false}")
-  void setRequireFederalCreateIdempotencyKey(boolean requireFederalCreateIdempotencyKey) {
-    this.requireFederalCreateIdempotencyKey = requireFederalCreateIdempotencyKey;
-  }
-
   @Value("${lexis.federal-submission.require-request-id:false}")
   void setRequireFederalRequestId(boolean requireFederalRequestId) {
     this.requireFederalRequestId = requireFederalRequestId;
@@ -129,11 +122,6 @@ public class LexisUploadController {
   @Value("${lexis.federal-submission.require-source-system:false}")
   void setRequireFederalSourceSystem(boolean requireFederalSourceSystem) {
     this.requireFederalSourceSystem = requireFederalSourceSystem;
-  }
-
-  @Value("${lexis.federal-submission.create-enabled:false}")
-  void setFederalCreateEnabled(boolean federalCreateEnabled) {
-    this.federalCreateEnabled = federalCreateEnabled;
   }
 
   @Value("${lexis.federal-submission.retry-after-seconds:60}")
@@ -629,19 +617,6 @@ public class LexisUploadController {
       @RequestHeader(name = SOURCE_SYSTEM_HEADER, required = false) String sourceSystemHeader,
       @RequestParam(name = "sourceSystem", required = false) String sourceSystem,
       Authentication authentication) {
-    if (!federalCreateEnabled) {
-      return loggedFederalCreateDisabled(
-          "create-raw",
-          requestId,
-          idempotencyKey,
-          null,
-          federalTraceMetadata(
-              federalSourceSystem(sourceSystemHeader, sourceSystem), null, authentication),
-          authentication,
-          effectiveFederalFileName(originalFileName),
-          0L,
-          System.nanoTime());
-    }
     RawFederalSubmission submission = readRawFederalSubmission(request, originalFileName);
     if (submission.failure() != null) {
       return submission.failure();
@@ -990,38 +965,6 @@ public class LexisUploadController {
         .body(withFederalResponseTrace(result, requestId, idempotencyKey, payloadSha256, traceMetadata));
   }
 
-  private ResponseEntity<ApplicationSubmissionImportResultDto> loggedFederalCreateDisabled(
-      String operation,
-      String requestId,
-      String idempotencyKey,
-      String payloadSha256,
-      FederalSubmissionTraceMetadata traceMetadata,
-      Authentication authentication,
-      String fileName,
-      long fileSize,
-      long startedAtNanos) {
-    ApplicationSubmissionImportResultDto result =
-        applicationSubmissionFailure(
-            "Federal LEXIS submission creation is disabled. Retry only after the integration has been explicitly enabled.",
-            fileName,
-            fileSize);
-    logFederalSubmissionResult(
-        operation,
-        requestId,
-        idempotencyKey,
-        payloadSha256,
-        resolveEntryUserId(authentication),
-        result,
-        HttpStatus.SERVICE_UNAVAILABLE.value(),
-        startedAtNanos,
-        traceMetadata);
-    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-        .header(HttpHeaders.RETRY_AFTER, Long.toString(federalSubmissionRetryAfterSeconds))
-        .body(
-            withFederalResponseTrace(
-                result, requestId, idempotencyKey, payloadSha256, traceMetadata));
-  }
-
   private ResponseEntity<ApplicationSubmissionImportResultDto> loggedFederalUnexpectedFailure(
       String operation,
       String requestId,
@@ -1072,18 +1015,6 @@ public class LexisUploadController {
     String payloadRootType = federalPayloadRootType(submissionData);
     FederalSubmissionTraceMetadata traceMetadata =
         federalTraceMetadata(null, payloadRootType, authentication);
-    if (!federalCreateEnabled) {
-      return loggedFederalCreateDisabled(
-          "create-raw",
-          requestId,
-          idempotencyKey,
-          payloadSha256,
-          traceMetadata,
-          authentication,
-          effectiveFederalFileName(originalFileName),
-          submissionData == null ? 0L : submissionData.length,
-          startedAtNanos);
-    }
     ResponseEntity<ApplicationSubmissionImportResultDto> missingRequestId =
         validateFederalRequestId(
             requestId,
@@ -1151,7 +1082,7 @@ public class LexisUploadController {
     ResponseEntity<ApplicationSubmissionImportResultDto> invalidIdempotencyKey =
         validateFederalIdempotencyKey(
             idempotencyKey,
-            federalCreateEnabled || requireFederalCreateIdempotencyKey,
+            true,
             effectiveFederalFileName(originalFileName),
             submissionData.length);
     if (invalidIdempotencyKey != null) {
@@ -1279,18 +1210,6 @@ public class LexisUploadController {
     String payloadSha256 = null;
     FederalSubmissionTraceMetadata traceMetadata =
         federalTraceMetadata(null, null, authentication);
-    if (!federalCreateEnabled) {
-      return loggedFederalCreateDisabled(
-          "create-multipart",
-          requestId,
-          idempotencyKey,
-          payloadSha256,
-          traceMetadata,
-          authentication,
-          fileName,
-          fileSize,
-          startedAtNanos);
-    }
     ResponseEntity<ApplicationSubmissionImportResultDto> missingRequestId =
         validateFederalRequestId(requestId, fileName, fileSize);
     if (missingRequestId != null) {
@@ -1352,7 +1271,7 @@ public class LexisUploadController {
     ResponseEntity<ApplicationSubmissionImportResultDto> invalidIdempotencyKey =
         validateFederalIdempotencyKey(
             idempotencyKey,
-            federalCreateEnabled || requireFederalCreateIdempotencyKey,
+            true,
             fileName,
             fileSize);
     if (invalidIdempotencyKey != null) {

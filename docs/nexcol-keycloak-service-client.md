@@ -63,9 +63,8 @@ represented in `aud`.
 
 ## Endpoints
 
-TEST enables validation and submission. The currently disabled PROD deployment is configured to
-enable both when production rollout resumes. DEV leaves CREATE disabled because ephemeral preview
-deployments do not have a long-lived NEXCOL client or gateway.
+Both endpoints are live in every backend environment. TEST and PROD provide the supported NEXCOL
+gateway and service-client integration; DEV has no supported NEXCOL gateway/client configuration.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|
@@ -156,7 +155,7 @@ identifiers when available.
 | `404` | Gateway route or method is unavailable |
 | `409` | The idempotency key conflicts, processing is already in flight on this replica, or the package already exists |
 | `422` | XML or business validation failed |
-| `503` | Submission creation is disabled or a LEXIS processing dependency is unavailable |
+| `503` | A LEXIS processing dependency is unavailable |
 
 A successful submission includes the generated internal LEXIS `APPLICATION_NUMBER` as
 `applicationNumber` and, when available, a relative `Location` header that uses that identifier.

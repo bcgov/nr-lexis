@@ -1187,7 +1187,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -1255,7 +1254,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -1597,7 +1595,7 @@ class LexisUploadControllerTest {
   }
 
   @Test
-  void federalApplicationSubmissionUploadShouldRequireIdempotencyKeyWheneverCreateIsEnabled() {
+  void federalApplicationSubmissionUploadShouldRequireIdempotencyKey() {
     LexisUploadController controller = controller();
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
@@ -1614,32 +1612,6 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().errors())
-        .containsExactly("X-Idempotency-Key header is required for federal create submissions.");
-    verifyNoInteractions(applicationSubmissionImportService);
-  }
-
-  @Test
-  void federalApplicationSubmissionUploadShouldRejectMissingIdempotencyKeyWhenRequired() {
-    LexisUploadController controller = controller();
-    controller.setRequireFederalCreateIdempotencyKey(true);
-    byte[] submissionData =
-        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
-            .getBytes(StandardCharsets.UTF_8);
-
-    ResponseEntity<ApplicationSubmissionImportResultDto> response =
-        controller.federalApplicationSubmissionUpload(
-            "FED-REF-1",
-            "federal-direct.xml",
-            submissionData,
-            "REQ-1",
-            null,
-            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().fileName()).isEqualTo("federal-direct.xml");
-    assertThat(response.getBody().fileSize()).isEqualTo(submissionData.length);
     assertThat(response.getBody().errors())
         .containsExactly("X-Idempotency-Key header is required for federal create submissions.");
     verifyNoInteractions(applicationSubmissionImportService);
@@ -1655,7 +1627,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -1694,7 +1665,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -1766,7 +1736,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     controller.setRequireFederalRequestId(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
@@ -1885,7 +1854,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     controller.setRequireFederalCreateUserReference(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
@@ -1956,7 +1924,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -2034,7 +2001,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     byte[] submissionData =
         "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
             .getBytes(StandardCharsets.UTF_8);
@@ -2513,9 +2479,8 @@ class LexisUploadControllerTest {
   }
 
   @Test
-  void federalApplicationSubmissionMultipartUploadShouldRejectMissingIdempotencyKeyWhenRequired() {
+  void federalApplicationSubmissionMultipartUploadShouldRejectMissingIdempotencyKey() {
     LexisUploadController controller = controller();
-    controller.setRequireFederalCreateIdempotencyKey(true);
     MultipartFile file = sampleXmlFile();
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -2995,65 +2960,7 @@ class LexisUploadControllerTest {
   }
 
   @Test
-  void federalApplicationSubmissionRawUploadShouldFailClosedWhenCreateIsDisabled() {
-    LexisUploadController controller =
-        new LexisUploadController(
-            uploadServiceProvider,
-            applicationSubmissionImportServiceProvider,
-            applicationEditLockService);
-    controller.setFederalSubmissionRetryAfterSeconds(120L);
-
-    ResponseEntity<ApplicationSubmissionImportResultDto> response =
-        controller.federalApplicationSubmissionRawUpload(
-            "FED-REF-1",
-            "federal-direct.xml",
-            httpServletRequest,
-            "REQ-1",
-            "IDEMP-1",
-            "NEXCOL",
-            null,
-            new TestingAuthenticationToken("nexcol-service-client", "n/a"));
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-    assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("120");
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().errors())
-        .containsExactly(
-            "Federal LEXIS submission creation is disabled. Retry only after the integration has been explicitly enabled.");
-    verifyNoInteractions(httpServletRequest, applicationSubmissionImportService);
-  }
-
-  @Test
-  void federalApplicationSubmissionMultipartUploadShouldFailClosedWhenCreateIsDisabled() {
-    LexisUploadController controller =
-        new LexisUploadController(
-            uploadServiceProvider,
-            applicationSubmissionImportServiceProvider,
-            applicationEditLockService);
-    MultipartFile file = sampleXmlFile();
-
-    ResponseEntity<ApplicationSubmissionImportResultDto> response =
-        controller.federalApplicationSubmissionMultipartUpload(
-            "FED-REF-1",
-            file,
-            null,
-            "REQ-1",
-            "IDEMP-1",
-            null,
-            null,
-            new TestingAuthenticationToken("nexcol-service-client", "n/a"));
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-    assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("60");
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().errors())
-        .containsExactly(
-            "Federal LEXIS submission creation is disabled. Retry only after the integration has been explicitly enabled.");
-    verifyNoInteractions(applicationSubmissionImportService);
-  }
-
-  @Test
-  void federalApplicationSubmissionValidationShouldRemainAvailableWhenCreateIsDisabled() {
+  void federalApplicationSubmissionValidationShouldRemainAvailable() {
     when(applicationSubmissionImportServiceProvider.getIfAvailable())
         .thenReturn(applicationSubmissionImportService);
     LexisUploadController controller =
@@ -3198,7 +3105,6 @@ class LexisUploadControllerTest {
             applicationSubmissionImportServiceProvider,
             applicationEditLockService,
             meterRegistryProvider);
-    controller.setFederalCreateEnabled(true);
     byte[] submissionData = "{\"type\":\"FeatureCollection\"}".getBytes(StandardCharsets.UTF_8);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
@@ -3503,7 +3409,6 @@ class LexisUploadControllerTest {
             uploadServiceProvider,
             applicationSubmissionImportServiceProvider,
             applicationEditLockService);
-    controller.setFederalCreateEnabled(true);
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     controller.setDocumentUploadMutationPolicy(documentUploadMutationPolicy);
     controller.setLexisPrincipalService(

@@ -43,7 +43,6 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
       "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.ca-central-1.amazonaws.com/test",
       "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
       "spring.profiles.active=stub-reports,stub-services",
-      "lexis.federal-submission.create-enabled=true",
       "ALLOWED_ORIGINS=http://localhost:3000"
     })
 @AutoConfigureMockMvc

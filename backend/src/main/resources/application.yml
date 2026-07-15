@@ -189,12 +189,8 @@ lexis:
         - "uploadApplicationSubmission"
       LEXIS_DELEGATED_ADMIN: []
   federal-submission:
-    # Federal submission creation is disabled by default and must be enabled explicitly.
-    create-enabled: ${LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED:false}
     require-request-id: false
     require-user-reference: false
-    # Compatibility setting; X-Idempotency-Key is always required when CREATE is enabled.
-    require-idempotency-key: false
     require-source-system: false
     # Retry guidance returned on dedicated federal endpoint 503 responses.
     retry-after-seconds: 60
