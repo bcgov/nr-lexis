@@ -38,6 +38,9 @@ on:
       oc_namespace:
         description: OpenShift namespace
         required: true
+      clamav_namespace:
+        description: Shared ClamAV OpenShift namespace
+        required: true
       oc_token:
         description: OpenShift token
         required: true
@@ -128,8 +131,7 @@ jobs:
             -p DATABASE_USER="$DATABASE_USER"
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
-            -p CLAMAV_REGISTRY="ghcr.io/${{ github.repository }}/clamav"
-            -p CLAMAV_IMAGE_TAG="${{ inputs.tag }}"
+            -p LEXIS_VIRUS_SCAN_HOST="clamav.${{ secrets.clamav_namespace }}.svc"
             -p LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
           triggers: ${{ inputs.triggers }}
 

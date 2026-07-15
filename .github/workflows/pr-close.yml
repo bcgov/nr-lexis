@@ -23,8 +23,8 @@ jobs:
       oc_token: ${{ secrets.oc_token }}
     with:
       cleanup: label
-      packages: backend frontend clamav
-      cleanup_name: nr-lexis-backend-${{ github.event.number }} nr-lexis-frontend-${{ github.event.number }} nr-lexis-clamav-${{ github.event.number }}
+      packages: backend frontend
+      cleanup_name: nr-lexis-backend-${{ github.event.number }} nr-lexis-frontend-${{ github.event.number }}
 
   cleanup-networkpolicies:
     name: Cleanup PR OpenShift Resources
@@ -78,7 +78,7 @@ jobs:
             delete_preview() {
               local pr_number="$1"
 
-              for component in backend frontend clamav; do
+              for component in backend frontend; do
                 local label="${REPO}-${component}-${pr_number}"
                 echo "Deleting PR resources matching app=${label}"
                 oc delete "${RESOURCE_TYPES}" -n "${NAMESPACE}" -l "app=${label}" --ignore-not-found
@@ -90,7 +90,7 @@ jobs:
 
             PREVIEW_PRS=$(
               oc get deploy -n "${NAMESPACE}" --no-headers -o custom-columns=:metadata.name \
-                | sed -nE "s/^${REPO}-(backend|frontend|clamav)-([0-9]+)$/\2/p" \
+                | sed -nE "s/^${REPO}-(backend|frontend)-([0-9]+)$/\2/p" \
                 | sort -un
             )
 
