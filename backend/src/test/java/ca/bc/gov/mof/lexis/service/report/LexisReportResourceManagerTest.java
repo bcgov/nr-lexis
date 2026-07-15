@@ -21,26 +21,8 @@ class LexisReportResourceManagerTest {
   @TempDir Path tempDirectory;
 
   @Test
-  void shouldAllowConcurrentReportsUntilTheTotalConcurrencyLimit() {
-    LexisReportResourceManager manager = manager(2, 1024);
-
-    try (LexisReportResourceManager.ReportPermit first = manager.acquire();
-        LexisReportResourceManager.ReportPermit second = manager.acquire()) {
-      assertThat(first).isNotNull();
-      assertThat(second).isNotNull();
-      assertThatThrownBy(manager::acquire)
-          .isInstanceOf(LexisReportCapacityException.class)
-          .hasMessageContaining("busy");
-    }
-
-    try (LexisReportResourceManager.ReportPermit ignored = manager.acquire()) {
-      assertThat(ignored).isNotNull();
-    }
-  }
-
-  @Test
   void shouldStopBufferedOutputBeforeItExceedsTheConfiguredLimit() throws Exception {
-    LexisReportResourceManager manager = manager(1, 4);
+    LexisReportResourceManager manager = manager(4);
     LexisReportResourceManager.LimitedByteArrayOutputStream output = manager.newOutputStream();
 
     output.write(new byte[] {1, 2, 3, 4});
@@ -54,7 +36,7 @@ class LexisReportResourceManagerTest {
 
   @Test
   void shouldInstallAndCleanUpAJasperSwapFileVirtualizer() throws Exception {
-    LexisReportResourceManager manager = manager(1, 1024);
+    LexisReportResourceManager manager = manager(1024);
     Map<String, Object> parameters = new HashMap<>();
 
     try (LexisReportResourceManager.JasperVirtualizerSession ignored =
@@ -71,7 +53,7 @@ class LexisReportResourceManagerTest {
 
   @Test
   void shouldApplyTheSameConfiguredQueryTimeoutToJdbcAndJasper() throws Exception {
-    LexisReportResourceManager manager = manager(1, 1024, 37);
+    LexisReportResourceManager manager = manager(1024, 37);
     Statement statement = mock(Statement.class);
 
     manager.applyQueryTimeout(statement);
@@ -84,14 +66,13 @@ class LexisReportResourceManagerTest {
         .isEqualTo("37");
   }
 
-  private LexisReportResourceManager manager(int maxConcurrent, long maxOutputBytes) {
-    return manager(maxConcurrent, maxOutputBytes, 120);
+  private LexisReportResourceManager manager(long maxOutputBytes) {
+    return manager(maxOutputBytes, 120);
   }
 
   private LexisReportResourceManager manager(
-      int maxConcurrent, long maxOutputBytes, int queryTimeoutSeconds) {
+      long maxOutputBytes, int queryTimeoutSeconds) {
     LexisReportResourceProperties properties = new LexisReportResourceProperties();
-    properties.setMaxConcurrent(maxConcurrent);
     properties.setMaxOutputBytes(maxOutputBytes);
     properties.setVirtualizerDirectory(tempDirectory.resolve("jasper").toString());
     properties.setVirtualizerMaxPages(2);

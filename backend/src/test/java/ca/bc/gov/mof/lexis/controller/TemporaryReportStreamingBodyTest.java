@@ -16,8 +16,6 @@ class TemporaryReportStreamingBodyTest {
   @Test
   void successfulTransferShouldDeleteTheTemporaryFileAndNotifyTheObserver() throws Exception {
     byte[] content = new byte[] {1, 2, 3};
-    int availableSlots = TemporaryReportStreamingBody.availableTransferSlots();
-    int availableBytes = TemporaryReportStreamingBody.availableStagedBytes();
     AtomicBoolean successful = new AtomicBoolean();
     TemporaryReportStreamingBody body =
         TemporaryReportStreamingBody.stage(
@@ -28,17 +26,12 @@ class TemporaryReportStreamingBodyTest {
             });
     Path temporaryFile = body.temporaryFile();
     ByteArrayOutputStream output = new ByteArrayOutputStream();
-    assertThat(TemporaryReportStreamingBody.availableTransferSlots()).isEqualTo(availableSlots - 1);
-    assertThat(TemporaryReportStreamingBody.availableStagedBytes())
-        .isEqualTo(availableBytes - content.length);
 
     body.writeTo(output);
 
     assertThat(output.toByteArray()).containsExactly(content);
     assertThat(successful).isTrue();
     assertThat(temporaryFile).doesNotExist();
-    assertThat(TemporaryReportStreamingBody.availableTransferSlots()).isEqualTo(availableSlots);
-    assertThat(TemporaryReportStreamingBody.availableStagedBytes()).isEqualTo(availableBytes);
   }
 
   @Test

@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -28,16 +29,26 @@ public class ApplicationEditLockService {
   private final Map<String, LockState> locks = new ConcurrentHashMap<>();
   private final Duration ttl;
   private final Clock clock;
+  private final RedisEditLockStore redisStore;
 
   @Autowired
   public ApplicationEditLockService(
-      @Value("${lexis.application-edit-lock.ttl-minutes:20}") long ttlMinutes) {
-    this(Duration.ofMinutes(ttlMinutes), Clock.systemUTC());
+      @Value("${lexis.application-edit-lock.ttl-minutes:20}") long ttlMinutes,
+      ObjectProvider<RedisEditLockStore> redisStoreProvider) {
+    this(
+        Duration.ofMinutes(ttlMinutes),
+        Clock.systemUTC(),
+        redisStoreProvider == null ? null : redisStoreProvider.getIfAvailable());
   }
 
   ApplicationEditLockService(Duration ttl, Clock clock) {
+    this(ttl, clock, null);
+  }
+
+  ApplicationEditLockService(Duration ttl, Clock clock, RedisEditLockStore redisStore) {
     this.ttl = ttl.isNegative() || ttl.isZero() ? Duration.ofMinutes(20) : ttl;
     this.clock = clock;
+    this.redisStore = redisStore;
   }
 
   public ApplicationEditLockDto acquire(Long applicationNumber, String userId, String displayName, boolean showOwner) {
@@ -89,6 +100,17 @@ public class ApplicationEditLockService {
       return locked(null, showOwner, aggregateLabel);
     }
 
+    if (redisStore != null) {
+      String effectiveDisplayName =
+          TextUtils.trimToNull(displayName) == null ? normalizedUserId : displayName.trim();
+      RedisEditLockStore.LockRecord state =
+          redisStore.acquire(aggregateKey, normalizedUserId, effectiveDisplayName, ttl);
+      if (state != null && state.userId().equalsIgnoreCase(normalizedUserId)) {
+        return new ApplicationEditLockDto(false, true, null, null, state.expiresAt());
+      }
+      return locked(toLockState(state), showOwner, aggregateLabel);
+    }
+
     Instant now = clock.instant();
     LockState state =
         locks.compute(
@@ -116,16 +138,14 @@ public class ApplicationEditLockService {
     return snapshotAggregate("application:" + applicationNumber, "application", userId, showOwner);
   }
 
-  /**
-   * Returns the active application locks from one in-memory registry snapshot pass.
-   *
-   * <p>Legacy search treated an application as locked even when the current user held the lock, so
-   * this intentionally does not resolve a user identity. The work is bounded by the current search
-   * page and performs no database calls.
-   */
+  /** Returns active locks for the current search page, including locks held by the current user. */
   public Set<Long> lockedApplicationNumbers(Collection<Long> applicationNumbers) {
     if (applicationNumbers == null || applicationNumbers.isEmpty()) {
       return Set.of();
+    }
+
+    if (redisStore != null) {
+      return redisStore.lockedApplicationNumbers(applicationNumbers);
     }
 
     Set<Long> lockedApplicationNumbers = new LinkedHashSet<>();
@@ -196,6 +216,9 @@ public class ApplicationEditLockService {
   }
 
   private boolean touchAggregate(String aggregateKey, String normalizedUserId) {
+    if (redisStore != null) {
+      return redisStore.touch(aggregateKey, normalizedUserId, ttl);
+    }
     Instant now = clock.instant();
     LockState state =
         locks.computeIfPresent(
@@ -244,6 +267,9 @@ public class ApplicationEditLockService {
   }
 
   private boolean releaseAggregate(String aggregateKey, String normalizedUserId) {
+    if (redisStore != null) {
+      return redisStore.release(aggregateKey, normalizedUserId);
+    }
     LockState state = activeLock(aggregateKey);
     return state != null
         && state.heldBy(normalizedUserId)
@@ -255,6 +281,9 @@ public class ApplicationEditLockService {
   }
 
   private LockState activeLock(String aggregateKey) {
+    if (redisStore != null) {
+      return toLockState(redisStore.activeLock(aggregateKey));
+    }
     Instant now = clock.instant();
     LockState state = locks.get(aggregateKey);
     if (state != null && state.expired(now)) {
@@ -262,6 +291,12 @@ public class ApplicationEditLockService {
       return null;
     }
     return state;
+  }
+
+  private LockState toLockState(RedisEditLockStore.LockRecord state) {
+    return state == null
+        ? null
+        : new LockState(state.userId(), state.displayName(), state.expiresAt());
   }
 
   private ApplicationEditLockDto locked(

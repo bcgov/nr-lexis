@@ -11,13 +11,14 @@ flowchart LR
     User["Interactive user"] -->|OIDC sign-in| Cognito["FAM / Cognito"]
     User --> Route["OpenShift route"]
     Route --> Frontend["Caddy / Coraza / React"]
-    Frontend -->|REST with Cognito JWT| Backend["Spring Boot API<br/>1 replica"]
+    Frontend -->|REST with Cognito JWT| Backend["Spring Boot API<br/>1-N replicas"]
 
     Nexcol[NEXCOL] -->|Client credentials| Keycloak[Keycloak]
     Nexcol --> Gateway["API gateway"]
     Gateway -->|Scoped federal POST requests| Backend
 
     Backend --> Oracle[("Shared Oracle database")]
+    Backend --> Redis[("Cluster-local Redis<br/>coordination")]
     Backend --> Identity["FAM identity lookup"]
     Backend --> ClamAV["ClamAV service"]
     Backend --> Mail["Government mail relay"]
@@ -35,6 +36,7 @@ separate service beside the application workloads.
 | React frontend           | Interactive provincial, federal, reporting, administration, and RTM AMV journeys. It uses backend-provided capabilities to control navigation and actions.             |
 | Spring Boot backend      | REST endpoints, object- and client-level authorization, Oracle workflow coordination, report generation, attachment validation, email events, and operational metrics. |
 | Oracle                   | System of record for LEXIS data, reference codes, audit fields, attachments, and the established PL/SQL package contracts.                                             |
+| Redis                    | Cluster-local distributed leases, scheduler leadership, and cached federal submission replay state. Oracle remains the authoritative business store.                   |
 | ClamAV                   | Malware scanning for uploaded content before accepted files are persisted.                                                                                             |
 | FAM / Cognito            | Interactive authentication and FAM role authorities, including client-scoped Provincial Submitter access.                                                              |
 | Keycloak and API gateway | Dedicated machine-to-machine authentication, scope enforcement, traffic controls, and routing for NEXCOL federal submissions.                                          |
@@ -82,11 +84,12 @@ Pull requests deploy an isolated DEV preview after their required builds and tes
 `main` deploys the accepted images to the persistent TEST environment and runs the smoke suite.
 Production deployment and image promotion remain disabled until production readiness is approved.
 
-The supported topology currently uses one backend replica. Interactive edit leases, permit
-operation mutexes, scheduler coordination, and federal submission idempotency are JVM-local, and
-deployment validation rejects a higher backend replica count. Frontend replicas can scale
-independently. Moving the backend to multiple replicas requires shared coordination before changing
-this constraint.
+The backend deployment uses a CPU-based Horizontal Pod Autoscaler with environment-specific minimum
+and maximum replica counts. Redis coordinates interactive edit leases, permit aggregate operations,
+the expiry scheduler, and federal submission idempotency across those replicas. Redis is reachable
+only through a cluster-local Service and a NetworkPolicy restricted to the matching backend pods.
+Available Oracle transactions, constraints, and conditional updates remain the final correctness
+boundary if a lease expires or the coordination service restarts.
 
 The daily expiry process is disabled by default and is enabled per environment. It processes each
 eligible exemption independently, leaves unsuccessful aggregates eligible for a later run, and
@@ -96,7 +99,7 @@ publishes metrics for operational monitoring.
 
 | Concern              | Legacy                                                                  | Modern                                                                                                                   |
 | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Application delivery | Java 8 WAR deployed to an application server                            | Separate React/Caddy, Spring Boot, and ClamAV containers on OpenShift                                                    |
+| Application delivery | Java 8 WAR deployed to an application server                            | Separate React/Caddy, Spring Boot, Redis, and ClamAV workloads on OpenShift                                              |
 | Web architecture     | Struts actions, JSP pages, browser JavaScript, and server HTTP sessions | React SPA, typed REST contracts, stateless JWT authentication, and Spring services                                       |
 | Interactive identity | WebADE filters, roles, and organization context                         | FAM roles through Cognito JWTs, backend capability resolution, and explicit client/object checks                         |
 | Federal ingress      | ESF queue-oriented ingestion                                            | NEXCOL through a dedicated Keycloak scope and API gateway routes                                                         |
@@ -104,12 +107,13 @@ publishes metrics for operational monitoring.
 | Attachments          | Oracle BLOB storage through application-server upload actions           | Oracle BLOB storage with bounded streaming validation and ClamAV scanning                                                |
 | Reports              | Application-server/WebADE report integration and legacy report assets   | Embedded JasperReports with checked-in templates and streamed HTTP responses                                             |
 | Email                | Request-coupled JavaMail flows with client and regional recipients      | After-commit asynchronous events, validated recipients, regional distribution-list routing, and non-production overrides |
-| Concurrency          | Process/session-scoped edit locks in a single runtime                   | Time-bounded JVM-local aggregate locks with a deployment-enforced single backend replica                                 |
+| Concurrency          | Process/session-scoped edit locks in a single runtime                   | Time-bounded Redis leases and idempotency claims shared by horizontally scaled backend replicas                           |
 | Delivery             | Legacy build and deployment pipeline                                    | GitHub Actions, container images, security checks, and parameterized OpenShift deployments                               |
 
 The modernization intentionally preserves Oracle contracts, core workflow semantics, BLOB storage,
 and the legacy-compatible GBMS sequence. Framework, identity, delivery, ingress, and operational
-controls change without introducing a new LEXIS database or distributed runtime dependency.
+controls change without introducing a new system-of-record database; Redis is a distributed
+coordination dependency only.
 
 ## Related documentation
 

@@ -166,15 +166,21 @@ there is no submission-status polling endpoint.
 
 Submission creation is disabled by default. Enabling CREATE makes `X-Idempotency-Key` mandatory,
 regardless of the optional compatibility setting for that header. When enabled, LEXIS provides
-bounded, process-local duplicate suppression:
-the idempotency key is scoped to the authenticated caller, bound to the XML payload SHA-256, and a
-completed non-5xx response is replayed while its cache entry remains available. An in-flight `409`
+bounded duplicate suppression shared by all backend replicas through Redis:
+the idempotency key is scoped to the authenticated caller and bound to the XML payload, user
+reference, source-system metadata, and effective filename. A completed non-5xx response is replayed while its cache
+entry remains available. An in-flight `409`
 includes `Retry-After` guidance and must be retried with the same key and identical payload. A
 different-payload `409` must not be retried with that key.
 
-This safeguard does not coordinate replicas or survive a restart. CREATE therefore supports only a
-single backend replica and controlled retries. Validation remains available while CREATE is
-disabled.
+An in-flight claim has a renewable five-minute lease; an abandoned claim therefore clears without
+operator action. Completed responses are retained for 24 hours by default. Redis AOF persistence
+preserves this state across normal Redis pod replacement. If Redis is unavailable, submission creation fails closed
+and NEXCOL must retry with the same idempotency key and payload. Redis coordination state is not an
+Oracle business record; Oracle uniqueness and transaction checks remain the final persistence
+boundary. If replay state is lost after Oracle commits, the package uniqueness check prevents a
+second import, but the retry can return an existing-package conflict instead of the original success
+response. Validation remains available while CREATE is disabled.
 
 ## ESF Migration Mapping
 

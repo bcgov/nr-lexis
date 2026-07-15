@@ -98,7 +98,7 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void reportCapacityAndQueryTimeoutShouldBeBoundedAndDeploymentConfigurable()
+  void reportQueryTimeoutShouldBeBoundedAndDeploymentConfigurable()
       throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
@@ -108,23 +108,33 @@ class BackendRuntimeConfigTest {
         Files.readString(resolve(Path.of(".github", "workflows", "reusable-deploy.yml")));
 
     assertThat(applicationConfig)
-        .contains("max-concurrent: ${LEXIS_REPORT_MAX_CONCURRENT:4}")
-        .contains("query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}");
+        .contains("query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}")
+        .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
     assertThat(deployment)
-        .contains("- name: LEXIS_REPORT_MAX_CONCURRENT")
-        .contains("value: ${LEXIS_REPORT_MAX_CONCURRENT}")
         .contains("- name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS")
-        .contains("value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}");
+        .contains("value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}")
+        .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
     assertThat(workflow)
-        .contains(
-            "LEXIS_REPORT_MAX_CONCURRENT:"
-                + " ${{ vars.LEXIS_REPORT_MAX_CONCURRENT || '4' }}")
-        .contains("-p LEXIS_REPORT_MAX_CONCURRENT=\"$LEXIS_REPORT_MAX_CONCURRENT\"")
         .contains(
             "LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:"
                 + " ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}")
         .contains(
-            "-p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS=\"$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS\"");
+            "-p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS=\"$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS\"")
+        .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
+  }
+
+  @Test
+  void redisExpiryCoordinationShouldRetainSuccessfulBusinessDates() throws IOException {
+    String applicationConfig =
+        Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
+    String deployment =
+        Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
+
+    assertThat(applicationConfig)
+        .contains("completion-retention: ${LEXIS_EXPIRY_COMPLETION_RETENTION:3d}");
+    assertThat(deployment)
+        .contains("- name: LEXIS_EXPIRY_COMPLETION_RETENTION")
+        .contains("value: ${LEXIS_EXPIRY_COMPLETION_RETENTION}");
   }
 
   @Test

@@ -117,6 +117,7 @@ jobs:
       database_host: ${{ secrets.database_host }}
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
+      redis_password: ${{ secrets.redis_password }}
       lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
     with:
       environment: dev

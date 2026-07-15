@@ -39,6 +39,7 @@ jobs:
       database_host: ${{ secrets.database_host }}
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
+      redis_password: ${{ secrets.redis_password }}
       lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
       keycloak_sa_client_id: ${{ secrets.keycloak_sa_client_id }}
       keycloak_sa_client_secret: ${{ secrets.keycloak_sa_client_secret }}
@@ -46,7 +47,8 @@ jobs:
       environment: test
       target: test
       tag: ${{ needs.init.outputs.pr }}
-      backend_replicas: "1"
+      backend_min_replicas: "2"
+      backend_max_replicas: "6"
       frontend_replicas: "1"
       backend_cpu_request: "500m"
       backend_memory_request: "1Gi"
@@ -84,6 +86,7 @@ jobs:
       database_host: ${{ secrets.database_host }}
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
+      redis_password: ${{ secrets.redis_password }}
       lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
       keycloak_sa_client_id: ${{ secrets.keycloak_sa_client_id }}
       keycloak_sa_client_secret: ${{ secrets.keycloak_sa_client_secret }}
@@ -91,8 +94,8 @@ jobs:
       environment: prod
       target: prod
       tag: ${{ needs.init.outputs.pr }}
-      # JVM-local edit and scheduler locks require one backend replica.
-      backend_replicas: "1"
+      backend_min_replicas: "3"
+      backend_max_replicas: "10"
       frontend_replicas: "3"
 
   # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is

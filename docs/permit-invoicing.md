@@ -55,8 +55,9 @@ When a failure occurs after GBMS processing starts:
 3. Complete or reverse the partial work through the supported operational process.
 4. Retry only after both histories agree.
 
-The current single-backend deployment and per-permit JVM lock reduce concurrent submissions from
-LEXIS, but they do not coordinate with other GBMS writers.
+LEXIS uses Redis aggregate leases to serialize overlapping permit operations across backend pods.
+Those leases do not coordinate with other GBMS writers, so the operational reconciliation path is
+still required for unknown or partial GBMS outcomes.
 
 ## Future hardening
 

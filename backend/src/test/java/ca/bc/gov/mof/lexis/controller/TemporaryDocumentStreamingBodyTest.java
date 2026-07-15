@@ -8,15 +8,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -74,44 +71,36 @@ class TemporaryDocumentStreamingBodyTest {
   }
 
   @Test
-  void shouldKeepDocumentDatabaseWorkWithinFourTransfersPerPod() throws Exception {
-    CountDownLatch firstFourStarted = new CountDownLatch(4);
-    CountDownLatch fifthStarted = new CountDownLatch(1);
+  void concurrentDocumentTransfersShouldNotBeSerializedByTheApplication() throws Exception {
+    CountDownLatch allStarted = new CountDownLatch(5);
     CountDownLatch release = new CountDownLatch(1);
-    AtomicInteger sourceInvocations = new AtomicInteger();
-    List<Future<?>> transfers = new ArrayList<>();
+    @SuppressWarnings("unchecked")
+    Future<Void>[] transfers = new Future[5];
 
     try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
       for (int index = 0; index < 5; index++) {
         TemporaryDocumentStreamingBody body =
             TemporaryDocumentStreamingBody.stream(
                 output -> {
-                  int invocation = sourceInvocations.incrementAndGet();
-                  if (invocation <= 4) {
-                    firstFourStarted.countDown();
-                  } else {
-                    fifthStarted.countDown();
-                  }
+                  allStarted.countDown();
                   try {
                     release.await();
                   } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     throw new IOException("staging interrupted", exception);
                   }
-                  output.write(invocation);
+                  output.write(1);
                 },
                 temporaryDirectory);
-        transfers.add(
+        transfers[index] =
             executor.submit(
                 () -> {
                   body.writeTo(new ByteArrayOutputStream());
                   return null;
-                }));
+                });
       }
 
-      assertThat(firstFourStarted.await(5, TimeUnit.SECONDS)).isTrue();
-      assertThat(fifthStarted.await(250, TimeUnit.MILLISECONDS)).isFalse();
-      assertThat(sourceInvocations).hasValue(4);
+      assertThat(allStarted.await(5, TimeUnit.SECONDS)).isTrue();
       release.countDown();
       for (Future<?> transfer : transfers) {
         transfer.get(5, TimeUnit.SECONDS);

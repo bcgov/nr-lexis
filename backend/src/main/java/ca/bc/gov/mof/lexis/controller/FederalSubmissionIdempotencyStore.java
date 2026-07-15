@@ -8,13 +8,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
 
-/**
- * Process-local duplicate suppression for synchronous federal submissions. State is not shared
- * across pods or retained across restarts.
- */
+/** Coordinates synchronous federal submission retries through Redis in Oracle-backed runtimes. */
+@Component
 final class FederalSubmissionIdempotencyStore {
 
   static final Duration DEFAULT_TTL = Duration.ofMinutes(15);
@@ -25,14 +26,34 @@ final class FederalSubmissionIdempotencyStore {
   private final Duration ttl;
   private final int maxEntries;
   private final Clock clock;
+  private final RedisFederalSubmissionIdempotencyStore redisStore;
+  private final Object localMonitor = new Object();
   private final Map<ScopedKey, Entry> entries = new LinkedHashMap<>();
   private long nextClaimId;
 
   FederalSubmissionIdempotencyStore() {
-    this(DEFAULT_TTL, DEFAULT_MAX_ENTRIES, Clock.systemUTC());
+    this(DEFAULT_TTL, DEFAULT_MAX_ENTRIES, Clock.systemUTC(), null);
   }
 
   FederalSubmissionIdempotencyStore(Duration ttl, int maxEntries, Clock clock) {
+    this(ttl, maxEntries, clock, null);
+  }
+
+  @Autowired
+  FederalSubmissionIdempotencyStore(
+      ObjectProvider<RedisFederalSubmissionIdempotencyStore> redisStoreProvider) {
+    this(
+        DEFAULT_TTL,
+        DEFAULT_MAX_ENTRIES,
+        Clock.systemUTC(),
+        redisStoreProvider == null ? null : redisStoreProvider.getIfAvailable());
+  }
+
+  private FederalSubmissionIdempotencyStore(
+      Duration ttl,
+      int maxEntries,
+      Clock clock,
+      RedisFederalSubmissionIdempotencyStore redisStore) {
     if (ttl == null || ttl.isZero() || ttl.isNegative()) {
       throw new IllegalArgumentException("Federal submission idempotency TTL must be positive.");
     }
@@ -43,67 +64,87 @@ final class FederalSubmissionIdempotencyStore {
     this.ttl = ttl;
     this.maxEntries = maxEntries;
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.redisStore = redisStore;
   }
 
-  synchronized Decision claim(String caller, String idempotencyKey, String payloadSha256) {
+  Decision claim(String caller, String idempotencyKey, String payloadSha256) {
     ScopedKey scopedKey =
         new ScopedKey(normalize(caller, UNKNOWN_CALLER), requireValue(idempotencyKey, "key"));
     String normalizedPayloadSha256 = requireValue(payloadSha256, "payload SHA-256");
-    Instant now = clock.instant();
-    removeExpired(now);
-
-    Entry existing = entries.get(scopedKey);
-    if (existing != null) {
-      if (!existing.payloadSha256.equals(normalizedPayloadSha256)) {
-        return Decision.payloadMismatch();
-      }
-      if (existing.response != null) {
-        return Decision.replay(existing.response.toResponseEntity());
-      }
-      return Decision.inFlight();
+    if (redisStore != null) {
+      return redisStore.claim(scopedKey.caller(), scopedKey.idempotencyKey(), normalizedPayloadSha256);
     }
+    synchronized (localMonitor) {
+      Instant now = clock.instant();
+      removeExpired(now);
 
-    if (entries.size() >= maxEntries) {
-      return Decision.capacityExceeded();
+      Entry existing = entries.get(scopedKey);
+      if (existing != null) {
+        if (!existing.payloadSha256.equals(normalizedPayloadSha256)) {
+          return Decision.payloadMismatch();
+        }
+        if (existing.response != null) {
+          return Decision.replay(existing.response.toResponseEntity());
+        }
+        return Decision.inFlight();
+      }
+
+      if (entries.size() >= maxEntries) {
+        return Decision.capacityExceeded();
+      }
+
+      long claimId = ++nextClaimId;
+      entries.put(
+          scopedKey,
+          new Entry(normalizedPayloadSha256, claimId, now.plus(ttl), null));
+      return Decision.claimed(new Claim(scopedKey.caller(), scopedKey.idempotencyKey(), claimId));
     }
-
-    long claimId = ++nextClaimId;
-    entries.put(
-        scopedKey,
-        new Entry(normalizedPayloadSha256, claimId, now.plus(ttl), null));
-    return Decision.claimed(new Claim(scopedKey.caller(), scopedKey.idempotencyKey(), claimId));
   }
 
-  synchronized void complete(
+  void complete(
       Claim claim, ResponseEntity<ApplicationSubmissionImportResultDto> response) {
+    if (redisStore != null) {
+      redisStore.complete(claim, response);
+      return;
+    }
     if (claim == null || response == null || response.getStatusCode().is5xxServerError()) {
       release(claim);
       return;
     }
 
-    ScopedKey scopedKey = new ScopedKey(claim.caller(), claim.idempotencyKey());
-    Entry current = entries.get(scopedKey);
-    if (current == null || current.claimId != claim.claimId()) {
-      return;
+    synchronized (localMonitor) {
+      ScopedKey scopedKey = new ScopedKey(claim.caller(), claim.idempotencyKey());
+      Entry current = entries.get(scopedKey);
+      if (current == null || current.claimId != claim.claimId()) {
+        return;
+      }
+      current.response = CachedResponse.from(response);
+      current.expiresAt = clock.instant().plus(ttl);
     }
-    current.response = CachedResponse.from(response);
-    current.expiresAt = clock.instant().plus(ttl);
   }
 
-  synchronized void release(Claim claim) {
+  void release(Claim claim) {
+    if (redisStore != null) {
+      redisStore.release(claim);
+      return;
+    }
     if (claim == null) {
       return;
     }
-    ScopedKey scopedKey = new ScopedKey(claim.caller(), claim.idempotencyKey());
-    Entry current = entries.get(scopedKey);
-    if (current != null && current.claimId == claim.claimId()) {
-      entries.remove(scopedKey);
+    synchronized (localMonitor) {
+      ScopedKey scopedKey = new ScopedKey(claim.caller(), claim.idempotencyKey());
+      Entry current = entries.get(scopedKey);
+      if (current != null && current.claimId == claim.claimId()) {
+        entries.remove(scopedKey);
+      }
     }
   }
 
-  synchronized int size() {
-    removeExpired(clock.instant());
-    return entries.size();
+  int size() {
+    synchronized (localMonitor) {
+      removeExpired(clock.instant());
+      return entries.size();
+    }
   }
 
   private void removeExpired(Instant now) {
@@ -138,20 +179,20 @@ final class FederalSubmissionIdempotencyStore {
       Claim claim,
       ResponseEntity<ApplicationSubmissionImportResultDto> replayResponse) {
 
-    private static Decision claimed(Claim claim) {
+    static Decision claimed(Claim claim) {
       return new Decision(Outcome.CLAIMED, claim, null);
     }
 
-    private static Decision replay(
+    static Decision replay(
         ResponseEntity<ApplicationSubmissionImportResultDto> replayResponse) {
       return new Decision(Outcome.REPLAY, null, replayResponse);
     }
 
-    private static Decision payloadMismatch() {
+    static Decision payloadMismatch() {
       return new Decision(Outcome.PAYLOAD_MISMATCH, null, null);
     }
 
-    private static Decision inFlight() {
+    static Decision inFlight() {
       return new Decision(Outcome.IN_FLIGHT, null, null);
     }
 

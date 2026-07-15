@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -71,7 +72,7 @@ public class LexisUploadController {
   private final ApplicationEditLockService applicationEditLockService;
   private final ObjectProvider<MeterRegistry> meterRegistryProvider;
   private final PermitOperationMutex permitOperationMutex;
-  private final FederalSubmissionIdempotencyStore federalCreateIdempotencyStore =
+  private FederalSubmissionIdempotencyStore federalCreateIdempotencyStore =
       new FederalSubmissionIdempotencyStore();
   private ProvincialAuthorizationService provincialAuthorizationService;
   private DocumentUploadMutationPolicy documentUploadMutationPolicy;
@@ -162,6 +163,12 @@ public class LexisUploadController {
   @Autowired
   void setLexisPrincipalService(LexisPrincipalService principalService) {
     this.principalService = principalService;
+  }
+
+  @Autowired
+  void setFederalSubmissionIdempotencyStore(
+      FederalSubmissionIdempotencyStore federalSubmissionIdempotencyStore) {
+    this.federalCreateIdempotencyStore = federalSubmissionIdempotencyStore;
   }
 
   @PostMapping(
@@ -1163,7 +1170,11 @@ public class LexisUploadController {
         beginFederalCreateIdempotency(
             entryUserId,
             idempotencyKey,
-            payloadSha256,
+            federalIdempotencyFingerprint(
+                payloadSha256,
+                userReference,
+                sourceSystem,
+                effectiveFederalFileName(originalFileName)),
             effectiveFederalFileName(originalFileName),
             submissionData.length);
     if (idempotencyStart.immediateResponse() != null) {
@@ -1389,7 +1400,8 @@ public class LexisUploadController {
         beginFederalCreateIdempotency(
             entryUserId,
             idempotencyKey,
-            payloadSha256,
+            federalIdempotencyFingerprint(
+                payloadSha256, userReference, sourceSystem, fileName),
             fileName,
             fileSize);
     if (idempotencyStart.immediateResponse() != null) {
@@ -1850,14 +1862,14 @@ public class LexisUploadController {
   private FederalCreateIdempotencyStart beginFederalCreateIdempotency(
       String caller,
       String idempotencyKey,
-      String payloadSha256,
+      String requestFingerprint,
       String fileName,
       long fileSize) {
     String normalizedIdempotencyKey = trimToNull(idempotencyKey);
     if (normalizedIdempotencyKey == null) {
       return FederalCreateIdempotencyStart.bypass();
     }
-    if (trimToNull(payloadSha256) == null) {
+    if (trimToNull(requestFingerprint) == null) {
       return FederalCreateIdempotencyStart.immediate(
           federalIdempotencyFailure(
               HttpStatus.SERVICE_UNAVAILABLE,
@@ -1868,7 +1880,7 @@ public class LexisUploadController {
     }
 
     FederalSubmissionIdempotencyStore.Decision decision =
-        federalCreateIdempotencyStore.claim(caller, normalizedIdempotencyKey, payloadSha256);
+        federalCreateIdempotencyStore.claim(caller, normalizedIdempotencyKey, requestFingerprint);
     return switch (decision.outcome()) {
       case CLAIMED -> FederalCreateIdempotencyStart.claimed(decision.claim());
       case REPLAY -> FederalCreateIdempotencyStart.replay(decision.replayResponse());
@@ -2439,6 +2451,25 @@ public class LexisUploadController {
     } catch (NoSuchAlgorithmException ex) {
       throw new IllegalStateException("SHA-256 digest algorithm is unavailable", ex);
     }
+  }
+
+  private String federalIdempotencyFingerprint(
+      String payloadSha256,
+      String userReference,
+      String sourceSystem,
+      String effectiveFileName) {
+    if (trimToNull(payloadSha256) == null) {
+      return null;
+    }
+    String semanticRequest =
+        payloadSha256
+            + "\u0000"
+            + String.valueOf(trimToNull(userReference))
+            + "\u0000"
+            + String.valueOf(trimToNull(sourceSystem))
+            + "\u0000"
+            + String.valueOf(trimToNull(effectiveFileName));
+    return sha256Hex(semanticRequest.getBytes(StandardCharsets.UTF_8));
   }
 
   private String resolveFileName(MultipartFile file) {

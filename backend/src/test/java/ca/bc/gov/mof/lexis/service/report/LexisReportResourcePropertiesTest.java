@@ -18,7 +18,6 @@ class LexisReportResourcePropertiesTest {
         context -> {
           LexisReportResourceProperties properties =
               context.getBean(LexisReportResourceProperties.class);
-          assertThat(properties.getMaxConcurrent()).isEqualTo(4);
           assertThat(properties.getMaxOutputBytes()).isEqualTo(25L * 1024L * 1024L);
           assertThat(properties.getVirtualizerDirectory()).isEqualTo("/tmp/lexis-jasper");
           assertThat(properties.getVirtualizerMaxPages()).isEqualTo(50);
@@ -30,7 +29,6 @@ class LexisReportResourcePropertiesTest {
   void shouldBindDeploymentOverrides() {
     contextRunner
         .withPropertyValues(
-            "lexis.reports.max-concurrent=3",
             "lexis.reports.max-output-bytes=4096",
             "lexis.reports.query-timeout-seconds=37",
             "lexis.reports.virtualizer-directory=/tmp/custom-jasper",
@@ -39,7 +37,6 @@ class LexisReportResourcePropertiesTest {
             context -> {
               LexisReportResourceProperties properties =
                   context.getBean(LexisReportResourceProperties.class);
-              assertThat(properties.getMaxConcurrent()).isEqualTo(3);
               assertThat(properties.getMaxOutputBytes()).isEqualTo(4096);
               assertThat(properties.getQueryTimeoutSeconds()).isEqualTo(37);
               assertThat(properties.getVirtualizerDirectory()).isEqualTo("/tmp/custom-jasper");

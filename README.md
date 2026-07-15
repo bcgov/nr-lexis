@@ -13,6 +13,7 @@ Full-stack LEXIS application for log export workflows.
 | Frontend | React 19, TypeScript, Carbon Design System |
 | Backend | Spring Boot 3.5, Java 21 |
 | Database | Oracle (shared, BC Gov-managed) |
+| Coordination | Redis distributed leases and federal replay state |
 | Auth | AWS Cognito (FAM) for interactive users; Keycloak scopes for NEXCOL service-client submission |
 | Reports | JasperReports library |
 
@@ -44,6 +45,7 @@ Both options share the same prerequisites and property files below. Reports use 
 2. **Maven 3.9+ and Java 21** (Option A only). The repo has no Maven wrapper.
 3. **Node 24+** (Option A only).
 4. **Docker Desktop** (Option B only).
+5. **Redis 7.4+**. Option A can start only Redis with `docker compose up -d redis`; Option B starts it automatically.
 
 ### Property files you create once
 
@@ -102,6 +104,7 @@ docker compose logs -f backend
 
 Services:
 
+- `redis` -> `localhost:6379` (local-only coordination service).
 - `backend` -> `localhost:8080` (Spring Boot via `mvn spring-boot:run` inside `maven:3.9.9-amazoncorretto-21-alpine`).
 - `frontend` -> `localhost:3000` (Vite via `npm run dev` inside `node:24-alpine`).
 

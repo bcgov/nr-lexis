@@ -13,16 +13,25 @@ Failed aggregates remain eligible for the next daily run. Logs report candidate,
 
 ## Deployment safety
 
-The scheduler has a JVM-local guard that prevents overlapping runs within one backend pod. It does not coordinate different pods. Expiry-enabled deployments require one backend replica. Deployment validation enforces the single-replica requirement.
+The scheduler uses a Redis-backed ShedLock lease. All backend replicas may trigger the schedule, but
+only the replica holding the shared lease runs the expiry process. A successful business-date marker
+prevents a later pod start from repeating that day's completed run. Redis failures fail closed
+without preventing the application from starting.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LEXIS_EXPIRY_ENABLED` | `false` | Creates the scheduled job when true; requires one backend replica. |
+| `LEXIS_EXPIRY_ENABLED` | `false` | Creates the Redis-coordinated scheduled job when true. |
 | `LEXIS_EXPIRY_CRON` | `30 0 0 * * *` | Spring six-field cron expression. |
 | `LEXIS_EXPIRY_ZONE` | `America/Vancouver` | Scheduler time zone. |
+| `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | `PT6H` | Maximum Redis lease duration for one run. |
+| `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | `PT0S` | Minimum Redis lease duration after a run starts. |
+| `LEXIS_EXPIRY_COMPLETION_RETENTION` | `3d` | Retention for successful business-date markers. |
 
 ## Operations
 
-Prometheus exposes completed, failed, and locally skipped run counters plus gauges for the last completed run's timestamp, candidate count, expired count, and deferred count. A separate gauge records the last top-level failure timestamp. These metrics are process-local and reset when the backend pod restarts; deferred exemptions remain eligible for the next run.
+Prometheus exposes completed, failed, lock-skipped, and locally skipped run counters plus gauges for
+the last completed run's timestamp, candidate count, expired count, and deferred count. A separate
+gauge records the last top-level failure timestamp. These metrics are process-local and reset when
+the backend pod restarts; deferred exemptions remain eligible for the next run.

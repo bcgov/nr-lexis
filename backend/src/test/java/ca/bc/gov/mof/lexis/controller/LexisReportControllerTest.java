@@ -12,7 +12,6 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.report.LexisGeneratedReport;
-import ca.bc.gov.mof.lexis.service.report.LexisReportCapacityException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportOutputLimitException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
@@ -110,23 +109,6 @@ class LexisReportControllerTest {
         .contains("Unable to generate")
         .doesNotContain("Oracle failed")
         .doesNotContain("down");
-  }
-
-  @Test
-  void reportCapacityShouldFailFastWithServiceUnavailable() {
-    when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
-    when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
-        .thenThrow(new LexisReportCapacityException("busy"));
-    LexisReportController controller =
-        new LexisReportController(
-            reportServiceProvider, provincialAuthorizationService, principalService);
-
-    ResponseEntity<StreamingResponseBody> response = controller.offerReport(sampleRequest());
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-    assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
-    assertThat(new String(responseBody(response), StandardCharsets.UTF_8))
-        .isEqualTo("Report generation is busy. Try again shortly.");
   }
 
   @Test

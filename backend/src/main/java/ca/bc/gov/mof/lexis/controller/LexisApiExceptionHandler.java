@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
+import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +82,21 @@ class LexisApiExceptionHandler {
     ProblemDetail problem =
         ProblemDetail.forStatusAndDetail(
             HttpStatus.SERVICE_UNAVAILABLE, CAPACITY_UNAVAILABLE_DETAIL);
+    problem.setTitle(CAPACITY_UNAVAILABLE_TITLE);
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .header(HttpHeaders.RETRY_AFTER, "5")
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .body(problem);
+  }
+
+  @ExceptionHandler(DistributedLockBusyException.class)
+  ResponseEntity<ProblemDetail> handleDistributedLockBusyException(
+      DistributedLockBusyException exception) {
+    LOGGER.info(
+        "event=lexis_coordination operation=mutation outcome=busy failureType={}",
+        exceptionType(exception));
+    ProblemDetail problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
     problem.setTitle(CAPACITY_UNAVAILABLE_TITLE);
     return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
         .header(HttpHeaders.RETRY_AFTER, "5")

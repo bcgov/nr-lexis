@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import ca.bc.gov.mof.lexis.service.coordination.RedisLeaseService;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -10,14 +11,27 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-/** Serializes exemption, application, and permit updates while deployment uses one backend pod. */
+/** Serializes exemption, application, and permit updates across backend pods. */
 @Service
 public final class PermitOperationMutex {
 
   private final ConcurrentHashMap<OperationKey, Entry> entries = new ConcurrentHashMap<>();
   private final ThreadLocal<NavigableSet<OperationKey>> heldKeys = new ThreadLocal<>();
+  private final RedisLeaseService redisLeases;
+
+  public PermitOperationMutex() {
+    this.redisLeases = null;
+  }
+
+  @Autowired
+  public PermitOperationMutex(ObjectProvider<RedisLeaseService> redisLeaseProvider) {
+    this.redisLeases =
+        redisLeaseProvider == null ? null : redisLeaseProvider.getIfAvailable();
+  }
 
   public <T> T execute(Long permitNumber, Supplier<T> operation) {
     validateNumber(permitNumber, "permit");
@@ -67,7 +81,50 @@ public final class PermitOperationMutex {
 
   private <T> T executeKeys(List<OperationKey> keys, Supplier<T> operation) {
     Objects.requireNonNull(operation, "operation");
+    if (redisLeases != null) {
+      return executeDistributed(keys, operation);
+    }
     return executeInOrder(keys, 0, operation);
+  }
+
+  private <T> T executeDistributed(List<OperationKey> keys, Supplier<T> operation) {
+    NavigableSet<OperationKey> currentHeldKeys = heldKeys.get();
+    NavigableSet<OperationKey> newlyHeldKeys = new TreeSet<>();
+    for (OperationKey key : keys) {
+      if (currentHeldKeys != null && currentHeldKeys.contains(key)) {
+        continue;
+      }
+      if (currentHeldKeys != null
+          && !currentHeldKeys.isEmpty()
+          && key.compareTo(currentHeldKeys.last()) < 0) {
+        throw new IllegalStateException(
+            "Aggregate operation locks must be acquired in exemption-then-application-then-permit order.");
+      }
+      newlyHeldKeys.add(key);
+    }
+    if (newlyHeldKeys.isEmpty()) {
+      return operation.get();
+    }
+
+    try (RedisLeaseService.Lease lease =
+        redisLeases.acquire(newlyHeldKeys.stream().map(OperationKey::redisResource).toList())) {
+      NavigableSet<OperationKey> updatedHeldKeys = heldKeys.get();
+      if (updatedHeldKeys == null) {
+        updatedHeldKeys = new TreeSet<>();
+        heldKeys.set(updatedHeldKeys);
+      }
+      updatedHeldKeys.addAll(newlyHeldKeys);
+      try {
+        T result = operation.get();
+        lease.requireValid();
+        return result;
+      } finally {
+        updatedHeldKeys.removeAll(newlyHeldKeys);
+        if (updatedHeldKeys.isEmpty()) {
+          heldKeys.remove();
+        }
+      }
+    }
   }
 
   private <T> T executeInOrder(
@@ -224,6 +281,14 @@ public final class PermitOperationMutex {
 
     boolean exemption() {
       return type == OperationType.EXEMPTION;
+    }
+
+    String redisResource() {
+      return switch (type) {
+        case EXEMPTION -> "exemption:" + textValue;
+        case APPLICATION -> "application:" + numericValue;
+        case PERMIT -> "permit:" + numericValue;
+      };
     }
   }
 }

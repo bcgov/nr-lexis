@@ -16,9 +16,6 @@ public class LexisReportResourceProperties {
   static final int DEFAULT_QUERY_TIMEOUT_SECONDS = 120;
 
   @Min(1)
-  private int maxConcurrent = 4;
-
-  @Min(1)
   @Max(Integer.MAX_VALUE)
   private long maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES;
 
@@ -31,14 +28,6 @@ public class LexisReportResourceProperties {
   @Min(1)
   @Max(3600)
   private int queryTimeoutSeconds = DEFAULT_QUERY_TIMEOUT_SECONDS;
-
-  public int getMaxConcurrent() {
-    return maxConcurrent;
-  }
-
-  public void setMaxConcurrent(int maxConcurrent) {
-    this.maxConcurrent = maxConcurrent;
-  }
 
   public long getMaxOutputBytes() {
     return maxOutputBytes;

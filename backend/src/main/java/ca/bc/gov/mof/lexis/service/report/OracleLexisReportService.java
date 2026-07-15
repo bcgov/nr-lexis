@@ -152,13 +152,11 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     LexisJasperReportDefinition definition = definitionOptional.get();
-    try (LexisReportResourceManager.ReportPermit ignored = reportResources.acquire()) {
-      return generateReportWithinPermit(definition, request)
-          .map(reportResources::requireWithinOutputLimit);
-    }
+    return generateResolvedReport(definition, request)
+        .map(reportResources::requireWithinOutputLimit);
   }
 
-  private Optional<LexisGeneratedReport> generateReportWithinPermit(
+  private Optional<LexisGeneratedReport> generateResolvedReport(
       LexisJasperReportDefinition definition, LexisReportRequestDto request) {
     LexisReportFormat requestedFormat =
         LexisReportFormat.fromNullable(request == null ? null : request.format());

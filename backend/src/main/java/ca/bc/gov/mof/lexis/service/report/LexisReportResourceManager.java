@@ -8,7 +8,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.sf.jasperreports.engine.JRParameter;
 import net.sf.jasperreports.engine.JasperReportsContext;
@@ -19,7 +18,7 @@ import net.sf.jasperreports.engine.util.JRSwapFile;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
-/** Per-pod report concurrency, query-timeout, output-size, and Jasper temporary-storage controls. */
+/** Report query-timeout, output-size, and Jasper temporary-storage controls. */
 @Service
 @Profile("oracle")
 public class LexisReportResourceManager {
@@ -27,7 +26,6 @@ public class LexisReportResourceManager {
   private static final int SWAP_BLOCK_SIZE_BYTES = 4096;
   private static final int SWAP_MIN_GROW_BLOCKS = 100;
 
-  private final Semaphore totalPermits;
   private final long maxOutputBytes;
   private final Path virtualizerDirectory;
   private final int virtualizerMaxPages;
@@ -36,8 +34,7 @@ public class LexisReportResourceManager {
 
   public LexisReportResourceManager(LexisReportResourceProperties properties) {
     Objects.requireNonNull(properties, "properties");
-    if (properties.getMaxConcurrent() < 1
-        || properties.getMaxOutputBytes() < 1
+    if (properties.getMaxOutputBytes() < 1
         || properties.getMaxOutputBytes() > Integer.MAX_VALUE
         || properties.getVirtualizerMaxPages() < 1
         || properties.getQueryTimeoutSeconds() < 1
@@ -48,7 +45,6 @@ public class LexisReportResourceManager {
     if (directory == null || directory.isBlank()) {
       throw new IllegalArgumentException("Report virtualizer directory is required.");
     }
-    this.totalPermits = new Semaphore(properties.getMaxConcurrent(), true);
     this.maxOutputBytes = properties.getMaxOutputBytes();
     this.virtualizerDirectory = Path.of(directory).toAbsolutePath().normalize();
     this.virtualizerMaxPages = properties.getVirtualizerMaxPages();
@@ -62,14 +58,6 @@ public class LexisReportResourceManager {
 
   static LexisReportResourceManager defaults() {
     return new LexisReportResourceManager(new LexisReportResourceProperties());
-  }
-
-  public ReportPermit acquire() {
-    if (!totalPermits.tryAcquire()) {
-      throw new LexisReportCapacityException(
-          "Report generation is busy on this pod. Try again shortly.");
-    }
-    return new ReportPermit(totalPermits);
   }
 
   public LimitedByteArrayOutputStream newOutputStream() {
@@ -135,23 +123,6 @@ public class LexisReportResourceManager {
         throw outputLimit;
       }
       current = current.getCause();
-    }
-  }
-
-  public static final class ReportPermit implements AutoCloseable {
-
-    private final Semaphore totalSemaphore;
-    private final AtomicBoolean released = new AtomicBoolean(false);
-
-    private ReportPermit(Semaphore totalSemaphore) {
-      this.totalSemaphore = totalSemaphore;
-    }
-
-    @Override
-    public void close() {
-      if (released.compareAndSet(false, true)) {
-        totalSemaphore.release();
-      }
     }
   }
 

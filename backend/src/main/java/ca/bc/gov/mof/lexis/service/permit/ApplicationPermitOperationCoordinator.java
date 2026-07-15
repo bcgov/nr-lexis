@@ -10,7 +10,7 @@ import java.util.function.Supplier;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.stereotype.Service;
 
-/** Coordinates one-JVM exemption, application, and permit mutations in a consistent lock order. */
+/** Coordinates exemption, application, and permit mutations in a consistent lock order. */
 @Service
 public final class ApplicationPermitOperationCoordinator {
 

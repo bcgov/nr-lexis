@@ -7,6 +7,7 @@ import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
 import ca.bc.gov.mof.lexis.repository.admin.LexisAdminPolicyRepository;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.coordination.RedisLeaseService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -22,6 +23,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.core.Authentication;
@@ -52,40 +54,48 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   private final LexisAdminPolicyRepository repository;
   private final LexisPrincipalService principalService;
   private final TransactionOperations transactionOperations;
+  private final RedisLeaseService redisLeases;
 
-  /*
-   * This guard closes add-time business-key check/write races only because deployment currently
-   * enforces one backend pod. The programmatic transaction completes before the guard is released.
-   * It is not a distributed lock. Oracle uniqueness remains the durable defense for fee policies.
-   * FIL deliberately preserves legacy's asymmetric rule: adds reject an existing date, while an
-   * update may move a row onto another row's date.
-   */
   private final ReentrantLock policyMutationGuard = new ReentrantLock(true);
 
   public OracleLexisAdminRpcService(LexisAdminPolicyRepository repository) {
-    this(repository, null, TransactionOperations.withoutTransaction());
+    this(repository, null, TransactionOperations.withoutTransaction(), null);
   }
 
   public OracleLexisAdminRpcService(
       LexisAdminPolicyRepository repository, LexisPrincipalService principalService) {
-    this(repository, principalService, TransactionOperations.withoutTransaction());
+    this(repository, principalService, TransactionOperations.withoutTransaction(), null);
   }
 
   @Autowired
   public OracleLexisAdminRpcService(
       LexisAdminPolicyRepository repository,
       LexisPrincipalService principalService,
-      PlatformTransactionManager transactionManager) {
-    this(repository, principalService, policyTransactionOperations(transactionManager));
+      PlatformTransactionManager transactionManager,
+      ObjectProvider<RedisLeaseService> redisLeaseProvider) {
+    this(
+        repository,
+        principalService,
+        policyTransactionOperations(transactionManager),
+        redisLeaseProvider == null ? null : redisLeaseProvider.getIfAvailable());
   }
 
   OracleLexisAdminRpcService(
       LexisAdminPolicyRepository repository,
       LexisPrincipalService principalService,
       TransactionOperations transactionOperations) {
+    this(repository, principalService, transactionOperations, null);
+  }
+
+  OracleLexisAdminRpcService(
+      LexisAdminPolicyRepository repository,
+      LexisPrincipalService principalService,
+      TransactionOperations transactionOperations,
+      RedisLeaseService redisLeases) {
     this.repository = repository;
     this.principalService = principalService;
     this.transactionOperations = transactionOperations;
+    this.redisLeases = redisLeases;
   }
 
   @Override
@@ -499,24 +509,33 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
   private Map<String, Object> guardedPolicyMutation(
       Supplier<Map<String, Object>> mutation) {
+    if (redisLeases != null) {
+      return redisLeases.execute(
+          List.of("admin:fee-policy"), () -> executePolicyTransaction(mutation));
+    }
     policyMutationGuard.lock();
     try {
-      Map<String, Object> result =
-          transactionOperations.execute(
-              status -> {
-                Map<String, Object> response = mutation.get();
-                if (!Boolean.TRUE.equals(response.get("success"))) {
-                  status.setRollbackOnly();
-                }
-                return response;
-              });
-      if (result == null) {
-        throw new IllegalStateException("Policy transaction returned no result.");
-      }
-      return result;
+      return executePolicyTransaction(mutation);
     } finally {
       policyMutationGuard.unlock();
     }
+  }
+
+  private Map<String, Object> executePolicyTransaction(
+      Supplier<Map<String, Object>> mutation) {
+    Map<String, Object> result =
+        transactionOperations.execute(
+            status -> {
+              Map<String, Object> response = mutation.get();
+              if (!Boolean.TRUE.equals(response.get("success"))) {
+                status.setRollbackOnly();
+              }
+              return response;
+            });
+    if (result == null) {
+      throw new IllegalStateException("Policy transaction returned no result.");
+    }
+    return result;
   }
 
   private static TransactionOperations policyTransactionOperations(

@@ -5,6 +5,7 @@ import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import ca.bc.gov.mof.lexis.service.coordination.RedisLeaseService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -29,32 +31,38 @@ public class LexisAdminScheduleService {
   private final LexisReportScheduleRepository repository;
   private final Clock clock;
   private final TransactionOperations transactionOperations;
+  private final RedisLeaseService redisLeases;
 
-  /*
-   * This process-local guard keeps the mutable-row usage check and write in one serialized
-   * transaction while deployment enforces one backend pod. It is not a distributed lock. Legacy
-   * Oracle permits more than one schedule for an advertising date, so this guard deliberately does
-   * not impose advertising-date uniqueness.
-   */
   private final ReentrantLock scheduleMutationGuard = new ReentrantLock(true);
 
   @Autowired
   public LexisAdminScheduleService(
       LexisReportScheduleRepository repository,
-      PlatformTransactionManager transactionManager) {
+      PlatformTransactionManager transactionManager,
+      ObjectProvider<RedisLeaseService> redisLeaseProvider) {
     this(
         repository,
         LexisBusinessTime.systemClock(),
-        scheduleTransactionOperations(transactionManager));
+        scheduleTransactionOperations(transactionManager),
+        redisLeaseProvider == null ? null : redisLeaseProvider.getIfAvailable());
   }
 
   LexisAdminScheduleService(
       LexisReportScheduleRepository repository,
       Clock clock,
       TransactionOperations transactionOperations) {
+    this(repository, clock, transactionOperations, null);
+  }
+
+  LexisAdminScheduleService(
+      LexisReportScheduleRepository repository,
+      Clock clock,
+      TransactionOperations transactionOperations,
+      RedisLeaseService redisLeases) {
     this.repository = repository;
     this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
     this.transactionOperations = transactionOperations;
+    this.redisLeases = redisLeases;
   }
 
   public List<ExportScheduleRowDto> upcomingSchedules() {
@@ -125,17 +133,25 @@ public class LexisAdminScheduleService {
 
   private ExportScheduleMutationResultDto executeScheduleMutation(
       Supplier<ExportScheduleMutationResultDto> mutation) {
+    if (redisLeases != null) {
+      return redisLeases.execute(List.of("admin:export-schedule"), () -> executeTransaction(mutation));
+    }
     scheduleMutationGuard.lock();
     try {
-      ExportScheduleMutationResultDto result =
-          transactionOperations.execute(status -> mutation.get());
-      if (result == null) {
-        throw new IllegalStateException("Export schedule transaction returned no result.");
-      }
-      return result;
+      return executeTransaction(mutation);
     } finally {
       scheduleMutationGuard.unlock();
     }
+  }
+
+  private ExportScheduleMutationResultDto executeTransaction(
+      Supplier<ExportScheduleMutationResultDto> mutation) {
+    ExportScheduleMutationResultDto result =
+        transactionOperations.execute(status -> mutation.get());
+    if (result == null) {
+      throw new IllegalStateException("Export schedule transaction returned no result.");
+    }
+    return result;
   }
 
   private static TransactionOperations scheduleTransactionOperations(

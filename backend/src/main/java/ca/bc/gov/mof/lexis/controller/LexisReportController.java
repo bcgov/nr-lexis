@@ -8,7 +8,6 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.report.LexisGeneratedReport;
-import ca.bc.gov.mof.lexis.service.report.LexisReportCapacityException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportOutputLimitException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
@@ -289,16 +288,6 @@ public class LexisReportController {
           effectiveFormat,
           "generation_succeeded",
           content.length);
-    } catch (LexisReportCapacityException ex) {
-      LOGGER.info("Report generation capacity is busy for {}", reportLabel);
-      return completeAudit(
-          audit,
-          reportError(
-              org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
-              "Report generation is busy. Try again shortly."),
-          null,
-          "capacity_rejected",
-          0);
     } catch (LexisReportOutputLimitException ex) {
       LOGGER.warn("Report output exceeded the configured size limit for {}", reportLabel);
       return completeAudit(

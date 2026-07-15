@@ -26,6 +26,7 @@
     <jacoco.version>0.8.15</jacoco.version>
     <ojdbc.version>21.3.0.0</ojdbc.version>
     <resilience4j.version>2.3.0</resilience4j.version>
+    <shedlock.version>7.7.0</shedlock.version>
     <!--
       Pinned to JR 6.21.5 (last stable 6.x). JR 7.x removed the legacy
       SAX/Digester JRXmlLoader and the replacement (JacksonReportLoader)
@@ -93,6 +94,15 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.javacrumbs.shedlock</groupId>
+      <artifactId>shedlock-provider-redis-spring</artifactId>
+      <version>${shedlock.version}</version>
     </dependency>
     <dependency>
       <groupId>io.micrometer</groupId>

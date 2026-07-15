@@ -10,12 +10,13 @@ import org.junit.jupiter.api.Test;
 class TestDeploymentTopologyConfigTest {
 
   @Test
-  void testShouldUseSingleReplicaJvmLockProfile() throws IOException {
+  void testShouldUseRedisCoordinatedAutoscalingProfile() throws IOException {
     String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
     String testDeploy = workflowJob(mergeWorkflow, "deploy-test", "tests");
 
     assertThat(testDeploy)
-        .contains("backend_replicas: \"1\"")
+        .contains("backend_min_replicas: \"2\"")
+        .contains("backend_max_replicas: \"6\"")
         .contains("frontend_replicas: \"1\"")
         .contains("backend_cpu_request: \"500m\"")
         .contains("backend_memory_request: \"1Gi\"")
@@ -29,12 +30,14 @@ class TestDeploymentTopologyConfigTest {
   }
 
   @Test
-  void productionShouldRetainSingleBackendWithExpiryDisabled() throws IOException {
+  void productionShouldRetainDisabledAutoscalingConfiguration() throws IOException {
     String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
     String prodDeploy = workflowJob(mergeWorkflow, "deploy-prod", "monitor-prod");
 
     assertThat(prodDeploy)
-        .contains("backend_replicas: \"1\"")
+        .contains("if: false")
+        .contains("backend_min_replicas: \"3\"")
+        .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
         .doesNotContain("expiry_enabled: true");
   }
@@ -46,9 +49,23 @@ class TestDeploymentTopologyConfigTest {
     String frontendTemplate = Files.readString(resolve("frontend/openshift.deploy.yml"));
 
     assertThat(workflow)
-        .contains("if: ${{ inputs.backend_replicas != '1' }}")
-        .contains("LEXIS edit and scheduler locks are JVM-local; backend_replicas must be 1")
+        .contains("backend_min_replicas:")
+        .contains("backend_max_replicas:")
+        .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
+        .contains("REDIS_PASSWORD: ${{ secrets.redis_password }}")
+        .contains("REDIS_IMAGE: ${{ vars.LEXIS_REDIS_IMAGE || 'redis:7.4.2-alpine' }}")
+        .contains("REDIS_CONFIG_VERSION: ${{ vars.LEXIS_REDIS_CONFIG_VERSION || '1' }}")
+        .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
+        .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
+        .contains("-p REDIS_PASSWORD=\"$REDIS_PASSWORD\"")
+        .contains("-p REDIS_IMAGE=\"$REDIS_IMAGE\"")
+        .contains("-p REDIS_CONFIG_VERSION=\"$REDIS_CONFIG_VERSION\"")
         .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
+        .contains("LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}")
+        .contains("LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}")
+        .contains("LEXIS_EXPIRY_COMPLETION_RETENTION: ${{ vars.LEXIS_EXPIRY_COMPLETION_RETENTION || '3d' }}")
+        .contains("LEXIS_FEDERAL_IN_FLIGHT_TTL: ${{ vars.LEXIS_FEDERAL_IN_FLIGHT_TTL || '5m' }}")
+        .contains("LEXIS_FEDERAL_REPLAY_TTL: ${{ vars.LEXIS_FEDERAL_REPLAY_TTL || '24h' }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")
@@ -87,8 +104,14 @@ class TestDeploymentTopologyConfigTest {
         .contains("-p MIN_CPU=\"${{ inputs.frontend_cpu_request }}\"")
         .contains("-p MAX_MEM=\"${{ inputs.frontend_memory_limit }}\"");
     assertThat(backendTemplate)
-        .contains("- name: MAX_REPLICAS\n    value: \"1\"")
-        .contains("type: Recreate")
+        .contains("- name: MAX_REPLICAS\n    value: \"3\"")
+        .contains("type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 0\n          maxSurge: 1")
+        .contains("averageUtilization: 70")
+        .contains("topologySpreadConstraints:")
+        .contains("topologyKey: kubernetes.io/hostname")
+        .contains("whenUnsatisfiable: ScheduleAnyway")
+        .contains("app.openshift.io/redis-config-version: ${REDIS_CONFIG_VERSION}")
+        .doesNotContain("app.openshift.io/redis-config-version: ${ROLLOUT_TRIGGER}")
         .contains(
             "- name: LEXIS_PERMIT_INVOICE_MODE\n"
                 + "    description: Permit invoice coordinator; legacy-best-effort preserves the legacy workflow\n"
@@ -118,7 +141,12 @@ class TestDeploymentTopologyConfigTest {
         .contains("cpu: ${MIN_CPU}")
         .contains("memory: ${MIN_MEM}")
         .contains("cpu: ${MAX_CPU}")
-        .contains("memory: ${MAX_MEM}");
+        .contains("memory: ${MAX_MEM}")
+        .contains("ephemeral-storage: \"512Mi\"")
+        .contains("ephemeral-storage: \"4Gi\"")
+        .contains("--maxmemory 384mb")
+        .contains("--maxmemory-policy noeviction")
+        .contains("egress: []\n      policyTypes:\n        - Ingress\n        - Egress");
     assertThat(frontendTemplate)
         .contains("cpu: ${MIN_CPU}")
         .contains("memory: ${MIN_MEM}")
@@ -141,6 +169,11 @@ class TestDeploymentTopologyConfigTest {
         between(
             backendJob,
             "      - name: Ensure Keycloak scopes and NEXCOL client",
+            "      - name: Require Redis coordination password");
+    String redisValidationStep =
+        between(
+            backendJob,
+            "      - name: Require Redis coordination password",
             "      - uses: bcgov/action-deployer-openshift@");
     String backendDeployStep =
         backendJob.substring(backendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
@@ -165,6 +198,7 @@ class TestDeploymentTopologyConfigTest {
             "DATABASE_USER",
             "DATABASE_PASSWORD",
             "KEYSTORE_SECRET",
+            "REDIS_PASSWORD",
             "LEXIS_PROD_RTM_ONLY",
             "LEXIS_EXPIRY_ENABLED",
             "LEXIS_PERMIT_INVOICE_MODE",
@@ -177,6 +211,10 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RNI_RECIPIENTS",
             "LEXIS_MAIL_REGION_RSI_RECIPIENTS",
             "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS");
+    assertThat(redisValidationStep)
+        .contains("REDIS_PASSWORD: ${{ secrets.redis_password }}")
+        .contains("Configure REDIS_PASSWORD in the GitHub environment")
+        .doesNotContain("DATABASE_PASSWORD", "KEYSTORE_SECRET");
     assertThat(checkoutStep)
         .contains(
             "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2")
@@ -190,6 +228,7 @@ class TestDeploymentTopologyConfigTest {
         .doesNotContain(
             "DATABASE_PASSWORD",
             "KEYSTORE_SECRET",
+            "REDIS_PASSWORD",
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS",
             "LEXIS_MAIL_REGION_RCO_RECIPIENTS",
             "LEXIS_MAIL_REGION_RNI_RECIPIENTS",
@@ -220,6 +259,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("DATABASE_USER: ${{ secrets.database_user }}")
         .contains("DATABASE_PASSWORD: ${{ secrets.database_password }}")
         .contains("KEYSTORE_SECRET: ${{ secrets.keystore_secret }}")
+        .contains("REDIS_PASSWORD: ${{ secrets.redis_password }}")
         .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}")
         .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
         .contains(
@@ -251,6 +291,7 @@ class TestDeploymentTopologyConfigTest {
     assertThat(frontendBeforeDeploy).doesNotContain("LEXIS_PROD_RTM_ONLY");
     assertThat(frontendJob)
         .doesNotContain(
+            "REDIS_PASSWORD",
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS",
             "LEXIS_MAIL_REGION_RCO_RECIPIENTS",
             "LEXIS_MAIL_REGION_RNI_RECIPIENTS",
@@ -337,6 +378,7 @@ class TestDeploymentTopologyConfigTest {
                 + "      DATABASE_USER: ${DATABASE_USER}\n"
                 + "      DATABASE_PASSWORD: ${DATABASE_PASSWORD}\n"
                 + "      KEYSTORE_SECRET: ${KEYSTORE_SECRET}\n"
+                + "      REDIS_PASSWORD: ${REDIS_PASSWORD}\n"
                 + "      LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS}\n"
                 + "      LEXIS_MAIL_REGION_RCO_RECIPIENTS:"
                 + " ${LEXIS_MAIL_REGION_RCO_RECIPIENTS}\n"
@@ -357,6 +399,61 @@ class TestDeploymentTopologyConfigTest {
                 + "                  value: ${LEXIS_MAIL_REGION_RSI_RECIPIENTS}",
             "- name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS\n"
                 + "                  value: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS}");
+  }
+
+  @Test
+  void redisShouldBePrivateAuthenticatedAndRestrictedToBackendPods() throws IOException {
+    String template = Files.readString(resolve("backend/openshift.deploy.yml"));
+    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+    String prWorkflow = Files.readString(resolve(".github/workflows/pr-open.yml"));
+    String prCloseWorkflow = Files.readString(resolve(".github/workflows/pr-close.yml"));
+    String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
+    String redisDeployment =
+        between(
+            template,
+            "  - apiVersion: apps/v1\n    kind: Deployment\n    metadata:\n      name: ${NAME}-redis-${ZONE}",
+            "  - apiVersion: v1\n    kind: Service\n    metadata:\n      name: ${NAME}-redis-${ZONE}");
+
+    assertThat(template)
+        .contains("kind: Deployment\n    metadata:\n      name: ${NAME}-redis-${ZONE}")
+        .contains("image: ${REDIS_IMAGE}")
+        .contains("--requirepass \"$REDIS_PASSWORD\"")
+        .contains("--appendonly yes")
+        .contains("--appendfsync everysec")
+        .contains("--maxmemory-policy noeviction")
+        .contains("type: Recreate")
+        .contains("readOnlyRootFilesystem: true")
+        .contains("seccompProfile:\n              type: RuntimeDefault")
+        .contains("mountPath: /data")
+        .contains("claimName: ${NAME}-redis-data-${ZONE}")
+        .contains("name: ${NAME}-redis-data-${ZONE}")
+        .contains("- ReadWriteOnce")
+        .contains("storageClassName: ${REDIS_STORAGE_CLASS}")
+        .contains("kind: Service\n    metadata:\n      name: ${NAME}-redis-${ZONE}")
+        .contains("type: ClusterIP")
+        .doesNotContain("name: ${NAME}-redis-${ZONE}\n    spec:\n      host:")
+        .contains("name: ${NAME}-redis-${ZONE}-network")
+        .contains("app: ${NAME}-backend-${ZONE}")
+        .contains("port: 6379")
+        .contains("key: REDIS_PASSWORD")
+        .contains("REDIS_PASSWORD: ${REDIS_PASSWORD}")
+        .contains("name: SPRING_DATA_REDIS_HOST")
+        .contains("name: SPRING_DATA_REDIS_PASSWORD")
+        .contains("name: LEXIS_COORDINATION_NAMESPACE\n                  value: ${ZONE}")
+        .contains("name: LEXIS_FEDERAL_IN_FLIGHT_TTL\n                  value: ${LEXIS_FEDERAL_IN_FLIGHT_TTL}")
+        .contains("name: LEXIS_FEDERAL_REPLAY_TTL\n                  value: ${LEXIS_FEDERAL_REPLAY_TTL}");
+    assertThat(redisDeployment)
+        .contains("runAsNonRoot: true", "readOnlyRootFilesystem: true")
+        .doesNotContain("runAsUser:", "privileged: true");
+    assertThat(workflow)
+        .contains("redis_password:\n        description: Password for the in-namespace Redis coordination service\n        required: true")
+        .contains("REDIS_PASSWORD: ${{ secrets.redis_password }}");
+    assertThat(prWorkflow).contains("redis_password: ${{ secrets.redis_password }}");
+    assertThat(prCloseWorkflow)
+        .contains("for component in backend frontend clamav redis")
+        .contains("(backend|frontend|clamav|redis)-([0-9]+)");
+    assertThat(occurrences(mergeWorkflow, "redis_password: ${{ secrets.redis_password }}"))
+        .isEqualTo(2);
   }
 
   @Test

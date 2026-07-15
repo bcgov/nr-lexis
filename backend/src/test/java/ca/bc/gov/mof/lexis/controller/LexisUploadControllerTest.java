@@ -1037,6 +1037,51 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void federalApplicationSubmissionUploadShouldBindIdempotencyKeyToUserReference() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable())
+        .thenReturn(applicationSubmissionImportService);
+    LexisUploadController controller = controller();
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("nexcol-service-client", "n/a");
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData,
+                "federal-direct.xml",
+                "nexcol-service-client",
+                "FED-REF-1"))
+        .thenReturn(acceptedFederalPayload("federal-direct.xml", submissionData.length));
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> first =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            authentication);
+    ResponseEntity<ApplicationSubmissionImportResultDto> conflict =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-2",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-2",
+            "IDEMP-1",
+            authentication);
+
+    assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(conflict.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    verify(applicationSubmissionImportService, times(1))
+        .importDedicatedFederalApplicationSubmission(
+            submissionData,
+            "federal-direct.xml",
+            "nexcol-service-client",
+            "FED-REF-1");
+  }
+
+  @Test
   void federalApplicationSubmissionUploadShouldReleaseClaimAfterTransientFailure() {
     when(applicationSubmissionImportServiceProvider.getIfAvailable())
         .thenReturn(applicationSubmissionImportService);
