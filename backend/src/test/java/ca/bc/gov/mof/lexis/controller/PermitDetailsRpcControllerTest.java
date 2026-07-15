@@ -71,7 +71,7 @@ class PermitDetailsRpcControllerTest {
   @BeforeEach
   void setup() {
     when(sessionService.getConfiguredIndustryRoles())
-        .thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER"));
+        .thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER"));
     controller =
         new PermitDetailsRpcController(serviceProvider, sessionService, authorizationService);
   }
@@ -599,6 +599,102 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void updateScaleAttachmentShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "Scale detail was added to the permit.", List.of(), List.of(), 7000123L);
+    when(service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith")).thenReturn(dto);
+
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updateScaleAttachment("101", null, 7000123L, "true", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
+  }
+
+  @Test
+  void addApplicationsToPermitShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "Application scale rows were added to the permit.", List.of(), List.of(), 7000123L);
+    when(service.addApplicationsToPermit(7000123L, "1000456,1000457", "idir\\jsmith"))
+        .thenReturn(dto);
+
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.addApplicationsToPermit(7000123L, "1000456,1000457", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).addApplicationsToPermit(7000123L, "1000456,1000457", "idir\\jsmith");
+  }
+
+  @Test
+  void removeApplicationFromPermitShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "Application scale rows were removed from the permit.", List.of(), List.of(), 7000123L);
+    when(service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith")).thenReturn(dto);
+
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.removeApplicationFromPermit(7000123L, 1000456L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void addBlanketOicScaleShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "Blanket OIC scale detail was added.", List.of(), List.of(), 7000123L);
+    when(service.addBlanketOicScale(
+            7000123L, "PKG-903", "TM1", "12.5", 7L, "HE", "A", "idir\\jsmith"))
+        .thenReturn(dto);
+
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.addBlanketOicScale(
+            7000123L, "PKG-903", "TM1", "12.5", 7L, "HE", "A", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service)
+        .addBlanketOicScale(
+            7000123L, "PKG-903", "TM1", "12.5", 7L, "HE", "A", "idir\\jsmith");
+  }
+
+  @Test
+  void deleteBlanketOicScaleShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "Blanket OIC scale detail was removed.", List.of(), List.of(), 7000123L);
+    when(service.deleteBlanketOicScale("101", 7000123L, "idir\\jsmith")).thenReturn(dto);
+
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.deleteBlanketOicScale("101", null, 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).deleteBlanketOicScale("101", 7000123L, "idir\\jsmith");
+  }
+
+  @Test
   void conversionRateShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitConversionRateRpcResponseDto dto = new PermitConversionRateRpcResponseDto(true, "1.23");
@@ -702,6 +798,62 @@ class PermitDetailsRpcControllerTest {
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updateShipping(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void updateScaleAttachmentShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updateScaleAttachment("101", null, 7000123L, "true", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void addApplicationsToPermitShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.addApplicationsToPermit(7000123L, "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void removeApplicationFromPermitShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.removeApplicationFromPermit(7000123L, 1000456L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void addBlanketOicScaleShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.addBlanketOicScale(
+            7000123L, "PKG-903", "TM1", "12.5", 7L, "HE", "A", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void deleteBlanketOicScaleShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.deleteBlanketOicScale("101", null, 7000123L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);

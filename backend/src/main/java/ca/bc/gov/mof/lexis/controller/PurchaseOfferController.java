@@ -5,20 +5,24 @@ import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
-import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -37,18 +41,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class PurchaseOfferController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PurchaseOfferController.class);
+  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
 
   private final ObjectProvider<PurchaseOfferService> serviceProvider;
   private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
   private final LexisApplicationService applicationService;
+  private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
 
   public PurchaseOfferController(
       ObjectProvider<PurchaseOfferService> serviceProvider,
       LexisSessionService sessionService,
-      LexisApplicationService applicationService) {
+      LexisAuthorizationService authorizationService,
+      LexisApplicationService applicationService,
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
     this.applicationService = applicationService;
+    this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
   }
 
   @GetMapping("/search/options")
@@ -76,6 +87,7 @@ public class PurchaseOfferController {
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal,
       Authentication authentication) {
     PurchaseOfferService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -104,6 +116,9 @@ public class PurchaseOfferController {
             page,
             size);
 
+    if (knownTotal != null) {
+      return ResponseEntity.ok(service.search(criteria, knownTotal));
+    }
     return ResponseEntity.ok(service.search(criteria));
   }
 
@@ -159,14 +174,48 @@ public class PurchaseOfferController {
       return ResponseEntity.noContent().build();
     }
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
     return service.findByOfferNumber(offerNumber)
-        .filter(detail -> canAccessOfferDetail(scopedClientNumber, detail))
+        .flatMap(detail -> authorizeAndEnrichOfferDetail(scopedClientNumber, roles, detail))
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
+  private Optional<PurchaseOfferDetailDto> authorizeAndEnrichOfferDetail(
+      String scopedClientNumber, List<String> roles, PurchaseOfferDetailDto detail) {
+    if (detail == null) {
+      return Optional.empty();
+    }
+
+    Optional<LexisApplicationDetailDto> application = findOfferApplication(detail);
+    if (!canAccessOfferDetail(scopedClientNumber, detail, application)) {
+      return Optional.empty();
+    }
+    PurchaseOfferDetailDto enriched =
+        detail
+            .withApplicationContext(
+                resolveApplicationPackageVolume(detail, application),
+                resolveApplicationSpeciesGradeCode(detail.applicationNumber()))
+            .withEditPermissions(
+                canEditScheduleDates(roles),
+                canEditOfferRemarks(roles),
+                canEditOfferDetails(scopedClientNumber, roles, detail),
+                canEditWithdrawFields(scopedClientNumber, roles, detail));
+    return Optional.of(enriched);
+  }
+
+  private Optional<LexisApplicationDetailDto> findOfferApplication(PurchaseOfferDetailDto detail) {
+    Long applicationNumber = detail.applicationNumber();
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return applicationService.findByApplicationNumber(applicationNumber);
+  }
+
   private boolean canAccessOfferDetail(
-      String scopedClientNumber, PurchaseOfferDetailDto detail) {
+      String scopedClientNumber,
+      PurchaseOfferDetailDto detail,
+      Optional<LexisApplicationDetailDto> application) {
     if (scopedClientNumber == null || scopedClientNumber.isBlank()) {
       return true;
     }
@@ -174,15 +223,89 @@ public class PurchaseOfferController {
     if (applicationNumber == null || applicationNumber < 1) {
       return false;
     }
-    return applicationService.findByApplicationNumber(applicationNumber)
-        .map(application -> matchesScopedApplicationClient(scopedClientNumber, application))
+    if (matchesScopedClient(scopedClientNumber, detail.offeringClientNumber())) {
+      return true;
+    }
+    return application
+        .map(
+            parentApplication ->
+                matchesScopedApplicationClient(scopedClientNumber, parentApplication))
         .orElse(false);
+  }
+
+  private Double resolveApplicationPackageVolume(
+      PurchaseOfferDetailDto detail, Optional<LexisApplicationDetailDto> application) {
+    if (application.isEmpty()) {
+      return null;
+    }
+
+    LexisApplicationDetailDto parentApplication = application.get();
+    String packageNumber = detail.packageNumber();
+    if (packageNumber == null || packageNumber.isBlank()) {
+      return parentApplication.applicationVolume();
+    }
+
+    List<LexisApplicationDetailDto.LexisPackageDto> packages = parentApplication.packages();
+    if (packages == null) {
+      return null;
+    }
+    return packages.stream()
+        .filter(pack -> packageNumber.equalsIgnoreCase(pack.packageNumber()))
+        .findFirst()
+        .map(LexisApplicationDetailDto.LexisPackageDto::volume)
+        .orElse(null);
+  }
+
+  private String resolveApplicationSpeciesGradeCode(Long applicationNumber) {
+    ApplicationDetailsRpcService applicationDetailsService =
+        applicationDetailsServiceProvider.getIfAvailable();
+    if (applicationDetailsService == null || applicationNumber == null || applicationNumber < 1) {
+      return null;
+    }
+    return ApplicationDetailsRpcService.toSpeciesEndUseSort(
+        applicationDetailsService.getSpeciesForApplication(applicationNumber));
   }
 
   private boolean matchesScopedApplicationClient(
       String scopedClientNumber, LexisApplicationDetailDto application) {
     return matchesScopedClient(
         scopedClientNumber, application.ownerClientNumber(), application.agentClientNumber());
+  }
+
+  private boolean canEditScheduleDates(List<String> roles) {
+    return isApplicationApprover(roles);
+  }
+
+  private boolean canEditOfferRemarks(List<String> roles) {
+    return isApplicationApprover(roles);
+  }
+
+  private boolean canEditOfferDetails(
+      String scopedClientNumber, List<String> roles, PurchaseOfferDetailDto detail) {
+    return isApplicationApprover(roles) || isOfferingClient(scopedClientNumber, detail);
+  }
+
+  private boolean canEditWithdrawFields(
+      String scopedClientNumber, List<String> roles, PurchaseOfferDetailDto detail) {
+    return isApplicationApprover(roles)
+        || (isOfferingClient(scopedClientNumber, detail)
+            && detail.offerWithdrawalDate() == null
+            && canWithdrawByDate(detail.offerEndDate()));
+  }
+
+  private boolean isApplicationApprover(List<String> roles) {
+    return roles != null && roles.contains(ROLE_APPLICATION_APPROVER);
+  }
+
+  private boolean isOfferingClient(String scopedClientNumber, PurchaseOfferDetailDto detail) {
+    return scopedClientNumber != null
+        && !scopedClientNumber.isBlank()
+        && detail != null
+        && matchesScopedClient(scopedClientNumber, detail.offeringClientNumber());
+  }
+
+  private boolean canWithdrawByDate(LocalDate offerEndDate) {
+    return offerEndDate != null && !offerEndDate.isBefore(LocalDate.now());
   }
 
   private PurchaseOfferSearchCriteria buildCriteria(

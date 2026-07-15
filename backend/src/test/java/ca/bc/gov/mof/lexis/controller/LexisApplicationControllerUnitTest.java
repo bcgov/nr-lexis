@@ -61,6 +61,7 @@ class LexisApplicationControllerUnitTest {
         null,
         0,
         25,
+        null,
         authentication);
 
     ArgumentCaptor<LexisApplicationSearchCriteria> criteriaCaptor =
@@ -108,6 +109,7 @@ class LexisApplicationControllerUnitTest {
             null,
             0,
             25,
+            null,
             authentication);
 
     assertThat(response.getBody()).isNotNull();
@@ -145,6 +147,7 @@ class LexisApplicationControllerUnitTest {
         LocalDate.of(2026, 3, 1),
         LocalDate.of(2026, 3, 1),
         LocalDate.of(2026, 3, 2),
+        null,
         180L,
         90.0,
         0.5,

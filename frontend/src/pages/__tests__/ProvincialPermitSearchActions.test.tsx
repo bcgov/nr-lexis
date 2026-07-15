@@ -15,6 +15,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/provincial-permit-search-service', () => ({
+  countProvincialPermits: vi.fn(),
   searchProvincialPermits: vi.fn(),
 }))
 
@@ -33,7 +34,7 @@ const permitSearchResponse = (
   content,
   page: {
     number: 0,
-    size: 100,
+    size: 10,
     totalElements: content.length,
     totalPages: content.length > 0 ? 1 : 0,
     ...page,
@@ -96,6 +97,7 @@ describe('Provincial Permit Search Actions', () => {
           region: [],
         }),
       }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
   })
 
@@ -170,7 +172,7 @@ describe('Provincial Permit Search Actions', () => {
       2,
       expect.objectContaining({
         page: 1,
-        pageSize: 100,
+        pageSize: 10,
       }),
       { knownTotal: 125 },
     )
@@ -217,13 +219,13 @@ describe('Provincial Permit Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Issued from date (YYYY-MM-DD)'), '2026-99-99')
+    await userEvent.type(screen.getByLabelText('Issued from date'), '2026-99-99')
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
     })
 
-    await userEvent.clear(screen.getByLabelText('Issued from date (YYYY-MM-DD)'))
-    await userEvent.type(screen.getByLabelText('Issued from date (YYYY-MM-DD)'), '2026-02-01')
+    await userEvent.clear(screen.getByLabelText('Issued from date'))
+    await userEvent.type(screen.getByLabelText('Issued from date'), '2026-02-01')
     await waitFor(() => {
       expect(searchButton).toBeEnabled()
     })

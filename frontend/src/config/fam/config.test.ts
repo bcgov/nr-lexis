@@ -20,6 +20,7 @@ const configuredRuntimeAuth = {
   VITE_COGNITO_SCOPES: 'openid profile email',
   VITE_ZONE: 'dev',
 }
+const configuredSignOutUrl = 'https://auth.example.test/logout'
 
 const loadConfig = async (): Promise<AmplifyConfig> => {
   vi.resetModules()
@@ -37,40 +38,36 @@ describe('FAM auth config', () => {
   })
 
   it('keeps sign-in on the current origin and uses the configured sign-out chain', async () => {
-    const signOutUrl =
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.silver.devops.gov.bc.ca%2F'
     window.config = {
       ...configuredRuntimeAuth,
-      VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/dashboard',
-      VITE_REDIRECT_SIGN_OUT: signOutUrl,
+      VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.gold.devops.gov.bc.ca/dashboard',
+      VITE_REDIRECT_SIGN_OUT: configuredSignOutUrl,
     }
 
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/dashboard`])
-    expect(oauth?.redirectSignOut).toEqual([signOutUrl])
+    expect(oauth?.redirectSignOut).toEqual([configuredSignOutUrl])
   })
 
-  it('uses an empty sign-out URL when no runtime sign-out URL is configured', async () => {
+  it('uses the app root sign-out URL when no runtime sign-out URL is configured', async () => {
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
-    expect(oauth?.redirectSignOut).toEqual([''])
+    expect(oauth?.redirectSignOut).toEqual([`${window.location.origin}/`])
   })
 
-  it('trims the configured BC Gov sign-out URL without rewriting the encoded return URL', async () => {
-    const signOutUrl =
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.silver.devops.gov.bc.ca%2F'
+  it('trims the configured sign-out URL without rewriting it', async () => {
     window.config = {
       ...configuredRuntimeAuth,
-      VITE_REDIRECT_SIGN_OUT: ` ${signOutUrl} `,
+      VITE_REDIRECT_SIGN_OUT: ` ${configuredSignOutUrl} `,
     }
 
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
-    expect(oauth?.redirectSignOut).toEqual([signOutUrl])
+    expect(oauth?.redirectSignOut).toEqual([configuredSignOutUrl])
   })
 })

@@ -22,8 +22,8 @@ public class LexisSessionService {
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
-  private static final String ROLE_FEDERAL_SUBMITTER = "LEXIS_FEDERAL_SUBMITTER";
   private static final String ROLE_DELEGATED_ADMIN = "LEXIS_DELEGATED_ADMIN";
+  private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
 
   private static final Set<String> CANONICAL_ROLES =
       Set.of(
@@ -32,7 +32,6 @@ public class LexisSessionService {
           ROLE_APPLICATION_APPROVER,
           ROLE_EXEMPTION_APPROVER,
           ROLE_PROVINCIAL_SUBMITTER,
-          ROLE_FEDERAL_SUBMITTER,
           ROLE_DELEGATED_ADMIN);
 
   private final Set<String> configuredIndustryRoles;
@@ -47,8 +46,8 @@ public class LexisSessionService {
 
     boolean adminUser = roleSet.contains(ROLE_ADMIN);
     boolean readOnlyUser = roleSet.contains(ROLE_READ_ONLY);
+    boolean applicationApprover = roleSet.contains(ROLE_APPLICATION_APPROVER);
     boolean provincialSubmitter = roleSet.contains(ROLE_PROVINCIAL_SUBMITTER);
-    boolean federalSubmitter = roleSet.contains(ROLE_FEDERAL_SUBMITTER);
     boolean industryUser = roleSet.stream().anyMatch(this::isIndustryRole);
     boolean exemptionApprover = roleSet.contains(ROLE_EXEMPTION_APPROVER);
     boolean delegatedAdminOnly = roleSet.size() == 1 && roleSet.contains(ROLE_DELEGATED_ADMIN);
@@ -60,13 +59,13 @@ public class LexisSessionService {
       target = WelcomeTarget.READ_ONLY;
     } else if (provincialSubmitter) {
       target = WelcomeTarget.PROVINCIAL_SUBMITTER;
-    } else if (federalSubmitter) {
-      target = WelcomeTarget.FEDERAL_SUBMITTER;
     } else if (industryUser) {
       target = WelcomeTarget.INDUSTRY_USER;
     } else if (exemptionApprover) {
       target = WelcomeTarget.EXEMPTION_APPROVER;
-    } else if (delegatedAdminOnly) {
+    } else if (applicationApprover) {
+      target = WelcomeTarget.MOFR_USER;
+    } else if (delegatedAdminOnly || !roleSet.isEmpty()) {
       target = WelcomeTarget.NO_ACCESS;
     } else {
       target = WelcomeTarget.MOFR_USER;
@@ -204,6 +203,9 @@ public class LexisSessionService {
     if (normalizedRole.isEmpty()) {
       return null;
     }
+    if (normalizedRole.startsWith(SCOPE_AUTHORITY_PREFIX)) {
+      return null;
+    }
 
     if (CANONICAL_ROLES.contains(normalizedRole)) {
       return normalizedRole;
@@ -231,7 +233,8 @@ public class LexisSessionService {
       }
 
       String forestClientSuffix = normalizedRole.substring(prefix.length());
-      if (!forestClientSuffix.isEmpty() && forestClientSuffix.chars().allMatch(Character::isDigit)) {
+      if (!forestClientSuffix.isEmpty()
+          && forestClientSuffix.chars().allMatch(Character::isDigit)) {
         return forestClientSuffix;
       }
     }
@@ -243,14 +246,13 @@ public class LexisSessionService {
   }
 
   private enum WelcomeTarget {
-    READ_ONLY("readOnly", "/applicationSearch.do?actionMapping=view"),
-    PROVINCIAL_SUBMITTER("industryUser", "/applicationSearch.do?actionMapping=view"),
-    FEDERAL_SUBMITTER("industryUser", "/federalApplicationSearch.do?actionMapping=view"),
-    INDUSTRY_USER("industryUser", "/applicationSearch.do?actionMapping=view"),
-    ADMIN_USER("adminUser", "/lexisAgentAdmin.do?actionMapping=view"),
-    EXEMPTION_APPROVER("exemptionApprover", "/exemptionSearch.do?actionMapping=view"),
+    READ_ONLY("readOnly", "/provincial/application"),
+    PROVINCIAL_SUBMITTER("industryUser", "/provincial/application"),
+    INDUSTRY_USER("industryUser", "/provincial/application"),
+    ADMIN_USER("adminUser", "/admin"),
+    EXEMPTION_APPROVER("exemptionApprover", "/provincial/exemption"),
     NO_ACCESS("noAccess", null),
-    MOFR_USER("mofrUser", "/applicationsReview.do?actionMapping=view");
+    MOFR_USER("mofrUser", "/provincial/review");
 
     private final String forwardName;
     private final String legacyPath;

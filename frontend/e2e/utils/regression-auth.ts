@@ -59,6 +59,9 @@ type AccessTokenDiagnostics = {
 const baseOrigin = new URL(E2E_BASE_URL).origin
 const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
+const LOGIN_BUTTON_VISIBLE_TIMEOUT_MS = 10_000
+const LOGIN_BUTTON_CLICK_TIMEOUT_MS = 15_000
+const LOGIN_SHELL_RENDER_ATTEMPTS = 3
 const APP_ROOT_NAVIGATION_ATTEMPTS = 4
 const APP_ROOT_NAVIGATION_TIMEOUT_MS = 20_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
@@ -415,16 +418,6 @@ const firstVisible = async (page: Page, selector: string, timeout = 5000) => {
   return visible ? locator : null
 }
 
-const clickLoginButton = async (page: Page, config: LoginConfig): Promise<void> => {
-  const testIdButton = page.getByTestId(config.testId)
-  if (await testIdButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await testIdButton.click()
-    return
-  }
-
-  await page.getByRole('button', { name: config.buttonName }).click()
-}
-
 const currentPageSummary = async (page: Page): Promise<string> => {
   const title = await page.title().catch(() => '')
   const rawUrl = page.url()
@@ -469,6 +462,56 @@ const gotoAppRoot = async (page: Page): Promise<void> => {
 
   throw new Error(
     `Unable to load LEXIS app root after ${APP_ROOT_NAVIGATION_ATTEMPTS} attempts. Last error: ${String(lastError)}`,
+  )
+}
+
+const pageTextSnippet = async (page: Page): Promise<string> => {
+  const text = await page
+    .locator('body')
+    .innerText({ timeout: 1_000 })
+    .catch(() => '')
+  return redactedTextSnippet(text, 1_000)
+}
+
+const visibleLoginButton = async (page: Page, config: LoginConfig) => {
+  const testIdButton = page.getByTestId(config.testId)
+  if (
+    await testIdButton.isVisible({ timeout: LOGIN_BUTTON_VISIBLE_TIMEOUT_MS }).catch(() => false)
+  ) {
+    return testIdButton
+  }
+
+  const roleButton = page.getByRole('button', { name: config.buttonName }).first()
+  if (await roleButton.isVisible({ timeout: LOGIN_BUTTON_VISIBLE_TIMEOUT_MS }).catch(() => false)) {
+    return roleButton
+  }
+
+  return null
+}
+
+const clickLoginButton = async (page: Page, config: LoginConfig): Promise<void> => {
+  for (let attempt = 1; attempt <= LOGIN_SHELL_RENDER_ATTEMPTS; attempt += 1) {
+    const button = await visibleLoginButton(page, config)
+    if (button) {
+      try {
+        await button.click({ timeout: LOGIN_BUTTON_CLICK_TIMEOUT_MS })
+        return
+      } catch (error) {
+        throw new Error(
+          `Unable to click ${config.label} login button from ${await currentPageSummary(page)}. Page text: ${await pageTextSnippet(page)}. ${String(error)}`,
+        )
+      }
+    }
+
+    if (attempt < LOGIN_SHELL_RENDER_ATTEMPTS) {
+      await page
+        .reload({ waitUntil: 'domcontentloaded', timeout: APP_ROOT_NAVIGATION_TIMEOUT_MS })
+        .catch(() => gotoAppRoot(page))
+    }
+  }
+
+  throw new Error(
+    `Unable to find ${config.label} login button after ${LOGIN_SHELL_RENDER_ATTEMPTS} attempts. Last page: ${await currentPageSummary(page)}. Page text: ${await pageTextSnippet(page)}.`,
   )
 }
 

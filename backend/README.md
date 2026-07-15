@@ -46,7 +46,10 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 | `ALLOWED_ORIGINS` | Frontend CORS origins | http://localhost:3000 |
 | `AWS_COGNITO_ISSUER_URI` | Cognito issuer URI | - |
 | `COGNITO_USERINFO_URI` | Cognito userinfo endpoint | - |
+| `KEYCLOAK_ISSUER_URI` | Optional Keycloak issuer URI for machine-to-machine NEXCOL service-client tokens | - |
+| `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
 | `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
+| `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
 | `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
 
@@ -68,8 +71,12 @@ Grouped by area; see `controller/` for request and response contracts.
 | Session | `/api/lexis/session/*` | Session capabilities and logoff routes. |
 | Provincial workflows | `/api/lexis/applications`, `/api/lexis/exemptions`, `/api/lexis/permits`, `/api/lexis/purchase-offers` | Search, options, details, and workflow actions. |
 | Federal workflows | `/api/lexis/federal` | Federal application search and detail workflows. |
+| Federal submissions | `/api/lexis/federal/submissions`, `/api/lexis/federal/submissions/validation` | NEXCOL machine-to-machine XML validation/submission. Requires the `lexis:federal-submission:submit` Keycloak scope. |
 | Reports | `/api/lexis/reports/*` | CSV, PDF, and spreadsheet outputs. |
 | Admin and uploads | `/api/lexis/admin/*`, `/api/lexis/*Upload` | Policy administration and upload workflows. |
+
+See [../docs/nexcol-keycloak-service-client.md](../docs/nexcol-keycloak-service-client.md) for
+the NEXCOL Keycloak service-client setup and request shape.
 
 ## Testing
 

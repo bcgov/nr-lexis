@@ -52,7 +52,9 @@ class OracleFeeDetailsServiceTest {
                     "ISS",
                     "Issued",
                     "00055667",
+                    "01",
                     "00077881",
+                    "03",
                     "Sample Buyer",
                     "US",
                     "VSL",
@@ -69,6 +71,7 @@ class OracleFeeDetailsServiceTest {
                     "FED-123",
                     "INV-456",
                     "",
+                    null,
                     "R2")));
 
     var result = service.getPermitSummary(7000123L);

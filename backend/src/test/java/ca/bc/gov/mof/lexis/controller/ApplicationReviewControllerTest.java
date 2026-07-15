@@ -74,7 +74,7 @@ class ApplicationReviewControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 
     ResponseEntity<ApplicationReviewSearchResponseDto> response =
-        controller.search(null, null, null, null, null, null, null, null, 0, 25);
+        controller.search(null, null, null, null, null, null, null, null, 0, 25, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -110,7 +110,8 @@ class ApplicationReviewControllerTest {
             List.of(12L),
             "applicationNumber DESC",
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);

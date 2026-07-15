@@ -53,9 +53,17 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
   }
 
   public Page<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  public Page<PurchaseOfferSearchResultDto> search(
+      PurchaseOfferSearchCriteria criteria, Integer knownTotal) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     int totalElements =
-        queryLegacyDynamicCountProcedure(COUNT_PURCHASE_OFFERS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+        knownTotal == null
+            ? queryLegacyDynamicCountProcedure(
+                COUNT_PURCHASE_OFFERS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            : Math.max(0, knownTotal);
     return queryLegacyDynamicPage(
         FIND_PURCHASE_OFFERS_BY_CRITERIA,
         sqlWhere.sql(),
@@ -147,6 +155,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),
                 getLong(rs, "APPLICATION_NUMBER"),
                 getString(rs, "PACKAGE_NUMBER"),
+                null,
+                null,
                 getString(rs, "COMPANY_NAME"),
                 getString(rs, "CONTACT_NAME"),
                 coalesce(getDouble(rs, "PURCHASE_OFFER_AMOUNT"), 0.0d),

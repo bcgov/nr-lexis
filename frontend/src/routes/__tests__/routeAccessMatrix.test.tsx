@@ -43,12 +43,6 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
     roleScope: 'provincialApplicationSubmission',
   },
   {
-    path: '/federal/application/upload',
-    requiredActions: ['uploadApplicationSubmission'],
-    requiredActionsMatch: 'any',
-    roleScope: 'federalApplicationSubmission',
-  },
-  {
     path: '/provincial/exemption/create',
     requiredActions: ['/exemptionSearch', '/createExemption'],
     requiredActionsMatch: 'all',
@@ -62,6 +56,11 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
     path: '/federal/application/:applicationNumber',
     requiredActions: ['/federalApplicationDetails', 'viewFederalApplication'],
     requiredActionsMatch: 'all',
+  },
+  {
+    path: '/federal/application/upload',
+    requiredActions: [],
+    requiredActionsMatch: 'any',
   },
   {
     path: '/admin/uploads',
@@ -81,7 +80,7 @@ describe('Protected route access matrix', () => {
     'enforces expected action requirements for $path',
     ({ path, requiredActions, requiredActionsMatch, roleScope }) => {
       const route = findRoute(path)
-      expect(route.requiredActions).toEqual(requiredActions)
+      expect(route.requiredActions ?? []).toEqual(requiredActions)
       expect(route.requiredActionsMatch ?? 'any').toBe(requiredActionsMatch)
       expect(route.roleScope).toBe(roleScope)
     },
@@ -94,8 +93,11 @@ describe('Protected route access matrix', () => {
 
   it('includes advertising list action in reports route requirements', () => {
     const route = findRoute('/reports')
+    const detailRoute = findRoute('/reports/:reportId')
+
     expect(route.requiredActions).toContain('mofrListing')
     expect(route.requiredActions).toContain('/applicationReport')
+    expect(detailRoute.requiredActions).toEqual(route.requiredActions)
   })
 
   it('does not expose retired Indian Reserve or legacy advertising routes', () => {
@@ -126,6 +128,31 @@ describe('Protected route access matrix', () => {
     expect((publicDashboardRoute?.element as ReactElement).type).toBe(Navigate)
     expect((publicDashboardRoute?.element as ReactElement).props).toMatchObject({
       to: '/',
+      replace: true,
+    })
+  })
+
+  it('returns signed-out unauthorized redirects to the login shell', () => {
+    const publicUnauthorizedRoute = PUBLIC_ROUTES.find((entry) => entry.path === '/unauthorized')
+
+    expect(publicUnauthorizedRoute).toBeDefined()
+    expect(publicUnauthorizedRoute?.id).toBe('Unauthorized Login Redirect')
+    expect(isValidElement(publicUnauthorizedRoute?.element)).toBe(true)
+    expect((publicUnauthorizedRoute?.element as ReactElement).type).toBe(Navigate)
+    expect((publicUnauthorizedRoute?.element as ReactElement).props).toMatchObject({
+      to: '/',
+      replace: true,
+    })
+  })
+
+  it('redirects the retired federal upload URL to federal search', () => {
+    const route = findRoute('/federal/application/upload')
+
+    expect(route.id).toBe('Retired Federal Upload Redirect')
+    expect(isValidElement(route.element)).toBe(true)
+    expect((route.element as ReactElement).type).toBe(Navigate)
+    expect((route.element as ReactElement).props).toMatchObject({
+      to: '/federal',
       replace: true,
     })
   })

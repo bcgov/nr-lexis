@@ -94,6 +94,13 @@ const MODERN_UPLOAD_ENDPOINTS: Record<UploadWorkflowType, string> = {
   applicationSubmission: '/lexis/application-submissions',
 }
 
+const MODERN_UPLOAD_VALIDATION_ENDPOINTS: Partial<Record<UploadWorkflowType, string>> = {
+  application: '/lexis/admin/uploads/applications/validation',
+  exemption: '/lexis/admin/uploads/exemptions/validation',
+  permit: '/lexis/admin/uploads/permits/validation',
+  invoice: '/lexis/admin/uploads/invoices/validation',
+}
+
 const APPLICATION_SUBMISSION_VALIDATION_ENDPOINT = '/lexis/application-submissions/validation'
 
 const appendBaseFormData = (formData: FormData, request: UploadRequestBase): void => {
@@ -160,6 +167,27 @@ export const submitAdminUpload = async <TType extends UploadWorkflowType>(
   const response = await apiService
     .getAxiosInstance()
     .post<AdminUploadResult>(modernEndpoint, modernPayload, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  return response.data ?? {}
+}
+
+export const validateAdminUpload = async <
+  TType extends Exclude<UploadWorkflowType, 'applicationSubmission'>,
+>(
+  workflowType: TType,
+  request: UploadRequestByType[TType],
+): Promise<AdminUploadResult> => {
+  const validationEndpoint = MODERN_UPLOAD_VALIDATION_ENDPOINTS[workflowType]
+  if (!validationEndpoint) {
+    throw new Error(`Validation is not supported for ${workflowType} uploads.`)
+  }
+  const payload = buildModernPayload(workflowType, request)
+  const response = await apiService
+    .getAxiosInstance()
+    .post<AdminUploadResult>(validationEndpoint, payload, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

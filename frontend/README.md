@@ -33,6 +33,8 @@ Mirrors `frontend/.env.example`. Vite bundles these values at dev/build time; ch
 | `VITE_REDIRECT_SIGN_OUT` | BC Gov logoff URL registered in Cognito; use `logoff.cgi?retnow=1&returl=<encoded-app-root>` and do not chain through LoginProxy OIDC logout | - |
 | `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
 | `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
+| `VITE_LEXIS_PROD_RTM_ONLY` | Restricts frontend routes and navigation to the Average Monthly Values module for LEXIS admins | false |
+| `VITE_FAM_MANAGE_URL` | Optional FAM manage app URL override for the admin user access lookup link | Environment-based default |
 
 Additional route and endpoint overrides are listed in `frontend/.env.example`.
 

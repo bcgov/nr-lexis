@@ -47,11 +47,18 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
 
   @Override
   public PurchaseOfferSearchResponseDto search(PurchaseOfferSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public PurchaseOfferSearchResponseDto search(
+      PurchaseOfferSearchCriteria criteria, Integer knownTotal) {
     PurchaseOfferSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    Page<PurchaseOfferSearchResultDto> searchPage = repository.search(normalized);
+    Page<PurchaseOfferSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
     List<PurchaseOfferSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new PurchaseOfferSearchResponseDto(
@@ -441,6 +448,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         || !equalsNullable(current.purchaseOfferDate(), updated.purchaseOfferDate())
         || !equalsNullable(current.offerWithdrawalDate(), updated.offerWithdrawalDate())
         || !equalsNullable(current.teacReviewDate(), updated.teacReviewDate())
+        || !equalsNullable(current.fairOfferIndicator(), updated.fairOfferIndicator())
+        || !equalsNullable(current.validOfferIndicator(), updated.validOfferIndicator())
+        || !equalsNullable(current.approvalIndicator(), updated.approvalIndicator())
         || !equalsNullable(current.offerRemark(), updated.offerRemark())
         || !equalsNullable(current.withdrawReason(), updated.withdrawReason())
         || !equalsNullable(current.pickupLocation(), updated.pickupLocation())

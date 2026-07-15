@@ -72,7 +72,8 @@ public class ApplicationReviewController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal) {
     ApplicationReviewService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for search");
@@ -92,6 +93,9 @@ public class ApplicationReviewController {
             page,
             size);
 
+    if (knownTotal != null) {
+      return ResponseEntity.ok(service.search(criteria, knownTotal));
+    }
     return ResponseEntity.ok(service.search(criteria));
   }
 

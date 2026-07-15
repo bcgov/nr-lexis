@@ -82,7 +82,8 @@ class FederalApplicationControllerTest {
             null,
             null,
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -124,7 +125,8 @@ class FederalApplicationControllerTest {
             " 00077881 ",
             " 00055667 ",
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);

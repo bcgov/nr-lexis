@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        package: [backend, frontend]
+        package: [backend, frontend, clamav]
     timeout-minutes: 10
     steps:
       - uses: bcgov/action-builder-ghcr@de3d575cf158e16f5dc2789630f6d587483b911c # v4.4.0
@@ -88,9 +88,21 @@ jobs:
           npm run format:check
           npm run test:cov
 
+  clamav-startup:
+    name: ClamAV Startup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build and verify ClamAV container startup
+        run: bash .github/scripts/check-clamav-startup.sh
+
   deploys:
     name: Deploys (${{ github.event.number }})
-    needs: [builds, vars, backend-tests, frontend-tests]
+    needs: [builds, vars, backend-tests, frontend-tests, clamav-startup]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
@@ -102,11 +114,12 @@ jobs:
       database_host: ${{ secrets.database_host }}
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
+      lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
     with:
       environment: dev
       target: ${{ github.event.number }}
       slot: ${{ needs.vars.outputs.slot }}
-      triggers: ('backend/', 'frontend/', '.github/workflows/')
+      triggers: ('backend/', 'frontend/', 'clamav/', '.github/workflows/')
 
   tests:
     name: Tests
@@ -121,7 +134,7 @@ jobs:
 
   results:
     name: PR Results
-    needs: [builds, backend-tests, frontend-tests, deploys, tests]
+    needs: [builds, backend-tests, frontend-tests, clamav-startup, deploys, tests]
     if: always()
     runs-on: ubuntu-slim
     steps:

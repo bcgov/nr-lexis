@@ -24,12 +24,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 @DisplayName("Unit Test | LexisSessionController")
 class LexisSessionControllerTest {
 
@@ -56,7 +58,7 @@ class LexisSessionControllerTest {
             "idir\\jsmith",
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
             "industryUser",
-            "/applicationSearch.do?actionMapping=view");
+            "/provincial/application");
 
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(dto);
@@ -81,7 +83,7 @@ class LexisSessionControllerTest {
             "idir\\jsmith",
             List.of(),
             "mofrUser",
-            "/applicationsReview.do?actionMapping=view");
+            "/provincial/review");
 
     when(principalService.resolvePrincipalName(principal)).thenReturn("idir\\jsmith");
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of())).thenReturn(dto);
@@ -95,7 +97,7 @@ class LexisSessionControllerTest {
   }
 
   @Test
-  void capabilitiesShouldUseWelcomeAndAuthorizationServices() {
+  void capabilitiesShouldUseWelcomeAndAuthorizationServices(CapturedOutput output) {
     MockHttpServletRequest request = new MockHttpServletRequest();
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_READ_ONLY", "LEXIS_ADMIN");
@@ -111,7 +113,7 @@ class LexisSessionControllerTest {
             "idir\\jsmith",
             List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"),
             "readOnly",
-            "/applicationSearch.do?actionMapping=view");
+            "/provincial/application");
 
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN")))
         .thenReturn(welcome);
@@ -129,7 +131,7 @@ class LexisSessionControllerTest {
                 "idir\\jsmith",
                 List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"),
                 "readOnly",
-                "/applicationSearch.do?actionMapping=view",
+                "/provincial/application",
                 List.of("/applicationSearch", "/applicationDetails"),
                 "76"));
 
@@ -137,6 +139,7 @@ class LexisSessionControllerTest {
     verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
     verify(authorizationService).resolveGrantedActions(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
     verify(principalService).resolveOrgUnitNo(authentication);
+    assertThat(output.getAll()).doesNotContain("Resolved LEXIS session capabilities");
   }
 
   @Test

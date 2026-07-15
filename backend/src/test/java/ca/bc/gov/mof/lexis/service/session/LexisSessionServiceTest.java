@@ -13,7 +13,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 class LexisSessionServiceTest {
 
   private final LexisSessionService service =
-      new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER");
+      new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
 
   @Test
   void shouldRouteReadOnlyUsersToApplicationSearch() {
@@ -21,7 +21,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_read_only"));
 
     assertThat(response.welcomeTarget()).isEqualTo("readOnly");
-    assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
     assertThat(response.roles()).containsExactly("LEXIS_READ_ONLY");
   }
 
@@ -31,7 +31,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin", "lexis_read_only"));
 
     assertThat(response.welcomeTarget()).isEqualTo("adminUser");
-    assertThat(response.legacyPath()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/admin");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
@@ -41,7 +41,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
   }
 
   @Test
@@ -50,17 +50,18 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter_00001234"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
     assertThat(response.roles()).containsExactly("LEXIS_PROVINCIAL_SUBMITTER");
   }
 
   @Test
-  void shouldRouteFederalSubmittersToFederalSearch() {
+  void shouldRouteUnknownOnlyRolesToNoAccess() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_federal_submitter"));
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_unknown_role"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/federalApplicationSearch.do?actionMapping=view");
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
+    assertThat(response.roles()).containsExactly("LEXIS_UNKNOWN_ROLE");
   }
 
   @Test
@@ -68,7 +69,8 @@ class LexisSessionServiceTest {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("log_export_industry_00001234"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
     assertThat(response.roles()).containsExactly("LOG_EXPORT_INDUSTRY_00001234");
   }
 
@@ -77,7 +79,8 @@ class LexisSessionServiceTest {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("industry_00001234"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
     assertThat(response.roles()).containsExactly("INDUSTRY_00001234");
   }
 
@@ -86,8 +89,8 @@ class LexisSessionServiceTest {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("industry_submitter"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
-    assertThat(response.legacyPath()).isEqualTo("/applicationsReview.do?actionMapping=view");
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
   }
 
   @Test
@@ -96,7 +99,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin"));
 
     assertThat(response.welcomeTarget()).isEqualTo("adminUser");
-    assertThat(response.legacyPath()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/admin");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN");
   }
 
@@ -106,7 +109,7 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\approver", List.of("lexis_exemption_approver", "other_role"));
 
     assertThat(response.welcomeTarget()).isEqualTo("exemptionApprover");
-    assertThat(response.legacyPath()).isEqualTo("/exemptionSearch.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/exemption");
     assertThat(response.roles()).containsExactly("LEXIS_EXEMPTION_APPROVER", "OTHER_ROLE");
   }
 
@@ -116,12 +119,12 @@ class LexisSessionServiceTest {
         service.resolveWelcomeRoute("idir\\staff", List.of("lexis_application_approver"));
 
     assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
-    assertThat(response.legacyPath()).isEqualTo("/applicationsReview.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_APPLICATION_APPROVER");
   }
 
   @Test
-  void shouldRecognizeDelegatedAdminWithoutRoutingToReviewerLanding() {
+  void shouldRecognizeDelegatedAdminWithoutRoutingToUiLanding() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\delegated", List.of("lexis_delegated_admin"));
 
@@ -154,7 +157,23 @@ class LexisSessionServiceTest {
                 new SimpleGrantedAuthority("LEXIS_ADMIN"),
                 new SimpleGrantedAuthority("lexis_admin")));
 
-    assertThat(roles).containsExactly("LEXIS_READ_ONLY", "LEXIS_DELEGATED_ADMIN", "LEXIS_ADMIN");
+    assertThat(roles)
+        .containsExactly(
+            "LEXIS_READ_ONLY",
+            "LEXIS_DELEGATED_ADMIN",
+            "LEXIS_ADMIN");
+  }
+
+  @Test
+  void shouldIgnoreOauthScopeAuthoritiesWhenParsingSessionRoles() {
+    List<String> roles =
+        service.parseAuthorities(
+            List.of(
+                new SimpleGrantedAuthority("SCOPE_openid"),
+                new SimpleGrantedAuthority("SCOPE_lexis:federal-submission:submit"),
+                new SimpleGrantedAuthority("lexis_read_only")));
+
+    assertThat(roles).containsExactly("LEXIS_READ_ONLY");
   }
 
   @Test
@@ -241,14 +260,14 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldNotResolveForestClientNumberFromFederalSubmitterSuffix() {
-    String clientNumber = service.resolveForestClientNumber(List.of("LEXIS_FEDERAL_SUBMITTER_00055667"));
+  void shouldNotResolveForestClientNumberFromUnknownRoleSuffix() {
+    String clientNumber = service.resolveForestClientNumber(List.of("LEXIS_UNKNOWN_ROLE_00055667"));
 
     assertThat(clientNumber).isNull();
   }
 
   @Test
-  void shouldNotResolveForestClientNumberFromLegacyFederalSubmitterSuffixAlias() {
+  void shouldNotResolveForestClientNumberFromLegacyIndustrySubmitterSuffixAlias() {
     String clientNumber = service.resolveForestClientNumber(List.of("log_export_industry_00055667"));
 
     assertThat(clientNumber).isNull();

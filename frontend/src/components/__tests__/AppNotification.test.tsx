@@ -1,10 +1,15 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AppNotification } from '../AppNotification'
+import {
+  APP_NOTIFICATION_REGION_ID,
+  AppNotification,
+  syncAppNotificationRegionTheme,
+} from '../AppNotification'
 
 describe('AppNotification', () => {
   afterEach(() => {
     vi.useRealTimers()
+    document.getElementById(APP_NOTIFICATION_REGION_ID)?.remove()
   })
 
   it('renders in the global toast notification region', () => {
@@ -19,6 +24,43 @@ describe('AppNotification', () => {
     expect(notificationRegion).toBeTruthy()
     expect(container.querySelector('main')).toBeEmptyDOMElement()
     expect(notificationRegion).toContainElement(screen.getByText('Upload error'))
+  })
+
+  it('uses low-contrast toast styling by default', () => {
+    render(<AppNotification kind="error" title="Upload error" subtitle="Upload failed." />)
+
+    expect(document.querySelector('.cds--toast-notification')).toHaveClass(
+      'cds--toast-notification--low-contrast',
+    )
+  })
+
+  it('allows high-contrast toast styling when explicitly requested', () => {
+    render(
+      <AppNotification
+        kind="error"
+        lowContrast={false}
+        title="Upload error"
+        subtitle="Upload failed."
+      />,
+    )
+
+    expect(document.querySelector('.cds--toast-notification')).not.toHaveClass(
+      'cds--toast-notification--low-contrast',
+    )
+  })
+
+  it('syncs the toast notification region to the selected app theme', () => {
+    const lightRegion = syncAppNotificationRegionTheme(false)!
+
+    expect(lightRegion).toHaveClass('app-notification-region')
+    expect(lightRegion).toHaveClass('cds--white')
+    expect(lightRegion).not.toHaveClass('cds--g100')
+
+    const darkRegion = syncAppNotificationRegionTheme(true)!
+
+    expect(darkRegion).toBe(lightRegion)
+    expect(darkRegion).toHaveClass('cds--g100')
+    expect(darkRegion).not.toHaveClass('cds--white')
   })
 
   it('auto-dismisses success notifications after at least 8 seconds by default', () => {

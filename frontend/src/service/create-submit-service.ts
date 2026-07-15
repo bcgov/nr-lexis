@@ -284,13 +284,45 @@ export type ProvincialOfferCreateSubmission = {
   companyName: string
   contactName: string
   region: string
+  offerVolume: string
   purchaseOfferAmount: string
   purchaseOfferDate: string
-  offerEndDate: string
+  offerWithdrawalDate: string
   withdrawReason: string
+  teacReviewDate: string
+  fairOfferIndicator: string
+  validOfferIndicator: string
+  approvalIndicator: string
+  offerRemark: string
   pickupLocation: string
   offerCondition: string
 }
+
+export type ProvincialOfferUpdateSubmission = ProvincialOfferCreateSubmission & {
+  offerNumber: string
+}
+
+const buildProvincialOfferPayload = (form: ProvincialOfferCreateSubmission): LegacyFormPayload => ({
+  applicationNumber: form.applicationNumber,
+  packageNumber: form.packageNumber,
+  companyName: form.companyName,
+  contactName: form.contactName,
+  offeringClientNumber: form.offeringClientNumber,
+  clientNumber: form.offeringClientNumber,
+  region: form.region,
+  offerVolume: form.offerVolume,
+  purchaseOfferAmount: form.purchaseOfferAmount,
+  purchaseOfferDate: form.purchaseOfferDate,
+  offerWithdrawalDate: form.offerWithdrawalDate,
+  withdrawReason: form.withdrawReason,
+  teacReviewDate: form.teacReviewDate,
+  fairOfferIndicator: form.fairOfferIndicator,
+  validOfferIndicator: form.validOfferIndicator,
+  approvalIndicator: form.approvalIndicator,
+  pickupLocation: form.pickupLocation,
+  offerCondition: form.offerCondition,
+  offerRemark: form.offerRemark || form.offerCondition,
+})
 
 export const submitProvincialOfferCreate = async (
   form: ProvincialOfferCreateSubmission,
@@ -298,27 +330,33 @@ export const submitProvincialOfferCreate = async (
   try {
     const payload = await postLegacyForm(
       getProvincialOfferCreatePath(),
-      withCreateActionMapping('addOffer', {
-        applicationNumber: form.applicationNumber,
-        packageNumber: form.packageNumber,
-        companyName: form.companyName,
-        contactName: form.contactName,
-        offeringClientNumber: form.offeringClientNumber,
-        clientNumber: form.offeringClientNumber,
-        region: form.region,
-        purchaseOfferAmount: form.purchaseOfferAmount,
-        purchaseOfferDate: form.purchaseOfferDate,
-        offerEndDate: form.offerEndDate,
-        withdrawReason: form.withdrawReason,
-        pickupLocation: form.pickupLocation,
-        offerCondition: form.offerCondition,
-        offerRemark: form.offerCondition,
-      }),
+      withCreateActionMapping('addOffer', buildProvincialOfferPayload(form)),
     )
     return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])
   } catch (error) {
     return buildFailureResult(
       'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
+      error,
+    )
+  }
+}
+
+export const submitProvincialOfferUpdate = async (
+  form: ProvincialOfferUpdateSubmission,
+): Promise<CreateSubmissionResult> => {
+  try {
+    const payload = await postLegacyForm(
+      withQueryParam(getProvincialOfferCreatePath(), 'actionMapping', 'updateOffer'),
+      withCreateActionMapping('updateOffer', {
+        ...buildProvincialOfferPayload(form),
+        exportPurchaseOfferNumber: form.offerNumber,
+        offerNumber: form.offerNumber,
+      }),
+    )
+    return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])
+  } catch (error) {
+    return buildFailureResult(
+      'Offer update failed. Please review the form and try again. If the problem persists, contact support.',
       error,
     )
   }

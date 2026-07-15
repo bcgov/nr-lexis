@@ -148,7 +148,9 @@ public class PermitRepository extends OracleRepositorySupport {
                 getString(rs, "EXPORT_PERMIT_STATUS_CODE"),
                 getString(rs, "STATUS_DESCRIPTION"),
                 getString(rs, "AGENT_NUMBER"),
+                getString(rs, "AGENT_LOCN_CODE"),
                 getString(rs, "CLIENT_NUMBER"),
+                getString(rs, "CLIENT_LOCN_CODE"),
                 getString(rs, "DESTINATION_COMPANY_NAME"),
                 getString(rs, "EXPORT_COUNTRY_CODE"),
                 getString(rs, "EXPORT_TRANSPORT_TYPE_CODE"),
@@ -165,6 +167,7 @@ public class PermitRepository extends OracleRepositorySupport {
                 getString(rs, "FEDERAL_PERMIT_NUMBER"),
                 getString(rs, "EXPORT_SALES_INVOICE_NUMBER"),
                 getString(rs, "REMARKS"),
+                getLong(rs, "OIC_APPLICATION_NUMBER"),
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
   }
 

@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchProvincialPermitDetailTabs } from '@/service/provincial-permit-detail-tabs-service'
+import {
+  addApplicationsToPermit,
+  addBlanketOicScale,
+  deleteBlanketOicScale,
+  fetchAvailablePermitApplications,
+  fetchProvincialPermitDetailTabs,
+  removeApplicationFromPermit,
+  updatePermitScaleAttachment,
+} from '@/service/provincial-permit-detail-tabs-service'
 import {
   addPermitInvoice,
   fetchPermitInvoices,
@@ -33,7 +41,19 @@ describe('provincial permit detail services', () => {
 
   it('loads permit detail tab rows from permit RPC endpoints', async () => {
     getCachedResponseMock
+      .mockResolvedValueOnce(response({ applicationList: ['1000456'] }))
       .mockResolvedValueOnce(response({ packageList: ['PKG-100'] }))
+      .mockResolvedValueOnce(
+        response({
+          region: 'Coast',
+          enduse: 'FI/PL',
+          ageclass: 'Second growth',
+          volume: '34.5',
+          length: '7.1',
+          diameter: '16.2',
+          productType: 'Unmanufactured',
+        }),
+      )
       .mockResolvedValueOnce(
         response({
           scaleList: [
@@ -44,6 +64,37 @@ describe('provincial permit detail services', () => {
               grade: 'A',
               pieces: 12,
               volume: '34.5',
+              permit: 'P-777',
+            },
+            {
+              id: 'SCALE-2',
+              timbermark: 'TM-2',
+              species: 'Cedar',
+              grade: 'B',
+              pieces: 4,
+              volume: '8.5',
+              permit: '',
+            },
+            {
+              id: 'SCALE-OTHER',
+              timbermark: 'TM-OTHER',
+              species: 'Spruce',
+              grade: 'C',
+              pieces: 2,
+              volume: '2.5',
+              permit: 'P-999',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          scaleList: [
+            {
+              id: 'SCALE-1',
+              timbermark: 'TM-1',
+              species: 'Fir',
+              grade: 'A',
               fil: 'FIL',
               fee: '$123.45',
             },
@@ -65,15 +116,33 @@ describe('provincial permit detail services', () => {
       receiptNumber: 'RCPT-1',
     })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(3)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(6)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       1,
-      '/lexis/rpc/permit-details/package-list',
+      '/lexis/rpc/permit-details/application-list',
       { params: { permitNumber: 'P-777' } },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       2,
+      '/lexis/rpc/permit-details/package-list',
+      { params: { permitNumber: 'P-777' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      3,
+      '/lexis/rpc/permit-details/package-info',
+      { params: { packageNumber: 'PKG-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      4,
+      '/lexis/rpc/permit-details/scales-for-package',
+      { params: { packageNumber: 'PKG-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      5,
       '/lexis/rpc/permit-details/scale-fees-for-package',
       {
         params: {
@@ -84,7 +153,7 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      3,
+      6,
       '/lexis/rpc/permit-details/gbms-invoice-history',
       {
         params: {
@@ -95,6 +164,23 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(result).toEqual({
+      applications: ['1000456'],
+      packages: [
+        {
+          packageNumber: 'PKG-100',
+          region: 'Coast',
+          speciesEndUseSort: 'FI/PL',
+          ageClass: 'Second growth',
+          packageVolume: '34.5',
+          averageLength: '7.1',
+          averageTopDiameter: '16.2',
+          productType: 'Unmanufactured',
+          currentPackageVolume: '',
+          status: '',
+          reprocessed: '',
+          comments: '',
+        },
+      ],
       items: [
         {
           id: 'SCALE-1',
@@ -103,6 +189,20 @@ describe('provincial permit detail services', () => {
           grade: 'A',
           pieces: 12,
           volume: 34.5,
+          packageNumber: 'PKG-100',
+          permitNumber: 'P-777',
+          includedInPermit: true,
+        },
+        {
+          id: 'SCALE-2',
+          timberMark: 'TM-2',
+          species: 'Cedar',
+          grade: 'B',
+          pieces: 4,
+          volume: 8.5,
+          packageNumber: 'PKG-100',
+          permitNumber: '',
+          includedInPermit: false,
         },
       ],
       fees: [
@@ -131,6 +231,149 @@ describe('provincial permit detail services', () => {
     })
   })
 
+  it('loads Blanket OIC package rows from the legacy OIC permit endpoints', async () => {
+    getCachedResponseMock
+      .mockResolvedValueOnce(response({ applicationList: [] }))
+      .mockResolvedValueOnce(response({ packageList: ['BOIC-100'] }))
+      .mockResolvedValueOnce(
+        response({
+          region: 'Coast',
+          enduse: 'HE/PL',
+          ageclass: 'Old growth',
+          volume: '40.0',
+          length: '7.5',
+          diameter: '18.0',
+          productType: 'Unmanufactured',
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          scaleList: [
+            {
+              id: 'OIC-SCALE-1',
+              timbermark: 'TM-OIC',
+              species: 'Hemlock',
+              grade: 'B',
+              pieces: 5,
+              volume: '12.5',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          scaleList: [
+            {
+              id: 'OIC-FEE-1',
+              timbermark: 'TM-OIC',
+              species: 'Hemlock',
+              grade: 'B',
+              fil: 'FIL',
+              fee: '$10.50',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          volume: '38.5',
+          status: 'APP',
+          statusDesc: 'Approved',
+          reprocessed: 'N',
+          comments: 'Current OIC package',
+          ageClass: 'Second growth',
+        }),
+      )
+
+    const result = await fetchProvincialPermitDetailTabs({
+      permitNumber: 'P-888',
+      blanketOic: true,
+    })
+
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(6)
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/rpc/permit-details/application-list',
+      { params: { permitNumber: 'P-888' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/rpc/permit-details/oic-package-list',
+      { params: { permitNumber: 'P-888' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      3,
+      '/lexis/rpc/permit-details/package-info',
+      { params: { packageNumber: 'BOIC-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      4,
+      '/lexis/rpc/permit-details/scales-for-package',
+      { params: { packageNumber: 'BOIC-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      5,
+      '/lexis/rpc/permit-details/scale-fees-for-package',
+      {
+        params: {
+          packageNumber: 'BOIC-100',
+          permitNumber: 'P-888',
+        },
+      },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      6,
+      '/lexis/rpc/permit-details/package-details',
+      { params: { packageNumber: 'BOIC-100' } },
+      { ttlMs: 30_000 },
+    )
+    expect(result.packages).toEqual([
+      {
+        packageNumber: 'BOIC-100',
+        region: 'Coast',
+        speciesEndUseSort: 'HE/PL',
+        ageClass: 'Second growth',
+        packageVolume: '40.0',
+        averageLength: '7.5',
+        averageTopDiameter: '18.0',
+        productType: 'Unmanufactured',
+        currentPackageVolume: '38.5',
+        status: 'APP - Approved',
+        reprocessed: 'N',
+        comments: 'Current OIC package',
+      },
+    ])
+    expect(result.items).toEqual([
+      {
+        id: 'OIC-SCALE-1',
+        timberMark: 'TM-OIC',
+        species: 'Hemlock',
+        grade: 'B',
+        pieces: 5,
+        volume: 12.5,
+        packageNumber: 'BOIC-100',
+        permitNumber: '',
+        includedInPermit: false,
+      },
+    ])
+    expect(result.fees).toEqual([
+      {
+        id: 'OIC-FEE-1',
+        feeCode: 'FIL',
+        feeDescription: 'TM-OIC / Hemlock / B',
+        amount: 10.5,
+        status: '',
+        invoiceNumber: '',
+        receiptNumber: '',
+      },
+    ])
+  })
+
   it('returns empty permit detail tab rows when optional RPC tables are unavailable', async () => {
     getCachedResponseMock
       .mockRejectedValueOnce(new Error('package list unavailable'))
@@ -142,11 +385,39 @@ describe('provincial permit detail services', () => {
     })
 
     expect(result).toEqual({
+      applications: [],
+      packages: [],
       items: [],
       fees: [],
       gbmsEvents: [],
       oicItems: [],
       boicItems: [],
+    })
+  })
+
+  it('loads available permit applications with the selected application filter', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        applicationList: ['1000456', '1000457'],
+        errorMessage: '',
+      }),
+    )
+
+    const result = await fetchAvailablePermitApplications(' EX-700 ', [' 1000455 '])
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/permit-details/available-application-list',
+      {
+        params: {
+          exemptionNumber: 'EX-700',
+          selectedApplications: '1000455',
+        },
+      },
+      { ttlMs: 30_000 },
+    )
+    expect(result).toEqual({
+      applicationList: ['1000456', '1000457'],
+      errorMessage: '',
     })
   })
 
@@ -261,6 +532,178 @@ describe('provincial permit detail services', () => {
       errors: [],
       warnings: ['Review invoice value.'],
       source: 'api',
+    })
+  })
+
+  it('posts permit scale attachment changes as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Scale detail was added to the permit.',
+      }),
+    )
+
+    const result = await updatePermitScaleAttachment({
+      scaleId: ' 123 ',
+      permitNumber: ' 777 ',
+      attachInd: true,
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/update-scale-attachment')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('scaleId')).toBe('123')
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('attachInd')).toBe('true')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Scale detail was added to the permit.',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts permit application adds as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Applications were added to the permit.',
+      }),
+    )
+
+    const result = await addApplicationsToPermit({
+      permitNumber: ' 777 ',
+      selectedApplications: [' 1000456 ', '1000457'],
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/add-applications-to-permit')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('selectedApplications')).toBe('1000456,1000457')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Applications were added to the permit.',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts permit application removals as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Application was removed from the permit.',
+      }),
+    )
+
+    const result = await removeApplicationFromPermit({
+      permitNumber: ' 777 ',
+      applicationNumber: ' 1000456 ',
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/remove-application-from-permit')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('applicationNumber')).toBe('1000456')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Application was removed from the permit.',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts Blanket OIC scale adds as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Blanket OIC scale detail was added.',
+      }),
+    )
+
+    const result = await addBlanketOicScale({
+      permitNumber: ' 777 ',
+      packageNumber: ' PKG-9 ',
+      timberMark: ' TM-1 ',
+      scaleVolume: ' 10.5 ',
+      scalePieces: ' 12 ',
+      speciesCode: ' HE ',
+      gradeCode: ' A ',
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/add-boic-scale')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('packageNumber')).toBe('PKG-9')
+    expect(body.get('timberMark')).toBe('TM-1')
+    expect(body.get('scaleVolume')).toBe('10.5')
+    expect(body.get('scalePieces')).toBe('12')
+    expect(body.get('speciesCode')).toBe('HE')
+    expect(body.get('gradeCode')).toBe('A')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Blanket OIC scale detail was added.',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts Blanket OIC scale deletes as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Blanket OIC scale detail was removed.',
+      }),
+    )
+
+    const result = await deleteBlanketOicScale({
+      scaleId: ' 123 ',
+      permitNumber: ' 777 ',
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/delete-boic-scale')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('scaleId')).toBe('123')
+    expect(body.get('permitNumber')).toBe('777')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Blanket OIC scale detail was removed.',
+      errors: [],
+      warnings: [],
     })
   })
 })

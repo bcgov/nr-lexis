@@ -14,6 +14,11 @@ public interface PurchaseOfferService {
 
   PurchaseOfferSearchResponseDto search(PurchaseOfferSearchCriteria criteria);
 
+  default PurchaseOfferSearchResponseDto search(
+      PurchaseOfferSearchCriteria criteria, Integer knownTotal) {
+    return search(criteria);
+  }
+
   int count(PurchaseOfferSearchCriteria criteria);
 
   Optional<PurchaseOfferDetailDto> findByOfferNumber(Long offerNumber);

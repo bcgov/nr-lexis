@@ -7,6 +7,8 @@ import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository;
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository.UploadFailureReason;
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository.UploadPersistenceResult;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.Optional;
@@ -24,9 +26,49 @@ public class OracleLexisUploadService implements LexisUploadService {
   private static final String ATTACHMENT_TYPE_INVOICE = "INV";
 
   private final UploadRepository uploadRepository;
+  private final VirusScanService virusScanService;
 
-  public OracleLexisUploadService(UploadRepository uploadRepository) {
+  public OracleLexisUploadService(
+      UploadRepository uploadRepository, VirusScanService virusScanService) {
     this.uploadRepository = uploadRepository;
+    this.virusScanService = virusScanService;
+  }
+
+  @Override
+  public Optional<LexisUploadResultDto> validateDocument(MultipartFile file, String uploadType) {
+    String normalizedUploadType = normalizeUploadType(uploadType);
+    if (!validFile(file) || normalizedUploadType == null) {
+      return Optional.empty();
+    }
+
+    String fileTypeCode = fileExtension(file);
+    if (fileTypeCode == null) {
+      return Optional.of(
+          rejected(
+              normalizedUploadType,
+              file,
+              "Document uploads need a file extension so LEXIS can resolve the file type."));
+    }
+
+    Optional<LexisUploadResultDto> fileTypeRejection =
+        rejectUnsupportedFileType(normalizedUploadType, file, fileTypeCode);
+    if (fileTypeRejection.isPresent()) {
+      return fileTypeRejection;
+    }
+
+    Optional<LexisUploadResultDto> virusScanRejection =
+        rejectFailedVirusScan(normalizedUploadType, file);
+    if (virusScanRejection.isPresent()) {
+      return virusScanRejection;
+    }
+
+    return Optional.of(
+        new LexisUploadResultDto(
+            normalizedUploadType,
+            resolveFileName(file),
+            file.getSize(),
+            "validated",
+            "File passed validation and virus scanning."));
   }
 
   @Override
@@ -42,6 +84,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("application", file, fileTypeCode);
     if (fileTypeRejection.isPresent()) {
       return fileTypeRejection;
+    }
+    Optional<LexisUploadResultDto> virusScanRejection = rejectFailedVirusScan("application", file);
+    if (virusScanRejection.isPresent()) {
+      return virusScanRejection;
     }
 
     UploadPersistenceResult persistenceResult =
@@ -80,6 +126,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     if (fileTypeRejection.isPresent()) {
       return fileTypeRejection;
     }
+    Optional<LexisUploadResultDto> virusScanRejection = rejectFailedVirusScan("permit", file);
+    if (virusScanRejection.isPresent()) {
+      return virusScanRejection;
+    }
 
     UploadPersistenceResult persistenceResult =
         uploadRepository.insertPermitFile(
@@ -115,6 +165,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("exemption", file, fileTypeCode);
     if (fileTypeRejection.isPresent()) {
       return fileTypeRejection;
+    }
+    Optional<LexisUploadResultDto> virusScanRejection = rejectFailedVirusScan("exemption", file);
+    if (virusScanRejection.isPresent()) {
+      return virusScanRejection;
     }
 
     UploadPersistenceResult persistenceResult =
@@ -165,6 +219,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("invoice", file, fileTypeCode);
     if (fileTypeRejection.isPresent()) {
       return fileTypeRejection;
+    }
+    Optional<LexisUploadResultDto> virusScanRejection = rejectFailedVirusScan("invoice", file);
+    if (virusScanRejection.isPresent()) {
+      return virusScanRejection;
     }
 
     String normalizedDescription = trimToNull(description);
@@ -238,8 +296,30 @@ public class OracleLexisUploadService implements LexisUploadService {
                 + " is not configured in LEXIS. Use a supported file type before uploading."));
   }
 
+  private Optional<LexisUploadResultDto> rejectFailedVirusScan(
+      String uploadType, MultipartFile file) {
+    try {
+      virusScanService.assertClean(file);
+      return Optional.empty();
+    } catch (VirusScanException ex) {
+      return Optional.of(rejected(uploadType, file, ex.userMessage()));
+    }
+  }
+
   private boolean validFile(MultipartFile file) {
     return file != null && !file.isEmpty();
+  }
+
+  private String normalizeUploadType(String uploadType) {
+    String normalized = trimToNull(uploadType);
+    if (normalized == null) {
+      return null;
+    }
+    normalized = normalized.toLowerCase(Locale.ROOT);
+    return switch (normalized) {
+      case "application", "permit", "exemption", "invoice" -> normalized;
+      default -> null;
+    };
   }
 
   private boolean positive(BigDecimal value) {

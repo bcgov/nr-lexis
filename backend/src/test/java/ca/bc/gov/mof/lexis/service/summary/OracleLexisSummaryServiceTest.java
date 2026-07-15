@@ -115,6 +115,7 @@ class OracleLexisSummaryServiceTest {
                     LocalDate.of(2026, 2, 20),
                     LocalDate.of(2026, 2, 21),
                     LocalDate.of(2026, 2, 26),
+                    null,
                     120L,
                     95.0,
                     1.6,
@@ -292,7 +293,9 @@ class OracleLexisSummaryServiceTest {
                     "ISS",
                     "Issued",
                     "00055667",
+                    "01",
                     "00077881",
+                    "03",
                     "Sample Buyer",
                     "US",
                     "VSL",
@@ -309,6 +312,7 @@ class OracleLexisSummaryServiceTest {
                     "FED-123",
                     "INV-456",
                     "",
+                    null,
                     "R2")));
 
     SummaryPermitsResponseDto response = service.permits("00077881", 0, 10, null);
@@ -368,7 +372,9 @@ class OracleLexisSummaryServiceTest {
                     "ISS",
                     "Issued",
                     "00055667",
+                    "01",
                     "00077881",
+                    "03",
                     "Sample Buyer",
                     "US",
                     "VSL",
@@ -385,6 +391,7 @@ class OracleLexisSummaryServiceTest {
                     "FED-123",
                     "INV-456",
                     "",
+                    null,
                     "R2")));
 
     SummaryFeesResponseDto response = service.fees("00077881", 0, 10, null);

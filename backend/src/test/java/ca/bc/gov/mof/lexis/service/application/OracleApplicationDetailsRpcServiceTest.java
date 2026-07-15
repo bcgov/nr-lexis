@@ -352,6 +352,7 @@ class OracleApplicationDetailsRpcServiceTest {
                 null,
                 "LU",
                 List.of("FI", "HE"),
+                null,
                 true),
             "idir\\jsmith");
 
@@ -372,6 +373,55 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
     verify(repository).replaceApplicationEndUses(
         org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList());
+  }
+
+  @Test
+  void addApplicationShouldInsertProvidedApplicationStatus() {
+    when(repository.findCandidateExcolCodes(2, "FI", "LU", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LU")));
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000457L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000457L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                "APP",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                "LU",
+                List.of("FI", "HE"),
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class);
+    verify(repository).insertApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().applicationStatusCode()).isEqualTo("APP");
   }
 
   @Test
@@ -1106,6 +1156,46 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addPackageShouldCarryFederalPermitLinkFieldsToOracleRecord() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.insertPackage(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 125.5d, 12.0d, 24.0d, "Test", null,
+                    7000123L, 8000123L, "A", null, null, "idir\\jsmith", Instant.now())));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                125.5d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                7000123L,
+                8000123L,
+                "N",
+                "S",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+    verify(repository).insertPackage(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.PackageMutationRecord record = recordCaptor.getValue();
+    assertThat(record.federalPermitNumber()).isEqualTo(7000123L);
+    assertThat(record.reservePermitNumber()).isEqualTo(8000123L);
+  }
+
+  @Test
   void addPackageShouldRejectWhenTotalPackageVolumeExceedsApplicationVolume() {
     when(repository.packageExists("PKG-903")).thenReturn(false);
     when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
@@ -1250,6 +1340,46 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePackageShouldPreserveExistingFederalPermitLinkFieldsWhenNotSupplied() {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 100.0d, 10.0d, 20.0d, "Old", null,
+                    7000123L, 8000123L, "A", "O", "H", "idir\\old", entryTimestamp)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.updatePackage(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                100.0d,
+                10.0d,
+                20.0d,
+                "A",
+                "Updated",
+                "N",
+                "O",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+    verify(repository).updatePackage(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.PackageMutationRecord record = recordCaptor.getValue();
+    assertThat(record.federalPermitNumber()).isEqualTo(7000123L);
+    assertThat(record.reservePermitNumber()).isEqualTo(8000123L);
+  }
+
+  @Test
   void updatePackageShouldRejectWhenTotalPackageVolumeExceedsApplicationVolume() {
     Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
     when(repository.findPackageMutationByPackageNumber("PKG-903"))
@@ -1386,6 +1516,54 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(response.valid()).isFalse();
     assertThat(response.errors()).contains("Timber mark NOPE does not exist.");
+    verify(repository, never()).insertScaleDetail(any());
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldRejectInvalidFederalTimberMarkBeforeInsert() {
+    when(repository.findCandidateExcolCodes(1, "HE", "PL", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L)).thenReturn(Optional.of(validTimberMarkRow()));
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"),
+            importPackageRequest(),
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "HE", null, 1L, 10.0d)));
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("Timber mark TM001 is not valid for federal applications.");
+    verify(repository, never()).insertApplication(any());
+    verify(repository, never()).insertPackage(any());
+    verify(repository, never()).insertScaleDetail(any());
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldAcceptValidFederalTimberMarkWithoutInsert() {
+    ApplicationDetailsRpcRepository.TimberMarkRow federalTimberMark =
+        new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
+    when(repository.findCandidateExcolCodes(1, "HE", "PL", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(federalTimberMark));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L)).thenReturn(Optional.of(federalTimberMark));
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"),
+            importPackageRequest(),
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "HE", null, 1L, 10.0d)));
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    verify(repository, never()).insertApplication(any());
+    verify(repository, never()).insertPackage(any());
     verify(repository, never()).insertScaleDetail(any());
   }
 
@@ -1904,6 +2082,53 @@ class OracleApplicationDetailsRpcServiceTest {
       String packageNumber, double packageVolume) {
     return new ApplicationDetailsRpcRepository.PackageDetailsRow(
         packageNumber, packageVolume, 0.0d, 0.0d, "ACT", null, "N", "S", "H");
+  }
+
+  private ApplicationDetailsRpcService.CreateApplicationRequest importApplicationRequest(
+      String jurisdictionCode) {
+    return new ApplicationDetailsRpcService.CreateApplicationRequest(
+        "F".equals(jurisdictionCode) ? 700123L : null,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        10.0d,
+        1.0d,
+        "Camp 1",
+        null,
+        null,
+        null,
+        "00011111",
+        "00",
+        null,
+        "S",
+        "O",
+        11L,
+        "H",
+        jurisdictionCode,
+        "S",
+        null,
+        "Owner Contact",
+        "N",
+        "PL",
+        List.of("HE"),
+        true);
+  }
+
+  private ApplicationDetailsRpcService.PackageMutationRequest importPackageRequest() {
+    return new ApplicationDetailsRpcService.PackageMutationRequest(
+        "PKG-903",
+        null,
+        null,
+        10.0d,
+        5.0d,
+        3.0d,
+        "ACT",
+        "",
+        "N",
+        "S",
+        "H",
+        "PL",
+        List.of("HE"));
   }
 
   private ApplicationDetailsRpcRepository.TimberMarkRow validTimberMarkRow() {

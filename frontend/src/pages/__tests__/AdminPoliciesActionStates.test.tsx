@@ -375,7 +375,6 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
 
-    expect(screen.getByText('Not Granted')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add Fee Policy' })).toBeDisabled()
   })
 

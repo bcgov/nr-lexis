@@ -84,6 +84,19 @@ jobs:
           supply_scan: true
           triggers: ('frontend/')
 
+  clamav-startup:
+    name: ClamAV Startup
+    if: (! github.event.pull_request.draft)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build and verify ClamAV container startup
+        run: bash .github/scripts/check-clamav-startup.sh
+
   trivy:
     name: Trivy Security Scan
     if: (! github.event.pull_request.draft)
@@ -123,7 +136,7 @@ jobs:
 
   results:
     name: Analysis Results
-    needs: [backend-tests, frontend-tests]
+    needs: [backend-tests, frontend-tests, clamav-startup]
     if: always() && (! github.event.pull_request.draft)
     runs-on: ubuntu-slim
     steps:

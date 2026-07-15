@@ -1,1035 +1,929 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ChangeEvent,
-  type DragEvent,
-  type FormEvent,
-} from 'react'
-import { Upload } from '@carbon/icons-react'
+  CheckmarkFilled,
+  ErrorFilled,
+  InformationFilled,
+  Renew,
+  Save,
+  WarningAltFilled,
+} from '@carbon/icons-react'
 import {
   Button,
   Column,
   Grid,
-  Select,
-  SelectItem,
+  InlineLoading,
+  Modal,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
-  TextInput,
-  Tile,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
-import IsoDatePicker from '../../components/IsoDatePicker'
-import SearchableSelect, { type SearchableSelectOption } from '../../components/SearchableSelect'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import { useAuth } from '@/context/auth/useAuth'
 import {
-  isValidIsoDate,
-  parseNonNegativeDecimalFieldValue,
-  requiredFieldError,
-  requiredNumericFieldError,
-} from '@/pages/shared/create-form-utils'
-import {
-  fetchApplicationSpeciesCodes,
-  type ApplicationCodeOption,
-} from '@/service/provincial-application-items-service'
-import {
-  previewRtmEmsLogAmvUpload,
-  uploadRtmEmsLogAmv,
   saveRtmEmsLogAmv,
+  searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
-  type RtmEmsLogAmvFilters,
-  type RtmEmsLogAmvMutationResult,
   type RtmEmsLogAmvRow,
   type RtmEmsLogAmvSaveRequest,
-  type RtmEmsLogAmvUploadPreview,
-  type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
-import { formatLocalIsoDate } from '@/utils/date'
 
-const createInitialFilters = (): RtmEmsLogAmvFilters => {
-  const today = formatLocalIsoDate(new Date())
-  return {
-    species: '',
-    growthIndicator: '',
-    retrievalDate: today,
-    updateDate: today,
-  }
+type RtmGrowthIndicator = 'O' | 'S'
+type RtmAmvChangeKind = 'added' | 'changed' | 'removed' | null
+
+type RtmAmvSpeciesColumn = {
+  key: string
+  label: string
+  speciesCodes: string[]
+  persistSpeciesCodes: string[]
 }
 
-type ManualFormState = {
-  species: string
+type RtmAmvCellBasis = {
+  currentRows: RtmEmsLogAmvRow[]
+  currentValue: string
+  hasCurrentRow: boolean
+  hasCurrentValue: boolean
+  hasMixedCurrentValues: boolean
+  hasMixedPreviousValues: boolean
+  previousRows: RtmEmsLogAmvRow[]
+  previousValue: string
+  hasPreviousRow: boolean
+  hasPreviousValue: boolean
+}
+
+type RtmAmvCell = RtmAmvCellBasis & {
+  changeKind: RtmAmvChangeKind
+  column: RtmAmvSpeciesColumn
   grade: string
-  growthIndicator: string
-  retrievalDate: string
-  updateDate: string
-  newValue: string
-  saveMode: 'create' | 'update'
+  key: string
+  value: string
+  dirty: boolean
+  warning: string | null
+  validationError: string | null
 }
 
-const createInitialForm = (): ManualFormState => {
-  const today = formatLocalIsoDate(new Date())
-  return {
-    species: '',
-    grade: '',
-    growthIndicator: '',
-    retrievalDate: today,
-    updateDate: today,
-    newValue: '',
-    saveMode: 'create',
+type NotificationState = {
+  kind: 'success' | 'error' | 'warning' | 'info'
+  title: string
+  subtitle: string
+}
+
+const RTM_AMV_DESCRIPTION =
+  'Maintain average monthly values directly in the table. Each saved value is persisted for old and second growth.'
+
+const RTM_AMV_SPECIES_COLUMNS: RtmAmvSpeciesColumn[] = [
+  { key: 'BA', label: 'Balsam', speciesCodes: ['BA', 'BALSAM'], persistSpeciesCodes: ['BA'] },
+  { key: 'HE', label: 'Hemlock', speciesCodes: ['HE', 'HEMLOCK'], persistSpeciesCodes: ['HE'] },
+  { key: 'CE', label: 'Cedar', speciesCodes: ['CE', 'CEDAR'], persistSpeciesCodes: ['CE'] },
+  { key: 'CY', label: 'Cypress', speciesCodes: ['CY', 'CYPRESS'], persistSpeciesCodes: ['CY'] },
+  { key: 'FI', label: 'Fir', speciesCodes: ['FI', 'FIR'], persistSpeciesCodes: ['FI'] },
+  { key: 'SP', label: 'Spruce', speciesCodes: ['SP', 'SPRUCE'], persistSpeciesCodes: ['SP'] },
+  {
+    key: 'PINE',
+    label: 'Pine',
+    speciesCodes: ['P', 'PINE', 'WH', 'LO', 'YE'],
+    persistSpeciesCodes: ['WH', 'LO', 'YE'],
+  },
+]
+
+const RTM_AMV_GRADE_ORDER = [
+  'A',
+  'B',
+  'C',
+  'D',
+  'E',
+  'F',
+  'G',
+  'H',
+  'I',
+  'J',
+  'K',
+  'L',
+  'M',
+  'U',
+  'X',
+  'Y',
+  'Z',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+]
+
+const RTM_AMV_GROWTH_INDICATORS: RtmGrowthIndicator[] = ['O', 'S']
+const MAX_AMV_VALUE = 9999.99
+
+const normalizeKey = (value: string | null | undefined) => (value ?? '').trim().toUpperCase()
+
+const padDatePart = (value: number) => String(value).padStart(2, '0')
+
+const toLocalIsoDate = (date: Date) =>
+  `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`
+
+const todayIsoDate = () => toLocalIsoDate(new Date())
+
+const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+
+const previousDayDate = (dateValue: string) => {
+  const [year, month, day] = dateValue.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return dateValue
   }
+
+  return toLocalIsoDate(new Date(year, month - 1, day - 1))
 }
 
-type PendingUploadValidation = {
-  fileName: string
-  fileSize: number
-}
-
-const hasInvalidIsoDateValue = (retrievalDate: string, updateDate: string): boolean => {
-  const normalizedRetrievalDate = retrievalDate.trim()
-  const normalizedUpdateDate = updateDate.trim()
-
-  return (
-    (normalizedRetrievalDate.length > 0 && !isValidIsoDate(normalizedRetrievalDate)) ||
-    (normalizedUpdateDate.length > 0 && !isValidIsoDate(normalizedUpdateDate))
-  )
-}
-
-const hasRequiredSearchFilters = (filters: RtmEmsLogAmvFilters): boolean => {
-  return filters.species.trim().length > 0 && filters.retrievalDate.trim().length > 0
-}
-
-const parseStatusTag = (status: string | undefined) => {
-  if (!status) {
-    return 'gray'
+const formatEffectiveDate = (dateValue: string) => {
+  const [year, month, day] = dateValue.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return dateValue
   }
 
-  if (status === 'accepted') {
-    return 'green'
-  }
-
-  if (status === 'validation_failed') {
-    return 'blue'
-  }
-
-  return 'red'
+  return new Intl.DateTimeFormat('en-CA', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, day)))
 }
 
-const formatMoney = (value: number | null) => {
-  if (value === null || Number.isNaN(value)) {
-    return ''
-  }
-
-  return value.toLocaleString('en-CA', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  })
-}
-
-const formatDecimalField = (value: number | null): string => {
-  if (value === null || Number.isNaN(value)) {
+const formatRawNumber = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
     return ''
   }
 
   return String(value)
 }
 
-const createResultMessage = (status: string, message: string, errors: string[]): string => {
-  return [message, ...errors].filter(Boolean).join(' ')
-}
+const normalizeNumericString = (value: string) => value.trim().replace(/,/g, '')
 
-const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
-const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
-const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
-
-const RTM_MODULE_DESCRIPTION =
-  'Query current and historical average monthly value rows, make manual create/update entries, and generate an upload preview from XLSX files.'
-
-const RTM_GROWTH_INDICATOR_OPTIONS: SearchableSelectOption[] = [
-  { value: 'O', label: 'O - Old growth' },
-  { value: 'S', label: 'S - Second growth' },
-]
-
-const toSpeciesOption = (item: ApplicationCodeOption): SearchableSelectOption => {
-  const code = item.code.trim()
-  const description = item.description.trim()
-  return {
-    value: code,
-    label: description && description !== code ? `${code} - ${description}` : code,
+const parseCellValue = (value: string): number | null | undefined => {
+  const normalized = normalizeNumericString(value)
+  if (!normalized) {
+    return null
   }
+
+  if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(normalized)) {
+    return undefined
+  }
+
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > MAX_AMV_VALUE) {
+    return undefined
+  }
+
+  return parsed
 }
+
+const comparableCellValue = (value: string) => {
+  const parsed = parseCellValue(value)
+  if (parsed === undefined) {
+    return normalizeNumericString(value)
+  }
+
+  return parsed === null ? '' : String(parsed)
+}
+
+const rowValue = (row: RtmEmsLogAmvRow) => row.newValue ?? row.currentValue ?? null
+
+const numericSignature = (value: number) => String(value)
+
+const resolveSpeciesColumnKey = (species: string | null | undefined) => {
+  const normalizedSpecies = normalizeKey(species)
+  if (!normalizedSpecies) {
+    return ''
+  }
+
+  const matchedColumn = RTM_AMV_SPECIES_COLUMNS.find((column) =>
+    column.speciesCodes.includes(normalizedSpecies),
+  )
+
+  return matchedColumn?.key ?? normalizedSpecies
+}
+
+const rowMatchesCell = (row: RtmEmsLogAmvRow, grade: string, column: RtmAmvSpeciesColumn) => {
+  const rowGrade = normalizeKey(row.grade)
+  const rowSpeciesColumnKey = resolveSpeciesColumnKey(row.species)
+  return rowGrade === grade && rowSpeciesColumnKey === column.key
+}
+
+const rowMatchesPersistTarget = (
+  row: RtmEmsLogAmvRow,
+  species: string,
+  grade: string,
+  growthIndicator: RtmGrowthIndicator,
+) =>
+  normalizeKey(row.species) === normalizeKey(species) &&
+  normalizeKey(row.grade) === normalizeKey(grade) &&
+  normalizeKey(row.growthIndicator) === growthIndicator
+
+const buildCellKey = (grade: string, columnKey: string) => `${grade}|${columnKey}`
+
+const buildCellBasis = (
+  currentRows: RtmEmsLogAmvRow[],
+  previousRows: RtmEmsLogAmvRow[],
+): Record<string, RtmAmvCellBasis> => {
+  const basisByKey: Record<string, RtmAmvCellBasis> = {}
+
+  RTM_AMV_GRADE_ORDER.forEach((grade) => {
+    RTM_AMV_SPECIES_COLUMNS.forEach((column) => {
+      const currentCellRows = currentRows.filter((row) => rowMatchesCell(row, grade, column))
+      const previousCellRows = previousRows.filter((row) => rowMatchesCell(row, grade, column))
+      const currentValues = currentCellRows
+        .map(rowValue)
+        .filter((value): value is number => value !== null && value !== undefined)
+      const previousValues = previousCellRows
+        .map(rowValue)
+        .filter((value): value is number => value !== null && value !== undefined)
+      const distinctCurrentValues = new Set(currentValues.map(numericSignature))
+      const distinctPreviousValues = new Set(previousValues.map(numericSignature))
+
+      basisByKey[buildCellKey(grade, column.key)] = {
+        currentRows: currentCellRows,
+        currentValue: formatRawNumber(currentValues[0]),
+        hasCurrentRow: currentCellRows.length > 0,
+        hasCurrentValue: currentValues.length > 0,
+        hasMixedCurrentValues: distinctCurrentValues.size > 1,
+        hasMixedPreviousValues: distinctPreviousValues.size > 1,
+        previousRows: previousCellRows,
+        previousValue: formatRawNumber(previousValues[0]),
+        hasPreviousRow: previousCellRows.length > 0,
+        hasPreviousValue: previousValues.length > 0,
+      }
+    })
+  })
+
+  return basisByKey
+}
+
+const buildPrefillValues = (sourceRows: RtmEmsLogAmvRow[]) => {
+  const sourceBasis = buildCellBasis(sourceRows, [])
+  return Object.fromEntries(
+    Object.entries(sourceBasis)
+      .filter(([, basis]) => basis.hasCurrentValue)
+      .map(([key, basis]) => [key, basis.currentValue]),
+  )
+}
+
+const buildCellWarning = (
+  cell: {
+    column: RtmAmvSpeciesColumn
+    changeKind: RtmAmvChangeKind
+    grade: string
+    hasCurrentValue: boolean
+    hasPreviousValue: boolean
+    value: string
+  },
+  showDailyWarnings: boolean,
+) => {
+  const nextValue = parseCellValue(cell.value)
+  const hasNextValue = nextValue !== null && nextValue !== undefined
+
+  if (showDailyWarnings && cell.hasPreviousValue && !hasNextValue) {
+    return `${cell.column.label} grade ${cell.grade} had a value yesterday and is blank for today.`
+  }
+
+  if (showDailyWarnings && !cell.hasPreviousValue && hasNextValue) {
+    return `${cell.column.label} grade ${cell.grade} is newly populated; it was blank yesterday.`
+  }
+
+  if (cell.changeKind === 'added') {
+    return `${cell.column.label} grade ${cell.grade} was blank in the starting values and is now populated.`
+  }
+
+  if (cell.changeKind === 'removed') {
+    return `${cell.column.label} grade ${cell.grade} had a value in the starting values and is now blank.`
+  }
+
+  return null
+}
+
+const buildCellValidationError = (cell: {
+  column: RtmAmvSpeciesColumn
+  dirty: boolean
+  grade: string
+  value: string
+}) => {
+  const parsedValue = parseCellValue(cell.value)
+  if (parsedValue === null && cell.dirty) {
+    return `${cell.column.label} grade ${cell.grade} is required.`
+  }
+
+  if (parsedValue === undefined) {
+    return `${cell.column.label} grade ${cell.grade} must be a number from 0 to 9999.99 with no more than two decimal places.`
+  }
+
+  return null
+}
+
+const buildCells = (
+  basisByKey: Record<string, RtmAmvCellBasis>,
+  editedValues: Record<string, string>,
+  prefillValues: Record<string, string>,
+  retryCellKeys: Record<string, true>,
+  showDailyWarnings: boolean,
+): RtmAmvCell[] =>
+  RTM_AMV_GRADE_ORDER.flatMap((grade) =>
+    RTM_AMV_SPECIES_COLUMNS.map((column) => {
+      const key = buildCellKey(grade, column.key)
+      const basis = basisByKey[key]
+      const value = editedValues[key] ?? basis.currentValue
+      const dirty =
+        retryCellKeys[key] === true ||
+        comparableCellValue(value) !== comparableCellValue(basis.currentValue)
+      const baselineValue = prefillValues[key] ?? basis.currentValue
+      const changedFromBaseline = comparableCellValue(value) !== comparableCellValue(baselineValue)
+      const baselineHasValue = normalizeNumericString(baselineValue) !== ''
+      const hasInputValue = normalizeNumericString(value) !== ''
+      const changeKind: RtmAmvChangeKind = !changedFromBaseline
+        ? null
+        : !baselineHasValue && hasInputValue
+          ? 'added'
+          : baselineHasValue && !hasInputValue
+            ? 'removed'
+            : 'changed'
+      const cell = {
+        ...basis,
+        changeKind,
+        column,
+        dirty,
+        grade,
+        key,
+        value,
+      }
+
+      return {
+        ...cell,
+        validationError: buildCellValidationError(cell),
+        warning: buildCellWarning(cell, showDailyWarnings),
+      }
+    }),
+  )
+
+const warningDeduplicate = (warnings: Array<string | null>) =>
+  Array.from(new Set(warnings.filter((warning): warning is string => Boolean(warning))))
+
+const notificationMessage = (message: string, errors: string[]) =>
+  Array.from(new Set([message, ...errors].filter(Boolean))).join(' ')
 
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
-  const [filters, setFilters] = useState<RtmEmsLogAmvFilters>(() => createInitialFilters())
-  const [rows, setRows] = useState<RtmEmsLogAmvRow[]>([])
-  const [speciesOptions, setSpeciesOptions] = useState<SearchableSelectOption[]>([])
-  const [hasSpeciesLookupFailed, setHasSpeciesLookupFailed] = useState(false)
-  const [hasSearched, setHasSearched] = useState(false)
+  const [targetDate, setTargetDate] = useState(todayIsoDate)
+  const [loadedDate, setLoadedDate] = useState(todayIsoDate)
+  const [currentRows, setCurrentRows] = useState<RtmEmsLogAmvRow[]>([])
+  const [previousRows, setPreviousRows] = useState<RtmEmsLogAmvRow[]>([])
+  const [editedValues, setEditedValues] = useState<Record<string, string>>({})
+  const [prefillValues, setPrefillValues] = useState<Record<string, string>>({})
+  const [prefillSourceDate, setPrefillSourceDate] = useState('')
+  const [retryCellKeys, setRetryCellKeys] = useState<Record<string, true>>({})
+  const [showWarningConfirmation, setShowWarningConfirmation] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [isPreviewing, setIsPreviewing] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
-  const [searchError, setSearchError] = useState('')
-  const [manualError, setManualError] = useState('')
-  const [uploadError, setUploadError] = useState('')
-  const [notification, setNotification] = useState('')
-  const [notificationKind, setNotificationKind] = useState<
-    'success' | 'error' | 'warning' | 'info'
-  >('info')
-  const [previewResult, setPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(null)
-  const [manualForm, setManualForm] = useState<ManualFormState>(() => createInitialForm())
-  const [manualResult, setManualResult] = useState<RtmEmsLogAmvMutationResult | null>(null)
-  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
-  const [pendingUploadValidation, setPendingUploadValidation] =
-    useState<PendingUploadValidation | null>(null)
-  const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
-  const [uploadInputKey, setUploadInputKey] = useState(0)
-  const [isDraggingUpload, setIsDraggingUpload] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [notification, setNotification] = useState<NotificationState | null>(null)
 
-  const hasSearchDateError = useMemo(
-    () => hasInvalidIsoDateValue(filters.retrievalDate, filters.updateDate),
-    [filters],
-  )
+  const today = todayIsoDate()
+  const selectedDateIsPast = isIsoDate(targetDate) && targetDate < today
+  const selectedDateIsToday = isIsoDate(targetDate) && targetDate === today
+  const selectedDateIsFuture = isIsoDate(targetDate) && targetDate > today
+  const selectedPreviousDayDate = selectedDateIsToday ? previousDayDate(targetDate) : ''
 
-  useEffect(() => {
-    let isCurrent = true
-
-    const loadSpeciesOptions = async () => {
-      try {
-        const speciesCodes = await fetchApplicationSpeciesCodes()
-        if (!isCurrent) {
-          return
-        }
-        const nextOptionsByCode = new Map<string, SearchableSelectOption>()
-        speciesCodes.map(toSpeciesOption).forEach((option) => {
-          if (option.value) {
-            nextOptionsByCode.set(option.value, option)
-          }
-        })
-        setSpeciesOptions(
-          [...nextOptionsByCode.values()].sort((left, right) =>
-            left.value.localeCompare(right.value),
-          ),
-        )
-        setHasSpeciesLookupFailed(false)
-      } catch (error) {
-        console.error(error)
-        if (isCurrent) {
-          setHasSpeciesLookupFailed(true)
-        }
-      }
-    }
-
-    void loadSpeciesOptions()
-
-    return () => {
-      isCurrent = false
-    }
-  }, [])
-
-  const pageSummary = useMemo(
-    () => ({
-      resultCount: rows.length,
-      hasFilter: Object.values(filters).some((value) => value.trim().length > 0),
-    }),
-    [rows.length, filters],
-  )
-
-  const runSearch = useCallback(async (nextFilters: RtmEmsLogAmvFilters) => {
-    setSearchError('')
-
-    if (!hasRequiredSearchFilters(nextFilters)) {
-      setRows([])
-      setSearchError('Species and retrieval date are required to query average monthly value rows.')
-      return
-    }
-
-    if (hasInvalidIsoDateValue(nextFilters.retrievalDate, nextFilters.updateDate)) {
-      setSearchError('Date filters must be valid YYYY-MM-DD values.')
+  const loadRows = useCallback(async () => {
+    if (!isIsoDate(targetDate)) {
+      setLoadError('Enter a valid effective date.')
+      setCurrentRows([])
+      setPreviousRows([])
+      setEditedValues({})
+      setPrefillValues({})
+      setPrefillSourceDate('')
+      setRetryCellKeys({})
+      setShowWarningConfirmation(false)
       return
     }
 
     setIsLoading(true)
+    setLoadError('')
+
     try {
-      const response = await searchRtmEmsLogAmv(nextFilters)
-      setRows(response)
-      setHasSearched(true)
+      const [currentResponse, previousResponse] = await Promise.all([
+        searchRtmEmsLogAmv({
+          species: '',
+          growthIndicator: '',
+          retrievalDate: targetDate,
+          updateDate: targetDate,
+        }),
+        selectedPreviousDayDate
+          ? searchRtmEmsLogAmv({
+              species: '',
+              growthIndicator: '',
+              retrievalDate: selectedPreviousDayDate,
+              updateDate: selectedPreviousDayDate,
+            })
+          : Promise.resolve([]),
+      ])
+
+      let nextPrefillValues: Record<string, string> = {}
+      let nextPrefillSourceDate = ''
+      if (currentResponse.length === 0) {
+        const latestRows = await searchLatestRtmEmsLogAmv(targetDate)
+        nextPrefillValues = buildPrefillValues(latestRows)
+        const sourceRow = latestRows.find((row) => row.updateDate || row.retrievalDate)
+        if (Object.keys(nextPrefillValues).length > 0 && sourceRow) {
+          nextPrefillSourceDate = sourceRow.updateDate ?? sourceRow.retrievalDate ?? ''
+        }
+      }
+
+      setCurrentRows(currentResponse)
+      setPreviousRows(previousResponse)
+      setLoadedDate(targetDate)
+      setEditedValues(nextPrefillValues)
+      setPrefillValues(nextPrefillValues)
+      setPrefillSourceDate(nextPrefillSourceDate)
+      setRetryCellKeys({})
+      setShowWarningConfirmation(false)
     } catch (error) {
       console.error(error)
-      setSearchError('Failed to load average monthly value rows.')
-      setRows([])
+      setLoadError('Unable to load average monthly values.')
+      setCurrentRows([])
+      setPreviousRows([])
+      setEditedValues({})
+      setPrefillValues({})
+      setPrefillSourceDate('')
+      setRetryCellKeys({})
+      setShowWarningConfirmation(false)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [selectedPreviousDayDate, targetDate])
 
-  const updateFilter = (field: keyof RtmEmsLogAmvFilters, value: string) => {
-    setFilters((current) => ({ ...current, [field]: value }))
+  useEffect(() => {
+    void loadRows()
+  }, [loadRows])
+
+  const basisByKey = useMemo(
+    () => buildCellBasis(currentRows, previousRows),
+    [currentRows, previousRows],
+  )
+  const compareWithPreviousDay = selectedDateIsToday && !prefillSourceDate
+  const cells = useMemo(
+    () =>
+      buildCells(basisByKey, editedValues, prefillValues, retryCellKeys, compareWithPreviousDay),
+    [basisByKey, compareWithPreviousDay, editedValues, prefillValues, retryCellKeys],
+  )
+  const warnings = warningDeduplicate(cells.map((cell) => cell.warning))
+  const validationErrors = warningDeduplicate(cells.map((cell) => cell.validationError))
+  const dirtyCells = cells.filter((cell) => cell.dirty)
+  const saveWarnings = warningDeduplicate(dirtyCells.map((cell) => cell.warning))
+  const confirmationMessages = warningDeduplicate([
+    selectedDateIsPast
+      ? `You are changing values for ${formatEffectiveDate(targetDate)}, which is in the past.`
+      : null,
+    ...saveWarnings,
+  ])
+  const hasPendingChanges = dirtyCells.length > 0
+  const isReadOnly = !canManage || isLoading || isSaving
+  const saveDisabled =
+    isReadOnly || !hasPendingChanges || validationErrors.length > 0 || !isIsoDate(targetDate)
+
+  const updateCellValue = (key: string, value: string) => {
+    setEditedValues((current) => ({
+      ...current,
+      [key]: value,
+    }))
   }
 
-  const updateManualField = (field: keyof ManualFormState, value: string) => {
-    setManualForm((current) => ({ ...current, [field]: value }))
+  const resetChanges = () => {
+    setEditedValues(prefillValues)
+    setRetryCellKeys({})
+    setShowWarningConfirmation(false)
   }
 
-  const loadManualFormFromRow = (row: RtmEmsLogAmvRow) => {
-    setManualForm({
-      species: row.species ?? '',
-      grade: row.grade ?? '',
-      growthIndicator: row.growthIndicator ?? '',
-      retrievalDate: row.retrievalDate ?? '',
-      updateDate: row.updateDate ?? '',
-      newValue: formatDecimalField(row.newValue ?? row.currentValue),
-      saveMode: 'update',
-    })
-    setManualError('')
-    setManualResult(null)
+  const buildSaveRequestsForCell = (cell: RtmAmvCell): RtmEmsLogAmvSaveRequest[] => {
+    const parsedValue = parseCellValue(cell.value)
+    if (typeof parsedValue !== 'number') {
+      return []
+    }
+
+    return cell.column.persistSpeciesCodes.flatMap((species) =>
+      RTM_AMV_GROWTH_INDICATORS.map((growthIndicator) => {
+        const currentRow = cell.currentRows.find((row) =>
+          rowMatchesPersistTarget(row, species, cell.grade, growthIndicator),
+        )
+        const previousRow = cell.previousRows.find((row) =>
+          rowMatchesPersistTarget(row, species, cell.grade, growthIndicator),
+        )
+        const hasExistingRow = Boolean(currentRow || previousRow)
+        const retrievalDate =
+          currentRow?.retrievalDate ??
+          previousRow?.retrievalDate ??
+          (previousRow ? selectedPreviousDayDate : targetDate)
+
+        return {
+          species,
+          grade: cell.grade,
+          growthIndicator,
+          retrievalDate: retrievalDate || targetDate,
+          updateDate: targetDate,
+          newValue: parsedValue,
+          saveMode: hasExistingRow ? 'update' : 'create',
+        }
+      }),
+    )
   }
 
-  const selectUploadFile = (nextFile: File | null) => {
-    setSelectedUploadFile(nextFile)
-    setUploadError('')
-    setPreviewResult(null)
-    setUploadResult(null)
-    setPendingUploadValidation(null)
-  }
-
-  const updateUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
-    selectUploadFile(event.currentTarget.files?.[0] ?? null)
-  }
-
-  const onDropUploadFile = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setIsDraggingUpload(false)
+  const saveChanges = async () => {
     if (!canManage) {
-      return
-    }
-    selectUploadFile(event.dataTransfer.files?.[0] ?? null)
-  }
-
-  const clearUploadState = () => {
-    setSelectedUploadFile(null)
-    setUploadError('')
-    setPreviewResult(null)
-    setUploadResult(null)
-    setPendingUploadValidation(null)
-    setUploadInputKey((current) => current + 1)
-    setIsDraggingUpload(false)
-  }
-
-  const submitSave = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!canManage) {
-      setManualError('You do not have permission to save average monthly value rows.')
+      setNotification({
+        kind: 'error',
+        title: 'Average monthly values',
+        subtitle: 'You do not have permission to update average monthly values.',
+      })
       return
     }
 
-    setManualResult(null)
-    setManualError('')
-
-    const nextError =
-      requiredFieldError(manualForm.species, 'Species') ||
-      requiredFieldError(manualForm.grade, 'Grade') ||
-      requiredFieldError(manualForm.growthIndicator, 'Growth indicator') ||
-      requiredFieldError(manualForm.retrievalDate, 'Retrieval date') ||
-      (manualForm.saveMode === 'update'
-        ? requiredFieldError(manualForm.updateDate, 'Update date')
-        : null) ||
-      (manualForm.retrievalDate && !isValidIsoDate(manualForm.retrievalDate)
-        ? 'Retrieval date must be YYYY-MM-DD.'
-        : null) ||
-      (manualForm.updateDate && !isValidIsoDate(manualForm.updateDate)
-        ? 'Update date must be YYYY-MM-DD.'
-        : null) ||
-      requiredNumericFieldError(manualForm.newValue, 'New value')
-
-    if (nextError) {
-      setManualError(nextError)
+    if (validationErrors.length > 0) {
+      setNotification({
+        kind: 'error',
+        title: 'Average monthly values',
+        subtitle: validationErrors[0],
+      })
       return
     }
 
-    const parsedNewValue = parseNonNegativeDecimalFieldValue(manualForm.newValue)
-    if (parsedNewValue === null) {
-      setManualError('New value must be a valid numeric amount.')
+    const saveAttempts = dirtyCells.flatMap((cell) =>
+      buildSaveRequestsForCell(cell).map((request) => ({ cellKey: cell.key, request })),
+    )
+    if (saveAttempts.length === 0) {
       return
-    }
-
-    const request: RtmEmsLogAmvSaveRequest = {
-      species: manualForm.species.trim(),
-      grade: manualForm.grade.trim(),
-      growthIndicator: manualForm.growthIndicator.trim(),
-      retrievalDate: manualForm.retrievalDate.trim(),
-      updateDate: manualForm.updateDate.trim(),
-      newValue: parsedNewValue,
-      saveMode: manualForm.saveMode,
     }
 
     setIsSaving(true)
+
     try {
-      const response = await saveRtmEmsLogAmv(request)
-      setManualResult(response)
-      setNotificationKind(response.status === 'accepted' ? 'success' : 'error')
-      setNotification(createResultMessage(response.status, response.message, response.errors))
-      if (response.status === 'accepted') {
-        await runSearch(filters)
+      const results = await Promise.all(
+        saveAttempts.map(async (attempt) => {
+          try {
+            return { ...attempt, result: await saveRtmEmsLogAmv(attempt.request) }
+          } catch (error) {
+            console.error(error)
+            return { ...attempt, result: null }
+          }
+        }),
+      )
+      const failedResults = results.filter((attempt) => attempt.result?.status !== 'accepted')
+
+      if (failedResults.length > 0) {
+        const failedCellKeys = new Set(failedResults.map((attempt) => attempt.cellKey))
+        const failedValues = Object.fromEntries(
+          dirtyCells
+            .filter((cell) => failedCellKeys.has(cell.key))
+            .map((cell) => [cell.key, cell.value]),
+        )
+        const firstFailedResult = failedResults[0].result
+
+        if (failedResults.length < results.length) {
+          await loadRows()
+          setEditedValues(failedValues)
+          setRetryCellKeys(
+            Object.fromEntries(Array.from(failedCellKeys, (key) => [key, true as const])),
+          )
+        }
+
+        setNotification({
+          kind: failedResults.length === results.length ? 'error' : 'warning',
+          title: 'Average monthly values',
+          subtitle: firstFailedResult
+            ? notificationMessage(firstFailedResult.message, firstFailedResult.errors)
+            : 'Unable to save average monthly values.',
+        })
+        return
       }
+
+      setNotification({
+        kind: saveWarnings.length > 0 ? 'warning' : 'success',
+        title: 'Average monthly values updated',
+        subtitle:
+          saveWarnings.length > 0
+            ? `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'} with ${saveWarnings.length} warning${saveWarnings.length === 1 ? '' : 's'}.`
+            : `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'}.`,
+      })
+      await loadRows()
     } catch (error) {
       console.error(error)
-      const message = 'Unable to save average monthly value row.'
-      setNotificationKind('error')
-      setNotification(message)
-      setManualResult({
-        status: 'rejected',
-        message,
-        errors: [message],
-        rows: [],
+      setNotification({
+        kind: 'error',
+        title: 'Average monthly values',
+        subtitle: 'Unable to save average monthly values.',
       })
     } finally {
       setIsSaving(false)
     }
   }
 
-  const submitPreview = async () => {
-    if (!selectedUploadFile) {
-      setUploadError('Select an XLSX file before generating a preview.')
+  const requestSave = () => {
+    if (selectedDateIsPast) {
+      setShowWarningConfirmation(true)
       return
     }
 
-    setUploadError('')
-    setIsPreviewing(true)
-    try {
-      const response = await previewRtmEmsLogAmvUpload(selectedUploadFile)
-      setPreviewResult(response)
-      if (!/\.(xlsx)$/i.test(selectedUploadFile.name)) {
-        setUploadError('The selected file may not be XLSX. Rename with .xlsx and try again.')
-      } else if (response.status === 'accepted') {
-        setPendingUploadValidation({
-          fileName: selectedUploadFile.name,
-          fileSize: selectedUploadFile.size,
-        })
-      } else {
-        setPendingUploadValidation(null)
-      }
-    } catch (error) {
-      console.error(error)
-      setUploadError('Unable to generate preview for this upload.')
-      setPreviewResult(null)
-      setPendingUploadValidation(null)
-    } finally {
-      setIsPreviewing(false)
-    }
+    void saveChanges()
   }
-
-  const submitUpload = async () => {
-    if (!canManage) {
-      setUploadError('You do not have permission to upload average monthly value rows.')
-      return
-    }
-
-    if (!selectedUploadFile) {
-      setUploadError('Select an XLSX file before applying upload.')
-      return
-    }
-
-    if (
-      !pendingUploadValidation ||
-      pendingUploadValidation.fileName !== selectedUploadFile.name ||
-      pendingUploadValidation.fileSize !== selectedUploadFile.size
-    ) {
-      setUploadError('Run a successful preview with this file before applying the upload.')
-      return
-    }
-
-    setUploadError('')
-    setUploadResult(null)
-    setIsUploading(true)
-
-    try {
-      const response = await uploadRtmEmsLogAmv({
-        file: selectedUploadFile,
-      })
-
-      setUploadResult(response)
-      setNotificationKind(
-        response.status === 'accepted'
-          ? 'success'
-          : response.status === 'validation_failed'
-            ? 'warning'
-            : 'error',
-      )
-      setNotification(createResultMessage(response.status, response.message, response.errors))
-      if (
-        (response.status === 'accepted' || response.status === 'validation_failed') &&
-        filters.species.trim().length > 0
-      ) {
-        await runSearch({
-          ...filters,
-          retrievalDate: previewResult?.retrievalDate ?? filters.retrievalDate,
-          growthIndicator: '',
-        })
-      }
-    } catch (error) {
-      console.error(error)
-      const message = 'Unable to apply average monthly value upload.'
-      setNotificationKind('error')
-      setNotification(message)
-      setUploadResult({
-        status: 'rejected',
-        message,
-        attemptedRowCount: 0,
-        uploadedRowCount: 0,
-        errors: [message],
-        warnings: [],
-        rows: [],
-      })
-    } finally {
-      setPendingUploadValidation(null)
-      setIsUploading(false)
-    }
-  }
-
-  const isPreviewDisabled =
-    isPreviewing ||
-    !selectedUploadFile ||
-    selectedUploadFile.size <= 0 ||
-    !RTM_UPLOAD_ACCEPT.some(
-      (type) =>
-        selectedUploadFile.type === type || selectedUploadFile.name.toLowerCase().endsWith('.xlsx'),
-    )
-
-  const isUploadDisabled =
-    isUploading ||
-    !canManage ||
-    !selectedUploadFile ||
-    selectedUploadFile.size <= 0 ||
-    !pendingUploadValidation ||
-    pendingUploadValidation.fileName !== selectedUploadFile.name ||
-    pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-    !RTM_UPLOAD_ACCEPT.some(
-      (type) =>
-        selectedUploadFile.type === type || selectedUploadFile.name.toLowerCase().endsWith('.xlsx'),
-    )
-
-  const uploadDropZoneClassName = [
-    'admin-upload-drop-zone',
-    isDraggingUpload ? 'is-dragging' : '',
-    !canManage ? 'is-disabled' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
 
   return (
-    <Grid fullWidth className="default-grid">
-      <Column sm={4} md={8} lg={16}>
+    <Grid fullWidth className="default-grid admin-upload-fspts-page rtm-amv-page">
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header rtm-amv-header">
         <h1>Average Monthly Values</h1>
-        <p>{RTM_MODULE_DESCRIPTION}</p>
+        <p>{RTM_AMV_DESCRIPTION}</p>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Query rows</h2>
-
-          <div className="legacy-search-grid">
-            {speciesOptions.length > 0 ? (
-              <SearchableSelect
-                id="rtm-species"
-                labelText="Species"
-                value={filters.species}
-                options={speciesOptions}
-                placeholder="Search species code"
-                onChange={(value) => updateFilter('species', value)}
-              />
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-content">
+        <section
+          className="admin-upload-panel rtm-amv-toolbar"
+          aria-labelledby="rtm-amv-table-title"
+        >
+          <div className="rtm-amv-toolbar__controls">
+            <IsoDatePicker
+              id="rtm-amv-effective-date"
+              labelText="Effective date"
+              value={targetDate}
+              onChange={setTargetDate}
+              disabled={isLoading || isSaving}
+            />
+            <Button
+              kind="secondary"
+              size="md"
+              renderIcon={Renew}
+              onClick={() => {
+                void loadRows()
+              }}
+              disabled={isLoading || isSaving || !isIsoDate(targetDate)}
+            >
+              Reload
+            </Button>
+          </div>
+          <div className="rtm-amv-toolbar__status" role="status">
+            {isLoading ? (
+              <InlineLoading description="Loading values" />
             ) : (
-              <TextInput
-                id="rtm-species"
-                labelText="Species"
-                value={filters.species}
-                onChange={(event) => updateFilter('species', event.target.value)}
-                helperText={hasSpeciesLookupFailed ? 'Species lookup unavailable.' : undefined}
-              />
+              <>
+                <InformationFilled size={16} aria-hidden="true" />
+                <span>
+                  {selectedDateIsToday
+                    ? `Comparing ${formatEffectiveDate(loadedDate)} against ${formatEffectiveDate(selectedPreviousDayDate)}`
+                    : selectedDateIsFuture
+                      ? 'Future date selected'
+                      : 'Past date selected'}
+                </span>
+              </>
             )}
+          </div>
+        </section>
 
-            <SearchableSelect
-              id="rtm-growth-indicator"
-              labelText="Growth indicator"
-              value={filters.growthIndicator}
-              options={RTM_GROWTH_INDICATOR_OPTIONS}
-              placeholder="Search growth indicator"
-              onChange={(value) => updateFilter('growthIndicator', value)}
+        {selectedDateIsPast && (
+          <div className="rtm-amv-warning-panel" role="status">
+            <div className="rtm-amv-warning-panel__header">
+              <WarningAltFilled size={20} aria-hidden="true" />
+              <h2>Past date selected</h2>
+            </div>
+            <p>Changes for {formatEffectiveDate(targetDate)} require confirmation before saving.</p>
+          </div>
+        )}
+
+        {prefillSourceDate && (
+          <div className="admin-upload-validation admin-upload-validation--info" role="status">
+            <InformationFilled
+              size={20}
+              className="admin-upload-validation__icon"
+              aria-hidden="true"
             />
+            <div className="admin-upload-validation__content">
+              <h3>Starting values copied</h3>
+              <p>
+                Prefilled from {formatEffectiveDate(prefillSourceDate)}. These values are not saved
+                for {formatEffectiveDate(targetDate)} until Save changes is selected.
+              </p>
+            </div>
+          </div>
+        )}
 
-            <IsoDatePicker
-              id="rtm-retrieval-date"
-              labelText="Retrieval date"
-              value={filters.retrievalDate}
-              onChange={(value) => updateFilter('retrievalDate', value)}
-            />
+        {loadError && (
+          <div className="admin-upload-validation admin-upload-validation--error" role="alert">
+            <ErrorFilled size={20} className="admin-upload-validation__icon" aria-hidden="true" />
+            <div className="admin-upload-validation__content">
+              <h3>Unable to load values</h3>
+              <p>{loadError}</p>
+            </div>
+          </div>
+        )}
 
-            <IsoDatePicker
-              id="rtm-update-date"
-              labelText="Update date"
-              value={filters.updateDate}
-              onChange={(value) => updateFilter('updateDate', value)}
-            />
+        {warnings.length > 0 && (
+          <div className="rtm-amv-warning-panel" role="status" aria-live="polite">
+            <div className="rtm-amv-warning-panel__header">
+              <WarningAltFilled size={20} aria-hidden="true" />
+              <h2>Warnings</h2>
+              <span>{warnings.length}</span>
+            </div>
+            <ul>
+              {warnings.slice(0, 8).map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+            {warnings.length > 8 && (
+              <p>
+                {warnings.length - 8} more warning{warnings.length - 8 === 1 ? '' : 's'} in the
+                table.
+              </p>
+            )}
+          </div>
+        )}
 
-            <Button
-              size="sm"
-              onClick={() => {
-                void runSearch(filters)
-              }}
-              disabled={isLoading || hasSearchDateError}
-            >
-              Search
-            </Button>
+        {validationErrors.length > 0 && (
+          <div className="admin-upload-validation admin-upload-validation--error" role="alert">
+            <ErrorFilled size={20} className="admin-upload-validation__icon" aria-hidden="true" />
+            <div className="admin-upload-validation__content">
+              <h3>Invalid table value</h3>
+              <p>{validationErrors[0]}</p>
+            </div>
+          </div>
+        )}
 
-            <Button
-              kind="secondary"
-              size="sm"
-              onClick={() => {
-                const nextFilters = createInitialFilters()
-                setFilters(nextFilters)
-                setRows([])
-                setSearchError('')
-                setHasSearched(false)
-              }}
-            >
-              Clear
-            </Button>
+        <section className="admin-upload-panel rtm-amv-table-panel">
+          <div className="admin-upload-section-heading rtm-amv-table-heading">
+            <h2 id="rtm-amv-table-title">Average monthly values table</h2>
+            <p>Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.</p>
           </div>
 
-          {searchError && (
-            <p className="landing-page-help-text landing-page-help-text--error">{searchError}</p>
-          )}
-
-          <div className="legacy-search-grid" style={{ marginTop: '0.75rem' }}>
-            <strong>Rows returned:</strong>
-            <span>{pageSummary.resultCount}</span>
-            <span>Filtered:</span>
-            <span>{pageSummary.hasFilter ? 'Yes' : 'No'}</span>
-          </div>
-
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Species</TableHeader>
-                <TableHeader>Grade</TableHeader>
-                <TableHeader>Growth</TableHeader>
-                <TableHeader>Retrieval date</TableHeader>
-                <TableHeader>Update date</TableHeader>
-                <TableHeader>Current value</TableHeader>
-                <TableHeader>New value</TableHeader>
-                <TableHeader>Actions</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => {
-                const key = `${row.species ?? ''}-${row.grade ?? ''}-${row.growthIndicator ?? ''}-${
-                  row.retrievalDate ?? ''
-                }-${row.updateDate ?? ''}`
-                return (
-                  <TableRow key={key}>
-                    <TableCell>{row.species ?? ''}</TableCell>
-                    <TableCell>{row.grade ?? ''}</TableCell>
-                    <TableCell>{row.growthIndicator ?? ''}</TableCell>
-                    <TableCell>{row.retrievalDate ?? ''}</TableCell>
-                    <TableCell>{row.updateDate ?? ''}</TableCell>
-                    <TableCell>{formatMoney(row.currentValue)}</TableCell>
-                    <TableCell>{formatMoney(row.newValue)}</TableCell>
-                    <TableCell>
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        onClick={() => {
-                          loadManualFormFromRow(row)
-                        }}
-                        disabled={!canManage}
-                      >
-                        Edit
-                      </Button>
-                    </TableCell>
+          <div className="rtm-amv-table-wrap">
+            <TableContainer>
+              <Table size="lg" useZebraStyles aria-label="Average monthly value table">
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Grade</TableHeader>
+                    {RTM_AMV_SPECIES_COLUMNS.map((column) => (
+                      <TableHeader key={column.key}>{column.label}</TableHeader>
+                    ))}
                   </TableRow>
-                )
-              })}
+                </TableHead>
+                <TableBody key={loadedDate}>
+                  {RTM_AMV_GRADE_ORDER.map((grade) => (
+                    <TableRow key={grade}>
+                      <TableCell className="rtm-amv-grade-cell">{grade}</TableCell>
+                      {RTM_AMV_SPECIES_COLUMNS.map((column) => {
+                        const cell = cells.find(
+                          (candidate) => candidate.key === buildCellKey(grade, column.key),
+                        )
+                        if (!cell) {
+                          return <TableCell key={column.key} />
+                        }
 
-              {rows.length === 0 && !isLoading && !searchError && (
-                <TableRow>
-                  <TableCell colSpan={8}>
-                    {hasSearched
-                      ? 'No rows match your current search.'
-                      : 'Enter a species and retrieval date to query average monthly value rows.'}
-                  </TableCell>
-                </TableRow>
-              )}
+                        const cellClassName = [
+                          'rtm-amv-value-cell',
+                          cell.dirty ? 'is-dirty' : '',
+                          cell.changeKind ? `is-${cell.changeKind}` : '',
+                          cell.warning ? 'has-warning' : '',
+                          cell.validationError ? 'has-error' : '',
+                          cell.hasMixedCurrentValues || cell.hasMixedPreviousValues
+                            ? 'has-mixed-values'
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')
 
-              {isLoading && (
-                <TableRow>
-                  <TableCell colSpan={8}>Loading rows…</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Manual entry</h2>
-          <form onSubmit={submitSave} noValidate>
-            <div className="legacy-search-grid">
-              {speciesOptions.length > 0 ? (
-                <SearchableSelect
-                  id="rtm-manual-species"
-                  labelText="Species"
-                  value={manualForm.species}
-                  options={speciesOptions}
-                  placeholder="Search species code"
-                  onChange={(value) => updateManualField('species', value)}
-                  disabled={!canManage}
-                />
-              ) : (
-                <TextInput
-                  id="rtm-manual-species"
-                  labelText="Species"
-                  value={manualForm.species}
-                  onChange={(event) => updateManualField('species', event.target.value)}
-                  disabled={!canManage}
-                  helperText={hasSpeciesLookupFailed ? 'Species lookup unavailable.' : undefined}
-                />
-              )}
-              <TextInput
-                id="rtm-manual-grade"
-                labelText="Grade"
-                value={manualForm.grade}
-                onChange={(event) => updateManualField('grade', event.target.value)}
-                disabled={!canManage}
-              />
-              <SearchableSelect
-                id="rtm-manual-growth"
-                labelText="Growth indicator"
-                value={manualForm.growthIndicator}
-                options={RTM_GROWTH_INDICATOR_OPTIONS}
-                placeholder="Search growth indicator"
-                onChange={(value) => updateManualField('growthIndicator', value)}
-                disabled={!canManage}
-              />
-              <IsoDatePicker
-                id="rtm-manual-retrieval-date"
-                labelText="Retrieval date"
-                value={manualForm.retrievalDate}
-                onChange={(value) => updateManualField('retrievalDate', value)}
-                disabled={!canManage}
-              />
-              <Select
-                id="rtm-save-mode"
-                labelText="Save mode"
-                value={manualForm.saveMode}
-                onChange={(event) =>
-                  updateManualField('saveMode', event.target.value as 'create' | 'update')
-                }
-                disabled={!canManage}
-              >
-                <SelectItem value="create" text="Create" />
-                <SelectItem value="update" text="Update" />
-              </Select>
-              {manualForm.saveMode === 'update' && (
-                <IsoDatePicker
-                  id="rtm-manual-update-date"
-                  labelText="Update date"
-                  value={manualForm.updateDate}
-                  onChange={(value) => updateManualField('updateDate', value)}
-                  disabled={!canManage}
-                />
-              )}
-              <TextInput
-                id="rtm-manual-new-value"
-                labelText="New value"
-                value={manualForm.newValue}
-                onChange={(event) => updateManualField('newValue', event.target.value)}
-                disabled={!canManage}
-              />
-            </div>
-
-            {manualError && (
-              <p className="landing-page-help-text landing-page-help-text--error">{manualError}</p>
-            )}
-
-            <Button kind="primary" type="submit" disabled={isSaving || !canManage}>
-              Save row
-            </Button>
-
-            {manualResult && (
-              <div style={{ marginTop: '0.75rem' }}>
-                <Tag type={parseStatusTag(manualResult.status)}>{manualResult.status}</Tag>
-                <p>
-                  {createResultMessage(
-                    manualResult.status,
-                    manualResult.message,
-                    manualResult.errors,
-                  )}
-                </p>
-              </div>
-            )}
-          </form>
-        </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
-          <div className="admin-upload-panel__header">
-            <div>
-              <h2 id="rtm-upload-title">Upload Excel Spreadsheet</h2>
-              <p>
-                Select or drag and drop an XLSX spreadsheet to validate average monthly value rows
-                before applying changes.
-              </p>
-            </div>
-            <a
-              className="cds--btn cds--btn--ghost"
-              href={RTM_TEMPLATE_DOWNLOAD_PATH}
-              download={RTM_TEMPLATE_DOWNLOAD_NAME}
-            >
-              Download template
-            </a>
-          </div>
-
-          <div
-            className={uploadDropZoneClassName}
-            onDragEnter={(event) => {
-              event.preventDefault()
-              if (canManage) {
-                setIsDraggingUpload(true)
-              }
-            }}
-            onDragOver={(event) => {
-              event.preventDefault()
-              if (canManage) {
-                setIsDraggingUpload(true)
-              }
-            }}
-            onDragLeave={() => setIsDraggingUpload(false)}
-            onDrop={onDropUploadFile}
-          >
-            <div className="admin-upload-drop-zone__icon" aria-hidden="true">
-              <Upload size={32} />
-            </div>
-            <div className="admin-upload-drop-zone__copy">
-              <p>Drag and drop your Excel file here, or browse for files.</p>
-              <p>
-                Supported format: .xlsx. The template includes retrieval and update date rows, and
-                values apply to old and second growth.
-              </p>
-            </div>
-            <input
-              key={uploadInputKey}
-              id="rtm-upload-file"
-              className="admin-upload-native-input"
-              type="file"
-              aria-label="Average monthly values upload spreadsheet"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              disabled={!canManage}
-              onChange={updateUploadFile}
-            />
-            <label
-              className={`cds--btn cds--btn--primary admin-upload-browse-button${
-                !canManage ? ' cds--btn--disabled' : ''
-              }`}
-              htmlFor={canManage ? 'rtm-upload-file' : undefined}
-              aria-disabled={!canManage}
-              onClick={(event) => {
-                if (!canManage) {
-                  event.preventDefault()
-                }
-              }}
-            >
-              Browse files
-            </label>
-          </div>
-
-          {selectedUploadFile && (
-            <div
-              className="admin-upload-queue-summary"
-              aria-label="Selected average monthly values upload file"
-            >
-              <div>
-                <span>Selected file</span>
-                <strong>{selectedUploadFile.name}</strong>
-              </div>
-              <div>
-                <span>Size</span>
-                <strong>{selectedUploadFile.size.toLocaleString()} bytes</strong>
-              </div>
-            </div>
-          )}
-
-          <div className="admin-upload-preview-footer">
-            <Button
-              kind="secondary"
-              onClick={() => {
-                void submitPreview()
-              }}
-              disabled={isPreviewDisabled}
-            >
-              Preview data
-            </Button>
-          </div>
-        </section>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <section className="admin-upload-panel" aria-labelledby="rtm-preview-title">
-          <div className="admin-upload-panel__header">
-            <div>
-              <h2 id="rtm-preview-title">Data Preview</h2>
-              <p>Review validation results before applying the spreadsheet upload.</p>
-            </div>
-            <div className="admin-upload-preview-actions">
-              <Button kind="secondary" size="sm" onClick={clearUploadState}>
-                Clear
-              </Button>
-              <Button
-                kind="primary"
-                size="sm"
-                onClick={() => {
-                  void submitUpload()
-                }}
-                disabled={isUploadDisabled}
-              >
-                Apply upload
-              </Button>
-            </div>
-          </div>
-          {uploadError && (
-            <p className="landing-page-help-text landing-page-help-text--error">{uploadError}</p>
-          )}
-          {!uploadError && selectedUploadFile && !isUploadDisabled && (
-            <p style={{ marginTop: '0.5rem' }}>
-              Upload has passed validation for the selected file and metadata.
-            </p>
-          )}
-          {!uploadError &&
-            selectedUploadFile &&
-            (pendingUploadValidation === null ||
-              pendingUploadValidation.fileName !== selectedUploadFile.name ||
-              pendingUploadValidation.fileSize !== selectedUploadFile.size) && (
-              <p className="landing-page-help-text landing-page-help-text--error">
-                Generate a valid preview before applying the upload.
-              </p>
-            )}
-
-          {!previewResult && (
-            <div style={{ marginTop: '0.75rem', padding: '2rem 1rem', textAlign: 'center' }}>
-              <p>No preview data yet.</p>
-              <p className="landing-page-help-text">
-                Upload an XLSX file above and select Preview data to validate it.
-              </p>
-            </div>
-          )}
-
-          {previewResult && (
-            <div style={{ marginTop: '0.75rem' }}>
-              <Tag type={parseStatusTag(previewResult.status)}>{previewResult.status}</Tag>
-              <p>{previewResult.message}</p>
-              {previewResult.fileName && <p>File: {previewResult.fileName}</p>}
-              {previewResult.updateDate && <p>Update date: {previewResult.updateDate}</p>}
-              <p>Rows to apply: {previewResult.rowCount}</p>
-
-              {previewResult.errors.length > 0 && (
-                <div>
-                  <h3>Errors</h3>
-                  <ul>
-                    {previewResult.errors.map((error) => (
-                      <li key={error}>{error}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {previewResult.warnings.length > 0 && (
-                <div>
-                  <h3>Warnings</h3>
-                  <ul>
-                    {previewResult.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {previewResult.rows.length > 0 && (
-                <Table useZebraStyles>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeader>Species code</TableHeader>
-                      <TableHeader>Grade</TableHeader>
-                      <TableHeader>Growth</TableHeader>
-                      <TableHeader>New value</TableHeader>
+                        return (
+                          <TableCell key={column.key} className={cellClassName}>
+                            <label className="rtm-amv-cell-input-label">
+                              <span>{`${column.label} grade ${grade}`}</span>
+                              <input
+                                className="rtm-amv-cell-input"
+                                inputMode="decimal"
+                                aria-label={`${column.label} grade ${grade}`}
+                                placeholder={cell.hasCurrentValue ? undefined : '-'}
+                                value={cell.value}
+                                disabled={isReadOnly}
+                                onChange={(event) => updateCellValue(cell.key, event.target.value)}
+                              />
+                            </label>
+                            {cell.hasMixedCurrentValues && (
+                              <span className="rtm-amv-cell-note">Multiple values</span>
+                            )}
+                          </TableCell>
+                        )
+                      })}
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {previewResult.rows.map((row) => (
-                      <TableRow
-                        key={`${row.species ?? ''}-${row.grade ?? ''}-${
-                          row.growthIndicator ?? ''
-                        }-${row.newValue ?? ''}`}
-                      >
-                        <TableCell>{row.species ?? ''}</TableCell>
-                        <TableCell>{row.grade ?? ''}</TableCell>
-                        <TableCell>{row.growthIndicator ?? ''}</TableCell>
-                        <TableCell>{formatMoney(row.newValue)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          )}
-
-          {uploadResult && (
-            <div style={{ marginTop: '0.75rem' }}>
-              <Tag type={parseStatusTag(uploadResult.status)}>{uploadResult.status}</Tag>
-              <p>
-                {createResultMessage(
-                  uploadResult.status,
-                  uploadResult.message,
-                  uploadResult.errors,
-                )}
-              </p>
-              {uploadResult.fileName && <p>File: {uploadResult.fileName}</p>}
-              <p>
-                Attempted rows: {uploadResult.attemptedRowCount} | Uploaded rows:{' '}
-                {uploadResult.uploadedRowCount}
-              </p>
-
-              {uploadResult.warnings.length > 0 && (
-                <div>
-                  <h3>Warnings</h3>
-                  <ul>
-                    {uploadResult.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </div>
         </section>
+
+        <div className="admin-upload-fspts-button-row rtm-amv-actions">
+          <Button
+            kind="ghost"
+            size="md"
+            renderIcon={Renew}
+            onClick={resetChanges}
+            disabled={!hasPendingChanges || isSaving}
+          >
+            Reset
+          </Button>
+          <Button
+            kind="primary"
+            size="md"
+            className="admin-upload-fspts-action-button"
+            renderIcon={isSaving ? CheckmarkFilled : Save}
+            onClick={requestSave}
+            disabled={saveDisabled}
+          >
+            {isSaving ? 'Saving' : 'Save changes'}
+          </Button>
+          <div className="rtm-amv-actions__summary" role="status">
+            {hasPendingChanges ? (
+              <span>
+                {dirtyCells.length} {prefillSourceDate ? 'carried-forward' : 'changed'} cell
+                {dirtyCells.length === 1 ? '' : 's'} ready to save
+              </span>
+            ) : (
+              <span>No unsaved changes</span>
+            )}
+          </div>
+        </div>
       </Column>
+
+      {showWarningConfirmation && (
+        <Modal
+          open
+          passiveModal
+          size="sm"
+          modalHeading="Confirm AMV changes"
+          aria-label="Confirm AMV changes"
+          className="rtm-amv-confirm-modal"
+          preventCloseOnClickOutside
+          selectorPrimaryFocus="#rtm-amv-confirm-cancel"
+          onRequestClose={() => setShowWarningConfirmation(false)}
+        >
+          <div className="rtm-amv-confirm-modal__body">
+            <p className="rtm-amv-confirm-modal__intro">
+              Review the following before saving {dirtyCells.length} changed cell
+              {dirtyCells.length === 1 ? '' : 's'}.
+            </p>
+            <div className="rtm-amv-confirm-modal__warning">
+              <WarningAltFilled size={20} aria-hidden="true" />
+              <div>
+                <ul>
+                  {confirmationMessages.slice(0, 8).map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+                {confirmationMessages.length > 8 && (
+                  <p>
+                    {confirmationMessages.length - 8} more warning
+                    {confirmationMessages.length - 8 === 1 ? '' : 's'} apply to this save.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="rtm-amv-confirm-modal__actions">
+            <Button
+              id="rtm-amv-confirm-cancel"
+              kind="secondary"
+              size="md"
+              onClick={() => setShowWarningConfirmation(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              size="md"
+              renderIcon={Save}
+              onClick={() => {
+                setShowWarningConfirmation(false)
+                void saveChanges()
+              }}
+            >
+              Confirm and save
+            </Button>
+          </div>
+        </Modal>
+      )}
 
       {notification && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
-            kind={notificationKind}
+            kind={notification.kind}
             role="status"
-            title="Average monthly values"
-            subtitle={notification}
+            title={notification.title}
+            subtitle={notification.subtitle}
             onCloseButtonClick={() => {
-              setNotification('')
+              setNotification(null)
             }}
           />
         </Column>

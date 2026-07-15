@@ -14,6 +14,11 @@ public interface FederalApplicationService {
 
   FederalApplicationSearchResponseDto search(FederalApplicationSearchCriteria criteria);
 
+  default FederalApplicationSearchResponseDto search(
+      FederalApplicationSearchCriteria criteria, Integer knownTotal) {
+    return search(criteria);
+  }
+
   int count(FederalApplicationSearchCriteria criteria);
 
   Optional<FederalApplicationDetailDto> findByApplicationNumber(Long applicationNumber);

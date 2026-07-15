@@ -1,11 +1,9 @@
-import { Tag } from '@carbon/react'
 import { displayValue } from '@/utils/text'
 import {
   formatScaleRows,
   formatUploadFileSize,
   formatUploadQueuedAt,
   uploadQueueStatusLabel,
-  uploadQueueStatusTagType,
 } from './uploadQueueHelpers'
 import type { UploadQueueItem } from './uploadQueueTypes'
 
@@ -14,12 +12,57 @@ export type UploadQueueReviewAccordionProps = {
   targetSummary: string
   idPrefix?: string
   itemNoun?: string
+  showHeader?: boolean
 }
 
 const asList = (value: string[] | undefined): string[] => value?.filter(Boolean) ?? []
 
 const formatDecimal = (value: number | undefined): string =>
   typeof value === 'number' ? value.toFixed(1) : 'Not provided'
+
+type ReviewTableRow = {
+  label: string
+  value: string
+}
+
+const clientLocationValue = (
+  clientNumber: string | undefined,
+  locationCode: string | undefined,
+): string => {
+  const client = displayValue(clientNumber)
+  return locationCode ? `${client}-${locationCode}` : client
+}
+
+const renderFieldValueTable = (
+  title: string,
+  rows: ReviewTableRow[],
+  emptyValue = 'Not provided',
+) => (
+  <div className="admin-upload-review__table-group">
+    <h4>{title}</h4>
+    <div className="admin-upload-review-table">
+      <table
+        className="cds--data-table admin-upload-review-field-table"
+        aria-label={`${title} review`}
+      >
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <th scope="row">{row.label}</th>
+              <td>{row.value || emptyValue}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)
 
 const reviewEmptyResultMessage = (
   item: UploadQueueItem,
@@ -28,7 +71,7 @@ const reviewEmptyResultMessage = (
   summary: string,
 ): string => {
   if (itemNoun === 'submission' && item.status === 'complete') {
-    return 'Application submission finalized successfully.'
+    return 'Application submission submitted successfully.'
   }
 
   return hasMetadata ? 'No validation issues returned.' : summary
@@ -39,6 +82,7 @@ function UploadQueueReviewAccordion({
   targetSummary,
   idPrefix = 'adminUploadReview',
   itemNoun = 'file',
+  showHeader = true,
 }: UploadQueueReviewAccordionProps) {
   if (items.length === 0) {
     return null
@@ -50,13 +94,20 @@ function UploadQueueReviewAccordion({
   const typeLabel = itemNoun === 'submission' ? 'Submission type' : 'Upload type'
 
   return (
-    <section className="admin-upload-review" aria-labelledby={titleId}>
-      <div className="admin-upload-review__header">
-        <h3 id={titleId}>{itemNounTitle} review</h3>
-        <span>
-          {items.length} {items.length === 1 ? itemNoun : itemNounPlural}
-        </span>
-      </div>
+    <section
+      className="admin-upload-review"
+      {...(showHeader
+        ? { 'aria-labelledby': titleId }
+        : { 'aria-label': `${itemNounTitle} review` })}
+    >
+      {showHeader && (
+        <div className="admin-upload-review__header">
+          <h3 id={titleId}>{itemNounTitle} review</h3>
+          <span>
+            {items.length} {items.length === 1 ? itemNoun : itemNounPlural}
+          </span>
+        </div>
+      )}
 
       <div className="admin-upload-review__list">
         {items.map((item) => {
@@ -73,6 +124,45 @@ function UploadQueueReviewAccordion({
           const summary = details?.summary || item.message || 'Waiting for upload.'
           const target = item.targetSummary ?? targetSummary
           const submissionSummary = details?.submissionSummary
+          const applicationSummaryRows = submissionSummary
+            ? [
+                {
+                  label: 'Owner client',
+                  value: clientLocationValue(
+                    submissionSummary.ownerClientNumber,
+                    submissionSummary.ownerClientLocationCode,
+                  ),
+                },
+                {
+                  label: 'Owner contact',
+                  value: displayValue(submissionSummary.ownerContactName),
+                },
+                {
+                  label: 'Region',
+                  value: displayValue(submissionSummary.orgUnitNumber),
+                },
+                {
+                  label: 'Jurisdiction',
+                  value: displayValue(submissionSummary.jurisdictionCode),
+                },
+                {
+                  label: 'Federal application',
+                  value: displayValue(submissionSummary.federalApplicationNumber),
+                },
+                {
+                  label: 'Source status',
+                  value: displayValue(submissionSummary.sourceApplicationStatusCode),
+                },
+                {
+                  label: 'Exemption reason',
+                  value: displayValue(submissionSummary.exemptionReasonCode),
+                },
+                {
+                  label: 'Applicant type',
+                  value: displayValue(submissionSummary.applicantTypeCode),
+                },
+              ]
+            : []
 
           return (
             <details
@@ -87,9 +177,11 @@ function UploadQueueReviewAccordion({
             >
               <summary className="admin-upload-review__summary">
                 <span className="admin-upload-review__file-name">{item.file.name}</span>
-                <Tag type={uploadQueueStatusTagType(item.status)}>
+                <span
+                  className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                >
                   {uploadQueueStatusLabel(item.status)}
-                </Tag>
+                </span>
                 <span className="admin-upload-review__summary-text">{summary}</span>
               </summary>
 
@@ -148,87 +240,47 @@ function UploadQueueReviewAccordion({
                 {submissionSummary && (
                   <div className="admin-upload-review__issue-group">
                     <h4>Application summary</h4>
-                    <dl className="admin-upload-review__meta">
-                      <div>
-                        <dt>Owner client</dt>
-                        <dd>
-                          {displayValue(submissionSummary.ownerClientNumber)}
-                          {submissionSummary.ownerClientLocationCode
-                            ? `-${submissionSummary.ownerClientLocationCode}`
-                            : ''}
-                        </dd>
+                    {renderFieldValueTable('Application details', applicationSummaryRows)}
+                    <div className="admin-upload-review__table-group">
+                      <h4>Product details</h4>
+                      <div className="admin-upload-review-table">
+                        <table
+                          className="cds--data-table admin-upload-review-product-table"
+                          aria-label="Product details review"
+                        >
+                          <thead>
+                            <tr>
+                              <th>Product type</th>
+                              <th>Age class</th>
+                              <th>Product location</th>
+                              <th>Application volume</th>
+                              <th>Average log volume</th>
+                              <th>Average length</th>
+                              <th>Average diameter</th>
+                              <th>Species</th>
+                              <th>End use</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td>{displayValue(submissionSummary.productTypeCode)}</td>
+                              <td>{displayValue(submissionSummary.ageClass)}</td>
+                              <td>{displayValue(submissionSummary.productLocation)}</td>
+                              <td>{formatDecimal(submissionSummary.applicationVolume)}</td>
+                              <td>{formatDecimal(submissionSummary.averageLogVolume)}</td>
+                              <td>{formatDecimal(submissionSummary.averageLength)}</td>
+                              <td>{formatDecimal(submissionSummary.averageDiameter)}</td>
+                              <td>
+                                {submissionSummary.speciesCodes?.length
+                                  ? submissionSummary.speciesCodes.join(', ')
+                                  : 'Not provided'}
+                              </td>
+                              <td>{displayValue(submissionSummary.endUseCode)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
                       </div>
-                      <div>
-                        <dt>Owner contact</dt>
-                        <dd>{displayValue(submissionSummary.ownerContactName)}</dd>
-                      </div>
-                      <div>
-                        <dt>Region</dt>
-                        <dd>{displayValue(submissionSummary.orgUnitNumber)}</dd>
-                      </div>
-                      <div>
-                        <dt>Jurisdiction</dt>
-                        <dd>{displayValue(submissionSummary.jurisdictionCode)}</dd>
-                      </div>
-                      {submissionSummary.federalApplicationNumber && (
-                        <div>
-                          <dt>Federal application</dt>
-                          <dd>{submissionSummary.federalApplicationNumber}</dd>
-                        </div>
-                      )}
-                      <div>
-                        <dt>Source status</dt>
-                        <dd>{displayValue(submissionSummary.sourceApplicationStatusCode)}</dd>
-                      </div>
-                      <div>
-                        <dt>Exemption reason</dt>
-                        <dd>{displayValue(submissionSummary.exemptionReasonCode)}</dd>
-                      </div>
-                      <div>
-                        <dt>Applicant type</dt>
-                        <dd>{displayValue(submissionSummary.applicantTypeCode)}</dd>
-                      </div>
-                      <div>
-                        <dt>Product type</dt>
-                        <dd>{displayValue(submissionSummary.productTypeCode)}</dd>
-                      </div>
-                      <div>
-                        <dt>Age class</dt>
-                        <dd>{displayValue(submissionSummary.ageClass)}</dd>
-                      </div>
-                      <div>
-                        <dt>Product location</dt>
-                        <dd>{displayValue(submissionSummary.productLocation)}</dd>
-                      </div>
-                      <div>
-                        <dt>Application volume</dt>
-                        <dd>{formatDecimal(submissionSummary.applicationVolume)}</dd>
-                      </div>
-                      <div>
-                        <dt>Average log volume</dt>
-                        <dd>{formatDecimal(submissionSummary.averageLogVolume)}</dd>
-                      </div>
-                      <div>
-                        <dt>Average length</dt>
-                        <dd>{formatDecimal(submissionSummary.averageLength)}</dd>
-                      </div>
-                      <div>
-                        <dt>Average diameter</dt>
-                        <dd>{formatDecimal(submissionSummary.averageDiameter)}</dd>
-                      </div>
-                      <div>
-                        <dt>Species</dt>
-                        <dd>
-                          {submissionSummary.speciesCodes?.length
-                            ? submissionSummary.speciesCodes.join(', ')
-                            : 'Not provided'}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>End use</dt>
-                        <dd>{displayValue(submissionSummary.endUseCode)}</dd>
-                      </div>
-                    </dl>
+                    </div>
                   </div>
                 )}
 

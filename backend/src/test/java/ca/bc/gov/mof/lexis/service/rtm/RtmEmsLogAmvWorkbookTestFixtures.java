@@ -15,19 +15,43 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
   static byte[] matrixWorkbook() throws IOException {
     return workbook(
         List.of(
-            row(1, text("A1", "GRADE"), text("B1", "BA"), text("C1", "HE"), text("D1", "PINE**")),
-            row(2, text("A2", "A"), number("B2", "10.25"), number("C2", "20.50"), number("D2", "30.75")),
-            row(3, text("A3", "1"), number("B3", "1.25"))));
+            row(1, text("A1", "Update Date"), text("B1", "2026-06-20")),
+            row(3, text("A3", "GRADE"), text("B3", "BA"), text("C3", "HE"), text("D3", "PINE**")),
+            row(4, text("A4", "A"), number("B4", "10.25"), number("C4", "20.50"), number("D4", "30.75")),
+            row(5, text("A5", "1"), number("B5", "1.25"))));
   }
 
   static byte[] matrixWorkbookWithMetadataRows() throws IOException {
     return workbook(
         List.of(
-            row(1, text("A1", "Retrieval Date"), text("B1", "2026-05-15")),
-            row(2, text("A2", "Update Date"), text("B2", "2026-06-20")),
+            row(1, text("A1", "Update Date"), text("B1", "2026-06-20")),
             row(4, text("A4", "GRADE"), text("B4", "BA"), text("C4", "HE"), text("D4", "PINE**")),
             row(5, text("A5", "A"), number("B5", "10.25"), number("C5", "20.50"), number("D5", "30.75")),
             row(6, text("A6", "1"), number("B6", "1.25"))));
+  }
+
+  static byte[] singleBalsamWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date"), text("B1", "2026-06-20")),
+            row(3, text("A3", "GRADE"), text("B3", "BA")),
+            row(4, text("A4", "A"), number("B4", "10.25"))));
+  }
+
+  static byte[] futureSingleBalsamWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date"), text("B1", "2026-08-01")),
+            row(3, text("A3", "GRADE"), text("B3", "BA")),
+            row(4, text("A4", "A"), number("B4", "10.25"))));
+  }
+
+  static byte[] optionalCedarGradeWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date"), text("B1", "2026-06-20")),
+            row(3, text("A3", "GRADE"), text("B3", "CE")),
+            row(4, text("A4", "C"), number("B4", "11.11"))));
   }
 
   static byte[] invalidWorkbook() throws IOException {
@@ -39,9 +63,10 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
 
   static byte[] fullGradeWorkbookWithBlankRow() throws IOException {
     List<String> rows = new ArrayList<>();
-    rows.add(row(1, text("A1", "GRADE"), text("B1", "BA")));
+    rows.add(row(1, text("A1", "Update Date"), text("B1", "2026-06-20")));
+    rows.add(row(3, text("A3", "GRADE"), text("B3", "BA")));
 
-    int rowNumber = 2;
+    int rowNumber = 4;
     for (char grade = 'A'; grade <= 'Z'; grade++) {
       rows.add(
           row(

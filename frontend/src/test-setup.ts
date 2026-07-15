@@ -11,6 +11,17 @@ const ResizeObserverMock = class {
   disconnect() {}
 }
 
+const matchMediaMock = (query: string): MediaQueryList => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+})
+
 class TestStorage implements Storage {
   private readonly values = new Map<string, string>()
 
@@ -58,6 +69,13 @@ if (!('ResizeObserver' in globalThis)) {
   Object.defineProperty(globalThis, 'ResizeObserver', {
     configurable: true,
     value: ResizeObserverMock,
+  })
+}
+
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: matchMediaMock,
   })
 }
 

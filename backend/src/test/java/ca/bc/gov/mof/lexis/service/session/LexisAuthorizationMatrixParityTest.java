@@ -43,6 +43,12 @@ class LexisAuthorizationMatrixParityTest {
           "/tenureReport",
           "/approvedExemptionReport");
 
+  private static final List<String> FEDERAL_READ_ACTIONS =
+      List.of(
+          "/federalApplicationSearch",
+          "/federalApplicationDetails",
+          "viewFederalApplication");
+
   @Autowired
   private LexisAuthorizationService authorizationService;
 
@@ -65,7 +71,7 @@ class LexisAuthorizationMatrixParityTest {
             "LEXIS_APPLICATION_APPROVER",
             "LEXIS_EXEMPTION_APPROVER",
             "LEXIS_PROVINCIAL_SUBMITTER",
-            "LEXIS_FEDERAL_SUBMITTER");
+            "LEXIS_DELEGATED_ADMIN");
   }
 
   @Test
@@ -97,7 +103,9 @@ class LexisAuthorizationMatrixParityTest {
             "approveExemption",
             "createOffer",
             "saveExemption",
-            "savePermit")
+            "savePermit",
+            "uploadFederalSubmission")
+        .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS)
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
   }
 
@@ -116,7 +124,9 @@ class LexisAuthorizationMatrixParityTest {
             "/filePermitUpload",
             "createOffer",
             "saveExemption",
-            "savePermit");
+            "savePermit",
+            "uploadFederalSubmission")
+        .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS);
   }
 
   @Test
@@ -136,32 +146,52 @@ class LexisAuthorizationMatrixParityTest {
         .doesNotContain(
             "LEXIS_READ_ONLY",
             "LEXIS_EXEMPTION_APPROVER",
-            "LEXIS_FEDERAL_SUBMITTER",
             "LEXIS_DELEGATED_ADMIN");
   }
 
   @Test
-  void federalSubmitterShouldOnlyUploadAndViewFederalApplications() {
-    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_FEDERAL_SUBMITTER")))
-        .contains(
-            "/federalApplicationSearch",
-            "/federalApplicationDetails",
-            "uploadApplicationSubmission",
-            "viewFederalApplication")
-        .doesNotContainAnyElementsOf(PROVINCIAL_VIEW_ACTIONS)
-        .doesNotContainAnyElementsOf(REPORT_ACTIONS)
-        .doesNotContain(
-            "/summary",
-            "createApplication",
-            "createOffer",
-            "saveExemption",
-            "savePermit");
+  void unknownRoleShouldGrantNoActions() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_UNKNOWN_ROLE")))
+        .isEmpty();
+    assertThat(authorizationService.hasKnownRole(List.of("LEXIS_UNKNOWN_ROLE"))).isFalse();
   }
 
   @Test
-  void applicationApproverShouldEditProvincialWorkWithoutAdminOrFederalAccess() {
+  void dedicatedFederalUploadActionShouldBeScopeOnlyForNonAdminCallers() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_ADMIN")))
+        .doesNotContain("uploadFederalSubmission");
+
+    assertThat(authorizationService.resolveRolesForAction("uploadFederalSubmission"))
+        .isEmpty();
+
+    assertThat(authorizationService.resolveRolesForAction("uploadApplicationSubmission"))
+        .doesNotContain("SCOPE_lexis:federal-submission:submit");
+  }
+
+  @Test
+  void federalUploadScopeShouldOnlyUseDedicatedFederalUploadAction() {
+    List<String> authorities = List.of("SCOPE_lexis:federal-submission:submit");
+
+    assertThat(authorizationService.resolveGrantedActions(authorities))
+        .containsExactly("uploadFederalSubmission");
+    assertThat(authorizationService.hasKnownRole(authorities)).isFalse();
+    assertThat(authorizationService.canPerformAction(authorities, "uploadFederalSubmission"))
+        .isTrue();
+    assertThat(authorizationService.canPerformAction(authorities, "uploadApplicationSubmission"))
+        .isFalse();
+    assertThat(authorizationService.canPerformAction(authorities, "/federalApplicationDetails"))
+        .isFalse();
+    assertThat(
+            authorizationService.canPerformAction(
+                List.of("SCOPE_lexis/federalSubmission/submit"), "uploadFederalSubmission"))
+        .isFalse();
+  }
+
+  @Test
+  void applicationApproverShouldEditProvincialWorkAndReadFederalApplications() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
+        .containsAll(FEDERAL_READ_ACTIONS)
         .containsAll(REPORT_ACTIONS)
         .contains(
             "/applicationsReview",
@@ -175,8 +205,6 @@ class LexisAuthorizationMatrixParityTest {
             "uploadApplicationSubmission")
         .doesNotContain(
             "/summary",
-            "/federalApplicationSearch",
-            "/federalApplicationDetails",
             "/lexisAgentAdmin",
             "/lexisFILAdmin",
             "/lexisPolicyAdmin",
@@ -187,7 +215,7 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void exemptionApproverShouldOnlyManageProvincialExemptions() {
+  void exemptionApproverShouldManageProvincialExemptionsAndReadFederalApplications() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_EXEMPTION_APPROVER")))
         .contains(
             "/createExemption",
@@ -195,13 +223,13 @@ class LexisAuthorizationMatrixParityTest {
             "/exemptionDetails",
             "approveExemption",
             "saveExemption")
+        .containsAll(FEDERAL_READ_ACTIONS)
         .doesNotContain(
             "/applicationsReview",
             "/applicationSearch",
             "/applicationDetails",
             "/offersSearch",
             "/permitSearch",
-            "/federalApplicationSearch",
             "createApplication",
             "createOffer",
             "savePermit",
@@ -213,7 +241,7 @@ class LexisAuthorizationMatrixParityTest {
   void readOnlyRoleShouldViewSearchesAndDetailsWithoutMutatingActionsOrReports() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("/federalApplicationSearch", "/federalApplicationDetails", "viewFederalApplication")
+        .containsAll(FEDERAL_READ_ACTIONS)
         .doesNotContain(
             "/summary",
             "/applicationRemarks",

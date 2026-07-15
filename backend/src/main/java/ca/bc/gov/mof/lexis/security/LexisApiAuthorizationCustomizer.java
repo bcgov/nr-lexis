@@ -1,8 +1,10 @@
 package ca.bc.gov.mof.lexis.security;
 
+import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.security.LexisApiAuthorizationRules.Rule;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import java.util.List;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,10 +19,35 @@ public class LexisApiAuthorizationCustomizer
         Customizer<
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry> {
 
-  private final LexisAuthorizationService authorizationService;
+  private static final String ACTION_LEXIS_AGENT_ADMIN = "/lexisAgentAdmin";
+  private static final String[] PROD_RTM_ONLY_SESSION_PATTERNS = {
+    "/api/lexis/session/**",
+    "/api/lexis/showWelcome",
+    "/api/lexis/showWelcome.do",
+    "/api/lexis/logoff",
+    "/api/lexis/logoff.do",
+    "/api/lexis/accessDenied",
+    "/api/lexis/accessDenied.do",
+    "/api/lexis/errorPage",
+    "/api/lexis/errorPage.do"
+  };
+  private static final String[] PROD_RTM_ONLY_GET_PATTERNS = {
+    "/api/lexis/rpc/application-details/species-codes",
+    "/api/lexis/rtm/emslogamv"
+  };
+  private static final String[] PROD_RTM_ONLY_POST_PATTERNS = {
+    "/api/lexis/rtm/emslogamv",
+    "/api/lexis/rtm/emslogamv/preview",
+    "/api/lexis/rtm/emslogamv/upload"
+  };
 
-  public LexisApiAuthorizationCustomizer(LexisAuthorizationService authorizationService) {
+  private final LexisAuthorizationService authorizationService;
+  private final LexisFeatureProperties featureProperties;
+
+  public LexisApiAuthorizationCustomizer(
+      LexisAuthorizationService authorizationService, LexisFeatureProperties featureProperties) {
     this.authorizationService = authorizationService;
+    this.featureProperties = featureProperties;
   }
 
   @Override
@@ -28,10 +55,16 @@ public class LexisApiAuthorizationCustomizer
       AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
           authorize) {
 
+    if (featureProperties.isProdRtmOnly()) {
+      authorizeProdRtmOnlyMode(authorize);
+      return;
+    }
+
     for (Rule rule : LexisApiAuthorizationRules.rules()) {
       switch (rule.type()) {
         case PERMIT_ALL -> authorize.requestMatchers(rule.method(), rule.patternsArray()).permitAll();
-        case ADMIN_AUTHORITY -> authorize.requestMatchers(rule.patternsArray()).hasAuthority("LEXIS_ADMIN");
+        case ADMIN_AUTHORITY ->
+            authorize.requestMatchers(rule.patternsArray()).hasAuthority("LEXIS_ADMIN");
         case KNOWN_ROLE -> authorizeKnownRoles(authorize, rule);
         case ACTION -> authorizeAction(authorize, rule);
       }
@@ -40,12 +73,31 @@ public class LexisApiAuthorizationCustomizer
     authorize.anyRequest().denyAll();
   }
 
+  private void authorizeProdRtmOnlyMode(
+      AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+          authorize) {
+    authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
+    authorizeKnownRoles(authorize, PROD_RTM_ONLY_SESSION_PATTERNS);
+    authorizeFixedAction(
+        authorize, HttpMethod.GET, ACTION_LEXIS_AGENT_ADMIN, PROD_RTM_ONLY_GET_PATTERNS);
+    authorizeFixedAction(
+        authorize, HttpMethod.POST, ACTION_LEXIS_AGENT_ADMIN, PROD_RTM_ONLY_POST_PATTERNS);
+    authorize.anyRequest().denyAll();
+  }
+
   private void authorizeKnownRoles(
       AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
           authorize,
       Rule rule) {
+    authorizeKnownRoles(authorize, rule.patternsArray());
+  }
+
+  private void authorizeKnownRoles(
+      AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+          authorize,
+      String... patterns) {
     authorize
-        .requestMatchers(rule.patternsArray())
+        .requestMatchers(patterns)
         .access(
             (authentication, context) ->
                 new AuthorizationDecision(
@@ -64,6 +116,22 @@ public class LexisApiAuthorizationCustomizer
                     authorizationService.canPerformAction(
                         getAuthorities(authentication.get()),
                         rule.requiredAction(context.getRequest().getParameter("actionMapping")))));
+  }
+
+  private void authorizeFixedAction(
+      AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+          authorize,
+      HttpMethod method,
+      String requiredAction,
+      String... patterns) {
+    authorize
+        .requestMatchers(method, patterns)
+        .access(
+            (authentication, context) ->
+                new AuthorizationDecision(
+                    authorizationService.canPerformAction(
+                        getAuthorities(authentication.get()),
+                        requiredAction)));
   }
 
   private List<String> getAuthorities(Authentication authentication) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -34,6 +34,12 @@ import {
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
+import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
   SEARCH_PAGE_SIZE_OPTIONS,
@@ -52,7 +58,14 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchAdjacentSearchPages,
+} from '@/pages/shared/deferred-search-total'
+import {
+  countProvincialExemptions,
+  searchProvincialExemptions,
+} from '@/service/provincial-exemption-search-service'
 import {
   fetchProvincialExemptionOptions,
   type SearchOption,
@@ -138,8 +151,13 @@ const ProvincialExemptionPage = () => {
     Record<string, ProvincialExemptionSearchItem>
   >({})
   const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus | null>(null)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canApproveExemption = canPerform('approveExemption')
+  const shouldDefaultApprovalFilters =
+    capabilities?.roles.includes('EXEMPTION_APPROVER') ||
+    capabilities?.roles.includes('LEXIS_EXEMPTION_APPROVER') ||
+    false
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -220,6 +238,9 @@ const ProvincialExemptionPage = () => {
   }, [filters.listFromDate, filters.listToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ProvincialExemptionSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: ProvincialExemptionSearchRequest, options: { force?: boolean } = {}) => {
@@ -228,9 +249,23 @@ const ProvincialExemptionPage = () => {
         capabilities?.principal,
         request,
       )
+      const isLatestRequest = beginSearchRequest()
       if (!options.force) {
         const cachedResults = getPageDataCache<ProvincialExemptionSearchResponse>(pageCacheKey)
         if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-exemption-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchProvincialExemptions,
+            onError: console.error,
+          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -238,7 +273,6 @@ const ProvincialExemptionPage = () => {
         }
       }
 
-      const isLatestRequest = beginSearchRequest()
       if (hasInvalidIsoDateValue(request.filters.listFromDate, request.filters.listToDate)) {
         setLoading(false)
         return
@@ -247,10 +281,41 @@ const ProvincialExemptionPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchProvincialExemptions(request)
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const commitSearchResponse = (
+          response: ProvincialExemptionSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+            prefetchAdjacentSearchPages({
+              pageId: 'provincial-exemption-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchProvincialExemptions,
+              onError: console.error,
+            })
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchProvincialExemptions,
+          count: countProvincialExemptions,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -264,10 +329,14 @@ const ProvincialExemptionPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {
+    if (searchParams.toString().length === 0 && shouldDefaultApprovalFilters) {
+      return
+    }
+
     void runSearch({
       filters: debouncedUrlState.filters,
       page: debouncedUrlState.page - 1,
@@ -275,14 +344,11 @@ const ProvincialExemptionPage = () => {
       sortField: debouncedUrlState.sortField,
       sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch])
+  }, [debouncedUrlState, runSearch, searchParams, shouldDefaultApprovalFilters])
 
   useEffect(() => {
-    const isExemptionApprover =
-      capabilities?.roles.includes('EXEMPTION_APPROVER') ||
-      capabilities?.roles.includes('LEXIS_EXEMPTION_APPROVER')
     const hasSearchQuery = searchParams.toString().length > 0
-    if (!hasSearchQuery && isExemptionApprover) {
+    if (!hasSearchQuery && shouldDefaultApprovalFilters) {
       setSearchParams(
         buildSearchParams(
           {
@@ -298,7 +364,7 @@ const ProvincialExemptionPage = () => {
         { replace: true },
       )
     }
-  }, [capabilities?.roles, searchParams, setSearchParams])
+  }, [searchParams, setSearchParams, shouldDefaultApprovalFilters])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -407,26 +473,42 @@ const ProvincialExemptionPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-exemption-search-page">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial exemption search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--filters">
+        <section className="legacy-search-section legacy-search-section--filters provincial-exemption-search-filters">
           <Tile>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid provincial-exemption-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
                 value={filters.applicationNumber}
                 onChange={(event) => updateFilter('applicationNumber', event.target.value)}
               />
+              <SearchableSelect
+                id="exemptionStatusCode"
+                labelText="Exemption status"
+                value={filters.exemptionStatusCode}
+                placeholder="All statuses"
+                options={exemptionStatusOptions}
+                onChange={(value) => updateFilter('exemptionStatusCode', value)}
+              />
               <TextInput
                 id="packageNumber"
                 labelText="Package number"
                 value={filters.packageNumber}
                 onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="exemptionTypeCode"
+                labelText="Exemption type"
+                value={filters.exemptionTypeCode}
+                placeholder="All types"
+                options={exemptionTypeOptions}
+                onChange={(value) => updateFilter('exemptionTypeCode', value)}
               />
               <TextInput
                 id="exemptionNumber"
@@ -450,38 +532,6 @@ const ProvincialExemptionPage = () => {
                   )
                 }}
               />
-              <IsoDatePicker
-                id="listFromDate"
-                labelText="List from date (YYYY-MM-DD)"
-                value={filters.listFromDate}
-                invalid={!isValidIsoDate(filters.listFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listFromDate', value)}
-              />
-              <IsoDatePicker
-                id="listToDate"
-                labelText="List to date (YYYY-MM-DD)"
-                value={filters.listToDate}
-                invalid={!isValidIsoDate(filters.listToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listToDate', value)}
-              />
-              <SearchableSelect
-                id="exemptionTypeCode"
-                labelText="Exemption type"
-                value={filters.exemptionTypeCode}
-                placeholder="All types"
-                options={exemptionTypeOptions}
-                onChange={(value) => updateFilter('exemptionTypeCode', value)}
-              />
-              <SearchableSelect
-                id="exemptionStatusCode"
-                labelText="Exemption status"
-                value={filters.exemptionStatusCode}
-                placeholder="All statuses"
-                options={exemptionStatusOptions}
-                onChange={(value) => updateFilter('exemptionStatusCode', value)}
-              />
               <TextInput
                 id="applicantClientNumber"
                 labelText="Applicant client number"
@@ -493,6 +543,22 @@ const ProvincialExemptionPage = () => {
                 labelText="Owner client number"
                 value={filters.ownerClientNumber}
                 onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="listFromDate"
+                labelText="Listing from date"
+                value={filters.listFromDate}
+                invalid={!isValidIsoDate(filters.listFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listFromDate', value)}
+              />
+              <IsoDatePicker
+                id="listToDate"
+                labelText="Listing to date"
+                value={filters.listToDate}
+                invalid={!isValidIsoDate(filters.listToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listToDate', value)}
               />
             </div>
             <div className="legacy-search-actions">

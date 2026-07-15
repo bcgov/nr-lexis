@@ -87,6 +87,22 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
         FROM EXPORT_SCHEDULE ES
        WHERE ES.EXPORT_SCHEDULE_ID = ?
       """;
+  private static final String FIND_EXPORT_SCHEDULE_BY_ADVERTISING_DATE =
+      """
+      SELECT ES.EXPORT_SCHEDULE_ID,
+             ES.ADVERTISING_DATE,
+             ES.APPLICATION_RECEIPT_DATE,
+             ES.OFFER_RECEIPT_DATE,
+             ES.OFFER_END_DATE,
+             ES.OFFER_WITHDRAWAL_DATE,
+             ES.TEAC_MEETING_DATE,
+             (SELECT COUNT(*)
+                FROM EXPORT_EXEMPTION_APPLICATION EEA
+               WHERE EEA.EXPORT_SCHEDULE_ID = ES.EXPORT_SCHEDULE_ID) AS APPLICATION_COUNT
+        FROM EXPORT_SCHEDULE ES
+       WHERE TRUNC(ES.ADVERTISING_DATE) = ?
+       ORDER BY ES.EXPORT_SCHEDULE_ID
+      """;
   private static final String FIND_DUPLICATE_ADVERTISING_DATE_COUNT =
       "SELECT COUNT(*) FROM EXPORT_SCHEDULE WHERE TRUNC(ADVERTISING_DATE) = ?";
   private static final String FIND_DUPLICATE_ADVERTISING_DATE_COUNT_EXCLUDING_ID =
@@ -172,6 +188,20 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
         .query(
             FIND_EXPORT_SCHEDULE_BY_ID,
             ps -> ps.setLong(1, exportScheduleId),
+            this::mapExportScheduleRow)
+        .stream()
+        .findFirst();
+  }
+
+  public Optional<ExportScheduleRowDto> findExportScheduleByAdvertisingDate(
+      LocalDate advertisingDate) {
+    if (advertisingDate == null) {
+      return Optional.empty();
+    }
+    return jdbcTemplate
+        .query(
+            FIND_EXPORT_SCHEDULE_BY_ADVERTISING_DATE,
+            ps -> ps.setDate(1, java.sql.Date.valueOf(advertisingDate)),
             this::mapExportScheduleRow)
         .stream()
         .findFirst();

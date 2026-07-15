@@ -17,7 +17,9 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import javax.sql.DataSource;
@@ -46,8 +48,40 @@ public class OracleLegacyCsvReportService {
       "{ call LEXIS_REPORTING.OFFERS_REPORT_CSV(?,?,?,?) }";
   private static final String FEE_SUMMARY_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.FEE_SUMMARY_RPT_CSV(?,?,?,?) }";
-  private static final String BIWEEKLY_CSV_PROCEDURE =
-      "{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }";
+  private static final String BIWEEKLY_REPORT_PROCEDURE =
+      "{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }";
+  private static final String BIWEEKLY_PACKAGE_PROCEDURE =
+      "{ call LEXIS_REPORTING.BIWEEKLY_SUBREPORT_RPT(?,?,?) }";
+  private static final List<String> BIWEEKLY_CSV_HEADERS =
+      List.of(
+          "ADVERTISING_DATE",
+          "REGION_NAME",
+          "CLIENT_NAME",
+          "CLIENT_ADDRESS_1",
+          "CLIENT_ADDRESS_2",
+          "CLIENT_ADDRESS_3",
+          "CLIENT_CITY",
+          "CLIENT_PROVINCE",
+          "CLIENT_POSTAL_CODE",
+          "CLIENT_CONTACT_NAME",
+          "CLIENT_CONTACT_PHONE",
+          "CLIENT_CONTACT_EMAIL",
+          "JURISDICTION_CODE",
+          "APPLICATION_NUMBER",
+          "SPECIES_ENDUSE",
+          "PRODUCT_TYPE",
+          "PRODUCT_LOCATION",
+          "EXEMPTION_APPLICATION_VOLUME",
+          "AVERAGE_LOG_VOLUME",
+          "AGENT_NAME",
+          "AGENT_PHONE",
+          "AGENT_CONTACT_NAME",
+          "AGENT_CONTACT_EMAIL",
+          "PACKAGE_NUMBER",
+          "PACKAGE_VOLUME",
+          "AGE_CLASS",
+          "AVERAGE_LENGTH",
+          "AVERAGE_DIAMETER");
   private static final String TRANSPORT_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.TRANSPORT_REPORT_CSV(?,?,?,?) }";
   private static final String EXEMPTIONS_CSV_PROCEDURE =
@@ -309,16 +343,14 @@ public class OracleLegacyCsvReportService {
 
   private Optional<LexisGeneratedReport> generateBiweeklyCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
-    DynamicWhere where = buildBiweeklyWhere(parameters);
     Optional<LegacyTabularReportData> dataOptional =
-        executeDynamicCursorProcedure(BIWEEKLY_CSV_PROCEDURE, where);
-    if (dataOptional.isEmpty()) {
-      return Optional.empty();
-    }
+        loadBiweeklyCsvData(parameters);
+    LegacyTabularReportData data =
+        dataOptional.orElseGet(() -> new LegacyTabularReportData(BIWEEKLY_CSV_HEADERS, List.of()));
 
     byte[] content;
     try {
-      content = renderCsv(dataOptional.orElseThrow());
+      content = renderCsv(data);
     } catch (IOException ex) {
       LOGGER.warn("Unable to render biweekly CSV: {}", ex.getMessage());
       return Optional.empty();
@@ -329,6 +361,136 @@ public class OracleLegacyCsvReportService {
             LexisJasperReportDefinition.BIWEEKLY_LISTING.resolveFilename(LexisReportFormat.CSV),
             LexisReportFormat.CSV.mediaType(),
             content));
+  }
+
+  private Optional<LegacyTabularReportData> loadBiweeklyCsvData(Map<String, String> parameters) {
+    try (Connection connection = dataSource.getConnection();
+        CallableStatement cs = connection.prepareCall(BIWEEKLY_REPORT_PROCEDURE)) {
+      cs.setString(1, defaultIfBlank(csvValue(parameters, "region", "orgUnitNumber"), ""));
+      setNullableString(cs, 2, first(parameters, "exportJurisdictionCode", "jurisdiction"));
+      cs.setString(3, defaultDate(first(parameters, "fromDate"), "0001-01-01"));
+      cs.setString(4, defaultDate(first(parameters, "toDate"), "9999-12-31"));
+      cs.registerOutParameter(5, Types.REF_CURSOR);
+      cs.execute();
+
+      try (ResultSet rs = (ResultSet) cs.getObject(5)) {
+        if (rs == null) {
+          return Optional.empty();
+        }
+        return Optional.of(
+            new LegacyTabularReportData(BIWEEKLY_CSV_HEADERS, readBiweeklyCsvRows(connection, rs)));
+      }
+    } catch (SQLException ex) {
+      LOGGER.warn(
+          "CSV report procedure failed [{}]: {}; root cause: {}",
+          BIWEEKLY_REPORT_PROCEDURE,
+          ex.getMessage(),
+          rootCauseMessage(ex));
+      return Optional.empty();
+    }
+  }
+
+  private List<List<String>> readBiweeklyCsvRows(Connection connection, ResultSet reportRows)
+      throws SQLException {
+    List<List<String>> rows = new ArrayList<>();
+    while (reportRows.next()) {
+      Map<String, String> reportRow = readCurrentRow(reportRows);
+      List<Map<String, String>> packageRows =
+          loadBiweeklyPackageRows(
+              connection,
+              value(reportRow, "APPLICATION_NUMBER"),
+              value(reportRow, "EXPORT_JURISDICTION_CODE"));
+      if (packageRows.isEmpty()) {
+        rows.add(buildBiweeklyCsvRow(reportRow, Map.of()));
+        continue;
+      }
+      for (Map<String, String> packageRow : packageRows) {
+        rows.add(buildBiweeklyCsvRow(reportRow, packageRow));
+      }
+    }
+    return rows;
+  }
+
+  private List<Map<String, String>> loadBiweeklyPackageRows(
+      Connection connection,
+      String applicationNumber,
+      String jurisdiction)
+      throws SQLException {
+    if (applicationNumber == null || applicationNumber.isBlank()) {
+      return List.of();
+    }
+
+    try (CallableStatement cs = connection.prepareCall(BIWEEKLY_PACKAGE_PROCEDURE)) {
+      setNullableString(cs, 1, applicationNumber);
+      setNullableString(cs, 2, jurisdiction);
+      cs.registerOutParameter(3, Types.REF_CURSOR);
+      cs.execute();
+
+      try (ResultSet rs = (ResultSet) cs.getObject(3)) {
+        if (rs == null) {
+          return List.of();
+        }
+        List<Map<String, String>> rows = new ArrayList<>();
+        while (rs.next()) {
+          rows.add(readCurrentRow(rs));
+        }
+        return rows;
+      }
+    }
+  }
+
+  private Map<String, String> readCurrentRow(ResultSet rs) throws SQLException {
+    ResultSetMetaData meta = rs.getMetaData();
+    int columnCount = meta.getColumnCount();
+    Map<String, String> row = new HashMap<>();
+    for (int index = 1; index <= columnCount; index++) {
+      String column = meta.getColumnName(index);
+      String cell = rs.getString(index);
+      row.put(column.toUpperCase(Locale.ROOT), cell == null ? "" : cell);
+    }
+    return row;
+  }
+
+  private List<String> buildBiweeklyCsvRow(
+      Map<String, String> reportRow,
+      Map<String, String> packageRow) {
+    return List.of(
+        value(reportRow, "ADVERTISING_DATE"),
+        value(reportRow, "ORG_UNIT"),
+        value(reportRow, "CLIENT_NAME"),
+        value(reportRow, "ADDRESS_1"),
+        value(reportRow, "ADDRESS_2"),
+        value(reportRow, "ADDRESS_3"),
+        value(reportRow, "CITY"),
+        value(reportRow, "PROVINCE"),
+        value(reportRow, "POSTAL_CODE"),
+        value(reportRow, "OWNER_CONTACT_NAME"),
+        value(reportRow, "BUSINESS_PHONE"),
+        value(reportRow, "EMAIL_ADDRESS"),
+        value(reportRow, "EXPORT_JURISDICTION_CODE"),
+        firstNonBlank(value(reportRow, "FED_APPLICATION_NUMBER"), value(reportRow, "APPLICATION_NUMBER")),
+        value(reportRow, "SPECIES_ENDUSE"),
+        value(reportRow, "PRODUCT_TYPE"),
+        value(reportRow, "PRODUCT_LOCATION"),
+        value(reportRow, "EXEMPTION_APPLICATION_VOLUME"),
+        value(reportRow, "AVERAGE_LOG_VOLUME"),
+        value(reportRow, "AGENT_CLIENT_NAME"),
+        value(reportRow, "AGENT_BUS_PHONE"),
+        value(reportRow, "AGENT_CONTACT_NAME"),
+        value(reportRow, "AGENT_EMAIL"),
+        value(packageRow, "PACKAGE_NUMBER"),
+        value(packageRow, "PACKAGE_VOLUME"),
+        firstNonBlank(value(packageRow, "EXPORT_GROWTH_TYPE_CODE"), value(reportRow, "EXPORT_GROWTH_TYPE_CODE")),
+        value(packageRow, "AVERAGE_LENGTH"),
+        value(packageRow, "AVERAGE_DIAMETER"));
+  }
+
+  private String value(Map<String, String> row, String column) {
+    return row.getOrDefault(column, "");
+  }
+
+  private String firstNonBlank(String firstValue, String secondValue) {
+    return firstValue == null || firstValue.isBlank() ? secondValue : firstValue;
   }
 
   private Optional<LexisGeneratedReport> generateTransportCsv(LexisReportRequestDto request) {
@@ -418,26 +580,6 @@ public class OracleLegacyCsvReportService {
     where.addLike("EEA.EXPORT_EXEMPTION_REASON_CODE", first(parameters, "exemptionReason"));
     where.addLike("EEA.EXPORT_GROWTH_TYPE_CODE", first(parameters, "growthType"));
     where.addEquals("EPD.EXPORT_PERMIT_STATUS_CODE", "COM");
-    return where.build();
-  }
-
-  private DynamicWhere buildBiweeklyWhere(Map<String, String> parameters) {
-    DynamicWhereBuilder where = new DynamicWhereBuilder();
-    where.addDateRange(
-        "ES.ADVERTISING_DATE",
-        defaultDate(first(parameters, "fromDate"), "0001-01-01"),
-        defaultDate(first(parameters, "toDate"), "9999-12-31"));
-    where.addNumericOrGroup("EEA.ORG_UNIT_NO", csvParts(parameters, "region", "orgUnitNumber"));
-
-    String jurisdiction = first(parameters, "exportJurisdictionCode", "jurisdiction");
-    if (jurisdiction == null || jurisdiction.isBlank()) {
-      where.addTextOrGroup("EEA.EXPORT_JURISDICTION_CODE", List.of("P", "F"));
-    } else {
-      where.addEquals("EEA.EXPORT_JURISDICTION_CODE", jurisdiction);
-    }
-
-    where.addEquals("EEA.EXPORT_APPLICATION_STATUS_CODE", "APP");
-    where.addNotEquals("EEA.EXPORT_PRODUCT_TYPE_CODE", "T");
     return where.build();
   }
 

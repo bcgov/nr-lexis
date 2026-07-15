@@ -51,7 +51,7 @@ import {
   fetchApplicationReviewOptions,
   fetchProvincialApplicationOptions,
 } from '@/service/search-options-service'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -112,9 +112,8 @@ vi.mock('@/service/search-options-service', () => ({
 
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
+  validateAdminUpload: vi.fn(),
 }))
-
-Element.prototype.scrollIntoView = vi.fn()
 
 // This file renders the full provincial application detail page; several tests exercise
 // Carbon comboboxes and async child panels, which can exceed Vitest's 5s default in CI.
@@ -176,6 +175,7 @@ const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
 const mockApplicationDetailAuth = (
   canPerform: (action: string) => boolean = () => true,
@@ -196,8 +196,8 @@ const mockApplicationDetailAuth = (
 const applicationDetail: ProvincialApplicationDetail = {
   applicationNumber: 321,
   exemptionNumber: 'EX-555',
-  applicationStatusCode: 'ACTIVE',
-  statusDescription: 'Active',
+  applicationStatusCode: 'APP',
+  statusDescription: 'Approved',
   ownerClientNumber: '00011122',
   agentClientNumber: '00033344',
   orgUnitNumber: 12,
@@ -264,6 +264,24 @@ const getSummaryComboBox = (
     .getAllByLabelText(labelText)
     .find((element: HTMLElement) => element.getAttribute('role') === 'combobox') as HTMLElement
 
+const selectApplicationDetailTab = async (name: string): Promise<void> => {
+  const tab = await screen.findByRole('tab', { name })
+
+  if (tab.getAttribute('aria-selected') !== 'true') {
+    await userEvent.click(tab)
+  }
+}
+
+const selectApplicationSummaryTile = async (): Promise<HTMLElement> => {
+  await selectApplicationDetailTab('Application')
+  return waitFor(() => getApplicationSummaryTile())
+}
+
+const selectApplicationReviewTile = async (): Promise<HTMLElement> => {
+  await selectApplicationDetailTab('Review')
+  return waitFor(() => getApplicationReviewTile())
+}
+
 describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -287,6 +305,10 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedSubmitAdminUpload.mockResolvedValue({
       status: 'success',
       message: 'Application document upload submitted.',
+    })
+    mockedValidateAdminUpload.mockResolvedValue({
+      status: 'validated',
+      message: 'File passed validation and virus scanning.',
     })
     mockedFetchApplicationReviewOptions.mockResolvedValue({
       productTypes: [],
@@ -524,7 +546,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ownerClientNumber: '00011122',
       ownerClientLocationCode: '00',
       exemptionNumber: 'EX-555',
-      applicationStatusCode: 'ACTIVE',
+      applicationStatusCode: 'APP',
       applicantTypeCode: 'A',
       orgUnitNumber: '12',
       productTypeCode: 'LOG',
@@ -553,6 +575,59 @@ describe('Provincial Application Detail Document Actions', () => {
     })
   })
 
+  it('uses the legacy application detail tab order', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const tabs = await screen.findAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Documents',
+      'Remarks',
+      'Offers',
+      'Review',
+    ])
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('hides remarks and review tabs without legacy remarks/review access', async () => {
+    mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const tabs = await screen.findAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Documents',
+      'Offers',
+    ])
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
   it('shows offer company and received date from application detail', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -577,6 +652,8 @@ describe('Provincial Application Detail Document Actions', () => {
         </Routes>
       </MemoryRouter>,
     )
+
+    await selectApplicationDetailTab('Offers')
 
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
     expect(screen.getByText('2026-04-05')).toBeInTheDocument()
@@ -604,6 +681,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationPermits).toHaveBeenCalledWith('321')
     })
+    await selectApplicationDetailTab('Application')
     const permitRow = (await screen.findByText('900101')).closest('tr')
     expect(permitRow).toBeTruthy()
     expect(within(permitRow as HTMLElement).getByText('Complete')).toBeInTheDocument()
@@ -614,7 +692,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
   })
 
-  it('jumps from the header action to the embedded application upload panel', async () => {
+  it('shows the embedded application upload panel on the documents tab without header actions', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -626,14 +704,73 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const [uploadButton] = await screen.findAllByRole('button', {
-      name: 'Upload Application Document',
-    })
-    expect(uploadButton).toBeEnabled()
-    await userEvent.click(uploadButton)
+    await selectApplicationDetailTab('Documents')
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
+  })
+
+  it('shows only the upload panel when an application has no documents', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+
+    expect(
+      await screen.findByText('No documents are on file for this application yet.'),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
+    expect(screen.getByLabelText('Document description')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('No document rows matched the current filter.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows existing application documents before the upload accordion', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '900',
+          name: 'existing-doc.pdf',
+          description: 'Existing document',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    const documentName = await screen.findByText('existing-doc.pdf')
+    const uploadToggle = screen.getByRole('button', { name: 'Upload new documents' })
+
+    expect(screen.getByLabelText('Filter document rows')).toBeInTheDocument()
+    expect(
+      documentName.compareDocumentPosition(uploadToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+
+    await userEvent.click(uploadToggle)
+    expect(screen.getByLabelText('Document description')).toBeVisible()
   })
 
   it('disables application upload for expired applications', async () => {
@@ -654,11 +791,9 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const [uploadButton] = await screen.findAllByRole('button', {
-      name: 'Upload Application Document',
-    })
+    await selectApplicationDetailTab('Documents')
 
-    expect(uploadButton).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(
       await screen.findByText(
         'Application document upload is unavailable for expired applications.',
@@ -693,10 +828,8 @@ describe('Provincial Application Detail Document Actions', () => {
       ),
     ).toBeInTheDocument()
 
-    const [uploadButton] = screen.getAllByRole('button', {
-      name: 'Upload Application Document',
-    })
-    expect(uploadButton).toBeDisabled()
+    await selectApplicationDetailTab('Documents')
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
   })
 
@@ -717,11 +850,13 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Application')
     expect(await screen.findByText('Application summary')).toBeInTheDocument()
     expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
+    await selectApplicationDetailTab('Items')
     expect(await screen.findByText('Package Details')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
@@ -732,6 +867,52 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['EXE', 'Exempted - New'],
+    ['PMT', 'Permitted'],
+    ['EXP', 'Expired'],
+    ['PND', 'Pending'],
+    ['REJ', 'Rejected'],
+    ['WDN', 'Withdrawn'],
+  ])(
+    'blocks application summary and package edits for %s applications',
+    async (applicationStatusCode, statusDescription) => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        applicationStatusCode,
+        statusDescription,
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectApplicationDetailTab('Application')
+      expect(await screen.findByText('Application summary')).toBeInTheDocument()
+      expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
+      const summaryTile = getApplicationSummaryTile()
+      expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
+
+      await selectApplicationDetailTab('Items')
+      expect(await screen.findByText('Package Details')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+      expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+      expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+      expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+      expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+    },
+  )
 
   it('blocks application edits when another user holds the edit lock', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -764,7 +945,8 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Locked: Yes')).toBeInTheDocument()
+    await selectApplicationDetailTab('Application')
+    expect(await screen.findByText('Application locked')).toBeInTheDocument()
     expect(
       screen.getAllByText(
         'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
@@ -774,15 +956,19 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
+
+    await selectApplicationDetailTab('Items')
     expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    await selectApplicationDetailTab('Documents')
     expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
     expect(await screen.findByText('locked-doc.pdf')).toBeInTheDocument()
     screen
       .getAllByRole('button', { name: 'Delete' })
       .forEach((button) => expect(button).toBeDisabled())
+    await selectApplicationDetailTab('Remarks')
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
   })
@@ -816,14 +1002,26 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Documents')).toBeInTheDocument()
+    await selectApplicationDetailTab('Documents')
     const file = new File(['test'], 'uploaded-doc.pdf', { type: 'application/pdf' })
 
     await userEvent.type(screen.getByLabelText('Document description'), 'Uploaded')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
     await waitFor(() => {
+      expect(mockedValidateAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file,
+          fileDescription: 'Uploaded',
+        }),
+      )
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
         'application',
         expect.objectContaining({
@@ -885,14 +1083,14 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledWith('654')
     })
     expect(await screen.findByText('Second status')).toBeInTheDocument()
-    expect(screen.getByText('00099988')).toBeInTheDocument()
+    expect(screen.getAllByText('00099988').length).toBeGreaterThan(0)
 
     await act(async () => {
       resolveFirstDetail?.(applicationDetail)
     })
 
     expect(screen.getByText('Second status')).toBeInTheDocument()
-    expect(screen.getByText('00099988')).toBeInTheDocument()
+    expect(screen.getAllByText('00099988').length).toBeGreaterThan(0)
     expect(screen.queryByText('00011122')).not.toBeInTheDocument()
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1)
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('654')
@@ -923,6 +1121,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('app-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -966,6 +1165,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('app-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1011,10 +1211,8 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButtons = await screen.findAllByRole('button', {
-      name: 'Upload Application Document',
-    })
-    expect(uploadButtons[0]).toBeDisabled()
+    await selectApplicationDetailTab('Documents')
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(
       await screen.findByText(
         'Application document upload is unavailable for expired applications.',
@@ -1089,6 +1287,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('old-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1136,6 +1335,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     expect(await screen.findByText('Package Details')).toBeInTheDocument()
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
@@ -1197,6 +1397,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     expect(await screen.findByRole('button', { name: 'Create Package' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Create Package' }))
 
@@ -1216,6 +1417,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -1245,6 +1447,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -1278,6 +1481,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -1314,6 +1518,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -1399,6 +1604,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: 'Package Details' })
     ).closest('section')
@@ -1445,6 +1651,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: 'Package Details' })
     ).closest('section')
@@ -1537,6 +1744,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
@@ -1605,6 +1813,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     const timberMarksSection = (
       await screen.findByRole('heading', { name: 'Timber Marks' })
     ).closest('div')
@@ -1627,6 +1836,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     const detailFetchCountAfterInitialLoad =
       mockedFetchProvincialApplicationDetail.mock.calls.length
@@ -1680,6 +1890,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), {
@@ -1711,6 +1922,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
 
@@ -1734,6 +1946,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
     await chooseComboBoxOption(
@@ -1762,6 +1975,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Items')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
     await chooseComboBoxOption(
@@ -1800,6 +2014,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Remarks')
     expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('New Remark'), {
       target: { value: 'New application note' },
@@ -1817,7 +2032,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
   })
 
-  it('hides application remark editing without application remarks action', async () => {
+  it('hides application remarks tab without application remarks action', async () => {
     mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
 
     render(
@@ -1831,14 +2046,11 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Remarks')).toBeInTheDocument()
-    const remarksTile = screen.getByText('Remarks').closest('.cds--tile')
-    expect(remarksTile).toBeTruthy()
-
-    const remarksControls = within(remarksTile as HTMLElement)
-    expect(remarksControls.queryByLabelText('New Remark')).not.toBeInTheDocument()
-    expect(remarksControls.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
-    expect(remarksControls.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
   it('updates existing application remarks and refreshes detail', async () => {
@@ -1863,6 +2075,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Remarks')
     const remarkRow = (await screen.findByText('ok')).closest('tr')
     expect(remarkRow).toBeTruthy()
     expect(within(remarkRow as HTMLElement).getByText('2026-01-04')).toBeInTheDocument()
@@ -1933,6 +2146,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Application')
     const termInput = await screen.findByLabelText('Term (days)')
     fireEvent.change(termInput, { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('Term (months)'), { target: { value: '2' } })
@@ -1960,10 +2174,15 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '02')
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01')
     })
+    await selectApplicationDetailTab('Owner')
     expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
-    expect(screen.getByText('Agent Export Services')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
 
+    await selectApplicationDetailTab('Agent')
+    expect(screen.getByText('Agent Export Services')).toBeInTheDocument()
+    expect(screen.getByText('agent@example.test')).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Application')
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
     await waitFor(() => {
@@ -1998,6 +2217,75 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   }, 30000)
 
+  it('hides and clears stale agent fields when editing an owner application summary', async () => {
+    const ownerApplicationDetail: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      agentClientNumber: null,
+    }
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(ownerApplicationDetail)
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      applicationNumber: '321',
+      federalApplicationNumber: '',
+      applicationDate: '2026-01-01',
+      receivedDate: '2026-01-02',
+      termDays: '30',
+      applicationVolume: '100',
+      averageLogVolume: '2',
+      exemptionReasonCode: 'U',
+      productLocation: 'BC',
+      exportScheduleId: '987',
+      agentClientNumber: '00033344',
+      agentClientLocationCode: '01',
+      ownerClientNumber: '00011122',
+      ownerClientLocationCode: '00',
+      exemptionNumber: 'EX-555',
+      applicationStatusCode: 'APP',
+      applicantTypeCode: 'O',
+      orgUnitNumber: '12',
+      productTypeCode: 'LOG',
+      jurisdictionCode: 'P',
+      growthTypeCode: 'O',
+      agentContactName: 'Agent Contact',
+      ownerContactName: 'Owner Contact',
+      oicIndicator: 'N',
+      endUseCode: 'LU',
+      speciesCodes: ['FI'],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    const summaryControls = within(summaryTile)
+
+    await waitFor(() => {
+      expect(summaryControls.queryByLabelText('Agent client number')).not.toBeInTheDocument()
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
+    })
+    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033344', 'agent')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicantTypeCode: 'O',
+          agentClientNumber: '',
+          agentClientLocationCode: '',
+          agentContactName: '',
+        }),
+      )
+    })
+  })
+
   it('validates application summary edits before saving', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -2010,7 +2298,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
     const productLocationInput = await summaryControls.findByLabelText('Location of logs')
 
@@ -2048,7 +2336,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ownerClientNumber: '00011122',
       ownerClientLocationCode: '00',
       exemptionNumber: 'EX-555',
-      applicationStatusCode: 'ACTIVE',
+      applicationStatusCode: 'APP',
       applicantTypeCode: 'A',
       orgUnitNumber: '1903',
       productTypeCode: 'LOG',
@@ -2084,7 +2372,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
     const regionComboBox = getSummaryComboBox(summaryControls, 'Region')
 
@@ -2132,7 +2420,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
     const listingDateComboBox = getSummaryComboBox(summaryControls, 'Listing date')
 
@@ -2169,7 +2457,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
     const applicationVolumeInput = await summaryControls.findByLabelText('Application volume (m³)')
     const averageLogVolumeInput = await summaryControls.findByLabelText('Average log volume')
@@ -2207,6 +2495,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Application')
     await screen.findByLabelText('Application volume (m³)')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
@@ -2237,7 +2526,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
     const productLocationInput = await summaryControls.findByLabelText('Location of logs')
 
@@ -2281,6 +2570,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Application')
     const ownerContactInput = await screen.findByLabelText('Owner contact name')
     await userEvent.clear(ownerContactInput)
     await userEvent.type(ownerContactInput, 'Typed Owner')
@@ -2316,6 +2606,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Review')
     expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Approve Application' }))
 
@@ -2339,8 +2630,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
-    const reviewTile = getApplicationReviewTile()
+    const reviewTile = await selectApplicationReviewTile()
     await waitFor(() => {
       expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
@@ -2372,8 +2662,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
-    const reviewTile = getApplicationReviewTile()
+    const reviewTile = await selectApplicationReviewTile()
     const reviewControls = within(reviewTile)
     await chooseComboBoxOption(
       reviewControls.getByRole('combobox', { name: /application status/i }),
@@ -2442,8 +2731,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
-    const reviewTile = getApplicationReviewTile()
+    const reviewTile = await selectApplicationReviewTile()
     await waitFor(() => {
       expect(within(reviewTile).getByRole('combobox', { name: /application status/i })).toHaveValue(
         'Expired',
@@ -2485,8 +2773,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
-    const reviewTile = getApplicationReviewTile()
+    const reviewTile = await selectApplicationReviewTile()
     await waitFor(() => {
       expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
@@ -2551,8 +2838,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
-    const reviewTile = getApplicationReviewTile()
+    const reviewTile = await selectApplicationReviewTile()
     await clearComboBox(within(reviewTile).getByRole('combobox', { name: /application status/i }))
     await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
 
@@ -2574,8 +2860,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
-    const reviewTile = getApplicationReviewTile()
+    const reviewTile = await selectApplicationReviewTile()
     await chooseComboBoxOption(
       within(reviewTile).getByRole('combobox', { name: /application status/i }),
       'Rejected',
@@ -2601,6 +2886,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Remarks')
     expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
 
@@ -2633,9 +2919,9 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
-    expect(uploadButton).toBeDisabled()
-
+    await selectApplicationDetailTab('Documents')
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -2674,6 +2960,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('unknown-status-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()

@@ -20,6 +20,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/application-review-search-service', () => ({
+  countApplicationReviews: vi.fn(),
   searchApplicationReviews: vi.fn(),
   approveApplicationReview: vi.fn(),
   updateApplicationReviewStatus: vi.fn(),
@@ -70,7 +71,7 @@ const reviewResponse = {
   ],
   page: {
     number: 0,
-    size: 20,
+    size: 100,
     totalElements: 2,
     totalPages: 1,
   },
@@ -99,7 +100,7 @@ const twoNewReviewResponse = {
   ],
   page: {
     number: 0,
-    size: 20,
+    size: 100,
     totalElements: 2,
     totalPages: 1,
   },
@@ -240,10 +241,13 @@ describe('Provincial Review Action State Smoke', () => {
       expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
     })
 
+    expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Rejected')
+    expect(screen.getByRole('checkbox', { name: 'Send status email' })).toBeChecked()
+
     await userEvent.clear(screen.getByLabelText('Client email address'))
     await userEvent.type(screen.getByLabelText('Client email address'), 'edited@example.com')
-    await userEvent.type(screen.getByLabelText('Rejection remark'), 'Rejected from review queue')
-    await userEvent.click(screen.getByRole('button', { name: 'Reject Application' }))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
+    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
@@ -264,9 +268,9 @@ describe('Provincial Review Action State Smoke', () => {
       )
     })
     expect(
-      await screen.findByText('Rejected application 1000123 and sent email.'),
+      await screen.findByText('Updated application 1000123 and sent email.'),
     ).toBeInTheDocument()
-  })
+  }, 15000)
 
   it('prefills the agent client email when rejecting an agent application', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
@@ -314,8 +318,8 @@ describe('Provincial Review Action State Smoke', () => {
       expect(screen.getByLabelText('Client email address')).toHaveValue('agent@example.com')
     })
 
-    await userEvent.type(screen.getByLabelText('Rejection remark'), 'Rejected from review queue')
-    await userEvent.click(screen.getByRole('button', { name: 'Reject Application' }))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
+    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
@@ -345,9 +349,9 @@ describe('Provincial Review Action State Smoke', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Reject Application' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
-    expect(screen.getByText('Rejection remark is required.')).toBeInTheDocument()
+    expect(screen.getByText('Remarks are required.')).toBeInTheDocument()
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
@@ -375,18 +379,47 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(
       await screen.findByText(
-        'No client email was found for this application. Enter one before rejecting.',
+        'No client email was found for this application. Enter one before sending email or clear Send status email.',
       ),
     ).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('Rejection remark'), 'Rejected from review queue')
-    await userEvent.click(screen.getByRole('button', { name: 'Reject Application' }))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
+    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
     expect(
-      await screen.findByText('Enter a valid client email address before rejecting.'),
+      await screen.findByText('Enter a valid client email address before sending email.'),
     ).toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+  })
+
+  it('updates a rejected application without sending email when email delivery is unchecked', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await waitFor(() =>
+      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
+    )
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
+    expect(screen.getByLabelText('Client email address')).toBeDisabled()
+
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected without notification')
+    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+        '1000123',
+        expect.objectContaining({
+          statusCode: 'REJ',
+          remark: 'Rejected without notification',
+          clientEmailAddress: '',
+        }),
+      )
+    })
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
   })
 
   it('does not default region filters when opened without query parameters', async () => {
@@ -398,7 +431,41 @@ describe('Provincial Review Action State Smoke', () => {
         filters: expect.objectContaining({
           region: [],
         }),
+        pageSize: 100,
       }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
+    )
+  })
+
+  it('keeps review pagination at 100 by default with expanded page size options', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 0,
+        pageSize: 100,
+      }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
+    )
+
+    const rowsPerPage = screen.getByLabelText('Items per page:')
+    expect(rowsPerPage).toHaveValue('100')
+    expect(
+      Array.from(rowsPerPage.querySelectorAll('option')).map((option) => option.value),
+    ).toEqual(['10', '25', '50', '100', '200'])
+  })
+
+  it('accepts supported review page sizes from the URL', async () => {
+    renderPage('/provincial/review?pageSize=200')
+    await screen.findByText('1000123')
+
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 0,
+        pageSize: 200,
+      }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
   })
 
@@ -495,6 +562,7 @@ describe('Provincial Review Action State Smoke', () => {
             region: ['1818'],
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })

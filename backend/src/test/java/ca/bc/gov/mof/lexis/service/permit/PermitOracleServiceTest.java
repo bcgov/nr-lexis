@@ -151,7 +151,9 @@ class PermitOracleServiceTest {
             "ISS",
             "Issued",
             "00055667",
+            "01",
             "00077881",
+            "03",
             "Example Dest Co",
             "US",
             "SEA",
@@ -168,6 +170,7 @@ class PermitOracleServiceTest {
             "FED-1122",
             "SI-99881",
             "Permit remarks",
+            null,
             "R2");
     when(repository.findByPermitNumber(9000123L)).thenReturn(Optional.of(dto));
 

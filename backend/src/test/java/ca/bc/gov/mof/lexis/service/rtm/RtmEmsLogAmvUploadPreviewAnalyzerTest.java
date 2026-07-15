@@ -25,7 +25,7 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
 
     assertThat(result.headerDetected()).isTrue();
     assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 6, 1));
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 5, 1));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
     assertThat(result.dataRowCount()).isEqualTo(2);
     assertThat(result.numericCellCount()).isEqualTo(4);
     assertThat(result.errors()).isEmpty();
@@ -37,16 +37,16 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
-  void shouldPreferWorkbookMetadataDatesWhenPresent() throws IOException {
+  void shouldUseSubmissionMonthAsUploadRetrievalDate() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
             new ByteArrayInputStream(
                 RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbookWithMetadataRows()),
-            LocalDate.of(2026, 8, 1));
+            LocalDate.of(2026, 8, 14));
 
     assertThat(result.headerDetected()).isTrue();
     assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 6, 1));
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 5, 1));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 8, 1));
     assertThat(result.dataRowCount()).isEqualTo(2);
     assertThat(result.numericCellCount()).isEqualTo(4);
     assertThat(result.errors()).isEmpty();
@@ -68,29 +68,32 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
-  void publishedTemplateShouldKeepDateRowsAndImportableMatrix() throws IOException {
+  void publishedTemplateShouldRequireUpdateDateAndUserEnteredValues() throws IOException {
     byte[] templateBytes = Files.readAllBytes(resolvePublishedTemplate());
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
 
     assertThat(sheetXml)
-        .contains("<t>Retrieval Date</t>")
-        .contains("<t>Update Date</t>")
-        .contains("<f>TODAY()</f>")
-        .contains("<t>GRADE</t>");
+        .contains("Update Date (YYYY-MM-DD)")
+        .contains("Enter update date here")
+        .contains("GRADE")
+        .doesNotContain("<t>Retrieval Date</t>")
+        .doesNotContain("<f>TODAY()</f>")
+        .doesNotContain("<v>10.25</v>")
+        .doesNotContain("<v>20.5</v>")
+        .doesNotContain("<v>30.75</v>")
+        .doesNotContain("<v>1.25</v>");
 
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-            new ByteArrayInputStream(templateBytes), LocalDate.of(2026, 7, 1));
+            new ByteArrayInputStream(templateBytes), LocalDate.of(2026, 7, 6));
 
     assertThat(result.headerDetected()).isTrue();
-    assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 7, 1));
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+    assertThat(result.updateDate()).isNull();
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 7, 1));
     assertThat(result.dataRowCount()).isEqualTo(23);
-    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.numericCellCount()).isZero();
     assertThat(result.errors()).isEmpty();
-    assertThat(result.rows()).hasSize(6);
-    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
-        .contains("BA", "HE", "WH", "LO", "YE");
+    assertThat(result.rows()).isEmpty();
   }
 
   @Test

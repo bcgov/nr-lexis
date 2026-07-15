@@ -93,6 +93,23 @@ describe('search-options-service', () => {
     expect(result).toEqual({ applicationStatuses: [] })
   })
 
+  it('filters disallowed application status options like legacy', async () => {
+    getCachedDataMock.mockResolvedValue({
+      applicationStatuses: [
+        { code: 'NEW', name: 'New' },
+        { code: 'DAL', name: 'Disallowed' },
+        { code: 'APP', name: 'Approved' },
+      ],
+    })
+
+    const result = await fetchFederalApplicationOptions()
+
+    expect(result.applicationStatuses).toEqual([
+      { value: 'NEW', label: 'New' },
+      { value: 'APP', label: 'Approved' },
+    ])
+  })
+
   it('parses report options for current schedules', async () => {
     getCachedDataMock.mockResolvedValue({
       currentSchedules: [

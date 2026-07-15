@@ -4,7 +4,9 @@ import {
   businessBceidProviderName,
   idirProviderName,
   isCognitoConfigured,
+  redirectSignOut,
 } from '@/config/fam/config'
+import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { hasRole } from '@/context/auth/role-utils'
 import {
@@ -56,6 +58,19 @@ const ACTION_PRIORITY: string[] = [
   'lexisAgentAdmin',
 ]
 
+const REPORT_ACTION_ROUTE_MAP: Record<string, string> = {
+  applicationreport: '/reports/applicationReport',
+  mofrlisting: '/reports/biweeklyListing',
+  offerreport: '/reports/offerReport',
+  teacreport: '/reports/teacReport',
+  exemptionreport: '/reports/exemptionReport',
+  permitledgerreport: '/reports/permitLedgerReport',
+  transportreport: '/reports/transportReport',
+  speciesgradereport: '/reports/speciesGradeReport',
+  feereport: '/reports/feeReport',
+  tenurereport: '/reports/tenureReport',
+}
+
 const REPORT_ACTIONS = new Set<string>([
   'applicationreport',
   'offerreport',
@@ -75,22 +90,24 @@ const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_APPLICATION_APPROVER: 'APPLICATION_APPROVER',
   LEXIS_EXEMPTION_APPROVER: 'EXEMPTION_APPROVER',
   LEXIS_PROVINCIAL_SUBMITTER: 'PROVINCIAL_SUBMITTER',
-  LEXIS_FEDERAL_SUBMITTER: 'FEDERAL_SUBMITTER',
   LEXIS_DELEGATED_ADMIN: 'DELEGATED_ADMIN',
 }
 
 const CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_PROVINCIAL_SUBMITTER_'
 const CANONICAL_PROVINCIAL_CONCRETE_PREFIX = 'PROVINCIAL_SUBMITTER_'
-const CANONICAL_FEDERAL_CONCRETE_ROLE = 'FEDERAL_SUBMITTER'
 const ROLE_ADMIN = 'ADMIN'
 const ROLE_READ_ONLY = 'READ_ONLY'
 const ROLE_APPLICATION_APPROVER = 'APPLICATION_APPROVER'
 const ROLE_EXEMPTION_APPROVER = 'EXEMPTION_APPROVER'
 const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
-const ROLE_FEDERAL_SUBMITTER = 'FEDERAL_SUBMITTER'
+const PROD_RTM_ONLY_ACTION = '/lexisAgentAdmin'
 
-const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER, ROLE_FEDERAL_SUBMITTER])
+const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER])
 const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'scroll', 'focus']
+
+const cognitoSignOut = async (): Promise<void> => {
+  await signOut({ global: false, oauth: { redirectUrl: redirectSignOut } })
+}
 
 const normalizeAction = (action: string): string => {
   return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
@@ -114,10 +131,6 @@ const canonicalizeRole = (role: string): string => {
 
   if (normalizedRole.startsWith(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX)) {
     return `${CANONICAL_PROVINCIAL_CONCRETE_PREFIX}${normalizedRole.slice(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX.length)}`
-  }
-
-  if (normalizedRole.startsWith('FEDERAL_SUBMITTER_')) {
-    return CANONICAL_FEDERAL_CONCRETE_ROLE
   }
 
   return LEGACY_TO_CANONICAL_ROLE_MAP[normalizedRole] ?? normalizedRole
@@ -173,15 +186,21 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   const isProvincialSubmitterUser = capabilities.roles.some((role) => {
     return role === ROLE_PROVINCIAL_SUBMITTER || role.startsWith('PROVINCIAL_SUBMITTER_')
   })
-  const isFederalSubmitterUser = capabilities.roles.some((role) => role === ROLE_FEDERAL_SUBMITTER)
   const isAdminUser = hasRole(capabilities.roles, ROLE_ADMIN)
   const isApplicationApproverUser = hasRole(capabilities.roles, ROLE_APPLICATION_APPROVER)
   const isExemptionApproverUser = hasRole(capabilities.roles, ROLE_EXEMPTION_APPROVER)
   const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
   const hasGrantedAction = (action: string): boolean => grantedSet.has(normalizeAction(action))
+  const reportRoute = Object.entries(REPORT_ACTION_ROUTE_MAP).find(([action]) =>
+    grantedSet.has(action),
+  )?.[1]
+
+  if (isProdRtmOnlyMode()) {
+    return isAdminUser ? PROD_RTM_ONLY_ROUTE : '/unauthorized'
+  }
 
   if (isAdminUser) {
-    return '/admin'
+    return '/provincial/review'
   }
 
   if (isReadOnlyUser) {
@@ -195,9 +214,6 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (isProvincialSubmitterUser && hasGrantedAction('createApplication')) {
       return '/provincial/application/create'
     }
-    if (isFederalSubmitterUser && hasGrantedAction('uploadApplicationSubmission')) {
-      return '/federal/application/upload'
-    }
     if (
       hasGrantedAction('/federalApplicationSearch') ||
       hasGrantedAction('viewFederalApplication')
@@ -206,6 +222,9 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     }
     if (hasGrantedAction('uploadApplicationSubmission')) {
       return '/provincial/application/upload'
+    }
+    if (reportRoute) {
+      return reportRoute
     }
     return '/unauthorized'
   }
@@ -223,6 +242,10 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (grantedSet.has(normalizedAction)) {
       return LEGACY_ACTION_ROUTE_MAP[normalizedAction]
     }
+  }
+
+  if (reportRoute) {
+    return reportRoute
   }
 
   return '/unauthorized'
@@ -257,7 +280,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       redirectToLoginShell()
 
       if (shouldSignOut) {
-        await signOut()
+        await cognitoSignOut()
       }
     } catch (error) {
       console.warn(`Unable to complete Cognito sign-out after ${reason}.`, error)
@@ -305,11 +328,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const data = await fetchSessionCapabilities()
         if (sessionGenerationRef.current === refreshGeneration) {
           sessionExpiryInFlightRef.current = false
-          setCapabilities(sanitizeCapabilities(data, orgUnitNo))
+          const nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+          authenticatedSessionRef.current = nextCapabilities.authenticated
+          setCapabilities(nextCapabilities)
         }
       } catch (error) {
         if (sessionGenerationRef.current === refreshGeneration) {
           console.warn('Unable to load session capabilities.', error)
+          authenticatedSessionRef.current = false
           setCapabilities(DEFAULT_CAPABILITIES)
         }
       } finally {
@@ -405,7 +431,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       redirectToLoginShell()
 
       if (isCognitoConfigured) {
-        await signOut()
+        await cognitoSignOut()
       }
     } catch (error) {
       console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
@@ -418,6 +444,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const canPerform = useCallback(
     (action: string): boolean => {
+      if (isProdRtmOnlyMode()) {
+        return (
+          hasRole(capabilities.roles, ROLE_ADMIN) &&
+          normalizeAction(action) === normalizeAction(PROD_RTM_ONLY_ACTION)
+        )
+      }
       if (hasRole(capabilities.roles, ROLE_ADMIN)) {
         return true
       }

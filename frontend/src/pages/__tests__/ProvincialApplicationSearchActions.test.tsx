@@ -23,6 +23,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/provincial-application-search-service', () => ({
+  countProvincialApplications: vi.fn(),
   searchProvincialApplications: vi.fn(),
 }))
 
@@ -117,10 +118,16 @@ describe('Provincial Application Search Actions', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Select 321' })).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Select 654' })).toBeDisabled()
-    expect(screen.getByRole('link', { name: 'Upload Application Submission' })).toHaveAttribute(
+    expect(
+      screen.queryByRole('link', { name: 'Upload Application Submission' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add Application' })).toHaveAttribute(
       'href',
-      '/provincial/application/upload',
+      '/provincial/application/create',
     )
+    expect(
+      screen.getByRole('link', { name: 'Add Application' }).closest('.legacy-search-actions'),
+    ).toBeNull()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(createExemptionButton).toBeEnabled()
@@ -134,6 +141,34 @@ describe('Provincial Application Search Actions', () => {
         ownerClientNumber: '22222222',
       },
     })
+  })
+
+  it('renders application search filters in the legacy order', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    const filterGrid = document.querySelector('.provincial-application-search-grid')
+    expect(filterGrid).toBeTruthy()
+    const fieldLabels = Array.from((filterGrid as HTMLElement).children).map((field) =>
+      field
+        .querySelector('label, .cds--label')
+        ?.textContent?.replace(/Total items selected:.*/, '')
+        .trim(),
+    )
+
+    expect(fieldLabels).toEqual([
+      'Application number',
+      'Application status',
+      'Package number',
+      'Exemption type',
+      'Exemption number',
+      'Product type',
+      'Region',
+      'Applicant client number',
+      'Owner client number',
+      'Listing from date',
+      'Listing to date',
+    ])
   })
 
   it('shows validation when selected rows do not share client numbers', async () => {
@@ -198,6 +233,7 @@ describe('Provincial Application Search Actions', () => {
             applicationNumber: '9',
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })
@@ -212,6 +248,7 @@ describe('Provincial Application Search Actions', () => {
           region: [],
         }),
       }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
   })
 
@@ -230,6 +267,7 @@ describe('Provincial Application Search Actions', () => {
             applicationNumber: '987',
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })
@@ -254,6 +292,7 @@ describe('Provincial Application Search Actions', () => {
             region: ['1818'],
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })

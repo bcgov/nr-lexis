@@ -4,19 +4,23 @@ import {
   Column,
   Grid,
   InlineLoading,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
   Tag,
   TextInput,
   Tile,
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
@@ -35,8 +39,14 @@ import {
   removeExemptionDocument,
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
-import { runReport } from '@/service/report-service'
-import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { triggerBrowserDownload } from '@/utils/download'
+
+const EXEMPTION_DETAIL_TAB_INDEX = {
+  summary: 0,
+  permits: 1,
+  documents: 2,
+  remarks: 3,
+} as const
 
 const ProvincialExemptionDetailsPage = () => {
   const navigate = useNavigate()
@@ -51,7 +61,9 @@ const ProvincialExemptionDetailsPage = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
-  const [isOpeningApprovedExemptionReport, setIsOpeningApprovedExemptionReport] = useState(false)
+  const [selectedExemptionTabIndex, setSelectedExemptionTabIndex] = useState(
+    EXEMPTION_DETAIL_TAB_INDEX.summary,
+  )
   const beginDetailRequest = useLatestRequestGuard()
   const permitFilter = searchParams.get('permitFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
@@ -163,39 +175,6 @@ const ProvincialExemptionDetailsPage = () => {
 
   const canManageDocuments = canPerform('/fileExemptionUpload')
 
-  const onOpenApprovedExemptionReport = useCallback(async () => {
-    if (!detail) {
-      return
-    }
-
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setIsOpeningApprovedExemptionReport(true)
-    try {
-      const runResult = await runReport({
-        reportId: 'approvedExemptionReport',
-        actionMapping: 'generate',
-        values: {
-          exemptionNumber: detail.exemptionNumber,
-          outputFormat: 'PDF',
-        },
-      })
-
-      const opened = openBlobInNewTab(runResult.blob, 'approvedExemptionReportWindow')
-      if (!opened) {
-        triggerBrowserDownload(runResult.blob, runResult.filename)
-        setActionErrorMessage(
-          'Popup blocked while opening approved exemption report preview. Downloaded the report file instead.',
-        )
-      }
-    } catch (error) {
-      console.error(error)
-      setActionErrorMessage('Unable to generate approved exemption report.')
-    } finally {
-      setIsOpeningApprovedExemptionReport(false)
-    }
-  }, [detail])
-
   const refreshExemptionDocuments = useCallback(async () => {
     if (!exemptionNumber) {
       return
@@ -205,16 +184,6 @@ const ProvincialExemptionDetailsPage = () => {
     setDocumentRows(documentsResult.rows)
     setDocumentsErrorMessage('')
   }, [exemptionNumber])
-
-  const onOpenExemptionUpload = useCallback(() => {
-    if (!detail) {
-      return
-    }
-
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    document.getElementById('exemptionDocumentUpload')?.scrollIntoView({ block: 'start' })
-  }, [detail])
 
   const onOpenDocument = useCallback(async (row: ProvincialExemptionDocumentRow) => {
     setActionErrorMessage('')
@@ -271,10 +240,36 @@ const ProvincialExemptionDetailsPage = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Provincial exemption details</h1>
-        <p>
-          Exemption <code>{exemptionNumber}</code>
-        </p>
+        <div className="application-detail-title-row">
+          <div>
+            <h1>Provincial exemption details</h1>
+            <p>
+              Exemption <code>{exemptionNumber}</code>
+            </p>
+          </div>
+          {detail && (
+            <dl className="application-detail-header-metrics" aria-label="Exemption highlights">
+              <div>
+                <dt>Status</dt>
+                <dd>
+                  {displayValue(detail.exemptionStatusDescription ?? detail.exemptionStatusCode)}
+                </dd>
+              </div>
+              <div>
+                <dt>Type</dt>
+                <dd>{displayValue(detail.exemptionTypeDescription ?? detail.exemptionTypeCode)}</dd>
+              </div>
+              <div>
+                <dt>Permits</dt>
+                <dd>{detail.permitNumbers.length.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>Documents</dt>
+                <dd>{documentRows.length.toLocaleString()}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
       </Column>
 
       {loading && (
@@ -332,262 +327,267 @@ const ProvincialExemptionDetailsPage = () => {
             </Column>
           )}
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">Actions</h2>
-              <div className="legacy-search-actions">
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canPerform('/exemptionSearch')}
-                  onClick={() => navigate(withCurrentSearch('/provincial/exemption'))}
-                >
-                  Back to Exemption search Results
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={
-                    !detail.applicationNumber ||
-                    !canPerform('/applicationSearch') ||
-                    !canPerform('/applicationDetails')
-                  }
-                  onClick={() => {
-                    if (detail.applicationNumber) {
-                      navigate(
-                        withCurrentSearch(`/provincial/application/${detail.applicationNumber}`),
-                      )
-                    }
-                  }}
-                >
-                  Open Application Detail
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canPerform('/permitSearch')}
-                  onClick={() => navigate(withCurrentSearch('/provincial/permit'))}
-                >
-                  Open Permit search
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canManageDocuments || !detail.exemptionNumber}
-                  onClick={onOpenExemptionUpload}
-                >
-                  Upload Exemption Document
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={
-                    !detail.exemptionNumber ||
-                    !canPerform('/approvedExemptionReport') ||
-                    isOpeningApprovedExemptionReport
-                  }
-                  onClick={() => void onOpenApprovedExemptionReport()}
-                >
-                  {isOpeningApprovedExemptionReport
-                    ? 'Opening Approved Exemption Report...'
-                    : 'Open Approved Exemption Report'}
-                </Button>
-              </div>
-            </Tile>
-          </Column>
+          <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+            <Tabs
+              selectedIndex={selectedExemptionTabIndex}
+              onChange={({ selectedIndex }) => setSelectedExemptionTabIndex(selectedIndex)}
+            >
+              <TabList
+                aria-label="Exemption detail sections"
+                contained
+                size="md"
+                className="application-tabs__list application-detail-tab-list"
+              >
+                <Tab>Summary</Tab>
+                <Tab>Permits</Tab>
+                <Tab>Documents</Tab>
+                <Tab>Remarks</Tab>
+              </TabList>
+              <TabPanels>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <DetailFieldTile
+                        title="Exemption summary"
+                        fields={[
+                          {
+                            label: 'Exemption number',
+                            value: displayValue(detail.exemptionNumber),
+                          },
+                          {
+                            label: 'Type',
+                            value: displayValue(
+                              detail.exemptionTypeDescription ?? detail.exemptionTypeCode,
+                            ),
+                          },
+                          {
+                            label: 'Status',
+                            value: displayValue(
+                              detail.exemptionStatusDescription ?? detail.exemptionStatusCode,
+                            ),
+                          },
+                          {
+                            label: 'Application number',
+                            value: displayValue(detail.applicationNumber),
+                          },
+                          {
+                            label: 'Application status',
+                            value: displayValue(detail.applicationStatus),
+                          },
+                          {
+                            label: 'Owner client number',
+                            value: displayValue(detail.ownerClientNumber),
+                          },
+                          {
+                            label: 'Agent client number',
+                            value: displayValue(detail.agentClientNumber),
+                          },
+                          { label: 'Approval date', value: displayValue(detail.approvalDate) },
+                          { label: 'Expiry date', value: displayValue(detail.expiryDate) },
+                          {
+                            label: 'Approved volume (m³)',
+                            value: displayValue(detail.approvedVolume),
+                          },
+                          { label: 'Used volume (m³)', value: displayValue(detail.usedVolume) },
+                          {
+                            label: 'Remaining volume (m³)',
+                            value: displayValue(detail.remainingVolume),
+                          },
+                          {
+                            label: 'Blanket Order in Council',
+                            value: (
+                              <Tag type={detail.blanketOic ? 'green' : 'gray'}>
+                                {detail.blanketOic ? 'Yes' : 'No'}
+                              </Tag>
+                            ),
+                          },
+                        ]}
+                      />
+                    </Column>
 
-          <Column sm={4} md={8} lg={16}>
-            <DetailFieldTile
-              title="Exemption summary"
-              fields={[
-                { label: 'Exemption number', value: displayValue(detail.exemptionNumber) },
-                {
-                  label: 'Type',
-                  value: displayValue(detail.exemptionTypeDescription ?? detail.exemptionTypeCode),
-                },
-                {
-                  label: 'Status',
-                  value: displayValue(
-                    detail.exemptionStatusDescription ?? detail.exemptionStatusCode,
-                  ),
-                },
-                { label: 'Application number', value: displayValue(detail.applicationNumber) },
-                { label: 'Application status', value: displayValue(detail.applicationStatus) },
-                { label: 'Owner client number', value: displayValue(detail.ownerClientNumber) },
-                { label: 'Agent client number', value: displayValue(detail.agentClientNumber) },
-                { label: 'Approval date', value: displayValue(detail.approvalDate) },
-                { label: 'Expiry date', value: displayValue(detail.expiryDate) },
-                {
-                  label: 'Approved volume (m³)',
-                  value: displayValue(detail.approvedVolume),
-                },
-                { label: 'Used volume (m³)', value: displayValue(detail.usedVolume) },
-                {
-                  label: 'Remaining volume (m³)',
-                  value: displayValue(detail.remainingVolume),
-                },
-                {
-                  label: 'Blanket Order in Council',
-                  value: (
-                    <Tag type={detail.blanketOic ? 'green' : 'gray'}>
-                      {detail.blanketOic ? 'Yes' : 'No'}
-                    </Tag>
-                  ),
-                },
-              ]}
-            />
-          </Column>
-
-          <Column sm={4} md={8} lg={16}>
-            <DetailFieldTile
-              title="Other conditions"
-              fields={[{ label: 'Conditions', value: displayValue(detail.otherConditions) }]}
-            />
-          </Column>
-
-          <Column sm={4} md={8} lg={8}>
-            <Tile>
-              <h2 className="detail-tile-title">Related permits</h2>
-              <TextInput
-                id="exemptionDetailPermitFilter"
-                labelText="Filter permits"
-                value={permitFilter}
-                onChange={(event) => updateFilterParam('permitFilter', event.target.value)}
-                placeholder="Filter by permit number"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Permit number</TableHeader>
-                    <TableHeader>Open</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredPermitNumbers.map((permitNumber) => (
-                    <TableRow key={permitNumber}>
-                      <TableCell>{permitNumber}</TableCell>
-                      <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          disabled={!canPerform('/permitSearch') || !canPerform('/permitDetails')}
-                          onClick={() =>
-                            navigate(withCurrentSearch(`/provincial/permit/${permitNumber}`))
+                    <Column sm={4} md={8} lg={16}>
+                      <DetailFieldTile
+                        title="Other conditions"
+                        fields={[
+                          { label: 'Conditions', value: displayValue(detail.otherConditions) },
+                        ]}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">Related permits</h2>
+                        <TextInput
+                          id="exemptionDetailPermitFilter"
+                          labelText="Filter permits"
+                          value={permitFilter}
+                          onChange={(event) =>
+                            updateFilterParam('permitFilter', event.target.value)
                           }
-                        >
-                          Open
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredPermitNumbers.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={2}>No permits matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                Documents{' '}
-                <ApiSourceTag context="Exemption documents are returned from the exemption documents service." />
-              </h2>
-              {canManageDocuments && (
-                <DetailDocumentUploadPanel
-                  workflowType="exemption"
-                  targetNumber={detail.exemptionNumber}
-                  inputId="exemptionDocumentUpload"
-                  disabled={!detail.exemptionNumber}
-                  onUploadComplete={refreshExemptionDocuments}
-                />
-              )}
-              <TextInput
-                id="exemptionDetailDocumentsFilter"
-                labelText="Filter document rows"
-                value={documentsFilter}
-                onChange={(event) => updateFilterParam('documentsFilter', event.target.value)}
-                placeholder="Filter by file name, description, type, or id"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>File Name</TableHeader>
-                    <TableHeader>Description</TableHeader>
-                    <TableHeader>Type</TableHeader>
-                    <TableHeader>Actions</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredDocumentRows.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.name || '-'}</TableCell>
-                      <TableCell>{row.description || '-'}</TableCell>
-                      <TableCell>{row.type || '-'}</TableCell>
-                      <TableCell>
-                        <div className="legacy-search-actions">
-                          <Button kind="ghost" size="sm" onClick={() => void onOpenDocument(row)}>
-                            Open
-                          </Button>
-                          <Button
-                            kind="danger--ghost"
-                            size="sm"
-                            disabled={!canManageDocuments || isRemovingDocumentId === row.id}
-                            onClick={() => void onRemoveDocument(row)}
-                          >
-                            {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredDocumentRows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        No document rows matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={8}>
-            <Tile>
-              <h2 className="detail-tile-title">Remarks</h2>
-              <TextInput
-                id="exemptionDetailRemarkFilter"
-                labelText="Filter remarks"
-                value={remarkFilter}
-                onChange={(event) => updateFilterParam('remarkFilter', event.target.value)}
-                placeholder="Filter by title or remark text"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Title</TableHeader>
-                    <TableHeader>Remark</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredRemarks.map((item) => (
-                    <TableRow key={`${item.title}-${item.remark}`}>
-                      <TableCell>{item.title}</TableCell>
-                      <TableCell>{item.remark}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredRemarks.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={2}>No remarks matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
+                          placeholder="Filter by permit number"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Permit number</TableHeader>
+                              <TableHeader>Open</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredPermitNumbers.map((permitNumber) => (
+                              <TableRow key={permitNumber}>
+                                <TableCell>{permitNumber}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    kind="ghost"
+                                    size="sm"
+                                    disabled={
+                                      !canPerform('/permitSearch') || !canPerform('/permitDetails')
+                                    }
+                                    onClick={() =>
+                                      navigate(
+                                        withCurrentSearch(`/provincial/permit/${permitNumber}`),
+                                      )
+                                    }
+                                  >
+                                    Open
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredPermitNumbers.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={2}>
+                                  No permits matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">Documents</h2>
+                        {canManageDocuments && (
+                          <DetailDocumentUploadPanel
+                            workflowType="exemption"
+                            targetNumber={detail.exemptionNumber}
+                            inputId="exemptionDocumentUpload"
+                            disabled={!detail.exemptionNumber}
+                            onUploadComplete={refreshExemptionDocuments}
+                          />
+                        )}
+                        <TextInput
+                          id="exemptionDetailDocumentsFilter"
+                          labelText="Filter document rows"
+                          value={documentsFilter}
+                          onChange={(event) =>
+                            updateFilterParam('documentsFilter', event.target.value)
+                          }
+                          placeholder="Filter by file name, description, type, or id"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>File Name</TableHeader>
+                              <TableHeader>Description</TableHeader>
+                              <TableHeader>Type</TableHeader>
+                              <TableHeader>Actions</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredDocumentRows.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.name || '-'}</TableCell>
+                                <TableCell>{row.description || '-'}</TableCell>
+                                <TableCell>{row.type || '-'}</TableCell>
+                                <TableCell>
+                                  <div className="legacy-search-actions">
+                                    <Button
+                                      kind="ghost"
+                                      size="sm"
+                                      onClick={() => void onOpenDocument(row)}
+                                    >
+                                      Open
+                                    </Button>
+                                    <Button
+                                      kind="danger--ghost"
+                                      size="sm"
+                                      disabled={
+                                        !canManageDocuments || isRemovingDocumentId === row.id
+                                      }
+                                      onClick={() => void onRemoveDocument(row)}
+                                    >
+                                      {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredDocumentRows.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={4}>
+                                  No document rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">Remarks</h2>
+                        <TextInput
+                          id="exemptionDetailRemarkFilter"
+                          labelText="Filter remarks"
+                          value={remarkFilter}
+                          onChange={(event) =>
+                            updateFilterParam('remarkFilter', event.target.value)
+                          }
+                          placeholder="Filter by title or remark text"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Title</TableHeader>
+                              <TableHeader>Remark</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredRemarks.map((item) => (
+                              <TableRow key={`${item.title}-${item.remark}`}>
+                                <TableCell>{item.title}</TableCell>
+                                <TableCell>{item.remark}</TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredRemarks.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={2}>
+                                  No remarks matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
           </Column>
         </>
       )}

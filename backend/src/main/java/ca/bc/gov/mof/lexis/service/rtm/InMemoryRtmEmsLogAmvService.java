@@ -9,6 +9,8 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -34,6 +36,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final List<String> UPLOAD_GROWTH_INDICATORS = List.of("O", "S");
 
   private final Clock clock;
+  private final VirusScanService virusScanService;
 
   private final List<RtmEmsLogAmvRowDto> rows = new ArrayList<>(
       List.of(
@@ -65,12 +68,21 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
               BigDecimal.valueOf(900.89),
               "0")));
 
-  public InMemoryRtmEmsLogAmvService() {
-    this(Clock.systemUTC());
+  InMemoryRtmEmsLogAmvService() {
+    this(Clock.systemUTC(), VirusScanService.NO_OP);
   }
 
   InMemoryRtmEmsLogAmvService(Clock clock) {
+    this(clock, VirusScanService.NO_OP);
+  }
+
+  public InMemoryRtmEmsLogAmvService(VirusScanService virusScanService) {
+    this(Clock.systemUTC(), virusScanService);
+  }
+
+  InMemoryRtmEmsLogAmvService(Clock clock, VirusScanService virusScanService) {
     this.clock = clock == null ? Clock.systemUTC() : clock;
+    this.virusScanService = virusScanService;
   }
 
   @Override
@@ -84,20 +96,33 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     String retrievalDateFilter = normalize(retrievalDate);
     String updateDateFilter = normalize(updateDate);
 
-    return rows.stream()
-        .filter(
-            row -> matchesFilter(speciesFilter, row.species()) &&
-                matchesFilter(growthIndicatorFilter, row.growthIndicator()) &&
-                matchesDateFilter(retrievalDateFilter, row.retrievalDate()) &&
-                matchesDateFilter(updateDateFilter, row.updateDate()))
-        .sorted(
-            Comparator.comparing(
-                    (RtmEmsLogAmvRowDto row) -> normalize(row.species()),
-                    Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER))
-                .thenComparing(
-                    (RtmEmsLogAmvRowDto row) -> normalize(row.grade()),
-                    Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER)))
-        .toList();
+    if (retrievalDateFilter != null && retrievalDateFilter.equals(updateDateFilter)) {
+      return findRowsForEffectiveDate(speciesFilter, growthIndicatorFilter, retrievalDateFilter);
+    }
+
+    return findRows(speciesFilter, growthIndicatorFilter, retrievalDateFilter, updateDateFilter);
+  }
+
+  @Override
+  public List<RtmEmsLogAmvRowDto> findLatestBefore(String effectiveDate) {
+    LocalDate parsedEffectiveDate = parseIsoOrLegacyDate(effectiveDate);
+    if (parsedEffectiveDate == null) {
+      return List.of();
+    }
+
+    LocalDate latestDate = null;
+    for (RtmEmsLogAmvRowDto row : rows) {
+      LocalDate rowDate = rowEffectiveDate(row);
+      if (rowDate != null
+          && rowDate.isBefore(parsedEffectiveDate)
+          && (latestDate == null || rowDate.isAfter(latestDate))) {
+        latestDate = rowDate;
+      }
+    }
+
+    return latestDate == null
+        ? List.of()
+        : findRowsForEffectiveDate(null, null, latestDate.toString());
   }
 
   @Override
@@ -170,11 +195,26 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (!isXlsx(file) ) {
       return buildPreview("rejected", "File type is not supported.", 0, List.of("Upload an XLSX file."), List.of());
     }
+    try {
+      virusScanService.assertClean(file);
+    } catch (VirusScanException ex) {
+      return buildPreview(
+          "rejected",
+          ex.userMessage(),
+          0,
+          List.of(ex.userMessage()),
+          List.of(),
+          null,
+          null,
+          List.of(),
+          fileName,
+          file.getSize());
+    }
 
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
           RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-              file.getInputStream(), currentSubmissionMonth());
+              file.getInputStream(), currentSubmissionDate());
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<RtmEmsLogAmvRowDto> previewRows = buildPreviewRows(parseResult);
@@ -189,7 +229,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (parseResult.updateDate() == null || parseResult.retrievalDate() == null) {
-        errors.add("The upload submission date could not be determined.");
+        errors.add("The update date is required in the uploaded template.");
       }
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
@@ -239,7 +279,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
           RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-              file.getInputStream(), currentSubmissionMonth());
+              file.getInputStream(), currentSubmissionDate());
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
@@ -249,6 +289,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
               .toList();
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
+      LocalDate effectiveDate = parsedUpdateDate;
 
       if (uploadRows.size() < parseResult.rows().size()) {
         warnings.add("Some rows were skipped because they were missing grade/species values.");
@@ -296,7 +337,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (parsedUpdateDate == null || parsedRetrievalDate == null) {
-        errors.add("The upload submission date could not be determined.");
+        errors.add("The update date is required in the uploaded template.");
       }
 
       if (!errors.isEmpty()) {
@@ -325,7 +366,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
                 species,
                 grade,
                 normalizedGrowthIndicator,
-                parsedRetrievalDate,
+                effectiveDate,
                 parsedUpdateDate,
                 newValue);
 
@@ -389,24 +430,27 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.add("Growth indicator is required.");
     }
 
-    if (parseRetrievalDate(request.retrievalDate()) == null) {
+    LocalDate parsedRetrievalDate = parseRetrievalDate(request.retrievalDate());
+    if (parsedRetrievalDate == null) {
       errors.add("Retrieval date is required and must be a valid date.");
     }
 
-    if (request.newValue() == null) {
-      errors.add("New value is required.");
-    }
-    if (request.newValue() != null && request.newValue().signum() < 0) {
-      errors.add("New value must be greater than or equal to zero.");
-    }
+    errors.addAll(RtmEmsLogAmvValueValidator.validate(request.newValue()));
 
     String saveMode = request.effectiveSaveMode();
     if (!SAVE_MODE_CREATE.equals(saveMode) && !SAVE_MODE_UPDATE.equals(saveMode)) {
       errors.add("Save mode must be 'create' or 'update'.");
     }
 
-    if (SAVE_MODE_UPDATE.equals(saveMode) && parseIsoOrLegacyDate(request.updateDate()) == null) {
+    LocalDate parsedUpdateDate = parseIsoOrLegacyDate(request.updateDate());
+    if (SAVE_MODE_UPDATE.equals(saveMode) && parsedUpdateDate == null) {
       errors.add("Update date is required for update mode.");
+    }
+    if (SAVE_MODE_UPDATE.equals(saveMode)
+        && parsedRetrievalDate != null
+        && parsedUpdateDate != null
+        && parsedUpdateDate.isBefore(parsedRetrievalDate)) {
+      errors.add("Update date must be on or after the retrieval date.");
     }
 
     return errors;
@@ -441,7 +485,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       String fileName,
       long fileSize) {
     return new RtmEmsLogAmvUploadPreviewDto(
-        status, fileName, fileSize, message, rowCount, retrievalDate, updateDate, errors, warnings, rows);
+        status, fileName, fileSize, message, rowCount, retrievalDate, updateDate, errors, List.of(), rows);
   }
 
   private String normalize(String value) {
@@ -464,6 +508,73 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       return true;
     }
     return expected.equals(trimToNull(candidate));
+  }
+
+  private List<RtmEmsLogAmvRowDto> findRows(
+      String speciesFilter,
+      String growthIndicatorFilter,
+      String retrievalDateFilter,
+      String updateDateFilter) {
+    return sortRows(
+        rows.stream()
+            .filter(
+                row ->
+                    matchesFilter(speciesFilter, row.species())
+                        && matchesFilter(growthIndicatorFilter, row.growthIndicator())
+                        && matchesDateFilter(retrievalDateFilter, row.retrievalDate())
+                        && matchesDateFilter(updateDateFilter, row.updateDate()))
+            .toList());
+  }
+
+  private List<RtmEmsLogAmvRowDto> findRowsForEffectiveDate(
+      String speciesFilter, String growthIndicatorFilter, String effectiveDate) {
+    Map<String, RtmEmsLogAmvRowDto> rowsByTarget = new LinkedHashMap<>();
+
+    rows.stream()
+        .filter(
+            row ->
+                matchesFilter(speciesFilter, row.species())
+                    && matchesFilter(growthIndicatorFilter, row.growthIndicator())
+                    && effectiveDate.equals(trimToNull(row.retrievalDate()))
+                    && (trimToNull(row.updateDate()) == null
+                        || effectiveDate.equals(trimToNull(row.updateDate()))))
+        .forEach(row -> rowsByTarget.put(rowKey(row), row));
+
+    rows.stream()
+        .filter(
+            row ->
+                matchesFilter(speciesFilter, row.species())
+                    && matchesFilter(growthIndicatorFilter, row.growthIndicator())
+                    && effectiveDate.equals(trimToNull(row.updateDate())))
+        .forEach(row -> rowsByTarget.put(rowKey(row), row));
+
+    return sortRows(rowsByTarget.values());
+  }
+
+  private LocalDate rowEffectiveDate(RtmEmsLogAmvRowDto row) {
+    String updateDate = trimToNull(row.updateDate());
+    return parseIsoOrLegacyDate(updateDate == null ? row.retrievalDate() : updateDate);
+  }
+
+  private List<RtmEmsLogAmvRowDto> sortRows(Iterable<RtmEmsLogAmvRowDto> sourceRows) {
+    List<RtmEmsLogAmvRowDto> sortedRows = new ArrayList<>();
+    sourceRows.forEach(sortedRows::add);
+    sortedRows.sort(
+        Comparator.comparing(
+                (RtmEmsLogAmvRowDto row) -> normalize(row.species()),
+                Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER))
+            .thenComparing(
+                (RtmEmsLogAmvRowDto row) -> normalize(row.grade()),
+                Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER)));
+    return sortedRows;
+  }
+
+  private String rowKey(RtmEmsLogAmvRowDto row) {
+    return String.join(
+        "|",
+        normalize(row.species()),
+        normalize(row.grade()),
+        normalize(row.growthIndicator()));
   }
 
   private int findMatchingRowIndex(
@@ -528,8 +639,8 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     return buildMutationResult(RETURN_SUCCESS, "Upload row saved.", List.of(), List.of(uploadedRow));
   }
 
-  private LocalDate currentSubmissionMonth() {
-    return LocalDate.now(clock).withDayOfMonth(1);
+  private LocalDate currentSubmissionDate() {
+    return LocalDate.now(clock);
   }
 
   private String formatDate(LocalDate date) {
@@ -556,6 +667,13 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     if (!isXlsx(file)) {
       errors.add("File type is not supported.");
+    }
+    if (errors.isEmpty()) {
+      try {
+        virusScanService.assertClean(file);
+      } catch (VirusScanException ex) {
+        errors.add(ex.userMessage());
+      }
     }
 
     return errors;
@@ -641,6 +759,6 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> warnings,
       List<RtmEmsLogAmvRowDto> rows) {
     return new RtmEmsLogAmvUploadResultDto(
-        status, fileName, fileSize, message, attemptedRowCount, uploadedRowCount, errors, warnings, rows);
+        status, fileName, fileSize, message, attemptedRowCount, uploadedRowCount, errors, List.of(), rows);
   }
 }

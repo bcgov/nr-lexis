@@ -1,0 +1,162 @@
+# NEXCOL Federal Submission API
+
+## Overview
+
+NEXCOL submits federal LEXIS XML through a synchronous machine-to-machine API. Interactive LEXIS
+authentication remains independent of this integration.
+
+```text
+NEXCOL
+  -> Keycloak client-credentials token
+  -> API gateway
+  -> LEXIS federal validation or submission endpoint
+  -> LEXIS federal application tables
+```
+
+## Authentication
+
+NEXCOL uses a dedicated confidential Keycloak client. Both federal endpoints require the OAuth
+scope:
+
+```text
+lexis:federal-submission:submit
+```
+
+The gateway validates the token issuer, expiry, required scope, and audience when configured.
+LEXIS validates the forwarded token and applies the same scope-based authorization.
+
+CI idempotently creates/checks the client scope, confidential client, and default scope assignment
+when these GitHub environment values are configured:
+
+- TEST: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
+- PROD: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-prod`
+
+Runtime client-secret lifecycle is managed through the environment's operational process.
+
+Obtain an access token with the standard client-credentials grant:
+
+```bash
+curl -sS -X POST "${TOKEN_URL}" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=${CLIENT_ID}" \
+  --data-urlencode "client_secret=${CLIENT_SECRET}"
+```
+
+Tokens should contain the expected issuer, an unexpired access-token lifetime, and
+`lexis:federal-submission:submit` in the `scope` claim. A configured gateway audience is also
+represented in `aud`.
+
+## Endpoints
+
+| Operation | Endpoint | Successful status | Persistence |
+|---|---|---|---|
+| Validate | `POST /api/lexis/federal/submissions/validation` | `200` | None |
+| Submit | `POST /api/lexis/federal/submissions` | `201` | Federal application, package and scale rows |
+
+Both endpoints consume `application/xml` and return JSON.
+
+## XML Contract
+
+The preferred payload is the legacy ESF submission envelope containing one LEXIS schema-version-2
+`LexisSubmission`. The inner `LexisSubmission` is also accepted as raw XML.
+
+Federal payloads include:
+
+- `jurisdictionCode=F` and `applStatusCode=A`;
+- federal applicant legal entity, contact and declaration fields;
+- `applicationDetail/officeUseOnly` reference, application date, biweekly list date, applicant
+  user id and language;
+- harvested timber with or without summary-of-scale data, or standing timber; and
+- version-2 element names and structure.
+
+Permit and shipping details are outside the federal exemption-submission contract.
+
+LEXIS validates the supplied application date and persists the service receipt date. The export
+schedule is resolved from the biweekly list date, with the next available schedule used when an
+exact date is unavailable.
+
+Synthetic fixtures are available in `backend/src/test/resources/lexis-upload-samples/`:
+
+- `pass-federal-application.xml`
+- `fail-federal-jurisdiction.xml`
+
+## Request Contract
+
+| Value | Location | Description |
+|---|---|---|
+| `userReference` | Query parameter | Stable business reference, maximum 50 characters |
+| `originalFileName` | Query parameter | Source filename for diagnostics |
+| `X-Request-ID` | Header | Correlation id for the HTTP attempt, maximum 200 characters |
+| `X-Source-System` | Header | Calling system identifier |
+| `X-Idempotency-Key` | Header | Stable logical submission id; required for submission |
+
+Each HTTP attempt uses a new request id. Retries of the same logical submission reuse the same
+idempotency key.
+
+### Validate
+
+```bash
+curl -sS -X POST \
+  "${LEXIS_GATEWAY_BASE_URL}/api/lexis/federal/submissions/validation" \
+  --url-query "userReference=${USER_REFERENCE}" \
+  --url-query "originalFileName=federal.xml" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/xml" \
+  -H "X-Request-ID: ${REQUEST_ID}" \
+  -H "X-Source-System: NEXCOL" \
+  --data-binary "@federal.xml"
+```
+
+### Submit
+
+```bash
+curl -sS -X POST \
+  "${LEXIS_GATEWAY_BASE_URL}/api/lexis/federal/submissions" \
+  --url-query "userReference=${USER_REFERENCE}" \
+  --url-query "originalFileName=federal.xml" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/xml" \
+  -H "X-Request-ID: ${REQUEST_ID}" \
+  -H "X-Idempotency-Key: ${IDEMPOTENCY_KEY}" \
+  -H "X-Source-System: NEXCOL" \
+  --data-binary "@federal.xml"
+```
+
+## Responses
+
+Responses include processing status, errors, warnings, trace metadata, payload digest and LEXIS
+identifiers when available.
+
+| Status | Meaning |
+|---|---|
+| `200` | XML validated successfully |
+| `201` | Submission accepted and persisted |
+| `400` | Invalid request metadata or body |
+| `401` | Missing, expired or invalid token |
+| `403` | Required scope is absent |
+| `404` | Gateway route or method is unavailable |
+| `422` | XML or business validation failed |
+| `503` | LEXIS processing dependency is unavailable |
+
+A successful submission includes an `applicationNumber` and, when available, a relative
+`Location` header. Processing is synchronous; there is no submission-status polling endpoint.
+
+For a transport timeout or `503`, retries use the original idempotency key. Durable response replay
+and duplicate suppression are required before automated submission retries are enabled.
+
+## ESF Migration Mapping
+
+| Previous ESF concept | Direct API equivalent |
+|---|---|
+| `submissionData` | XML request body |
+| `originalFileName` | `originalFileName` query parameter |
+| `userReference` | `userReference` query parameter |
+| ESF-authenticated submitter | Keycloak machine-client identity |
+| ESF submission id | Request/idempotency metadata and returned LEXIS identifiers |
+| Upload/schema/finalize stages | HTTP status plus response status, errors and warnings |
+| `getSubmissionStatus` polling | Immediate validation or submission response |
+| ESF accepted/rejected message | `201` or `422` JSON response |
+
+The legacy ESF source, LEXIS VC schema/parser and representative archived submissions define the
+compatibility baseline for the direct API.

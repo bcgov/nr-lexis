@@ -14,6 +14,11 @@ public interface LexisApplicationService {
 
   LexisApplicationSearchResponseDto search(LexisApplicationSearchCriteria criteria);
 
+  default LexisApplicationSearchResponseDto search(
+      LexisApplicationSearchCriteria criteria, Integer knownTotal) {
+    return search(criteria);
+  }
+
   int count(LexisApplicationSearchCriteria criteria);
 
   Optional<LexisApplicationDetailDto> findByApplicationNumber(long applicationNumber);

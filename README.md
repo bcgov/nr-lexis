@@ -13,7 +13,7 @@ Full-stack LEXIS application for log export workflows.
 | Frontend | React 19, TypeScript, Carbon Design System |
 | Backend | Spring Boot 3.5, Java 21 |
 | Database | Oracle (shared, BC Gov-managed) |
-| Auth | AWS Cognito (FAM) |
+| Auth | AWS Cognito (FAM) for interactive users; Keycloak scopes for NEXCOL service-client submission |
 | Reports | JasperReports library |
 
 ## Local Development
@@ -42,7 +42,7 @@ These files are gitignored and stay local.
 
 #### `backend/src/main/resources/application-local.yml`
 
-Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
+Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, optional Keycloak issuer URI for service-client tokens, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
 
 For Option B, Compose overrides `TRUSTSTORE_PATH` inside Docker to `/app/src/main/resources/cert/jssecacerts`; no local edit is needed for the container path.
 
@@ -121,6 +121,15 @@ Regardless of option:
 
 If the backend starts but authenticated API calls fail, check network access, `application-local.yml` credentials, Cognito config, and the truststore path.
 
+### NEXCOL federal submission API
+
+NEXCOL uses a dedicated Keycloak client and the `lexis:federal-submission:submit` OAuth scope to
+validate or submit federal XML through the API gateway. CI manages the client, scope and default
+scope assignment for configured environments.
+
+See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for the API
+contract and [gateway/README.md](gateway/README.md) for gateway responsibilities.
+
 ## CI regression
 
 The `Regression` GitHub Actions workflow runs weekly and manually against TEST. It currently reads
@@ -129,7 +138,18 @@ TEST IDIR credentials from GitHub `test` environment secrets and passes the mask
 because repeated automated login attempts can lock the TEST account. See
 [frontend/e2e/README.md](frontend/e2e/README.md) for the required GitHub environment secrets.
 
+Production RTM-only rollout is controlled by the optional GitHub environment secret
+`lexis_prod_rtm_only`. Set it to `true` for PROD to pass `LEXIS_PROD_RTM_ONLY` to the backend and
+`VITE_LEXIS_PROD_RTM_ONLY` to the frontend. In that mode, the frontend only shows the Average
+Monthly Values module/sidebar item for LEXIS admins, and the backend denies non-session/non-RTM API
+routes.
+
+The new admin user access lookup link can be pointed at a specific FAM manage app by setting the
+optional GitHub environment variable `VITE_FAM_MANAGE_URL`; if omitted, the frontend resolves a
+default URL from `VITE_ZONE`.
+
 ## Component docs
 
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
 - [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.
+- [docs/rtm-amv-ui-and-procedure-contract.md](docs/rtm-amv-ui-and-procedure-contract.md) - RTM AMV UI rules and Oracle procedure constraints.
