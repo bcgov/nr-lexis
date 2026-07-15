@@ -188,6 +188,8 @@ jobs:
           LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${{ secrets.lexis_mail_permit_request_recipients }}
         with:
           file: backend/openshift.deploy.yml
+          # PR lite mode produces an invalid strategy for this RollingUpdate deployment.
+          lite_mode: false
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}

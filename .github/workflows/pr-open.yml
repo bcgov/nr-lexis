@@ -122,6 +122,9 @@ jobs:
       environment: dev
       target: ${{ github.event.number }}
       slot: ${{ needs.vars.outputs.slot }}
+      backend_min_replicas: "1"
+      backend_max_replicas: "1"
+      frontend_replicas: "1"
       triggers: ('backend/', 'frontend/', 'clamav/', '.github/workflows/')
 
   tests:

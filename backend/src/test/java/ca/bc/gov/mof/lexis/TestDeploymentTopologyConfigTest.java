@@ -17,7 +17,7 @@ class TestDeploymentTopologyConfigTest {
     assertThat(testDeploy)
         .contains("backend_min_replicas: \"2\"")
         .contains("backend_max_replicas: \"6\"")
-        .contains("frontend_replicas: \"1\"")
+        .contains("frontend_replicas: \"2\"")
         .contains("backend_cpu_request: \"500m\"")
         .contains("backend_memory_request: \"1Gi\"")
         .contains("backend_cpu_limit: \"1500m\"")
@@ -40,6 +40,23 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
         .doesNotContain("expiry_enabled: true");
+  }
+
+  @Test
+  void pullRequestPreviewShouldPinOnePodAndDisableBackendLiteMode() throws IOException {
+    String prWorkflow = Files.readString(resolve(".github/workflows/pr-open.yml"));
+    String reusableWorkflow =
+        Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+    String prDeploy = workflowJob(prWorkflow, "deploys", "tests");
+    String backendDeploy = workflowJob(reusableWorkflow, "backend", "frontend");
+
+    assertThat(prDeploy)
+        .contains("backend_min_replicas: \"1\"")
+        .contains("backend_max_replicas: \"1\"")
+        .contains("frontend_replicas: \"1\"");
+    assertThat(backendDeploy)
+        .contains("file: backend/openshift.deploy.yml")
+        .contains("lite_mode: false");
   }
 
   @Test
