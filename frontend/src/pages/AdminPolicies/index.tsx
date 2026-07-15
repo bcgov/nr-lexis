@@ -6,9 +6,6 @@ import {
   Grid,
   InlineLoading,
   Pagination,
-  Tab,
-  TabList,
-  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -35,7 +32,6 @@ import {
   fetchExportSchedulePage,
   updateExportSchedule as updateExportScheduleRequest,
   type ExportScheduleRow,
-  type ExportScheduleScope,
   type ExportScheduleSortDirection,
   type ExportScheduleSortField,
 } from '@/service/admin-schedule-service'
@@ -105,11 +101,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_ADMIN_PAGE_SIZE)
   const [totalRows, setTotalRows] = useState(0)
-  const [scheduleScope, setScheduleScope] = useState<ExportScheduleScope>('upcoming')
   const [scheduleSortField, setScheduleSortField] =
     useState<ExportScheduleSortField>('advertisingDate')
   const [scheduleSortDirection, setScheduleSortDirection] =
-    useState<ExportScheduleSortDirection>('asc')
+    useState<ExportScheduleSortDirection>('desc')
 
   const [feeEffectiveDate, setFeeEffectiveDate] = useState('')
   const [feeOrgUnitCode, setFeeOrgUnitCode] = useState('')
@@ -279,16 +274,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setShowScheduleValidationErrors(false)
   }
 
-  const selectScheduleScope = (selectedIndex: number): void => {
-    const nextScope: ExportScheduleScope = selectedIndex === 1 ? 'past' : 'upcoming'
-    if (nextScope === scheduleScope) {
-      return
-    }
-    setScheduleScope(nextScope)
-    setPage(0)
-    resetScheduleForm()
-  }
-
   const onScheduleSort = (sortField: ExportScheduleSortField): void => {
     setScheduleSortDirection((currentDirection) =>
       scheduleSortField === sortField && currentDirection === 'asc' ? 'desc' : 'asc',
@@ -322,7 +307,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         const loadedPage = await fetchExportSchedulePage(
           page,
           pageSize,
-          scheduleScope,
           scheduleSortField,
           scheduleSortDirection,
         )
@@ -342,7 +326,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     } finally {
       setIsLoadingPolicies(false)
     }
-  }, [area, canAccessArea, page, pageSize, scheduleScope, scheduleSortDirection, scheduleSortField])
+  }, [area, canAccessArea, page, pageSize, scheduleSortDirection, scheduleSortField])
 
   useEffect(() => {
     void loadPolicies()
@@ -866,94 +850,80 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           <Tile>
             <h2 className="dashboard-title">Export schedule administration</h2>
             <p>
-              {scheduleScope === 'past' ? 'Past rows' : 'Upcoming rows'}:{' '}
-              <strong>{totalRows}</strong>
+              Records: <strong>{totalRows}</strong>
             </p>
-            <Tabs
-              selectedIndex={scheduleScope === 'past' ? 1 : 0}
-              onChange={({ selectedIndex }) => selectScheduleScope(selectedIndex)}
-            >
-              <TabList aria-label="Export schedule period" contained size="sm">
-                <Tab>Upcoming</Tab>
-                <Tab>Past</Tab>
-              </TabList>
-            </Tabs>
-            {scheduleScope === 'upcoming' && (
-              <>
-                <div className="legacy-search-grid">
-                  <IsoDatePicker
-                    id="scheduleAdvertisingDate"
-                    labelText="Advertising date"
-                    value={scheduleAdvertisingDate}
-                    invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
-                    invalidText={scheduleFieldError('scheduleAdvertisingDate')}
-                    onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
-                    onChange={setScheduleAdvertisingDate}
-                  />
-                  <IsoDatePicker
-                    id="scheduleApplicationReceiptDate"
-                    labelText="Application receipt date"
-                    value={scheduleApplicationReceiptDate}
-                    invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
-                    invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
-                    onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
-                    onChange={setScheduleApplicationReceiptDate}
-                  />
-                  <IsoDatePicker
-                    id="scheduleOfferReceiptDate"
-                    labelText="Offer receipt date"
-                    value={scheduleOfferReceiptDate}
-                    invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
-                    invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
-                    onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
-                    onChange={setScheduleOfferReceiptDate}
-                  />
-                  <IsoDatePicker
-                    id="scheduleOfferEndDate"
-                    labelText="Offer end date"
-                    value={scheduleOfferEndDate}
-                    invalid={!!scheduleFieldError('scheduleOfferEndDate')}
-                    invalidText={scheduleFieldError('scheduleOfferEndDate')}
-                    onBlur={() => markFieldTouched('scheduleOfferEndDate')}
-                    onChange={setScheduleOfferEndDate}
-                  />
-                  <IsoDatePicker
-                    id="scheduleOfferWithdrawalDate"
-                    labelText="Offer withdrawal date"
-                    value={scheduleOfferWithdrawalDate}
-                    invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
-                    invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
-                    onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
-                    onChange={setScheduleOfferWithdrawalDate}
-                  />
-                  <IsoDatePicker
-                    id="scheduleTeacMeetingDate"
-                    labelText="TEAC meeting date"
-                    value={scheduleTeacMeetingDate}
-                    invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
-                    invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
-                    onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
-                    onChange={setScheduleTeacMeetingDate}
-                  />
-                </div>
-                <div className="legacy-search-actions">
-                  <Button
-                    kind="primary"
-                    onClick={() => void upsertExportSchedule()}
-                    disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
-                  >
-                    {editingScheduleId ? 'Update Export Schedule' : 'Add Export Schedule'}
-                  </Button>
-                  <Button
-                    kind="ghost"
-                    onClick={resetScheduleForm}
-                    disabled={isLoadingPolicies || isMutatingPolicies}
-                  >
-                    {editingScheduleId ? 'Cancel Edit' : 'Clear Schedule'}
-                  </Button>
-                </div>
-              </>
-            )}
+            <div className="legacy-search-grid">
+              <IsoDatePicker
+                id="scheduleAdvertisingDate"
+                labelText="Advertising date"
+                value={scheduleAdvertisingDate}
+                invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
+                invalidText={scheduleFieldError('scheduleAdvertisingDate')}
+                onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
+                onChange={setScheduleAdvertisingDate}
+              />
+              <IsoDatePicker
+                id="scheduleApplicationReceiptDate"
+                labelText="Application receipt date"
+                value={scheduleApplicationReceiptDate}
+                invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
+                invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
+                onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
+                onChange={setScheduleApplicationReceiptDate}
+              />
+              <IsoDatePicker
+                id="scheduleOfferReceiptDate"
+                labelText="Offer receipt date"
+                value={scheduleOfferReceiptDate}
+                invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
+                invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
+                onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
+                onChange={setScheduleOfferReceiptDate}
+              />
+              <IsoDatePicker
+                id="scheduleOfferEndDate"
+                labelText="Offer end date"
+                value={scheduleOfferEndDate}
+                invalid={!!scheduleFieldError('scheduleOfferEndDate')}
+                invalidText={scheduleFieldError('scheduleOfferEndDate')}
+                onBlur={() => markFieldTouched('scheduleOfferEndDate')}
+                onChange={setScheduleOfferEndDate}
+              />
+              <IsoDatePicker
+                id="scheduleOfferWithdrawalDate"
+                labelText="Offer withdrawal date"
+                value={scheduleOfferWithdrawalDate}
+                invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
+                invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
+                onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
+                onChange={setScheduleOfferWithdrawalDate}
+              />
+              <IsoDatePicker
+                id="scheduleTeacMeetingDate"
+                labelText="TEAC meeting date"
+                value={scheduleTeacMeetingDate}
+                invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
+                invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
+                onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
+                onChange={setScheduleTeacMeetingDate}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={() => void upsertExportSchedule()}
+                disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
+              >
+                {editingScheduleId ? 'Update Export Schedule' : 'Add Export Schedule'}
+              </Button>
+              <Button
+                kind="ghost"
+                onClick={resetScheduleForm}
+                disabled={isLoadingPolicies || isMutatingPolicies}
+              >
+                {editingScheduleId ? 'Cancel Edit' : 'Clear Schedule'}
+              </Button>
+            </div>
 
             <Table useZebraStyles>
               <TableHead>
@@ -998,36 +968,28 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {scheduleScope === 'past' ? (
-                        'Read only'
-                      ) : (
-                        <>
-                          <Button
-                            kind="ghost"
-                            size="sm"
-                            onClick={() => editExportSchedule(row)}
-                            disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            kind="ghost"
-                            size="sm"
-                            onClick={() => void deleteExportSchedule(row)}
-                            disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
-                          >
-                            Delete
-                          </Button>
-                        </>
-                      )}
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => editExportSchedule(row)}
+                        disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => void deleteExportSchedule(row)}
+                        disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                      >
+                        Delete
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {exportSchedules.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9}>
-                      No {scheduleScope} export schedule rows found.
-                    </TableCell>
+                    <TableCell colSpan={9}>No export schedule rows found.</TableCell>
                   </TableRow>
                 )}
               </TableBody>

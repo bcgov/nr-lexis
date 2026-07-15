@@ -55,13 +55,12 @@ describe('admin-schedule-service', () => {
         params: {
           page: 0,
           size: 100,
-          scope: 'upcoming',
           sortField: 'advertisingDate',
-          sortDirection: 'asc',
+          sortDirection: 'desc',
         },
       },
       {
-        cacheKey: 'admin-schedules:upcoming:advertisingDate:asc:0:100',
+        cacheKey: 'admin-schedules:advertisingDate:desc:0:100',
         ttlMs: 30_000,
       },
     )
@@ -111,7 +110,7 @@ describe('admin-schedule-service', () => {
     })
   })
 
-  it('passes past scope and column sorting to the export schedule API', async () => {
+  it('passes column sorting to the export schedule API', async () => {
     getCachedResponseMock.mockResolvedValue({
       data: {
         results: [],
@@ -121,7 +120,7 @@ describe('admin-schedule-service', () => {
       },
     })
 
-    await fetchExportSchedulePage(2, 50, 'past', 'teacMeetingDate', 'desc')
+    await fetchExportSchedulePage(2, 50, 'teacMeetingDate', 'desc')
 
     expect(getCachedResponseMock).toHaveBeenCalledWith(
       '/lexis/admin/schedules',
@@ -129,13 +128,12 @@ describe('admin-schedule-service', () => {
         params: {
           page: 2,
           size: 50,
-          scope: 'past',
           sortField: 'teacMeetingDate',
           sortDirection: 'desc',
         },
       },
       {
-        cacheKey: 'admin-schedules:past:teacMeetingDate:desc:2:50',
+        cacheKey: 'admin-schedules:teacMeetingDate:desc:2:50',
         ttlMs: 30_000,
       },
     )

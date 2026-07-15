@@ -263,9 +263,8 @@ describe('Admin policy action states', () => {
         expect(mockedFetchExportSchedulePage).toHaveBeenCalledWith(
           0,
           100,
-          'upcoming',
           'advertisingDate',
-          'asc',
+          'desc',
         )
       } else {
         expect(fetchPage).toHaveBeenCalledWith(0, 100)
@@ -357,9 +356,8 @@ describe('Admin policy action states', () => {
         expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
           0,
           100,
-          'upcoming',
           'advertisingDate',
-          'asc',
+          'desc',
         )
       } else {
         expect(fetchPage).toHaveBeenLastCalledWith(0, 100)
@@ -381,9 +379,8 @@ describe('Admin policy action states', () => {
           expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
             0,
             20,
-            'upcoming',
             'advertisingDate',
-            'asc',
+            'desc',
           )
         } else {
           expect(fetchPage).toHaveBeenLastCalledWith(0, 20)
@@ -397,9 +394,8 @@ describe('Admin policy action states', () => {
           expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
             1,
             20,
-            'upcoming',
             'advertisingDate',
-            'asc',
+            'desc',
           )
         } else {
           expect(fetchPage).toHaveBeenLastCalledWith(1, 20)
@@ -408,40 +404,39 @@ describe('Admin policy action states', () => {
     },
   )
 
-  it('loads past export schedules as read-only and sorts them on the server', async () => {
-    const pastRow = {
+  it('loads historical schedules in the paginated table and sorts them on the server', async () => {
+    const historicalRow = {
       exportScheduleId: '17',
-      advertisingDate: '2026-07-08',
-      applicationReceiptDate: '2026-07-08',
-      offerReceiptDate: '2026-07-22',
-      offerEndDate: '2026-08-14',
-      offerWithdrawalDate: '2026-08-04',
-      teacMeetingDate: '2026-08-07',
-      applicationCount: 3,
+      advertisingDate: '2026-06-24',
+      applicationReceiptDate: '2026-06-24',
+      offerReceiptDate: '2026-07-08',
+      offerEndDate: '2026-08-07',
+      offerWithdrawalDate: '2026-07-28',
+      teacMeetingDate: '2026-07-31',
+      applicationCount: 0,
       mutable: true,
     }
-    mockedFetchExportSchedulePage
-      .mockResolvedValueOnce({ rows: [], total: 25, page: 0, size: 100 })
-      .mockResolvedValueOnce({ rows: [pastRow], total: 2129, page: 0, size: 100 })
-      .mockResolvedValue({ rows: [pastRow], total: 2129, page: 0, size: 100 })
+    mockedFetchExportSchedulePage.mockResolvedValue({
+      rows: [historicalRow],
+      total: 2154,
+      page: 0,
+      size: 100,
+    })
 
     renderPage('schedule')
 
     await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
-    await userEvent.click(screen.getByRole('tab', { name: 'Past' }))
-
     await waitFor(() => {
       expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
         0,
         100,
-        'past',
         'advertisingDate',
-        'asc',
+        'desc',
       )
     })
-    expect(screen.getByText('Read only')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Advertising date')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Advertising date')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
 
     await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting' }))
 
@@ -449,7 +444,6 @@ describe('Admin policy action states', () => {
       expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
         0,
         100,
-        'past',
         'teacMeetingDate',
         'asc',
       )
@@ -461,7 +455,6 @@ describe('Admin policy action states', () => {
       expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
         0,
         100,
-        'past',
         'teacMeetingDate',
         'desc',
       )
@@ -650,18 +643,18 @@ describe('Admin policy action states', () => {
     expect(mockedFetchExportSchedulePage).toHaveBeenCalledTimes(1)
   })
 
-  it('updates and deletes only mutable export schedule rows', async () => {
+  it('updates and deletes unreferenced export schedule rows regardless of date', async () => {
     mockedFetchExportSchedulePage
       .mockResolvedValueOnce({
         rows: [
           {
             exportScheduleId: '1001',
-            advertisingDate: '2026-07-01',
-            applicationReceiptDate: '2026-06-25',
-            offerReceiptDate: '2026-07-08',
+            advertisingDate: '2026-06-24',
+            applicationReceiptDate: '2026-06-20',
+            offerReceiptDate: '2026-06-30',
             offerEndDate: '2026-07-09',
-            offerWithdrawalDate: '2026-07-10',
-            teacMeetingDate: '2026-07-15',
+            offerWithdrawalDate: '2026-07-05',
+            teacMeetingDate: '2026-07-07',
             applicationCount: 0,
             mutable: true,
           },
@@ -685,12 +678,12 @@ describe('Admin policy action states', () => {
         rows: [
           {
             exportScheduleId: '1001',
-            advertisingDate: '2026-07-01',
+            advertisingDate: '2026-06-24',
             applicationReceiptDate: '2026-06-26',
-            offerReceiptDate: '2026-07-08',
+            offerReceiptDate: '2026-06-30',
             offerEndDate: '2026-07-09',
-            offerWithdrawalDate: '2026-07-10',
-            teacMeetingDate: '2026-07-15',
+            offerWithdrawalDate: '2026-07-05',
+            teacMeetingDate: '2026-07-07',
             applicationCount: 0,
             mutable: true,
           },
@@ -719,12 +712,12 @@ describe('Admin policy action states', () => {
 
     await waitFor(() => {
       expect(mockedUpdateExportSchedule).toHaveBeenCalledWith('1001', {
-        advertisingDate: '2026-07-01',
+        advertisingDate: '2026-06-24',
         applicationReceiptDate: '2026-06-26',
-        offerReceiptDate: '2026-07-08',
+        offerReceiptDate: '2026-06-30',
         offerEndDate: '2026-07-09',
-        offerWithdrawalDate: '2026-07-10',
-        teacMeetingDate: '2026-07-15',
+        offerWithdrawalDate: '2026-07-05',
+        teacMeetingDate: '2026-07-07',
       })
     })
     expect(await screen.findByText('Export schedule updated.')).toBeInTheDocument()

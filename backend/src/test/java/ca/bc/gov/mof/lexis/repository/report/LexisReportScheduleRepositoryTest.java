@@ -308,7 +308,7 @@ class LexisReportScheduleRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void findExportSchedulesPageShouldSupportPastScopeAndWhitelistedSorting() throws Exception {
+  void findExportSchedulesPageShouldIncludeAllDatesAndUseWhitelistedSorting() throws Exception {
     when(jdbcTemplate.query(
             any(String.class),
             any(PreparedStatementSetter.class),
@@ -321,14 +321,14 @@ class LexisReportScheduleRepositoryTest {
             });
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
-    repository.findExportSchedules(0, 50, "past", "teacMeetingDate", "desc");
+    repository.findExportSchedules(0, 50, "teacMeetingDate", "desc");
 
     ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate)
         .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sqlCaptor.getValue())
-        .contains("WHERE ES.ADVERTISING_DATE < TRUNC(SYSDATE)")
         .contains("ORDER BY ES.TEAC_MEETING_DATE DESC, ES.EXPORT_SCHEDULE_ID ASC")
+        .doesNotContain("WHERE ES.ADVERTISING_DATE")
         .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
     verify(preparedStatement).setInt(1, 0);
     verify(preparedStatement).setInt(2, 50);
@@ -336,7 +336,7 @@ class LexisReportScheduleRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void findExportSchedulesPageShouldFallbackForUnknownScopeAndSortValues() throws Exception {
+  void findExportSchedulesPageShouldFallbackForUnknownSortValues() throws Exception {
     when(jdbcTemplate.query(
             any(String.class),
             any(PreparedStatementSetter.class),
@@ -349,15 +349,14 @@ class LexisReportScheduleRepositoryTest {
             });
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
-    repository.findExportSchedules(0, 50, "past' OR 1=1", "ADVERTISING_DATE; DELETE", "DESC; DELETE");
+    repository.findExportSchedules(0, 50, "ADVERTISING_DATE; DELETE", "DESC; DELETE");
 
     ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate)
         .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sqlCaptor.getValue())
-        .contains("WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)")
         .contains("ORDER BY ES.ADVERTISING_DATE ASC, ES.EXPORT_SCHEDULE_ID ASC")
-        .doesNotContain("1=1", "DELETE");
+        .doesNotContain("DELETE");
   }
 
   @Test

@@ -29,7 +29,7 @@ class LexisAdminScheduleControllerTest {
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
-    var response = controller.schedules(0, 100, "upcoming", "advertisingDate", "asc");
+    var response = controller.schedules(0, 100, "advertisingDate", "desc");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
   }
@@ -41,15 +41,15 @@ class LexisAdminScheduleControllerTest {
         new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
     LexisAdminPagedResponseDto<ExportScheduleRowDto> payload =
         new LexisAdminPagedResponseDto<>(java.util.List.of(row), 1, 0, 100);
-    when(scheduleService.schedules(0, 100, "past", "teacMeetingDate", "desc")).thenReturn(payload);
+    when(scheduleService.schedules(0, 100, "teacMeetingDate", "desc")).thenReturn(payload);
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
-    var response = controller.schedules(0, 100, "past", "teacMeetingDate", "desc");
+    var response = controller.schedules(0, 100, "teacMeetingDate", "desc");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(scheduleService).schedules(0, 100, "past", "teacMeetingDate", "desc");
+    verify(scheduleService).schedules(0, 100, "teacMeetingDate", "desc");
   }
 
   @Test

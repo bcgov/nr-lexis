@@ -24,10 +24,8 @@ public class LexisAdminScheduleService {
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisAdminScheduleService.class);
   private static final int DEFAULT_PAGE_SIZE = 100;
   private static final int MAX_PAGE_SIZE = 200;
-  private static final String PAST_SCOPE = "past";
-  private static final String UPCOMING_SCOPE = "upcoming";
   private static final String DEFAULT_SORT_FIELD = "advertisingDate";
-  private static final String DEFAULT_SORT_DIRECTION = "asc";
+  private static final String DEFAULT_SORT_DIRECTION = "desc";
   private static final String SCHEDULE_CONSTRAINT_MESSAGE =
       "Export schedule dates are invalid or conflict with an existing schedule.";
   private static final String SCHEDULE_DATABASE_MESSAGE =
@@ -51,29 +49,29 @@ public class LexisAdminScheduleService {
   }
 
   public LexisAdminPagedResponseDto<ExportScheduleRowDto> upcomingSchedules(int page, int size) {
-    return schedules(page, size, UPCOMING_SCOPE, DEFAULT_SORT_FIELD, DEFAULT_SORT_DIRECTION);
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+    return new LexisAdminPagedResponseDto<>(
+        repository.findUpcomingExportSchedules(normalizedPage, normalizedSize),
+        repository.countUpcomingExportSchedules(),
+        normalizedPage,
+        normalizedSize);
   }
 
   public LexisAdminPagedResponseDto<ExportScheduleRowDto> schedules(
-      int page, int size, String scope, String sortField, String sortDirection) {
+      int page, int size, String sortField, String sortDirection) {
     int normalizedPage = Math.max(0, page);
     int normalizedSize = size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
-    String normalizedScope = normalizeScope(scope);
-    List<ExportScheduleRowDto> rows =
-        repository.findExportSchedules(
-            normalizedPage, normalizedSize, normalizedScope, sortField, sortDirection);
     return new LexisAdminPagedResponseDto<>(
-        PAST_SCOPE.equals(normalizedScope)
-            ? rows.stream().map(this::asReadOnlySchedule).toList()
-            : rows,
-        repository.countExportSchedules(normalizedScope),
+        repository.findExportSchedules(normalizedPage, normalizedSize, sortField, sortDirection),
+        repository.countExportSchedules(),
         normalizedPage,
         normalizedSize);
   }
 
   @Transactional
   public ExportScheduleMutationResultDto createSchedule(ExportScheduleCreateRequestDto request) {
-    String validationError = validate(request);
+    String validationError = validate(request, true);
     if (validationError != null) {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
@@ -108,7 +106,7 @@ public class LexisAdminScheduleService {
       return new ExportScheduleMutationResultDto(false, rowValidationError, null);
     }
 
-    String validationError = validate(request);
+    String validationError = validate(request, false);
     if (validationError != null) {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
@@ -172,11 +170,6 @@ public class LexisAdminScheduleService {
       return "Export schedule not found.";
     }
 
-    LocalDate today = LocalDate.now(clock);
-    if (existing.advertisingDate() == null || existing.advertisingDate().isBefore(today)) {
-      return "Only current or future export schedules can be changed.";
-    }
-
     long usageCount = repository.countApplicationsForExportSchedule(exportScheduleId);
     if (usageCount > 0L) {
       return "Export schedule is used by existing applications and cannot be changed.";
@@ -185,24 +178,7 @@ public class LexisAdminScheduleService {
     return null;
   }
 
-  private String normalizeScope(String scope) {
-    return PAST_SCOPE.equalsIgnoreCase(scope) ? PAST_SCOPE : UPCOMING_SCOPE;
-  }
-
-  private ExportScheduleRowDto asReadOnlySchedule(ExportScheduleRowDto row) {
-    return new ExportScheduleRowDto(
-        row.exportScheduleId(),
-        row.advertisingDate(),
-        row.applicationReceiptDate(),
-        row.offerReceiptDate(),
-        row.offerEndDate(),
-        row.offerWithdrawalDate(),
-        row.teacMeetingDate(),
-        row.applicationCount(),
-        false);
-  }
-
-  private String validate(ExportScheduleCreateRequestDto request) {
+  private String validate(ExportScheduleCreateRequestDto request, boolean requireFutureAdvertisingDate) {
     if (request == null) {
       return "Export schedule details are required.";
     }
@@ -211,7 +187,7 @@ public class LexisAdminScheduleService {
     if (advertisingDate == null) {
       return "Advertising date is required.";
     }
-    if (advertisingDate.isBefore(LocalDate.now(clock))) {
+    if (requireFutureAdvertisingDate && advertisingDate.isBefore(LocalDate.now(clock))) {
       return "Advertising date must be today or a future date.";
     }
     if (request.applicationReceiptDate() != null

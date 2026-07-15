@@ -47,9 +47,8 @@ class LexisAdminScheduleServiceTest {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
     ExportScheduleRowDto row =
         new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
-    when(repository.findExportSchedules(1, 50, "upcoming", "advertisingDate", "asc"))
-        .thenReturn(List.of(row));
-    when(repository.countExportSchedules("upcoming")).thenReturn(73);
+    when(repository.findUpcomingExportSchedules(1, 50)).thenReturn(List.of(row));
+    when(repository.countUpcomingExportSchedules()).thenReturn(73);
 
     var result = service.upcomingSchedules(1, 50);
 
@@ -62,9 +61,8 @@ class LexisAdminScheduleServiceTest {
   @Test
   void upcomingSchedulesPageShouldNormalizeInvalidPaging() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
-    when(repository.findExportSchedules(0, 100, "upcoming", "advertisingDate", "asc"))
-        .thenReturn(List.of());
-    when(repository.countExportSchedules("upcoming")).thenReturn(0);
+    when(repository.findUpcomingExportSchedules(0, 100)).thenReturn(List.of());
+    when(repository.countUpcomingExportSchedules()).thenReturn(0);
 
     var result = service.upcomingSchedules(-3, 0);
 
@@ -72,26 +70,25 @@ class LexisAdminScheduleServiceTest {
     assertThat(result.total()).isZero();
     assertThat(result.page()).isZero();
     assertThat(result.size()).isEqualTo(100);
-    verify(repository).findExportSchedules(0, 100, "upcoming", "advertisingDate", "asc");
+    verify(repository).findUpcomingExportSchedules(0, 100);
   }
 
   @Test
   void upcomingSchedulesPageShouldCapPageSizeAtTwoHundred() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
-    when(repository.findExportSchedules(2, 200, "upcoming", "advertisingDate", "asc"))
-        .thenReturn(List.of());
-    when(repository.countExportSchedules("upcoming")).thenReturn(0);
+    when(repository.findUpcomingExportSchedules(2, 200)).thenReturn(List.of());
+    when(repository.countUpcomingExportSchedules()).thenReturn(0);
 
     var result = service.upcomingSchedules(2, 500);
 
     assertThat(result.results()).isEmpty();
     assertThat(result.page()).isEqualTo(2);
     assertThat(result.size()).isEqualTo(200);
-    verify(repository).findExportSchedules(2, 200, "upcoming", "advertisingDate", "asc");
+    verify(repository).findUpcomingExportSchedules(2, 200);
   }
 
   @Test
-  void pastSchedulesShouldBeReadOnlyAndRetainRequestedSorting() {
+  void schedulesShouldIncludeHistoricalRowsAndRetainRequestedSorting() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
     ExportScheduleRowDto row =
         new ExportScheduleRowDto(
@@ -104,15 +101,14 @@ class LexisAdminScheduleServiceTest {
             null,
             0L,
             true);
-    when(repository.findExportSchedules(0, 50, "past", "teacMeetingDate", "desc"))
-        .thenReturn(List.of(row));
-    when(repository.countExportSchedules("past")).thenReturn(2129);
+    when(repository.findExportSchedules(0, 50, "teacMeetingDate", "desc")).thenReturn(List.of(row));
+    when(repository.countExportSchedules()).thenReturn(2154);
 
-    var result = service.schedules(0, 50, "past", "teacMeetingDate", "desc");
+    var result = service.schedules(0, 50, "teacMeetingDate", "desc");
 
-    assertThat(result.results()).singleElement().extracting(ExportScheduleRowDto::mutable).isEqualTo(false);
-    assertThat(result.total()).isEqualTo(2129);
-    verify(repository).findExportSchedules(0, 50, "past", "teacMeetingDate", "desc");
+    assertThat(result.results()).containsExactly(row);
+    assertThat(result.total()).isEqualTo(2154);
+    verify(repository).findExportSchedules(0, 50, "teacMeetingDate", "desc");
   }
 
   @Test
@@ -374,6 +370,39 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
+  void updateScheduleShouldUpdatePastUnreferencedSchedule() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 6, 24),
+            LocalDate.of(2026, 6, 24),
+            LocalDate.of(2026, 7, 8));
+    ExportScheduleRowDto updated =
+        new ExportScheduleRowDto(
+            1001L,
+            request.advertisingDate(),
+            request.applicationReceiptDate(),
+            request.offerReceiptDate(),
+            request.offerEndDate(),
+            request.offerWithdrawalDate(),
+            request.teacMeetingDate());
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 6, 24), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.advertisingDateExistsForOtherSchedule(LocalDate.of(2026, 6, 24), 1001L))
+        .thenReturn(false);
+    when(repository.updateExportSchedule(1001L, request)).thenReturn(updated);
+
+    var result = service.updateSchedule(1001L, request);
+
+    assertThat(result.success()).isTrue();
+    assertThat(result.schedule()).isEqualTo(updated);
+  }
+
+  @Test
   void updateScheduleShouldReturnValidationMessageForDatabaseConstraintViolation() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
     ExportScheduleCreateRequestDto request =
@@ -428,7 +457,7 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
-  void deleteScheduleShouldRejectPastSchedules() {
+  void deleteScheduleShouldDeletePastUnreferencedSchedules() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
     when(repository.findExportScheduleById(1001L))
         .thenReturn(
@@ -436,10 +465,13 @@ class LexisAdminScheduleServiceTest {
                 new ExportScheduleRowDto(
                     1001L, LocalDate.of(2026, 6, 24), null, null, null, null, null)));
 
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.deleteExportSchedule(1001L)).thenReturn(true);
+
     var result = service.deleteSchedule(1001L);
 
-    assertThat(result.success()).isFalse();
-    assertThat(result.message()).isEqualTo("Only current or future export schedules can be changed.");
+    assertThat(result.success()).isTrue();
+    assertThat(result.message()).isEqualTo("Export schedule deleted.");
   }
 
   @Test

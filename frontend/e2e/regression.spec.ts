@@ -1806,32 +1806,31 @@ test.describe('TEST IDIR admin regression', () => {
     expect(exportSchedules.size).toBe(100)
   })
 
-  test('can page and sort read-only past export schedules', async () => {
+  test('can page and sort all export schedules', async () => {
     const page = await authenticatedIdirPage()
 
-    const pastSchedules = await readJsonResponse<GenericSearchResponse>(
+    const schedules = await readJsonResponse<GenericSearchResponse>(
       await getWithAuth(page, '/api/lexis/admin/schedules', {
         params: {
           page: 0,
           size: 20,
-          scope: 'past',
           sortField: 'advertisingDate',
           sortDirection: 'desc',
         },
       }),
     )
-    const rows = asRecordArray(pastSchedules.results)
+    const rows = asRecordArray(schedules.results)
 
-    expect(pastSchedules.total, 'TEST should retain historical export schedules').toBeGreaterThan(0)
-    expect(pastSchedules.page).toBe(0)
-    expect(pastSchedules.size).toBe(20)
+    expect(schedules.total, 'TEST should include historical export schedules').toBeGreaterThan(25)
+    expect(schedules.page).toBe(0)
+    expect(schedules.size).toBe(20)
     expect(rows.length).toBeLessThanOrEqual(20)
 
     let previousAdvertisingDate: string | null = null
     for (const row of rows) {
       const advertisingDate = String(row.advertisingDate ?? '').trim()
       expect(advertisingDate).toMatch(isoDatePattern)
-      expect(row.mutable).toBe(false)
+      expect(row.mutable).toBe(Number(row.applicationCount ?? 0) === 0)
       if (previousAdvertisingDate) {
         expect(previousAdvertisingDate >= advertisingDate).toBe(true)
       }

@@ -64,19 +64,20 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       """;
   private static final String UPCOMING_EXPORT_SCHEDULE_CONDITION =
       "ES.ADVERTISING_DATE >= TRUNC(SYSDATE)";
-  private static final String PAST_EXPORT_SCHEDULE_CONDITION =
-      "ES.ADVERTISING_DATE < TRUNC(SYSDATE)";
   private static final String FIND_UPCOMING_EXPORT_SCHEDULES =
       EXPORT_SCHEDULE_SELECT
           + " WHERE "
           + UPCOMING_EXPORT_SCHEDULE_CONDITION
           + " ORDER BY ES.ADVERTISING_DATE ASC";
+  private static final String FIND_UPCOMING_EXPORT_SCHEDULES_PAGE =
+      FIND_UPCOMING_EXPORT_SCHEDULES + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
   private static final String COUNT_UPCOMING_EXPORT_SCHEDULES =
       """
       SELECT COUNT(*)
         FROM EXPORT_SCHEDULE ES
        WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)
       """;
+  private static final String COUNT_EXPORT_SCHEDULES = "SELECT COUNT(*) FROM EXPORT_SCHEDULE";
   private static final String FIND_EXPORT_SCHEDULE_BY_ID =
       """
       SELECT ES.EXPORT_SCHEDULE_ID,
@@ -167,11 +168,15 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<ExportScheduleRowDto> findUpcomingExportSchedules(int page, int size) {
-    return findExportSchedules(page, size, "upcoming", "advertisingDate", "asc");
+    return queryExportSchedulePage(FIND_UPCOMING_EXPORT_SCHEDULES_PAGE, page, size);
   }
 
   public List<ExportScheduleRowDto> findExportSchedules(
-      int page, int size, String scope, String sortField, String sortDirection) {
+      int page, int size, String sortField, String sortDirection) {
+    return queryExportSchedulePage(findExportSchedulesPageSql(sortField, sortDirection), page, size);
+  }
+
+  private List<ExportScheduleRowDto> queryExportSchedulePage(String sql, int page, int size) {
     int normalizedPage = Math.max(0, page);
     int normalizedSize = Math.max(1, size);
     long offsetLong = (long) normalizedPage * normalizedSize;
@@ -180,7 +185,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     }
     int offset = (int) offsetLong;
     return jdbcTemplate.query(
-        findExportSchedulesPageSql(scope, sortField, sortDirection),
+        sql,
         ps -> {
           ps.setInt(1, offset);
           ps.setInt(2, normalizedSize);
@@ -193,11 +198,8 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return count == null ? 0 : Math.max(0, count);
   }
 
-  public int countExportSchedules(String scope) {
-    Integer count =
-        jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM EXPORT_SCHEDULE ES WHERE " + exportScheduleCondition(scope),
-            Integer.class);
+  public int countExportSchedules() {
+    Integer count = jdbcTemplate.queryForObject(COUNT_EXPORT_SCHEDULES, Integer.class);
     return count == null ? 0 : Math.max(0, count);
   }
 
@@ -379,22 +381,14 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
         applicationCount == 0L);
   }
 
-  private String findExportSchedulesPageSql(String scope, String sortField, String sortDirection) {
+  private String findExportSchedulesPageSql(String sortField, String sortDirection) {
     return EXPORT_SCHEDULE_SELECT
-        + " WHERE "
-        + exportScheduleCondition(scope)
         + " ORDER BY "
         + exportScheduleSortColumn(sortField)
         + " "
         + exportScheduleSortDirection(sortDirection)
         + ", ES.EXPORT_SCHEDULE_ID ASC"
         + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
-  }
-
-  private String exportScheduleCondition(String scope) {
-    return "past".equalsIgnoreCase(scope)
-        ? PAST_EXPORT_SCHEDULE_CONDITION
-        : UPCOMING_EXPORT_SCHEDULE_CONDITION;
   }
 
   private String exportScheduleSortColumn(String sortField) {
