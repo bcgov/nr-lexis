@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -31,6 +32,8 @@ import {
   fetchExportSchedulePage,
   updateExportSchedule as updateExportScheduleRequest,
   type ExportScheduleRow,
+  type ExportScheduleSortDirection,
+  type ExportScheduleSortField,
 } from '@/service/admin-schedule-service'
 import {
   deleteFeePolicy as deleteFeePolicyRequest,
@@ -66,11 +69,30 @@ type AdminPoliciesPageProps = {
 
 const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
 const DEFAULT_ADMIN_PAGE_SIZE = 100
+const SCHEDULE_SORT_COLUMNS: Array<{ id: ExportScheduleSortField; label: string }> = [
+  { id: 'exportScheduleId', label: 'ID' },
+  { id: 'advertisingDate', label: 'Advertising date' },
+  { id: 'applicationReceiptDate', label: 'Application receipt' },
+  { id: 'offerReceiptDate', label: 'Offer receipt' },
+  { id: 'offerEndDate', label: 'Offer end' },
+  { id: 'offerWithdrawalDate', label: 'Offer withdrawal' },
+  { id: 'teacMeetingDate', label: 'TEAC meeting' },
+  { id: 'applicationCount', label: 'Applications' },
+]
+
+const applicationSearchPathForAdvertisingDate = (advertisingDate: string): string => {
+  const searchParams = new URLSearchParams({
+    listingFromDate: advertisingDate,
+    listingToDate: advertisingDate,
+  })
+  return `/provincial/application?${searchParams.toString()}`
+}
 
 const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const { canPerform } = useAuth()
   const canManageFeePolicy = canPerform('/lexisPolicyAdmin')
   const canManageFilPolicy = canPerform('/lexisFILAdmin')
+  const canSearchApplications = canPerform('/applicationSearch')
   const canAccessArea = area === 'fil' ? canManageFilPolicy : canManageFeePolicy
 
   const [feePolicies, setFeePolicies] = useState<FeePolicyRow[]>([])
@@ -79,6 +101,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_ADMIN_PAGE_SIZE)
   const [totalRows, setTotalRows] = useState(0)
+  const [scheduleSortField, setScheduleSortField] =
+    useState<ExportScheduleSortField>('advertisingDate')
+  const [scheduleSortDirection, setScheduleSortDirection] =
+    useState<ExportScheduleSortDirection>('desc')
 
   const [feeEffectiveDate, setFeeEffectiveDate] = useState('')
   const [feeOrgUnitCode, setFeeOrgUnitCode] = useState('')
@@ -248,6 +274,14 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setShowScheduleValidationErrors(false)
   }
 
+  const onScheduleSort = (sortField: ExportScheduleSortField): void => {
+    setScheduleSortDirection((currentDirection) =>
+      scheduleSortField === sortField && currentDirection === 'asc' ? 'desc' : 'asc',
+    )
+    setScheduleSortField(sortField)
+    setPage(0)
+  }
+
   const loadPolicies = useCallback(async () => {
     setIsLoadingPolicies(true)
     clearNotifications()
@@ -270,7 +304,12 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         setFilPolicies(loadedPage.rows)
         setTotalRows(loadedPage.total)
       } else {
-        const loadedPage = await fetchExportSchedulePage(page, pageSize)
+        const loadedPage = await fetchExportSchedulePage(
+          page,
+          pageSize,
+          scheduleSortField,
+          scheduleSortDirection,
+        )
         setExportSchedules(loadedPage.rows)
         setTotalRows(loadedPage.total)
       }
@@ -287,7 +326,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     } finally {
       setIsLoadingPolicies(false)
     }
-  }, [area, canAccessArea, page, pageSize])
+  }, [area, canAccessArea, page, pageSize, scheduleSortDirection, scheduleSortField])
 
   useEffect(() => {
     void loadPolicies()
@@ -811,7 +850,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           <Tile>
             <h2 className="dashboard-title">Export schedule administration</h2>
             <p>
-              Upcoming rows: <strong>{totalRows}</strong>
+              Records: <strong>{totalRows}</strong>
             </p>
             <div className="legacy-search-grid">
               <IsoDatePicker
@@ -889,14 +928,20 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
-                  <TableHeader>ID</TableHeader>
-                  <TableHeader>Advertising date</TableHeader>
-                  <TableHeader>Application receipt</TableHeader>
-                  <TableHeader>Offer receipt</TableHeader>
-                  <TableHeader>Offer end</TableHeader>
-                  <TableHeader>Offer withdrawal</TableHeader>
-                  <TableHeader>TEAC meeting</TableHeader>
-                  <TableHeader>Applications</TableHeader>
+                  {SCHEDULE_SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onScheduleSort(column.id)}
+                      >
+                        {column.label}
+                        {scheduleSortField === column.id
+                          ? ` (${scheduleSortDirection.toUpperCase()})`
+                          : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
                   <TableHeader>Actions</TableHeader>
                 </TableRow>
               </TableHead>
@@ -910,7 +955,18 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                     <TableCell>{row.offerEndDate}</TableCell>
                     <TableCell>{row.offerWithdrawalDate}</TableCell>
                     <TableCell>{row.teacMeetingDate}</TableCell>
-                    <TableCell>{row.applicationCount}</TableCell>
+                    <TableCell>
+                      {canSearchApplications ? (
+                        <Link
+                          to={applicationSearchPathForAdvertisingDate(row.advertisingDate)}
+                          aria-label={`View ${row.applicationCount} applications advertised on ${row.advertisingDate}`}
+                        >
+                          {row.applicationCount}
+                        </Link>
+                      ) : (
+                        row.applicationCount
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Button
                         kind="ghost"
@@ -933,7 +989,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 ))}
                 {exportSchedules.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9}>No upcoming export schedule rows found.</TableCell>
+                    <TableCell colSpan={9}>No export schedule rows found.</TableCell>
                   </TableRow>
                 )}
               </TableBody>

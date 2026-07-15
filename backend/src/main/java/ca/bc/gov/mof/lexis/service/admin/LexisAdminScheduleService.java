@@ -8,8 +8,11 @@ import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,10 +21,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Profile("oracle")
 public class LexisAdminScheduleService {
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(LexisAdminScheduleService.class);
   private static final int DEFAULT_PAGE_SIZE = 100;
   private static final int MAX_PAGE_SIZE = 200;
+  private static final String DEFAULT_SORT_FIELD = "advertisingDate";
+  private static final String DEFAULT_SORT_DIRECTION = "desc";
   private static final String SCHEDULE_CONSTRAINT_MESSAGE =
       "Export schedule dates are invalid or conflict with an existing schedule.";
+  private static final String SCHEDULE_DATABASE_MESSAGE =
+      "Export schedule could not be saved. Contact support if the problem persists.";
 
   private final LexisReportScheduleRepository repository;
   private final Clock clock;
@@ -50,25 +58,43 @@ public class LexisAdminScheduleService {
         normalizedSize);
   }
 
+  public LexisAdminPagedResponseDto<ExportScheduleRowDto> schedules(
+      int page, int size, String sortField, String sortDirection) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+    return new LexisAdminPagedResponseDto<>(
+        repository.findExportSchedules(normalizedPage, normalizedSize, sortField, sortDirection),
+        repository.countExportSchedules(),
+        normalizedPage,
+        normalizedSize);
+  }
+
   @Transactional
   public ExportScheduleMutationResultDto createSchedule(ExportScheduleCreateRequestDto request) {
-    String validationError = validate(request);
+    String validationError = validate(request, true);
     if (validationError != null) {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
 
-    if (repository.advertisingDateExists(request.advertisingDate())) {
-      return new ExportScheduleMutationResultDto(
-          false,
-          "A schedule already exists for that advertising date.",
-          null);
-    }
-
     try {
+      if (repository.advertisingDateExists(request.advertisingDate())) {
+        return new ExportScheduleMutationResultDto(
+            false,
+            "A schedule already exists for that advertising date.",
+            null);
+      }
       ExportScheduleRowDto row = repository.insertExportSchedule(request);
       return new ExportScheduleMutationResultDto(true, "Export schedule added.", row);
     } catch (DataIntegrityViolationException ex) {
       return new ExportScheduleMutationResultDto(false, SCHEDULE_CONSTRAINT_MESSAGE, null);
+    } catch (DataAccessException ex) {
+      LOGGER.warn(
+          "Export schedule create failed for advertising date {}: {}: {}",
+          request.advertisingDate(),
+          ex.getClass().getSimpleName(),
+          ex.getMessage());
+      LOGGER.debug("Export schedule create failure detail", ex);
+      return new ExportScheduleMutationResultDto(false, SCHEDULE_DATABASE_MESSAGE, null);
     }
   }
 
@@ -80,22 +106,30 @@ public class LexisAdminScheduleService {
       return new ExportScheduleMutationResultDto(false, rowValidationError, null);
     }
 
-    String validationError = validate(request);
+    String validationError = validate(request, false);
     if (validationError != null) {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
 
-    if (repository.advertisingDateExistsForOtherSchedule(
-        request.advertisingDate(), exportScheduleId)) {
-      return new ExportScheduleMutationResultDto(
-          false, "A schedule already exists for that advertising date.", null);
-    }
-
     try {
+      if (repository.advertisingDateExistsForOtherSchedule(
+          request.advertisingDate(), exportScheduleId)) {
+        return new ExportScheduleMutationResultDto(
+            false, "A schedule already exists for that advertising date.", null);
+      }
       ExportScheduleRowDto row = repository.updateExportSchedule(exportScheduleId, request);
       return new ExportScheduleMutationResultDto(true, "Export schedule updated.", row);
     } catch (DataIntegrityViolationException ex) {
       return new ExportScheduleMutationResultDto(false, SCHEDULE_CONSTRAINT_MESSAGE, null);
+    } catch (DataAccessException ex) {
+      LOGGER.warn(
+          "Export schedule update failed for id {} and advertising date {}: {}: {}",
+          exportScheduleId,
+          request.advertisingDate(),
+          ex.getClass().getSimpleName(),
+          ex.getMessage());
+      LOGGER.debug("Export schedule update failure detail", ex);
+      return new ExportScheduleMutationResultDto(false, SCHEDULE_DATABASE_MESSAGE, null);
     }
   }
 
@@ -106,10 +140,23 @@ public class LexisAdminScheduleService {
       return new ExportScheduleMutationResultDto(false, rowValidationError, null);
     }
 
-    boolean deleted = repository.deleteExportSchedule(exportScheduleId);
-    return deleted
+    try {
+      boolean deleted = repository.deleteExportSchedule(exportScheduleId);
+      return deleted
         ? new ExportScheduleMutationResultDto(true, "Export schedule deleted.", null)
         : new ExportScheduleMutationResultDto(false, "Export schedule not found.", null);
+    } catch (DataAccessException ex) {
+      LOGGER.warn(
+          "Export schedule delete failed for id {}: {}: {}",
+          exportScheduleId,
+          ex.getClass().getSimpleName(),
+          ex.getMessage());
+      LOGGER.debug("Export schedule delete failure detail", ex);
+      return new ExportScheduleMutationResultDto(
+          false,
+          "Export schedule could not be deleted. Contact support if the problem persists.",
+          null);
+    }
   }
 
   private String validateMutableSchedule(long exportScheduleId) {
@@ -123,11 +170,6 @@ public class LexisAdminScheduleService {
       return "Export schedule not found.";
     }
 
-    LocalDate today = LocalDate.now(clock);
-    if (existing.advertisingDate() == null || existing.advertisingDate().isBefore(today)) {
-      return "Only current or future export schedules can be changed.";
-    }
-
     long usageCount = repository.countApplicationsForExportSchedule(exportScheduleId);
     if (usageCount > 0L) {
       return "Export schedule is used by existing applications and cannot be changed.";
@@ -136,7 +178,7 @@ public class LexisAdminScheduleService {
     return null;
   }
 
-  private String validate(ExportScheduleCreateRequestDto request) {
+  private String validate(ExportScheduleCreateRequestDto request, boolean requireFutureAdvertisingDate) {
     if (request == null) {
       return "Export schedule details are required.";
     }
@@ -145,7 +187,7 @@ public class LexisAdminScheduleService {
     if (advertisingDate == null) {
       return "Advertising date is required.";
     }
-    if (advertisingDate.isBefore(LocalDate.now(clock))) {
+    if (requireFutureAdvertisingDate && advertisingDate.isBefore(LocalDate.now(clock))) {
       return "Advertising date must be today or a future date.";
     }
     if (request.applicationReceiptDate() != null

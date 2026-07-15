@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import java.sql.CallableStatement;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Types;
@@ -21,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.CallableStatementCallback;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.RowMapper;
@@ -34,6 +36,7 @@ class LexisReportScheduleRepositoryTest {
   @Mock private ResultSet clientResultSet;
   @Mock private ResultSet orgUnitResultSet;
   @Mock private PreparedStatement preparedStatement;
+  @Mock private Connection connection;
 
   @Test
   void loadRegionOptionsShouldUseOrgUnitNameLabelsLikeLegacyReportSelects() throws Exception {
@@ -305,6 +308,59 @@ class LexisReportScheduleRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void findExportSchedulesPageShouldIncludeAllDatesAndUseWhitelistedSorting() throws Exception {
+    when(jdbcTemplate.query(
+            any(String.class),
+            any(PreparedStatementSetter.class),
+            any(RowMapper.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return List.of();
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    repository.findExportSchedules(0, 50, "teacMeetingDate", "desc");
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
+    assertThat(sqlCaptor.getValue())
+        .contains("ORDER BY ES.TEAC_MEETING_DATE DESC, ES.EXPORT_SCHEDULE_ID ASC")
+        .doesNotContain("WHERE ES.ADVERTISING_DATE")
+        .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+    verify(preparedStatement).setInt(1, 0);
+    verify(preparedStatement).setInt(2, 50);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void findExportSchedulesPageShouldFallbackForUnknownSortValues() throws Exception {
+    when(jdbcTemplate.query(
+            any(String.class),
+            any(PreparedStatementSetter.class),
+            any(RowMapper.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return List.of();
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    repository.findExportSchedules(0, 50, "ADVERTISING_DATE; DELETE", "DESC; DELETE");
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
+    assertThat(sqlCaptor.getValue())
+        .contains("ORDER BY ES.ADVERTISING_DATE ASC, ES.EXPORT_SCHEDULE_ID ASC")
+        .doesNotContain("DELETE");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void findExportScheduleByAdvertisingDateShouldBindExactLegacyListDate() throws Exception {
     when(jdbcTemplate.query(
             any(String.class),
@@ -332,15 +388,16 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void insertExportScheduleShouldUseLegacySequenceAndBindScheduleDates() throws Exception {
-    when(jdbcTemplate.queryForObject("SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL", Long.class))
-        .thenReturn(1002L);
-    when(jdbcTemplate.update(any(String.class), any(PreparedStatementSetter.class)))
+  @SuppressWarnings("unchecked")
+  void insertExportScheduleShouldUseLegacyInlineSequenceAndBindScheduleDates() throws Exception {
+    when(connection.prepareCall(any(String.class))).thenReturn(callableStatement);
+    when(callableStatement.getLong(7)).thenReturn(1002L);
+    when(callableStatement.wasNull()).thenReturn(false);
+    when(jdbcTemplate.execute(any(ConnectionCallback.class)))
         .thenAnswer(
             invocation -> {
-              PreparedStatementSetter setter = invocation.getArgument(1);
-              setter.setValues(preparedStatement);
-              return 1;
+              ConnectionCallback<Long> callback = invocation.getArgument(0);
+              return callback.doInConnection(connection);
             });
     ExportScheduleCreateRequestDto request =
         new ExportScheduleCreateRequestDto(
@@ -357,13 +414,18 @@ class LexisReportScheduleRepositoryTest {
     assertThat(row.exportScheduleId()).isEqualTo(1002L);
     assertThat(row.advertisingDate()).isEqualTo(LocalDate.of(2026, 7, 15));
     verify(jdbcTemplate, never()).execute("LOCK TABLE EXPORT_SCHEDULE IN EXCLUSIVE MODE");
-    verify(preparedStatement).setLong(1, 1002L);
-    verify(preparedStatement).setDate(2, java.sql.Date.valueOf("2026-07-15"));
-    verify(preparedStatement).setDate(3, java.sql.Date.valueOf("2026-07-15"));
-    verify(preparedStatement).setDate(4, java.sql.Date.valueOf("2026-07-29"));
-    verify(preparedStatement).setDate(5, java.sql.Date.valueOf("2026-08-07"));
-    verify(preparedStatement).setDate(6, java.sql.Date.valueOf("2026-08-14"));
-    verify(preparedStatement).setDate(7, java.sql.Date.valueOf("2026-08-04"));
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(connection).prepareCall(sqlCaptor.capture());
+    assertThat(sqlCaptor.getValue())
+        .contains("EXPORT_SCHEDULE_SEQ.NEXTVAL")
+        .doesNotContain("SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL");
+    verify(callableStatement).setDate(1, java.sql.Date.valueOf("2026-07-15"));
+    verify(callableStatement).setDate(2, java.sql.Date.valueOf("2026-07-15"));
+    verify(callableStatement).setDate(3, java.sql.Date.valueOf("2026-07-29"));
+    verify(callableStatement).setDate(4, java.sql.Date.valueOf("2026-08-07"));
+    verify(callableStatement).setDate(5, java.sql.Date.valueOf("2026-08-14"));
+    verify(callableStatement).setDate(6, java.sql.Date.valueOf("2026-08-04"));
+    verify(callableStatement).registerOutParameter(7, Types.NUMERIC);
   }
 
   @Test

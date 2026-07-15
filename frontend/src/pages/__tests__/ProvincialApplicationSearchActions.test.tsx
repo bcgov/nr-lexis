@@ -252,6 +252,21 @@ describe('Provincial Application Search Actions', () => {
     )
   })
 
+  it('auto-searches an advertising date supplied by the export schedule link', async () => {
+    renderPage('/provincial/application?listingFromDate=2026-07-15&listingToDate=2026-07-15')
+    await screen.findByText('321')
+
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          listingFromDate: '2026-07-15',
+          listingToDate: '2026-07-15',
+        }),
+      }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
+    )
+  })
+
   it('debounces backend searches while filters are typed', async () => {
     renderPage()
     await screen.findByText('321')

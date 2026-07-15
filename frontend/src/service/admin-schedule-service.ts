@@ -36,6 +36,18 @@ export type ExportSchedulePage = {
   size: number
 }
 
+export type ExportScheduleSortField =
+  | 'exportScheduleId'
+  | 'advertisingDate'
+  | 'applicationReceiptDate'
+  | 'offerReceiptDate'
+  | 'offerEndDate'
+  | 'offerWithdrawalDate'
+  | 'teacMeetingDate'
+  | 'applicationCount'
+
+export type ExportScheduleSortDirection = 'asc' | 'desc'
+
 const SCHEDULE_CACHE_TTL_MS = 30_000
 const DEFAULT_ADMIN_PAGE = 0
 const DEFAULT_ADMIN_PAGE_SIZE = 100
@@ -90,6 +102,8 @@ const normalizeSchedulePage = (
 export const fetchExportSchedulePage = async (
   page = DEFAULT_ADMIN_PAGE,
   size = DEFAULT_ADMIN_PAGE_SIZE,
+  sortField: ExportScheduleSortField = 'advertisingDate',
+  sortDirection: ExportScheduleSortDirection = 'desc',
 ): Promise<ExportSchedulePage> => {
   const response = await apiService.getCachedResponse<unknown>(
     '/lexis/admin/schedules',
@@ -97,10 +111,12 @@ export const fetchExportSchedulePage = async (
       params: {
         page,
         size,
+        sortField,
+        sortDirection,
       },
     },
     {
-      cacheKey: `admin-schedules:upcoming:${page}:${size}`,
+      cacheKey: `admin-schedules:${sortField}:${sortDirection}:${page}:${size}`,
       ttlMs: SCHEDULE_CACHE_TTL_MS,
     },
   )
