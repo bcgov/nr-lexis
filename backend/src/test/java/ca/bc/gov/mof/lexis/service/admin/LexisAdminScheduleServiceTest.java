@@ -47,8 +47,9 @@ class LexisAdminScheduleServiceTest {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
     ExportScheduleRowDto row =
         new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
-    when(repository.findUpcomingExportSchedules(1, 50)).thenReturn(List.of(row));
-    when(repository.countUpcomingExportSchedules()).thenReturn(73);
+    when(repository.findExportSchedules(1, 50, "upcoming", "advertisingDate", "asc"))
+        .thenReturn(List.of(row));
+    when(repository.countExportSchedules("upcoming")).thenReturn(73);
 
     var result = service.upcomingSchedules(1, 50);
 
@@ -61,8 +62,9 @@ class LexisAdminScheduleServiceTest {
   @Test
   void upcomingSchedulesPageShouldNormalizeInvalidPaging() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
-    when(repository.findUpcomingExportSchedules(0, 100)).thenReturn(List.of());
-    when(repository.countUpcomingExportSchedules()).thenReturn(0);
+    when(repository.findExportSchedules(0, 100, "upcoming", "advertisingDate", "asc"))
+        .thenReturn(List.of());
+    when(repository.countExportSchedules("upcoming")).thenReturn(0);
 
     var result = service.upcomingSchedules(-3, 0);
 
@@ -70,21 +72,47 @@ class LexisAdminScheduleServiceTest {
     assertThat(result.total()).isZero();
     assertThat(result.page()).isZero();
     assertThat(result.size()).isEqualTo(100);
-    verify(repository).findUpcomingExportSchedules(0, 100);
+    verify(repository).findExportSchedules(0, 100, "upcoming", "advertisingDate", "asc");
   }
 
   @Test
   void upcomingSchedulesPageShouldCapPageSizeAtTwoHundred() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
-    when(repository.findUpcomingExportSchedules(2, 200)).thenReturn(List.of());
-    when(repository.countUpcomingExportSchedules()).thenReturn(0);
+    when(repository.findExportSchedules(2, 200, "upcoming", "advertisingDate", "asc"))
+        .thenReturn(List.of());
+    when(repository.countExportSchedules("upcoming")).thenReturn(0);
 
     var result = service.upcomingSchedules(2, 500);
 
     assertThat(result.results()).isEmpty();
     assertThat(result.page()).isEqualTo(2);
     assertThat(result.size()).isEqualTo(200);
-    verify(repository).findUpcomingExportSchedules(2, 200);
+    verify(repository).findExportSchedules(2, 200, "upcoming", "advertisingDate", "asc");
+  }
+
+  @Test
+  void pastSchedulesShouldBeReadOnlyAndRetainRequestedSorting() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleRowDto row =
+        new ExportScheduleRowDto(
+            1001L,
+            LocalDate.of(2026, 6, 24),
+            null,
+            null,
+            null,
+            null,
+            null,
+            0L,
+            true);
+    when(repository.findExportSchedules(0, 50, "past", "teacMeetingDate", "desc"))
+        .thenReturn(List.of(row));
+    when(repository.countExportSchedules("past")).thenReturn(2129);
+
+    var result = service.schedules(0, 50, "past", "teacMeetingDate", "desc");
+
+    assertThat(result.results()).singleElement().extracting(ExportScheduleRowDto::mutable).isEqualTo(false);
+    assertThat(result.total()).isEqualTo(2129);
+    verify(repository).findExportSchedules(0, 50, "past", "teacMeetingDate", "desc");
   }
 
   @Test

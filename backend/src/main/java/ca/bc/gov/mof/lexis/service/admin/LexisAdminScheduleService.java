@@ -24,6 +24,10 @@ public class LexisAdminScheduleService {
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisAdminScheduleService.class);
   private static final int DEFAULT_PAGE_SIZE = 100;
   private static final int MAX_PAGE_SIZE = 200;
+  private static final String PAST_SCOPE = "past";
+  private static final String UPCOMING_SCOPE = "upcoming";
+  private static final String DEFAULT_SORT_FIELD = "advertisingDate";
+  private static final String DEFAULT_SORT_DIRECTION = "asc";
   private static final String SCHEDULE_CONSTRAINT_MESSAGE =
       "Export schedule dates are invalid or conflict with an existing schedule.";
   private static final String SCHEDULE_DATABASE_MESSAGE =
@@ -47,11 +51,22 @@ public class LexisAdminScheduleService {
   }
 
   public LexisAdminPagedResponseDto<ExportScheduleRowDto> upcomingSchedules(int page, int size) {
+    return schedules(page, size, UPCOMING_SCOPE, DEFAULT_SORT_FIELD, DEFAULT_SORT_DIRECTION);
+  }
+
+  public LexisAdminPagedResponseDto<ExportScheduleRowDto> schedules(
+      int page, int size, String scope, String sortField, String sortDirection) {
     int normalizedPage = Math.max(0, page);
     int normalizedSize = size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+    String normalizedScope = normalizeScope(scope);
+    List<ExportScheduleRowDto> rows =
+        repository.findExportSchedules(
+            normalizedPage, normalizedSize, normalizedScope, sortField, sortDirection);
     return new LexisAdminPagedResponseDto<>(
-        repository.findUpcomingExportSchedules(normalizedPage, normalizedSize),
-        repository.countUpcomingExportSchedules(),
+        PAST_SCOPE.equals(normalizedScope)
+            ? rows.stream().map(this::asReadOnlySchedule).toList()
+            : rows,
+        repository.countExportSchedules(normalizedScope),
         normalizedPage,
         normalizedSize);
   }
@@ -168,6 +183,23 @@ public class LexisAdminScheduleService {
     }
 
     return null;
+  }
+
+  private String normalizeScope(String scope) {
+    return PAST_SCOPE.equalsIgnoreCase(scope) ? PAST_SCOPE : UPCOMING_SCOPE;
+  }
+
+  private ExportScheduleRowDto asReadOnlySchedule(ExportScheduleRowDto row) {
+    return new ExportScheduleRowDto(
+        row.exportScheduleId(),
+        row.advertisingDate(),
+        row.applicationReceiptDate(),
+        row.offerReceiptDate(),
+        row.offerEndDate(),
+        row.offerWithdrawalDate(),
+        row.teacMeetingDate(),
+        row.applicationCount(),
+        false);
   }
 
   private String validate(ExportScheduleCreateRequestDto request) {

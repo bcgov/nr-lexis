@@ -24,32 +24,32 @@ class LexisAdminScheduleControllerTest {
   @Mock private LexisAdminScheduleService scheduleService;
 
   @Test
-  void upcomingSchedulesShouldReturnNoContentWhenServiceMissing() {
+  void schedulesShouldReturnNoContentWhenServiceMissing() {
     when(scheduleServiceProvider.getIfAvailable()).thenReturn(null);
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
-    var response = controller.upcomingSchedules(0, 100);
+    var response = controller.schedules(0, 100, "upcoming", "advertisingDate", "asc");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
   }
 
   @Test
-  void upcomingSchedulesShouldDelegateToService() {
+  void schedulesShouldDelegateToService() {
     when(scheduleServiceProvider.getIfAvailable()).thenReturn(scheduleService);
     ExportScheduleRowDto row =
         new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
     LexisAdminPagedResponseDto<ExportScheduleRowDto> payload =
         new LexisAdminPagedResponseDto<>(java.util.List.of(row), 1, 0, 100);
-    when(scheduleService.upcomingSchedules(0, 100)).thenReturn(payload);
+    when(scheduleService.schedules(0, 100, "past", "teacMeetingDate", "desc")).thenReturn(payload);
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
-    var response = controller.upcomingSchedules(0, 100);
+    var response = controller.schedules(0, 100, "past", "teacMeetingDate", "desc");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(scheduleService).upcomingSchedules(0, 100);
+    verify(scheduleService).schedules(0, 100, "past", "teacMeetingDate", "desc");
   }
 
   @Test

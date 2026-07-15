@@ -1265,7 +1265,9 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(table.getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
     await expect(table.getByRole('columnheader', { name: 'Pine' })).toBeVisible()
     await expect(
-      page.getByText('Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.'),
+      page.getByText(
+        'Pine saves to WH, LO and YE. Each edited cell saves old and second growth rows.',
+      ),
     ).toBeVisible()
     const balsamGradeA = page.getByLabel('Balsam grade A')
     const balsamGradeB = page.getByLabel('Balsam grade B')
@@ -1804,6 +1806,39 @@ test.describe('TEST IDIR admin regression', () => {
     expect(exportSchedules.size).toBe(100)
   })
 
+  test('can page and sort read-only past export schedules', async () => {
+    const page = await authenticatedIdirPage()
+
+    const pastSchedules = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/admin/schedules', {
+        params: {
+          page: 0,
+          size: 20,
+          scope: 'past',
+          sortField: 'advertisingDate',
+          sortDirection: 'desc',
+        },
+      }),
+    )
+    const rows = asRecordArray(pastSchedules.results)
+
+    expect(pastSchedules.total, 'TEST should retain historical export schedules').toBeGreaterThan(0)
+    expect(pastSchedules.page).toBe(0)
+    expect(pastSchedules.size).toBe(20)
+    expect(rows.length).toBeLessThanOrEqual(20)
+
+    let previousAdvertisingDate: string | null = null
+    for (const row of rows) {
+      const advertisingDate = String(row.advertisingDate ?? '').trim()
+      expect(advertisingDate).toMatch(isoDatePattern)
+      expect(row.mutable).toBe(false)
+      if (previousAdvertisingDate) {
+        expect(previousAdvertisingDate >= advertisingDate).toBe(true)
+      }
+      previousAdvertisingDate = advertisingDate
+    }
+  })
+
   test('shows report advertising date selector from current list dates', async () => {
     const page = await authenticatedIdirPage()
 
@@ -2046,7 +2081,6 @@ test.describe('TEST IDIR admin regression', () => {
     const rtmSearchText = await rtmSearchResponse.text()
     expect(rtmSearchResponse.status(), redactedTextSnippet(rtmSearchText)).toBe(200)
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
-
   })
 
   test('rejects ClamAV test payloads on application document and submission uploads', async () => {

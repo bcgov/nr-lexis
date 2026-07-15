@@ -259,7 +259,17 @@ describe('Admin policy action states', () => {
         ).not.toBeInTheDocument()
       }
 
-      expect(fetchPage).toHaveBeenCalledWith(0, 100)
+      if (area === 'schedule') {
+        expect(mockedFetchExportSchedulePage).toHaveBeenCalledWith(
+          0,
+          100,
+          'upcoming',
+          'advertisingDate',
+          'asc',
+        )
+      } else {
+        expect(fetchPage).toHaveBeenCalledWith(0, 100)
+      }
       for (const untouchedFetch of untouchedFetches) {
         expect(untouchedFetch).not.toHaveBeenCalled()
       }
@@ -343,7 +353,17 @@ describe('Admin policy action states', () => {
 
       await screen.findByRole('heading', { level: 1, name: heading })
 
-      expect(fetchPage).toHaveBeenLastCalledWith(0, 100)
+      if (area === 'schedule') {
+        expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+          0,
+          100,
+          'upcoming',
+          'advertisingDate',
+          'asc',
+        )
+      } else {
+        expect(fetchPage).toHaveBeenLastCalledWith(0, 100)
+      }
       expect(screen.getByText('220')).toBeInTheDocument()
 
       const rowsPerPage = screen.getByLabelText('Rows per page')
@@ -357,16 +377,96 @@ describe('Admin policy action states', () => {
       fireEvent.change(rowsPerPage, { target: { value: '20' } })
 
       await waitFor(() => {
-        expect(fetchPage).toHaveBeenLastCalledWith(0, 20)
+        if (area === 'schedule') {
+          expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+            0,
+            20,
+            'upcoming',
+            'advertisingDate',
+            'asc',
+          )
+        } else {
+          expect(fetchPage).toHaveBeenLastCalledWith(0, 20)
+        }
       })
 
       await userEvent.click(screen.getByLabelText('Next page'))
 
       await waitFor(() => {
-        expect(fetchPage).toHaveBeenLastCalledWith(1, 20)
+        if (area === 'schedule') {
+          expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+            1,
+            20,
+            'upcoming',
+            'advertisingDate',
+            'asc',
+          )
+        } else {
+          expect(fetchPage).toHaveBeenLastCalledWith(1, 20)
+        }
       })
     },
   )
+
+  it('loads past export schedules as read-only and sorts them on the server', async () => {
+    const pastRow = {
+      exportScheduleId: '17',
+      advertisingDate: '2026-07-08',
+      applicationReceiptDate: '2026-07-08',
+      offerReceiptDate: '2026-07-22',
+      offerEndDate: '2026-08-14',
+      offerWithdrawalDate: '2026-08-04',
+      teacMeetingDate: '2026-08-07',
+      applicationCount: 3,
+      mutable: true,
+    }
+    mockedFetchExportSchedulePage
+      .mockResolvedValueOnce({ rows: [], total: 25, page: 0, size: 100 })
+      .mockResolvedValueOnce({ rows: [pastRow], total: 2129, page: 0, size: 100 })
+      .mockResolvedValue({ rows: [pastRow], total: 2129, page: 0, size: 100 })
+
+    renderPage('schedule')
+
+    await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
+    await userEvent.click(screen.getByRole('tab', { name: 'Past' }))
+
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'past',
+        'advertisingDate',
+        'asc',
+      )
+    })
+    expect(screen.getByText('Read only')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Advertising date')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting' }))
+
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'past',
+        'teacMeetingDate',
+        'asc',
+      )
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting (ASC)' }))
+
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'past',
+        'teacMeetingDate',
+        'desc',
+      )
+    })
+  })
 
   it('enforces permission and disables mutating actions when not granted', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
