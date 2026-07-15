@@ -25,11 +25,14 @@ type PostWithCsrfOptions = {
   data?: Record<string, unknown>
   form?: Record<string, string>
   multipart?: Record<string, string | number | boolean | MultipartFile>
+  params?: Record<string, string>
+  headers?: Record<string, string>
 }
 
 type GetWithAuthOptions = {
   params?: Record<string, string>
   failOnStatusCode?: boolean
+  headers?: Record<string, string>
 }
 
 type RealCredentials = {
@@ -297,7 +300,10 @@ export const getWithAuth = async (
   return page.request.get(path, {
     ...options,
     failOnStatusCode: options.failOnStatusCode ?? false,
-    headers: await authHeaders(page),
+    headers: {
+      ...options.headers,
+      ...(await authHeaders(page)),
+    },
   })
 }
 
@@ -669,7 +675,10 @@ export const postWithCsrf = async (
 ): Promise<APIResponse> => {
   return page.request.post(path, {
     ...options,
-    headers: await authHeaders(page),
+    headers: {
+      ...options.headers,
+      ...(await authHeaders(page)),
+    },
     failOnStatusCode: false,
   })
 }
@@ -681,7 +690,10 @@ export const putWithCsrf = async (
 ): Promise<APIResponse> => {
   return page.request.put(path, {
     ...options,
-    headers: await authHeaders(page),
+    headers: {
+      ...options.headers,
+      ...(await authHeaders(page)),
+    },
     failOnStatusCode: false,
   })
 }
@@ -691,11 +703,15 @@ export const deleteWithCsrf = async (
   path: string,
   options: {
     params?: Record<string, string>
+    headers?: Record<string, string>
   } = {},
 ): Promise<APIResponse> => {
   return page.request.delete(path, {
     ...options,
-    headers: await authHeaders(page),
+    headers: {
+      ...options.headers,
+      ...(await authHeaders(page)),
+    },
     failOnStatusCode: false,
   })
 }

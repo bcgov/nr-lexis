@@ -19,7 +19,7 @@ jobs:
       run:
         working-directory: frontend
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     strategy:
@@ -30,6 +30,10 @@ jobs:
       regression-outcome: ${{ steps.run-regression.outcome }}
     env:
       E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.gold.devops.gov.bc.ca
+      E2E_REGRESSION_CLIENT_NUMBER: ${{ vars.E2E_REGRESSION_CLIENT_NUMBER }}
+      E2E_REGRESSION_CLIENT_LOCATION_CODE: ${{ vars.E2E_REGRESSION_CLIENT_LOCATION_CODE }}
+      E2E_REGRESSION_LEGACY_REGION_CODE: ${{ vars.E2E_REGRESSION_LEGACY_REGION_CODE }}
+      E2E_REGRESSION_TIMBER_MARK: ${{ vars.E2E_REGRESSION_TIMBER_MARK }}
     steps:
       - uses: actions/checkout@v6
 

@@ -20,6 +20,7 @@ import {
   redactedTextSnippet,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
+import { formatBusinessIsoDate } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
   `.csp-side-nav__section:has(.csp-side-nav__category-text:text-is("${name}"))`
@@ -177,6 +178,14 @@ const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
   }
 }
 
+const isSharedTestRegressionBaseUrl = (rawUrl: string): boolean => {
+  try {
+    return new URL(rawUrl).hostname.toLowerCase() === 'nr-lexis-test.apps.gold.devops.gov.bc.ca'
+  } catch {
+    return false
+  }
+}
+
 type ReviewStatusResponse = {
   updated?: boolean
   valid?: boolean
@@ -212,6 +221,96 @@ type ApplicationSubmissionResponse = {
   packageNumber?: string | null
   scaleRows?: number
   errors?: unknown
+}
+
+type ApplicationPersistenceResponse = {
+  valid?: boolean
+  message?: string | null
+  applicationNumber?: number | null
+  errors?: unknown
+  warnings?: unknown
+}
+
+type ApplicationSummaryResponse = {
+  applicationNumber?: number | null
+  applicationDate?: string | null
+  termDays?: number | null
+  receivedDate?: string | null
+  applicationVolume?: number | null
+  averageLogVolume?: number | null
+  productLocation?: string | null
+  exportScheduleId?: number | null
+  agentClientNumber?: string | null
+  agentClientLocationCode?: string | null
+  ownerClientNumber?: string | null
+  ownerClientLocationCode?: string | null
+  exemptionReasonCode?: string | null
+  applicationStatusCode?: string | null
+  applicantTypeCode?: string | null
+  orgUnitNumber?: number | null
+  productTypeCode?: string | null
+  jurisdictionCode?: string | null
+  growthTypeCode?: string | null
+  agentContactName?: string | null
+  ownerContactName?: string | null
+  oicIndicator?: string | null
+}
+
+type OfferPersistenceResponse = {
+  success?: boolean
+  message?: string | null
+  applicationNumber?: number | null
+  exportPurchaseOfferNumber?: number | null
+  errors?: unknown
+  warnings?: unknown
+}
+
+type ExemptionPreviewResponse = {
+  valid?: boolean
+  exemptionTypeCode?: string | null
+  exemptionStatusCode?: string | null
+  approvedVolume?: string | null
+  expiryDate?: string | null
+  applicationNumbers?: unknown
+  errors?: unknown
+}
+
+type ExemptionPersistenceResponse = {
+  success?: boolean
+  message?: string | null
+  exemptionNumber?: string | null
+  errors?: unknown
+  warnings?: unknown
+}
+
+type ExemptionApprovalResponse = {
+  success?: boolean
+  valid?: boolean
+  errorMessage?: string | null
+  errors?: unknown
+  warnings?: unknown
+}
+
+type RelationshipMutationResponse = {
+  success?: boolean
+  message?: string | null
+  errors?: unknown
+  warnings?: unknown
+}
+
+type ExemptionApplicationsResponse = {
+  applications?: unknown
+}
+
+type PermitMutationResponse = RelationshipMutationResponse & {
+  permitNumber?: number | string | null
+  permitStatus?: string | null
+}
+
+type ShippingReferenceOptionsResponse = {
+  countries?: unknown
+  transportTypes?: unknown
+  ports?: unknown
 }
 
 type LexisUploadResponse = {
@@ -283,9 +382,55 @@ type JsonWithStatus<T> = {
   payload: T
 }
 
+type VersionedJson<T> = {
+  payload: T
+  version: string
+}
+
+type CleanupHandle = {
+  complete: () => void
+}
+
+class RegressionCleanupStack {
+  private readonly tasks: Array<{
+    label: string
+    active: boolean
+    cleanup: () => Promise<void>
+  }> = []
+
+  defer(label: string, cleanup: () => Promise<void>): CleanupHandle {
+    const task = { label, active: true, cleanup }
+    this.tasks.push(task)
+    return {
+      complete: () => {
+        task.active = false
+      },
+    }
+  }
+
+  async run(): Promise<Error[]> {
+    const failures: Error[] = []
+    for (const task of [...this.tasks].reverse()) {
+      if (!task.active) {
+        continue
+      }
+      try {
+        await task.cleanup()
+        task.active = false
+      } catch (error) {
+        failures.push(
+          new Error(`${task.label}: ${error instanceof Error ? error.message : String(error)}`, {
+            cause: error,
+          }),
+        )
+      }
+    }
+    return failures
+  }
+}
+
 const missingApplicationNumber = '999999999'
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
-const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
 const selectedNaturalResourceRegionText =
@@ -295,6 +440,15 @@ const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
 const famManageUrlPattern = /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
+const recordVersionHeader = 'X-Lexis-Record-Version'
+const regressionEndUseCode = 'PL'
+const regressionSpeciesCode = 'HE'
+const regressionOwnerClientNumber = process.env.E2E_REGRESSION_CLIENT_NUMBER?.trim() || '00001074'
+const regressionOwnerClientLocationCode =
+  process.env.E2E_REGRESSION_CLIENT_LOCATION_CODE?.trim() || '03'
+const regressionLegacyRegionCode =
+  process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() || 'RSC'
+const regressionTimberMark = process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() || 'NCHWP'
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -389,6 +543,25 @@ const uniqueRegressionPackageNumber = (): string => {
   return `E2E-${timestamp}-${suffix}`
 }
 
+const validateRegressionFixtureConfig = (): void => {
+  const invalidNames: string[] = []
+  if (!/^\d{8}$/.test(regressionOwnerClientNumber)) {
+    invalidNames.push('E2E_REGRESSION_CLIENT_NUMBER')
+  }
+  if (!/^[A-Z0-9]{2}$/i.test(regressionOwnerClientLocationCode)) {
+    invalidNames.push('E2E_REGRESSION_CLIENT_LOCATION_CODE')
+  }
+  if (!/^[A-Z0-9]{3}$/.test(regressionLegacyRegionCode)) {
+    invalidNames.push('E2E_REGRESSION_LEGACY_REGION_CODE')
+  }
+  if (!/^[A-Z0-9 -]{1,10}$/.test(regressionTimberMark)) {
+    invalidNames.push('E2E_REGRESSION_TIMBER_MARK')
+  }
+  if (invalidNames.length > 0) {
+    throw new Error(`Invalid TEST regression fixture configuration: ${invalidNames.join(', ')}`)
+  }
+}
+
 const regressionSubmissionXml = (
   packageNumber: string,
 ): string => `<?xml version="1.0" encoding="UTF-8"?>
@@ -397,18 +570,18 @@ const regressionSubmissionXml = (
     <lexis:LexisSubmission>
       <lexis:applicant>
         <lexis:applicantDetails>
-          <lexis:clientNumber>00001074</lexis:clientNumber>
-          <lexis:clientLocnCode>03</lexis:clientLocnCode>
-          <lexis:name>Mosaic Forest Management Corporation</lexis:name>
+          <lexis:clientNumber>${regressionOwnerClientNumber}</lexis:clientNumber>
+          <lexis:clientLocnCode>${regressionOwnerClientLocationCode}</lexis:clientLocnCode>
+          <lexis:name>LEXIS E2E REGRESSION</lexis:name>
         </lexis:applicantDetails>
         <lexis:applicantContact>
-          <lexis:contactSurname>SERVICE</lexis:contactSurname>
-          <lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>
+          <lexis:contactSurname>REGRESSION</lexis:contactSurname>
+          <lexis:contactFirstname>E2E</lexis:contactFirstname>
         </lexis:applicantContact>
       </lexis:applicant>
       <lexis:applicationDetail>
         <lexis:jurisdictionCode>P</lexis:jurisdictionCode>
-        <lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>
+        <lexis:bcForestRegionCode>${regressionLegacyRegionCode}</lexis:bcForestRegionCode>
         <lexis:applStatusCode>A</lexis:applStatusCode>
         <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
         <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
@@ -417,26 +590,26 @@ const regressionSubmissionXml = (
         <lexis:productTypeCode>H</lexis:productTypeCode>
         <lexis:boomNumber>${packageNumber}</lexis:boomNumber>
         <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
-        <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
+        <lexis:productLocation>LEXIS E2E REGRESSION</lexis:productLocation>
         <lexis:ageClass>S</lexis:ageClass>
         <lexis:avgLength>6.7</lexis:avgLength>
         <lexis:avgDiameter>12.8</lexis:avgDiameter>
         <lexis:harvestedTimber>
-          <lexis:timberMark>NCHWP</lexis:timberMark>
+          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
           <lexis:numberOfPieces>1500</lexis:numberOfPieces>
           <lexis:species>HE</lexis:species>
           <lexis:grade>H</lexis:grade>
           <lexis:quantityVolume>500</lexis:quantityVolume>
         </lexis:harvestedTimber>
         <lexis:harvestedTimber>
-          <lexis:timberMark>NCHWP</lexis:timberMark>
+          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
           <lexis:numberOfPieces>50</lexis:numberOfPieces>
           <lexis:species>HE</lexis:species>
           <lexis:grade>J</lexis:grade>
           <lexis:quantityVolume>24.5</lexis:quantityVolume>
         </lexis:harvestedTimber>
         <lexis:harvestedTimber>
-          <lexis:timberMark>NCHWP</lexis:timberMark>
+          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
           <lexis:numberOfPieces>1</lexis:numberOfPieces>
           <lexis:species>FI</lexis:species>
           <lexis:grade>J</lexis:grade>
@@ -717,6 +890,387 @@ const readJsonResponseWithStatuses = async <T>(
   }
 }
 
+const requiredString = (value: unknown, label: string): string => {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    throw new Error(`${label} was missing from the TEST regression record.`)
+  }
+  return String(value).trim()
+}
+
+const versionHeaders = (version: string): Record<string, string> => ({
+  [recordVersionHeader]: version,
+})
+
+const readVersionedJson = async <T>(page: Page, path: string): Promise<VersionedJson<T>> => {
+  const response = await getWithAuth(page, path)
+  const payload = await readJsonResponse<T>(response)
+  const version = response.headers()[recordVersionHeader.toLowerCase()]?.trim() ?? ''
+  expect(version, `${path} should return ${recordVersionHeader}`).not.toBe('')
+  return { payload, version }
+}
+
+const currentOfferSchedule = async (
+  page: Page,
+): Promise<{ scheduleId: string; advertisingDate: string; offerReceiptDate: string }> => {
+  const schedulePage = await readJsonResponse<GenericSearchResponse>(
+    await getWithAuth(page, '/api/lexis/admin/schedules', {
+      params: {
+        page: '0',
+        size: '200',
+      },
+    }),
+  )
+  const today = formatBusinessIsoDate()
+  const schedule = asRecordArray(schedulePage.results).find((candidate) => {
+    const advertisingDate = String(candidate.advertisingDate ?? '').trim()
+    const offerReceiptDate = String(candidate.offerReceiptDate ?? '').trim()
+    return advertisingDate <= today && offerReceiptDate >= today
+  })
+  if (!schedule) {
+    throw new Error(
+      `TEST needs an existing export schedule with advertisingDate <= ${today} <= offerReceiptDate for the CRUD regression.`,
+    )
+  }
+  return {
+    scheduleId: requiredString(schedule.exportScheduleId, 'Export schedule ID'),
+    advertisingDate: requiredString(schedule.advertisingDate, 'Export schedule advertising date'),
+    offerReceiptDate: requiredString(
+      schedule.offerReceiptDate,
+      'Export schedule offer receipt date',
+    ),
+  }
+}
+
+const fetchApplicationSummary = async (
+  page: Page,
+  applicationNumber: number,
+): Promise<ApplicationSummaryResponse> =>
+  readJsonResponse<ApplicationSummaryResponse>(
+    await getWithAuth(page, '/api/lexis/rpc/application-details/application-summary', {
+      params: { applicationNumber: String(applicationNumber) },
+    }),
+  )
+
+const applicationSummaryForm = (
+  summary: ApplicationSummaryResponse,
+  scheduleId: string,
+  productLocation: string,
+): Record<string, string> => ({
+  applicationNumber: requiredString(summary.applicationNumber, 'Application number'),
+  applicationDate: requiredString(summary.applicationDate, 'Application date'),
+  receivedDate: requiredString(summary.receivedDate, 'Application received date'),
+  termDays: requiredString(summary.termDays, 'Application term'),
+  applicationVolume: requiredString(summary.applicationVolume, 'Application volume'),
+  averageLogVolume: requiredString(summary.averageLogVolume, 'Average log volume'),
+  exemptionReasonCode: requiredString(summary.exemptionReasonCode, 'Exemption reason'),
+  productLocation,
+  exportScheduleId: scheduleId,
+  agentClientNumber: String(summary.agentClientNumber ?? ''),
+  agentClientLocationCode: String(summary.agentClientLocationCode ?? ''),
+  ownerClientNumber: requiredString(summary.ownerClientNumber, 'Owner client number'),
+  ownerClientLocationCode: requiredString(summary.ownerClientLocationCode, 'Owner client location'),
+  applicantType: requiredString(summary.applicantTypeCode, 'Applicant type'),
+  orgUnitNumber: requiredString(summary.orgUnitNumber, 'Application organization'),
+  productTypeCode: requiredString(summary.productTypeCode, 'Application product type'),
+  growthTypeCode: requiredString(summary.growthTypeCode, 'Application growth type'),
+  agentContactName: String(summary.agentContactName ?? ''),
+  ownerContactName: requiredString(summary.ownerContactName, 'Owner contact'),
+  oicIndicator: String(summary.oicIndicator ?? 'N'),
+  applicationEndUseCode: regressionEndUseCode,
+  applicationSelectedSpecies: regressionSpeciesCode,
+})
+
+const createApplicationForm = (
+  template: ApplicationSummaryResponse,
+  scheduleId: string,
+  marker: string,
+): Record<string, string> => ({
+  applicationDate: formatBusinessIsoDate(),
+  exemptionTerm: '30',
+  dateReceived: formatBusinessIsoDate(),
+  applicationVolume: '10',
+  averageLogVolume: requiredString(template.averageLogVolume, 'Average log volume'),
+  logLocation: marker,
+  exportScheduleId: scheduleId,
+  ownerApplicantType: 'O',
+  ownerClientNumber: requiredString(template.ownerClientNumber, 'Owner client number'),
+  ownerClientLocation: requiredString(template.ownerClientLocationCode, 'Owner client location'),
+  ownerContactName: marker,
+  exemptionReason: requiredString(template.exemptionReasonCode, 'Exemption reason'),
+  region: requiredString(template.orgUnitNumber, 'Application organization'),
+  productType: requiredString(template.productTypeCode, 'Application product type'),
+  exportJurisdictionCode: 'P',
+  ageClass: requiredString(template.growthTypeCode, 'Application growth type'),
+  oicIndicator: 'N',
+  applicationEndUseCode: regressionEndUseCode,
+  applicationSelectedSpecies: regressionSpeciesCode,
+  additionalRemarks: marker,
+})
+
+const rejectRegressionApplication = async (
+  page: Page,
+  applicationNumber: number,
+  remark: string,
+): Promise<void> => {
+  const current = await readVersionedJson<Record<string, unknown>>(
+    page,
+    `/api/lexis/applications/${applicationNumber}`,
+  )
+  if (String(current.payload.applicationStatusCode ?? '').toUpperCase() === 'REJ') {
+    return
+  }
+  const rejected = await readJsonResponse<ReviewStatusResponse>(
+    await postWithCsrf(page, `/api/lexis/application-reviews/${applicationNumber}/status`, {
+      headers: versionHeaders(current.version),
+      data: {
+        statusCode: 'REJ',
+        remark,
+        clientEmailAddress: regressionClientEmail,
+      },
+    }),
+  )
+  expect(rejected.valid).toBe(true)
+  expect(rejected.updated).toBe(true)
+  expect(rejected.statusCode).toBe('REJ')
+}
+
+const offerUpdateForm = (
+  offerNumber: number,
+  values: Record<string, string>,
+): Record<string, string> => ({
+  exportPurchaseOfferNumber: String(offerNumber),
+  offerNumber: String(offerNumber),
+  ...values,
+})
+
+const withdrawRegressionOffer = async (
+  page: Page,
+  offerNumber: number,
+  marker: string,
+): Promise<void> => {
+  const current = await readVersionedJson<Record<string, unknown>>(
+    page,
+    `/api/lexis/purchase-offers/${offerNumber}`,
+  )
+  if (String(current.payload.offerWithdrawalDate ?? '').trim()) {
+    return
+  }
+  const result = await readJsonResponse<OfferPersistenceResponse>(
+    await postWithCsrf(page, '/api/lexis/rpc/offer-details/offer/update', {
+      headers: versionHeaders(current.version),
+      form: offerUpdateForm(offerNumber, {
+        offerWithdrawalDate: formatBusinessIsoDate(),
+        withdrawReason: `${marker} cleanup`,
+      }),
+    }),
+  )
+  expect(result.success).toBe(true)
+  expect(asStringArray(result.errors)).toEqual([])
+}
+
+const exemptionUpdateForm = (
+  detail: Record<string, unknown>,
+  orgUnitNumber: string,
+  values: Record<string, string> = {},
+): Record<string, string> => ({
+  exemptionNumber: requiredString(detail.exemptionNumber, 'Exemption number'),
+  previousExemptionNumber: requiredString(detail.exemptionNumber, 'Previous exemption number'),
+  approvedVolume: requiredString(detail.approvedVolume, 'Exemption approved volume'),
+  approvalDate: String(detail.approvalDate ?? ''),
+  expiryDate: requiredString(detail.expiryDate, 'Exemption expiry date'),
+  otherConditions: String(detail.otherConditions ?? ''),
+  exemptionTypeCode: requiredString(detail.exemptionTypeCode, 'Exemption type'),
+  exemptionStatusCode: requiredString(detail.exemptionStatusCode, 'Exemption status'),
+  region: orgUnitNumber,
+  ...values,
+})
+
+const exemptionContainsApplication = async (
+  page: Page,
+  exemptionNumber: string,
+  applicationNumber: number,
+): Promise<boolean> => {
+  const response = await readJsonResponse<ExemptionApplicationsResponse>(
+    await getWithAuth(page, '/api/lexis/rpc/exemption-details/applications', {
+      params: { exemptionNumber },
+    }),
+  )
+  return asRecordArray(response.applications).some(
+    (application) => Number(application.applicationNumber) === applicationNumber,
+  )
+}
+
+const unlinkRegressionExemptionApplication = async (
+  page: Page,
+  exemptionNumber: string,
+  applicationNumber: number,
+): Promise<void> => {
+  if (!(await exemptionContainsApplication(page, exemptionNumber, applicationNumber))) {
+    return
+  }
+  const current = await readVersionedJson<Record<string, unknown>>(
+    page,
+    `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+  )
+  const result = await readJsonResponse<RelationshipMutationResponse>(
+    await deleteWithCsrf(page, '/api/lexis/rpc/exemption-details/application', {
+      headers: versionHeaders(current.version),
+      params: {
+        applicationNumber: String(applicationNumber),
+        exemptionNumber,
+      },
+    }),
+  )
+  expect(result.success).toBe(true)
+  expect(asStringArray(result.errors)).toEqual([])
+}
+
+const linkRegressionExemptionApplication = async (
+  page: Page,
+  exemptionNumber: string,
+  applicationNumber: number,
+): Promise<void> => {
+  if (await exemptionContainsApplication(page, exemptionNumber, applicationNumber)) {
+    return
+  }
+  const current = await readVersionedJson<Record<string, unknown>>(
+    page,
+    `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+  )
+  const result = await readJsonResponse<RelationshipMutationResponse>(
+    await postWithCsrf(page, '/api/lexis/rpc/exemption-details/application', {
+      headers: versionHeaders(current.version),
+      form: {
+        applicationNumber: String(applicationNumber),
+        exemptionNumber,
+      },
+    }),
+  )
+  expect(result.success).toBe(true)
+  expect(asStringArray(result.errors)).toEqual([])
+}
+
+const cancelRegressionExemption = async (
+  page: Page,
+  exemptionNumber: string,
+  orgUnitNumber: string,
+): Promise<void> => {
+  const current = await readVersionedJson<Record<string, unknown>>(
+    page,
+    `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+  )
+  if (String(current.payload.exemptionStatusCode ?? '').toUpperCase() === 'CAN') {
+    return
+  }
+  const result = await readJsonResponse<ExemptionPersistenceResponse>(
+    await postWithCsrf(page, '/api/lexis/rpc/exemption-details/exemption/update', {
+      headers: versionHeaders(current.version),
+      form: exemptionUpdateForm(current.payload, orgUnitNumber, {
+        exemptionStatusCode: 'CAN',
+      }),
+    }),
+  )
+  expect(result.success).toBe(true)
+  expect(asStringArray(result.errors)).toEqual([])
+}
+
+const shippingFixture = async (
+  page: Page,
+): Promise<{ transportType: string; portOfExport: string }> => {
+  const options = await readJsonResponse<ShippingReferenceOptionsResponse>(
+    await getWithAuth(page, '/api/lexis/shipping-reference-options'),
+  )
+  expect(asRecordArray(options.countries).some((country) => optionCode(country) === 'CA')).toBe(
+    true,
+  )
+  const transportType = optionCode(asRecordArray(options.transportTypes)[0] ?? {})
+  const portOfExport = optionCode(
+    asRecordArray(options.ports).find((port) => optionCode(port) !== 'OT') ?? {},
+  )
+  expect(transportType, 'TEST needs an active transport type for permit regression.').not.toBe('')
+  expect(portOfExport, 'TEST needs a non-Other port for permit regression.').not.toBe('')
+  return { transportType, portOfExport }
+}
+
+const permitShippingForm = (
+  permitNumber: number,
+  marker: string,
+  shipping: { transportType: string; portOfExport: string },
+  permitStatus?: string,
+): Record<string, string> => ({
+  permitNumber: String(permitNumber),
+  ...(permitStatus ? { permitStatus } : {}),
+  destinationCompanyName: 'LEXIS E2E REGRESSION',
+  destinationCountry: 'CA',
+  transportType: shipping.transportType,
+  transportName: marker,
+  estimatedShippingDate: formatBusinessIsoDate(),
+  portOfExport: shipping.portOfExport,
+  permitRemarks: marker,
+})
+
+const cancelRegressionPermit = async (
+  page: Page,
+  permitNumber: number,
+  marker: string,
+  shipping: { transportType: string; portOfExport: string },
+): Promise<void> => {
+  const current = await readVersionedJson<Record<string, unknown>>(
+    page,
+    `/api/lexis/permits/${permitNumber}`,
+  )
+  if (String(current.payload.permitStatusCode ?? '').toUpperCase() === 'CAN') {
+    return
+  }
+  const result = await readJsonResponse<PermitMutationResponse>(
+    await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+      headers: versionHeaders(current.version),
+      form: permitShippingForm(permitNumber, marker, shipping, 'CAN'),
+    }),
+  )
+  expect(result.success).toBe(true)
+  expect(result.permitStatus).toBe('CAN')
+  expect(asStringArray(result.errors)).toEqual([])
+}
+
+const permitContainsApplication = async (
+  page: Page,
+  permitNumber: number,
+  applicationNumber: number,
+): Promise<boolean> => {
+  const response = await readJsonResponse<Record<string, unknown>>(
+    await getWithAuth(page, '/api/lexis/rpc/permit-details/application-list', {
+      params: { permitNumber: String(permitNumber) },
+    }),
+  )
+  return asStringArray(response.applicationList).includes(String(applicationNumber))
+}
+
+const detachRegressionPermitApplication = async (
+  page: Page,
+  permitNumber: number,
+  applicationNumber: number,
+): Promise<void> => {
+  if (!(await permitContainsApplication(page, permitNumber, applicationNumber))) {
+    return
+  }
+  const current = await readVersionedJson<Record<string, unknown>>(
+    page,
+    `/api/lexis/permits/${permitNumber}`,
+  )
+  const result = await readJsonResponse<RelationshipMutationResponse>(
+    await postWithCsrf(page, '/api/lexis/rpc/permit-details/remove-application-from-permit', {
+      headers: versionHeaders(current.version),
+      form: {
+        permitNumber: String(permitNumber),
+        applicationNumber: String(applicationNumber),
+      },
+    }),
+  )
+  expect(result.success).toBe(true)
+  expect(asStringArray(result.errors)).toEqual([])
+}
+
 const latestExportScheduleAdvertisingDate = async (page: Page): Promise<string> => {
   const schedulePage = await readJsonResponse<GenericSearchResponse>(
     await getWithAuth(page, '/api/lexis/admin/schedules', {
@@ -922,8 +1476,13 @@ const cleanupRegressionPackage = async (
       continue
     }
 
+    const application = await readVersionedJson<Record<string, unknown>>(
+      page,
+      `/api/lexis/applications/${applicationNumber}`,
+    )
     const deleteScale = await readJsonResponse<DeleteResponse>(
       await deleteWithCsrf(page, '/api/lexis/rpc/application-details/scale', {
+        headers: versionHeaders(application.version),
         params: {
           scaleId,
           applicationNumber: String(applicationNumber),
@@ -933,8 +1492,13 @@ const cleanupRegressionPackage = async (
     expect(deleteScale.success, `Expected scale ${scaleId} cleanup to succeed`).toBe(true)
   }
 
+  const application = await readVersionedJson<Record<string, unknown>>(
+    page,
+    `/api/lexis/applications/${applicationNumber}`,
+  )
   const deletePackage = await readJsonResponse<DeleteResponse>(
     await deleteWithCsrf(page, '/api/lexis/rpc/application-details/package', {
+      headers: versionHeaders(application.version),
       params: {
         packageNumber,
         applicationNumber: String(applicationNumber),
@@ -2104,95 +2668,446 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
-  test('validates, submits, reviews, and cleans up an IDIR application upload', async () => {
+  test('creates, edits, terminalizes, and cleans up provincial records', async () => {
+    test.setTimeout(300_000)
+    test.skip(
+      !isSharedTestRegressionBaseUrl(E2E_BASE_URL),
+      'Persistent provincial CRUD regression runs only against shared TEST.',
+    )
+
     const page = await authenticatedIdirPage()
+    const cleanup = new RegressionCleanupStack()
     const packageNumber = uniqueRegressionPackageNumber()
-    let applicationNumber: number | null = null
+    const marker = `LEXIS E2E ${packageNumber}`
+    const lifecycleMarker = `${marker} lifecycle`
+    const offerMarker = `${marker} offer`
+    let primaryError: unknown
 
     try {
-      const validationResult = await postRegressionSubmission(
-        page,
-        '/api/lexis/application-submissions/validation',
-        packageNumber,
-      )
+      validateRegressionFixtureConfig()
+      const schedule = await test.step('load authoritative TEST prerequisites', async () => ({
+        offer: await currentOfferSchedule(page),
+        shipping: await shippingFixture(page),
+      }))
+
+      const validationResult = await test.step('validate the XML application submission', () =>
+        postRegressionSubmission(
+          page,
+          '/api/lexis/application-submissions/validation',
+          packageNumber,
+        ))
       expect(validationResult.status).toBe('validated')
       expect(validationResult.packageNumber).toBe(packageNumber)
       expect(validationResult.scaleRows).toBe(3)
       expect(asStringArray(validationResult.errors)).toEqual([])
 
-      const submissionResult = await postRegressionSubmission(
-        page,
-        '/api/lexis/application-submissions',
-        packageNumber,
-      )
+      const submissionResult = await test.step('import the lifecycle application', () =>
+        postRegressionSubmission(page, '/api/lexis/application-submissions', packageNumber))
       expect(submissionResult.status).toBe('accepted')
       expect(submissionResult.packageNumber).toBe(packageNumber)
       expect(submissionResult.scaleRows).toBe(3)
       expect(asStringArray(submissionResult.errors)).toEqual([])
       expect(submissionResult.applicationNumber).toEqual(expect.any(Number))
-      applicationNumber = submissionResult.applicationNumber ?? null
+      const lifecycleApplicationNumber = Number(submissionResult.applicationNumber)
+      expect(lifecycleApplicationNumber).toBeGreaterThan(0)
 
-      if (applicationNumber === null) {
-        throw new Error('IDIR application submission did not return an application number.')
-      }
+      cleanup.defer('delete lifecycle application package and scales', () =>
+        cleanupRegressionPackage(page, lifecycleApplicationNumber, packageNumber),
+      )
+      const lifecycleRejectCleanup = cleanup.defer('reject lifecycle application', () =>
+        rejectRegressionApplication(page, lifecycleApplicationNumber, `${marker} cleanup`),
+      )
 
       await expectAccessiblePage(
         page,
-        `/provincial/application/${applicationNumber}`,
+        `/provincial/application/${lifecycleApplicationNumber}`,
         /provincial application details/i,
       )
-      await page.getByRole('tab', { name: 'Documents' }).click()
-      await expect(
-        page
-          .locator('.detail-tile-title')
-          .filter({ hasText: /^Documents$/ })
-          .first(),
-      ).toBeVisible()
-      await expect(
-        page
-          .locator('.detail-tile-title')
-          .filter({ hasText: /^Documents$/ })
-          .first(),
-      ).not.toContainText('API')
-      await expect(page.getByText('Upload documents').first()).toBeVisible()
-      await expect(
-        page.getByText(/Multiple files can be queued and saved together/).first(),
-      ).toBeVisible()
-      await expect(page.getByText('Queued files').first()).toBeVisible()
-      await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
-      await expect(page.getByLabel('Document File')).toBeEnabled()
-      await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-      await expect(page.getByRole('button', { name: 'Submit upload' })).toHaveCount(0)
-      await expect(
-        page.getByRole('button', { name: 'Choose files for Upload documents' }),
-      ).toHaveAttribute('aria-disabled', 'false')
+      const lifecycleTemplate = await fetchApplicationSummary(page, lifecycleApplicationNumber)
 
-      const approved = await readJsonResponse<ReviewStatusResponse>(
-        await postWithCsrf(page, `/api/lexis/application-reviews/${applicationNumber}/approve`),
+      const createdApplication = await test.step('create the offer application', async () =>
+        readJsonResponse<ApplicationPersistenceResponse>(
+          await postWithCsrf(page, '/api/lexis/rpc/application-details/application', {
+            form: createApplicationForm(lifecycleTemplate, schedule.offer.scheduleId, offerMarker),
+          }),
+        ))
+      expect(createdApplication.valid).toBe(true)
+      expect(asStringArray(createdApplication.errors)).toEqual([])
+      const offerApplicationNumber = Number(createdApplication.applicationNumber)
+      expect(offerApplicationNumber).toBeGreaterThan(0)
+      const offerApplicationCleanup = cleanup.defer('reject offer application', () =>
+        rejectRegressionApplication(page, offerApplicationNumber, `${marker} cleanup`),
       )
-      expect(approved.valid).toBe(true)
-      expect(approved.updated).toBe(true)
-      expect(approved.statusCode).toBe('APP')
 
-      const rejected = await readJsonResponse<ReviewStatusResponse>(
-        await postWithCsrf(page, `/api/lexis/application-reviews/${applicationNumber}/status`, {
-          data: {
-            statusCode: 'REJ',
-            remark: regressionStatusRemark,
-            clientEmailAddress: regressionClientEmail,
+      const initialOfferApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${offerApplicationNumber}`,
+      )
+      expect(initialOfferApplication.payload.applicationStatusCode).toBe('NEW')
+      expect(initialOfferApplication.payload.canCreateOffers).toBe(true)
+      const offerApplicationSummary = await fetchApplicationSummary(page, offerApplicationNumber)
+      const offerApplicationUpdate = applicationSummaryForm(
+        offerApplicationSummary,
+        schedule.offer.scheduleId,
+        `${offerMarker} edited`,
+      )
+      const updatedApplication = await readJsonResponse<ApplicationPersistenceResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/application-details/application-summary', {
+          headers: versionHeaders(initialOfferApplication.version),
+          form: offerApplicationUpdate,
+        }),
+      )
+      expect(updatedApplication.valid).toBe(true)
+      expect(asStringArray(updatedApplication.errors)).toEqual([])
+
+      const staleApplicationUpdate = await readJsonResponseWithStatuses<Record<string, unknown>>(
+        await postWithCsrf(page, '/api/lexis/rpc/application-details/application-summary', {
+          headers: versionHeaders(initialOfferApplication.version),
+          form: offerApplicationUpdate,
+        }),
+        [409],
+      )
+      expect(staleApplicationUpdate.status).toBe(409)
+      expect(staleApplicationUpdate.payload.code).toBe('STALE_RECORD')
+      expect(staleApplicationUpdate.payload.recordType).toBe('application')
+      expect(staleApplicationUpdate.payload.recordId).toBe(String(offerApplicationNumber))
+
+      const persistedOfferApplication = await fetchApplicationSummary(page, offerApplicationNumber)
+      expect(persistedOfferApplication.productLocation).toBe(`${offerMarker} edited`)
+
+      const applicationBeforeOffer = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${offerApplicationNumber}`,
+      )
+      const createdOffer = await test.step('create the purchase offer', async () =>
+        readJsonResponse<OfferPersistenceResponse>(
+          await postWithCsrf(page, '/api/lexis/rpc/offer-details/offer', {
+            headers: versionHeaders(applicationBeforeOffer.version),
+            form: {
+              applicationNumber: String(offerApplicationNumber),
+              packageNumber: '',
+              companyName: 'LEXIS E2E REGRESSION',
+              contactName: offerMarker,
+              offeringClientNumber: regressionOwnerClientNumber,
+              clientNumber: regressionOwnerClientNumber,
+              offerVolume: '1',
+              purchaseOfferAmount: '100',
+              teacReviewDate: '',
+              fairOfferIndicator: 'N',
+              validOfferIndicator: 'Y',
+              approvalIndicator: 'N',
+              pickupLocation: offerMarker,
+              offerCondition: offerMarker,
+              offerRemark: offerMarker,
+            },
+          }),
+        ))
+      expect(createdOffer.success).toBe(true)
+      expect(asStringArray(createdOffer.errors)).toEqual([])
+      const offerNumber = Number(createdOffer.exportPurchaseOfferNumber)
+      expect(offerNumber).toBeGreaterThan(0)
+      const offerCleanup = cleanup.defer('withdraw purchase offer', () =>
+        withdrawRegressionOffer(page, offerNumber, marker),
+      )
+
+      await expectAccessiblePage(
+        page,
+        `/provincial/offers/${offerNumber}`,
+        new RegExp(`offer ${offerNumber}`, 'i'),
+      )
+      const currentOffer = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/purchase-offers/${offerNumber}`,
+      )
+      const editedOffer = await readJsonResponse<OfferPersistenceResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/offer-details/offer/update', {
+          headers: versionHeaders(currentOffer.version),
+          form: offerUpdateForm(offerNumber, {
+            purchaseOfferAmount: '125',
+            offerRemark: `${offerMarker} edited`,
+          }),
+        }),
+      )
+      expect(editedOffer.success).toBe(true)
+      expect(asStringArray(editedOffer.errors)).toEqual([])
+      const persistedOffer = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/purchase-offers/${offerNumber}`,
+      )
+      expect(Number(persistedOffer.payload.purchaseOfferAmount)).toBe(125)
+      expect(persistedOffer.payload.offerRemark).toBe(`${offerMarker} edited`)
+
+      await withdrawRegressionOffer(page, offerNumber, marker)
+      offerCleanup.complete()
+      const withdrawnOffer = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/purchase-offers/${offerNumber}`,
+      )
+      expect(String(withdrawnOffer.payload.offerWithdrawalDate ?? '')).toBe(formatBusinessIsoDate())
+
+      await rejectRegressionApplication(
+        page,
+        offerApplicationNumber,
+        `${marker} offer application cleanup`,
+      )
+      offerApplicationCleanup.complete()
+      const rejectedOfferApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${offerApplicationNumber}`,
+      )
+      expect(rejectedOfferApplication.payload.applicationStatusCode).toBe('REJ')
+
+      const lifecycleApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      const lifecycleApplicationUpdate = applicationSummaryForm(
+        lifecycleTemplate,
+        String(lifecycleTemplate.exportScheduleId ?? ''),
+        `${lifecycleMarker} edited`,
+      )
+      const updatedLifecycleApplication = await readJsonResponse<ApplicationPersistenceResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/application-details/application-summary', {
+          headers: versionHeaders(lifecycleApplication.version),
+          form: lifecycleApplicationUpdate,
+        }),
+      )
+      expect(updatedLifecycleApplication.valid).toBe(true)
+      expect(asStringArray(updatedLifecycleApplication.errors)).toEqual([])
+
+      const applicationBeforeApproval = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      const approvedApplication = await readJsonResponse<ReviewStatusResponse>(
+        await postWithCsrf(
+          page,
+          `/api/lexis/application-reviews/${lifecycleApplicationNumber}/approve`,
+          { headers: versionHeaders(applicationBeforeApproval.version) },
+        ),
+      )
+      expect(approvedApplication.valid).toBe(true)
+      expect(approvedApplication.updated).toBe(true)
+      expect(approvedApplication.statusCode).toBe('APP')
+      lifecycleRejectCleanup.complete()
+
+      const preview = await readJsonResponse<ExemptionPreviewResponse>(
+        await getWithAuth(page, '/api/lexis/rpc/exemption-details/create-preview', {
+          params: { applicationNumbers: String(lifecycleApplicationNumber) },
+        }),
+      )
+      expect(preview.valid).toBe(true)
+      expect(preview.exemptionTypeCode).toBe('M')
+      expect(preview.exemptionStatusCode).toBe('NEW')
+      expect(Number(preview.approvedVolume)).toBeGreaterThan(0)
+      expect(requiredString(preview.expiryDate, 'Exemption preview expiry date')).toMatch(
+        isoDatePattern,
+      )
+
+      const applicationBeforeExemption = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      const orgUnitNumber = requiredString(
+        lifecycleTemplate.orgUnitNumber,
+        'Lifecycle application organization',
+      )
+      const createdExemption = await readJsonResponse<ExemptionPersistenceResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/exemption-details/exemption', {
+          headers: versionHeaders(applicationBeforeExemption.version),
+          form: {
+            applicationNumber: String(lifecycleApplicationNumber),
+            applications: String(lifecycleApplicationNumber),
+            exemptionNumber: '',
+            exemptionTypeCode: 'M',
+            exemptionStatusCode: 'NEW',
+            approvalDate: '',
+            expiryDate: requiredString(preview.expiryDate, 'Exemption expiry date'),
+            approvedVolume: requiredString(preview.approvedVolume, 'Exemption approved volume'),
+            region: orgUnitNumber,
+            otherConditions: lifecycleMarker,
           },
         }),
       )
-      expect(rejected.valid).toBe(true)
-      expect(rejected.updated).toBe(true)
-      expect(rejected.statusCode).toBe('REJ')
-      expect(rejected.remark).toBe(regressionStatusRemark)
-    } finally {
-      if (applicationNumber !== null) {
-        await cleanupRegressionPackage(page, applicationNumber, packageNumber).catch(
-          () => undefined,
-        )
-      }
+      expect(createdExemption.success).toBe(true)
+      expect(asStringArray(createdExemption.errors)).toEqual([])
+      const exemptionNumber = requiredString(
+        createdExemption.exemptionNumber,
+        'Created exemption number',
+      )
+      const exemptionCleanup = cleanup.defer('cancel ministerial exemption', () =>
+        cancelRegressionExemption(page, exemptionNumber, orgUnitNumber),
+      )
+
+      await expectAccessiblePage(
+        page,
+        `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`,
+        new RegExp(`exemption ${exemptionNumber}`, 'i'),
+      )
+      const currentExemption = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+      )
+      const editedExemption = await readJsonResponse<ExemptionPersistenceResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/exemption-details/exemption/update', {
+          headers: versionHeaders(currentExemption.version),
+          form: exemptionUpdateForm(currentExemption.payload, orgUnitNumber, {
+            otherConditions: `${lifecycleMarker} edited`,
+          }),
+        }),
+      )
+      expect(editedExemption.success).toBe(true)
+      expect(asStringArray(editedExemption.errors)).toEqual([])
+
+      const relinkCleanup = cleanup.defer('relink lifecycle application to exemption', () =>
+        linkRegressionExemptionApplication(page, exemptionNumber, lifecycleApplicationNumber),
+      )
+      await unlinkRegressionExemptionApplication(page, exemptionNumber, lifecycleApplicationNumber)
+      const unlinkedApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(unlinkedApplication.payload.applicationStatusCode).toBe('APP')
+      await linkRegressionExemptionApplication(page, exemptionNumber, lifecycleApplicationNumber)
+      relinkCleanup.complete()
+      const relinkedApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(relinkedApplication.payload.applicationStatusCode).toBe('EXE')
+
+      const exemptionBeforeApproval = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+      )
+      const approvedExemption = await readJsonResponse<ExemptionApprovalResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/exemption-details/approve-exemptions', {
+          headers: versionHeaders(exemptionBeforeApproval.version),
+          form: { exemptionNumbers: exemptionNumber },
+        }),
+      )
+      expect(approvedExemption.success).toBe(true)
+      expect(approvedExemption.valid).toBe(true)
+      expect(asStringArray(approvedExemption.errors)).toEqual([])
+
+      const exemptionBeforePermit = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+      )
+      expect(exemptionBeforePermit.payload.exemptionStatusCode).toBe('ACT')
+      const createdPermit = await readJsonResponse<PermitMutationResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/permit-details/create-from-exemption', {
+          headers: versionHeaders(exemptionBeforePermit.version),
+          form: { exemptionNumber },
+        }),
+      )
+      expect(createdPermit.success).toBe(true)
+      expect(createdPermit.permitStatus).toBe('ACT')
+      expect(asStringArray(createdPermit.errors)).toEqual([])
+      const permitNumber = Number(createdPermit.permitNumber)
+      expect(permitNumber).toBeGreaterThan(0)
+      const permitCleanup = cleanup.defer('cancel provincial permit', () =>
+        cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
+      )
+
+      await expectAccessiblePage(
+        page,
+        `/provincial/permit/${permitNumber}`,
+        new RegExp(`permit ${permitNumber}`, 'i'),
+      )
+      const currentPermit = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/permits/${permitNumber}`,
+      )
+      const updatedPermit = await readJsonResponse<PermitMutationResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+          headers: versionHeaders(currentPermit.version),
+          form: permitShippingForm(
+            permitNumber,
+            packageNumber.slice(0, 24),
+            schedule.shipping,
+            'ACT',
+          ),
+        }),
+      )
+      expect(updatedPermit.success).toBe(true)
+      expect(updatedPermit.permitStatus).toBe('ACT')
+      expect(asStringArray(updatedPermit.errors)).toEqual([])
+
+      const permitBeforeAttach = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/permits/${permitNumber}`,
+      )
+      const attachedApplication = await readJsonResponse<RelationshipMutationResponse>(
+        await postWithCsrf(page, '/api/lexis/rpc/permit-details/add-applications-to-permit', {
+          headers: versionHeaders(permitBeforeAttach.version),
+          form: {
+            permitNumber: String(permitNumber),
+            selectedApplications: String(lifecycleApplicationNumber),
+          },
+        }),
+      )
+      expect(attachedApplication.success).toBe(true)
+      expect(asStringArray(attachedApplication.errors)).toEqual([])
+      const detachCleanup = cleanup.defer('detach lifecycle application from permit', () =>
+        detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber),
+      )
+      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
+        true,
+      )
+      const permittedApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(permittedApplication.payload.applicationStatusCode).toBe('PMT')
+
+      await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
+      detachCleanup.complete()
+      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
+        false,
+      )
+      const detachedApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(detachedApplication.payload.applicationStatusCode).toBe('EXE')
+
+      await cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
+      permitCleanup.complete()
+      const cancelledPermit = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/permits/${permitNumber}`,
+      )
+      expect(cancelledPermit.payload.permitStatusCode).toBe('CAN')
+
+      await cancelRegressionExemption(page, exemptionNumber, orgUnitNumber)
+      exemptionCleanup.complete()
+      const cancelledExemption = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+      )
+      expect(cancelledExemption.payload.exemptionStatusCode).toBe('CAN')
+      const terminalApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(terminalApplication.payload.applicationStatusCode).toBe('APP')
+    } catch (error) {
+      primaryError = error
+    }
+
+    const cleanupFailures = await cleanup.run()
+    const failures = [...cleanupFailures]
+    if (primaryError !== undefined) {
+      failures.unshift(
+        primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
+      )
+    }
+    if (failures.length === 1) {
+      throw failures[0]
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Provincial CRUD regression and cleanup failed.')
     }
   })
 
