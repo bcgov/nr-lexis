@@ -2163,6 +2163,10 @@ public class LexisUploadController {
     if ("accepted".equalsIgnoreCase(result.status())) {
       return HttpStatus.CREATED;
     }
+    String failureText = federalSubmissionFailureText(result);
+    if (failureText.contains("package ") && failureText.contains(" already exists")) {
+      return HttpStatus.CONFLICT;
+    }
     return applicationSubmissionResponseStatus(result);
   }
 

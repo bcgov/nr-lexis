@@ -81,7 +81,10 @@ class ApplicationYamlDefaultsTest {
   void applicationYamlShouldKeepDedicatedFederalCreateDisabledByDefault() {
     Properties properties = loadApplicationYaml();
 
-    assertThat(properties).containsEntry("lexis.federal-submission.create-enabled", false);
+    assertThat(properties)
+        .containsEntry(
+            "lexis.federal-submission.create-enabled",
+            "${LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED:false}");
   }
 
   private static Properties loadApplicationYaml() {

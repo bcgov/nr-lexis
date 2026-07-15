@@ -65,6 +65,10 @@ on:
         description: Enable the daily exemption expiry scheduler
         default: false
         type: boolean
+      federal_submission_create_enabled:
+        description: Enable scoped NEXCOL federal application submission
+        default: false
+        type: boolean
       tag:
         description: Container tag
         default: ${{ github.event.number }}
@@ -174,6 +178,7 @@ jobs:
           LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}
           LEXIS_EXPIRY_LOCK_AT_MOST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_MOST_FOR || 'PT6H' }}
           LEXIS_EXPIRY_LOCK_AT_LEAST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_LEAST_FOR || 'PT5M' }}
+          LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED: ${{ inputs.federal_submission_create_enabled && 'true' || 'false' }}
           LEXIS_REPORT_QUERY_TIMEOUT_SECONDS: ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}
           LEXIS_PERMIT_INVOICE_MODE: ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}
           LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS: ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}
@@ -222,6 +227,7 @@ jobs:
             -p LEXIS_EXPIRY_ZONE="$LEXIS_EXPIRY_ZONE"
             -p LEXIS_EXPIRY_LOCK_AT_MOST_FOR="$LEXIS_EXPIRY_LOCK_AT_MOST_FOR"
             -p LEXIS_EXPIRY_LOCK_AT_LEAST_FOR="$LEXIS_EXPIRY_LOCK_AT_LEAST_FOR"
+            -p LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED="$LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED"
             -p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS="$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS"
             -p LEXIS_PERMIT_INVOICE_MODE="$LEXIS_PERMIT_INVOICE_MODE"
             -p LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS="$LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS"

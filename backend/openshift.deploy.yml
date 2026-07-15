@@ -63,6 +63,9 @@ parameters:
   - name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR
     description: Minimum duration of one Oracle scheduler lock
     value: PT5M
+  - name: LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED
+    description: Enable scoped NEXCOL federal application submission
+    value: "false"
   - name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS
     description: Maximum Oracle/Jasper report query duration before cancellation
     value: "120"
@@ -268,6 +271,8 @@ objects:
                   value: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR}
                 - name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR
                   value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}
+                - name: LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED
+                  value: ${LEXIS_FEDERAL_SUBMISSION_CREATE_ENABLED}
                 - name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS
                   value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}
                 - name: LEXIS_PERMIT_INVOICE_MODE

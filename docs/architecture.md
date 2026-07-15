@@ -93,9 +93,10 @@ The daily expiry process is disabled by default and is enabled per environment. 
 trigger. It processes each eligible exemption independently, leaves unsuccessful aggregates
 eligible for a later run, and publishes metrics for operational monitoring.
 
-Federal validation is replica-safe. Federal CREATE currently has process-local duplicate
-suppression only; multi-replica production enablement requires an accepted durable Oracle
-idempotency/replay design or an equivalent external contract.
+Federal validation and CREATE are replica-safe for the NEXCOL contract. CREATE uses best-effort
+same-replica replay, while the Oracle package primary key and the application/package/scale
+transaction prevent a duplicate package from committing across replicas. A cross-replica retry
+that finds an existing package receives a conflict for NEXCOL reconciliation.
 
 ## Legacy-to-modern architecture shifts
 

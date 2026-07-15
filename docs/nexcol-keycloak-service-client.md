@@ -29,8 +29,8 @@ lexis:federal-submission:submit
 The gateway validates the token issuer, expiry, required scope, and audience when configured.
 LEXIS validates the forwarded token and applies the same scope-based authorization.
 
-TEST and PROD deployments idempotently create or check the client scope, confidential client, and
-default scope assignment. Each GitHub environment requires:
+The TEST deployment, and the PROD deployment when enabled, idempotently create or check the client
+scope, confidential client, and default scope assignment. Each GitHub environment requires:
 
 - secrets `KEYCLOAK_SA_CLIENT_ID` and `KEYCLOAK_SA_CLIENT_SECRET` for the least-privilege
   provisioning service account;
@@ -63,8 +63,9 @@ represented in `aud`.
 
 ## Endpoints
 
-Validation is deployable now. The submission route is present but returns `503` while federal
-CREATE remains disabled in application configuration.
+TEST enables validation and submission. The currently disabled PROD deployment is configured to
+enable both when production rollout resumes. DEV leaves CREATE disabled because ephemeral preview
+deployments do not have a long-lived NEXCOL client or gateway.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|
@@ -153,7 +154,7 @@ identifiers when available.
 | `401` | Missing, expired or invalid token |
 | `403` | Required scope is absent |
 | `404` | Gateway route or method is unavailable |
-| `409` | The idempotency key is already in flight or is bound to different payload bytes |
+| `409` | The idempotency key conflicts, processing is already in flight on this replica, or the package already exists |
 | `422` | XML or business validation failed |
 | `503` | Submission creation is disabled or a LEXIS processing dependency is unavailable |
 
@@ -164,19 +165,19 @@ The submitted `FED_APPLICATION_NUMBER` is returned as
 to be unique, and must not be used as a detail or mutation identifier. Processing is synchronous;
 there is no submission-status polling endpoint.
 
-Submission creation is disabled by default. Enabling CREATE makes `X-Idempotency-Key` mandatory,
-regardless of the optional compatibility setting for that header. The idempotency key is scoped to
-the authenticated caller and bound to the XML payload, user reference, source-system metadata, and
-effective filename. A completed non-5xx response is replayed while its process-local entry remains
-available. An in-flight `409`
-includes `Retry-After` guidance and must be retried with the same key and identical payload. A
-different-payload `409` must not be retried with that key.
+CREATE requires `X-Idempotency-Key`. The key is scoped to the authenticated caller and bound to the
+XML payload, user reference, source-system metadata, and effective filename. A completed non-5xx
+response is replayed when the retry reaches the same replica while its bounded entry remains
+available. An in-flight `409` includes `Retry-After` guidance and must be retried with the same key
+and identical payload. A different-payload `409` must not be retried with that key.
 
-Current duplicate suppression is bounded, process-local, and lost when a backend pod restarts. It
-does not provide durable replay or cross-replica claims. Multi-replica production CREATE therefore
-requires an accepted durable Oracle idempotency/replay design or an equivalent external contract.
-Oracle transaction and uniqueness checks remain the final persistence boundary. Validation remains
-available while CREATE is disabled.
+NEXCOL validates before submission and assigns a stable package number and idempotency key to each
+logical submission. Distinct validated submissions can be processed concurrently. The application,
+package, and scale writes use one Oracle transaction, and `EXPORT_PACKAGE.PACKAGE_NUMBER` is the
+cross-replica collision boundary. A retry reaching another replica after the first commit receives
+`409` when its package already exists; NEXCOL must stop blind retries and reconcile that package.
+This contract intentionally provides best-effort replay rather than durable exactly-once response
+replay.
 
 ## ESF Migration Mapping
 

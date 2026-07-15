@@ -2064,7 +2064,7 @@ class LexisUploadControllerTest {
             "IDEMP-1",
             new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     assertThat(
             meterRegistry
                 .get("lexis_federal_submission_failures_total")
