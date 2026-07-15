@@ -51,6 +51,7 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
 | `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
 | `LEXIS_EXPIRY_ENABLED` | Enables the daily exemption-expiry scheduler; only one backend replica may run it | false |
+| `LEXIS_REPORT_MAX_CONCURRENT` | Maximum concurrent report generations per backend pod; completed report transfers use virtual threads and are not included in this limit | 4 |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
 | `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | legacy-best-effort |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Requested timeout in seconds for each isolated GBMS transaction (1-3600); cancellation can leave the outcome unknown | 60 |
@@ -80,6 +81,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `KEYSTORE_SECRET` | Secret `keystore_secret` |
 | `LEXIS_PROD_RTM_ONLY` | Secret `lexis_prod_rtm_only` |
 | `LEXIS_EXPIRY_ENABLED` | Workflow input `expiry_enabled` |
+| `LEXIS_REPORT_MAX_CONCURRENT` | Variable `LEXIS_REPORT_MAX_CONCURRENT` |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Variable `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` |
 | `LEXIS_PERMIT_INVOICE_MODE` | Variable `LEXIS_PERMIT_INVOICE_MODE` |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Variable `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` |

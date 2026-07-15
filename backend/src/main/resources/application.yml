@@ -6,20 +6,6 @@ spring:
   mvc:
     async:
       request-timeout: ${LEXIS_ASYNC_REQUEST_TIMEOUT:5m}
-  task:
-    execution:
-      # A named email executor suppresses this bean in AUTO mode; MVC streaming needs its own pool.
-      mode: force
-      thread-name-prefix: lexis-stream-
-      pool:
-        core-size: 2
-        max-size: 4
-        queue-capacity: 8
-        keep-alive: 30s
-        allow-core-thread-timeout: true
-      shutdown:
-        await-termination: true
-        await-termination-period: 10s
   # Keep bootstrap runnable before Oracle config is introduced.
   autoconfigure:
     exclude:
@@ -78,7 +64,7 @@ lexis:
   runtime:
     require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}
   reports:
-    max-concurrent: ${LEXIS_REPORT_MAX_CONCURRENT:1}
+    max-concurrent: ${LEXIS_REPORT_MAX_CONCURRENT:4}
     max-output-bytes: ${LEXIS_REPORT_MAX_OUTPUT_BYTES:26214400}
     query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}
     virtualizer-directory: ${LEXIS_REPORT_VIRTUALIZER_DIRECTORY:/tmp/lexis-jasper}

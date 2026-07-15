@@ -71,14 +71,7 @@ class BackendRuntimeConfigTest {
     assertThat(applicationConfig)
         .contains("timeout-per-shutdown-phase: ${LEXIS_SHUTDOWN_PHASE_TIMEOUT:60s}")
         .contains("shutdown: graceful")
-        .contains("request-timeout: ${LEXIS_ASYNC_REQUEST_TIMEOUT:5m}")
-        .contains("mode: force")
-        .contains("thread-name-prefix: lexis-stream-")
-        .contains("core-size: 2")
-        .contains("max-size: 4")
-        .contains("queue-capacity: 8")
-        .contains("await-termination: true")
-        .contains("await-termination-period: 10s");
+        .contains("request-timeout: ${LEXIS_ASYNC_REQUEST_TIMEOUT:5m}");
     assertThat(deployment).contains("terminationGracePeriodSeconds: 90");
     int probeStart = deployment.indexOf("startupProbe:");
     int probeEnd = deployment.indexOf("volumeMounts:", probeStart);
@@ -105,7 +98,8 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void reportQueryTimeoutShouldBeBoundedAndDeploymentConfigurable() throws IOException {
+  void reportCapacityAndQueryTimeoutShouldBeBoundedAndDeploymentConfigurable()
+      throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
     String deployment =
@@ -114,11 +108,18 @@ class BackendRuntimeConfigTest {
         Files.readString(resolve(Path.of(".github", "workflows", "reusable-deploy.yml")));
 
     assertThat(applicationConfig)
+        .contains("max-concurrent: ${LEXIS_REPORT_MAX_CONCURRENT:4}")
         .contains("query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}");
     assertThat(deployment)
+        .contains("- name: LEXIS_REPORT_MAX_CONCURRENT")
+        .contains("value: ${LEXIS_REPORT_MAX_CONCURRENT}")
         .contains("- name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS")
         .contains("value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}");
     assertThat(workflow)
+        .contains(
+            "LEXIS_REPORT_MAX_CONCURRENT:"
+                + " ${{ vars.LEXIS_REPORT_MAX_CONCURRENT || '4' }}")
+        .contains("-p LEXIS_REPORT_MAX_CONCURRENT=\"$LEXIS_REPORT_MAX_CONCURRENT\"")
         .contains(
             "LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:"
                 + " ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}")

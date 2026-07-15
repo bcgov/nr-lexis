@@ -1212,7 +1212,8 @@ public class PermitDetailsRpcController {
                         .build());
               }
               headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-              StreamingResponseBody body = content::writeTo;
+              StreamingResponseBody body =
+                  TemporaryDocumentStreamingBody.stream(content::writeTo);
               return ResponseEntity.ok().headers(headers).body(body);
             })
         .orElseGet(() -> ResponseEntity.noContent().build());

@@ -142,17 +142,8 @@ public class OracleLexisReportService implements LexisReportService {
   public Optional<LexisGeneratedReport> generateReport(
       String reportAction,
       LexisReportRequestDto request) {
-    try (LexisReportResourceManager.ReportPermit ignored = reportResources.acquire()) {
-      return generateReportWithinPermit(reportAction, request)
-          .map(reportResources::requireWithinOutputLimit);
-    }
-  }
-
-  private Optional<LexisGeneratedReport> generateReportWithinPermit(
-      String reportAction, LexisReportRequestDto request) {
     Optional<LexisJasperReportDefinition> definitionOptional =
         LexisJasperReportDefinition.fromAction(reportAction);
-
     if (definitionOptional.isEmpty()) {
       LOGGER.warn(
           "event=lexis_report operation=resolve outcome=unknown_action action={}",
@@ -161,13 +152,21 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     LexisJasperReportDefinition definition = definitionOptional.get();
+    try (LexisReportResourceManager.ReportPermit ignored = reportResources.acquire()) {
+      return generateReportWithinPermit(definition, request)
+          .map(reportResources::requireWithinOutputLimit);
+    }
+  }
+
+  private Optional<LexisGeneratedReport> generateReportWithinPermit(
+      LexisJasperReportDefinition definition, LexisReportRequestDto request) {
     LexisReportFormat requestedFormat =
         LexisReportFormat.fromNullable(request == null ? null : request.format());
     LexisReportFormat effectiveFormat = resolveEffectiveFormat(definition, requestedFormat);
     if (!canGeneratePermitReport(definition, request)) {
       LOGGER.warn(
           "event=lexis_report operation=authorize outcome=denied action={}",
-          controlSafe(reportAction));
+          definition.action());
       return Optional.empty();
     }
     LexisReportRequestDto effectiveRequest = applyLegacyReportDefaults(definition, request);

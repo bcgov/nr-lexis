@@ -16,7 +16,7 @@ public class LexisReportResourceProperties {
   static final int DEFAULT_QUERY_TIMEOUT_SECONDS = 120;
 
   @Min(1)
-  private int maxConcurrent = 1;
+  private int maxConcurrent = 4;
 
   @Min(1)
   @Max(Integer.MAX_VALUE)

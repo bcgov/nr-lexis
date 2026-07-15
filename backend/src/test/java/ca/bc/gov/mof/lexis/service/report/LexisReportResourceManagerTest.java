@@ -21,10 +21,13 @@ class LexisReportResourceManagerTest {
   @TempDir Path tempDirectory;
 
   @Test
-  void shouldFailFastAtConfiguredConcurrencyAndReleaseTheSlot() {
-    LexisReportResourceManager manager = manager(1, 1024);
+  void shouldAllowConcurrentReportsUntilTheTotalConcurrencyLimit() {
+    LexisReportResourceManager manager = manager(2, 1024);
 
-    try (LexisReportResourceManager.ReportPermit ignored = manager.acquire()) {
+    try (LexisReportResourceManager.ReportPermit first = manager.acquire();
+        LexisReportResourceManager.ReportPermit second = manager.acquire()) {
+      assertThat(first).isNotNull();
+      assertThat(second).isNotNull();
       assertThatThrownBy(manager::acquire)
           .isInstanceOf(LexisReportCapacityException.class)
           .hasMessageContaining("busy");

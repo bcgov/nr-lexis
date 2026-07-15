@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,6 +38,24 @@ class OracleLexisReportResourceContainmentTest {
     }
 
     verifyNoInteractions(csvService, tableService);
+  }
+
+  @Test
+  void oneActiveReportShouldNotBlockAnotherReport() {
+    OracleLegacyCsvReportService csvService = mock(OracleLegacyCsvReportService.class);
+    OracleLegacyJasperTableReportService tableService =
+        mock(OracleLegacyJasperTableReportService.class);
+    LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), "CSV");
+    when(csvService.generateLegacyCsvReport(
+            LexisJasperReportDefinition.OFFER_REPORT, request, LexisReportFormat.CSV))
+        .thenReturn(
+            Optional.of(new LexisGeneratedReport("offers.csv", "text/csv", new byte[] {1})));
+    LexisReportResourceManager resources = resources(2, 1024);
+    OracleLexisReportService service = service(csvService, tableService, resources);
+
+    try (LexisReportResourceManager.ReportPermit ignored = resources.acquire()) {
+      assertThat(service.generateReport("offerReport", request)).isPresent();
+    }
   }
 
   @Test

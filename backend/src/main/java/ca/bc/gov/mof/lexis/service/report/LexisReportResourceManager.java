@@ -27,7 +27,7 @@ public class LexisReportResourceManager {
   private static final int SWAP_BLOCK_SIZE_BYTES = 4096;
   private static final int SWAP_MIN_GROW_BLOCKS = 100;
 
-  private final Semaphore permits;
+  private final Semaphore totalPermits;
   private final long maxOutputBytes;
   private final Path virtualizerDirectory;
   private final int virtualizerMaxPages;
@@ -48,7 +48,7 @@ public class LexisReportResourceManager {
     if (directory == null || directory.isBlank()) {
       throw new IllegalArgumentException("Report virtualizer directory is required.");
     }
-    this.permits = new Semaphore(properties.getMaxConcurrent(), true);
+    this.totalPermits = new Semaphore(properties.getMaxConcurrent(), true);
     this.maxOutputBytes = properties.getMaxOutputBytes();
     this.virtualizerDirectory = Path.of(directory).toAbsolutePath().normalize();
     this.virtualizerMaxPages = properties.getVirtualizerMaxPages();
@@ -65,11 +65,11 @@ public class LexisReportResourceManager {
   }
 
   public ReportPermit acquire() {
-    if (!permits.tryAcquire()) {
+    if (!totalPermits.tryAcquire()) {
       throw new LexisReportCapacityException(
           "Report generation is busy on this pod. Try again shortly.");
     }
-    return new ReportPermit(permits);
+    return new ReportPermit(totalPermits);
   }
 
   public LimitedByteArrayOutputStream newOutputStream() {
@@ -140,17 +140,17 @@ public class LexisReportResourceManager {
 
   public static final class ReportPermit implements AutoCloseable {
 
-    private final Semaphore semaphore;
+    private final Semaphore totalSemaphore;
     private final AtomicBoolean released = new AtomicBoolean(false);
 
-    private ReportPermit(Semaphore semaphore) {
-      this.semaphore = semaphore;
+    private ReportPermit(Semaphore totalSemaphore) {
+      this.totalSemaphore = totalSemaphore;
     }
 
     @Override
     public void close() {
       if (released.compareAndSet(false, true)) {
-        semaphore.release();
+        totalSemaphore.release();
       }
     }
   }
