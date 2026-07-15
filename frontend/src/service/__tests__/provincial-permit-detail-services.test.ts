@@ -15,6 +15,7 @@ import {
 import {
   addPermitInvoice,
   createPermitFromExemption,
+  fetchPermitApprovalEmailDefault,
   fetchPermitFeeOverrideContext,
   fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
@@ -24,8 +25,9 @@ import {
   updatePermitDetail,
 } from '@/service/provincial-permit-documents-invoices-service'
 
-const { getCachedResponseMock, postMock } = vi.hoisted(() => ({
+const { getCachedResponseMock, getMock, postMock } = vi.hoisted(() => ({
   getCachedResponseMock: vi.fn(),
+  getMock: vi.fn(),
   postMock: vi.fn(),
 }))
 
@@ -33,7 +35,7 @@ vi.mock('@/service/api-service', () => ({
   default: {
     getCachedResponse: getCachedResponseMock,
     getAxiosInstance: () => ({
-      get: vi.fn(),
+      get: getMock,
       post: postMock,
       delete: vi.fn(),
     }),
@@ -816,6 +818,15 @@ describe('provincial permit detail services', () => {
     expect(approvalBody).toBeInstanceOf(URLSearchParams)
     expect(approvalBody.get('permitNumber')).toBe('777')
     expect(approvalBody.get('clientEmailAddress')).toBe('applicant@example.com')
+  })
+
+  it('loads the server-resolved permit approval recipient without caching', async () => {
+    getMock.mockResolvedValue(response({ clientEmailAddress: ' applicant@example.com ' }))
+
+    await expect(fetchPermitApprovalEmailDefault(' 777 ')).resolves.toBe('applicant@example.com')
+    expect(getMock).toHaveBeenCalledWith('/lexis/rpc/permit-details/approval-email-default', {
+      params: { permitNumber: '777' },
+    })
   })
 
   it('loads the persisted permit fee override context without caching it', async () => {

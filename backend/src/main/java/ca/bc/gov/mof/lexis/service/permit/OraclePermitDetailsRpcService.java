@@ -61,8 +61,8 @@ import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator.ScaleValues;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
-import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
@@ -159,7 +159,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private final ExemptionService exemptionService;
   private final ApplicationReviewRepository applicationReviewRepository;
   private final ClientLookupService clientLookupService;
-  private final AuthoritativeClientEmailResolver clientEmailResolver;
+  private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
   private final PermitNotificationEmailService permitEmailService;
   private final ApplicationDetailsRpcService applicationDetailsRpcService;
   private final ProvincialPermitMutationValidator permitMutationValidator;
@@ -172,7 +172,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       ExemptionService exemptionService,
       ApplicationReviewRepository applicationReviewRepository,
       ClientLookupService clientLookupService,
-      AuthoritativeClientEmailResolver clientEmailResolver,
+      ApplicationNotificationRecipientResolver notificationRecipientResolver,
       PermitNotificationEmailService permitEmailService,
       ApplicationDetailsRpcService applicationDetailsRpcService,
       ObjectProvider<PermitInvoiceOrchestrationService>
@@ -182,7 +182,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     this.exemptionService = exemptionService;
     this.applicationReviewRepository = applicationReviewRepository;
     this.clientLookupService = clientLookupService;
-    this.clientEmailResolver = clientEmailResolver;
+    this.notificationRecipientResolver = notificationRecipientResolver;
     this.permitEmailService = permitEmailService;
     this.applicationDetailsRpcService = applicationDetailsRpcService;
     this.permitInvoiceOrchestrationServiceProvider =
@@ -298,6 +298,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public Optional<String> getApprovalPermitEmailDefault(Long permitNumber) {
+    return repository
+        .findPermitMutationByPermitNumber(permitNumber)
+        .flatMap(this::resolvePermitClientEmail);
+  }
+
+  @Override
   public PermitEmailResult sendApprovalPermitEmail(
       Long permitNumber, String clientEmailAddress) {
     Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
@@ -348,7 +355,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (clientNumber == null || locationCode == null) {
       return Optional.empty();
     }
-    return clientEmailResolver.resolve(clientNumber, locationCode);
+    List<Long> applicationNumbers =
+        permit.oicApplicationNumber() != null && permit.oicApplicationNumber() > 0
+            ? List.of(permit.oicApplicationNumber())
+            : repository.findApplicationNumbersByPermitNumberRequired(permit.permitNumber());
+    return notificationRecipientResolver.resolveForLinkedOwnerApplications(
+        applicationNumbers, clientNumber, locationCode);
   }
 
   @Override

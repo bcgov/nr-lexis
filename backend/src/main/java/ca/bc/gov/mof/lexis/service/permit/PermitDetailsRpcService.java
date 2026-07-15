@@ -122,6 +122,8 @@ public interface PermitDetailsRpcService {
   PermitEmailResult sendRequestPermitEmail(
       Long permitNumber, String copyToAddress, String userId);
 
+  Optional<String> getApprovalPermitEmailDefault(Long permitNumber);
+
   PermitEmailResult sendApprovalPermitEmail(Long permitNumber, String clientEmailAddress);
 
   PermitPersistenceRpcResponseDto updateScaleAttachment(

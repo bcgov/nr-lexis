@@ -215,6 +215,23 @@ public class PermitDetailsRpcController {
         });
   }
 
+  @GetMapping("/approval-email-default")
+  public ResponseEntity<PermitApprovalEmailDefaultResponseDto> getApprovalPermitEmailDefault(
+      @RequestParam(name = "permitNumber") Long permitNumber,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      return ResponseEntity.noContent().build();
+    }
+    requirePermitAccess(permitNumber, authentication);
+    return ResponseEntity.ok(
+        new PermitApprovalEmailDefaultResponseDto(
+            service.getApprovalPermitEmailDefault(permitNumber).orElse("")));
+  }
+
   @GetMapping("/total-fees-for-permit")
   public ResponseEntity<PermitTotalFeesRpcResponseDto> getTotalFeesForPermit(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
@@ -1741,6 +1758,8 @@ public class PermitDetailsRpcController {
       String lockMessage) {}
 
   public record ReleaseLockResponseDto(String release) {}
+
+  public record PermitApprovalEmailDefaultResponseDto(String clientEmailAddress) {}
 
   public record RemoveDocumentResponseDto(String success) {}
 

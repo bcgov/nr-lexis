@@ -15,7 +15,7 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
-import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalStatusMutationRequest;
@@ -45,19 +45,19 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
   private final ApplicationReviewRepository repository;
   private final ApplicationReviewStatusEmailSender emailSender;
   private final ApplicationApprovalEligibilityService approvalEligibilityService;
-  private final AuthoritativeClientEmailResolver clientEmailResolver;
+  private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
   private final FederalApplicationService federalApplicationService;
 
   public ApplicationReviewOracleService(
       ApplicationReviewRepository repository,
       ApplicationReviewStatusEmailSender emailSender,
       ApplicationApprovalEligibilityService approvalEligibilityService,
-      AuthoritativeClientEmailResolver clientEmailResolver,
+      ApplicationNotificationRecipientResolver notificationRecipientResolver,
       FederalApplicationService federalApplicationService) {
     this.repository = repository;
     this.emailSender = emailSender;
     this.approvalEligibilityService = approvalEligibilityService;
-    this.clientEmailResolver = clientEmailResolver;
+    this.notificationRecipientResolver = notificationRecipientResolver;
     this.federalApplicationService = federalApplicationService;
   }
 
@@ -456,8 +456,22 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     String clientEmail;
     if (requestedRecipient == null) {
       clientEmail =
-          clientEmailResolver
-              .resolve(context.clientNumber(), context.locationCode())
+          notificationRecipientResolver
+              .resolve(
+                  applicationNumber,
+                  context.applicantTypeCode(),
+                  "O".equalsIgnoreCase(context.applicantTypeCode())
+                      ? context.clientNumber()
+                      : null,
+                  "O".equalsIgnoreCase(context.applicantTypeCode())
+                      ? context.locationCode()
+                      : null,
+                  "A".equalsIgnoreCase(context.applicantTypeCode())
+                      ? context.clientNumber()
+                      : null,
+                  "A".equalsIgnoreCase(context.applicantTypeCode())
+                      ? context.locationCode()
+                      : null)
               .orElse(null);
     } else {
       clientEmail = MailRecipientValidator.normalize(requestedRecipient).orElse(null);

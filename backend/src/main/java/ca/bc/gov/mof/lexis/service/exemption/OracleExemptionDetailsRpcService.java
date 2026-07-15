@@ -5,7 +5,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
-import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
@@ -65,17 +65,17 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ExemptionDetailsRpcRepository repository;
-  private final AuthoritativeClientEmailResolver clientEmailResolver;
+  private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
   private final EmailNotificationService notificationService;
   private final ExemptionActivationEligibilityValidator activationEligibilityValidator;
 
   public OracleExemptionDetailsRpcService(
       ExemptionDetailsRpcRepository repository,
-      AuthoritativeClientEmailResolver clientEmailResolver,
+      ApplicationNotificationRecipientResolver notificationRecipientResolver,
       EmailNotificationService notificationService,
       ExemptionActivationEligibilityValidator activationEligibilityValidator) {
     this.repository = repository;
-    this.clientEmailResolver = clientEmailResolver;
+    this.notificationRecipientResolver = notificationRecipientResolver;
     this.notificationService = notificationService;
     this.activationEligibilityValidator = activationEligibilityValidator;
   }
@@ -1150,15 +1150,13 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private Optional<String> resolveApplicationClientEmail(
       ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
-    if ("A".equalsIgnoreCase(trimToNull(application.exportApplicantTypeCode()))) {
-      return clientEmailResolver.resolve(
-          application.agentClientNumber(), application.agentClientLocationCode());
-    }
-    if ("O".equalsIgnoreCase(trimToNull(application.exportApplicantTypeCode()))) {
-      return clientEmailResolver.resolve(
-          application.ownerClientNumber(), application.ownerClientLocationCode());
-    }
-    return Optional.empty();
+    return notificationRecipientResolver.resolve(
+        application.applicationNumber(),
+        application.exportApplicantTypeCode(),
+        application.ownerClientNumber(),
+        application.ownerClientLocationCode(),
+        application.agentClientNumber(),
+        application.agentClientLocationCode());
   }
 
   private boolean stageExemptionApprovalEmail(String exemptionNumber, String toEmailAddress) {

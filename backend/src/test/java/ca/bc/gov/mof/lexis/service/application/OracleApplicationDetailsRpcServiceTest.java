@@ -10,6 +10,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
+import ca.bc.gov.mof.lexis.repository.application.ApplicationNotificationContactRepository;
+import ca.bc.gov.mof.lexis.repository.application.ApplicationNotificationContactRepository.InsertContactRecord;
+import ca.bc.gov.mof.lexis.repository.application.ApplicationNotificationContactRepository.NotificationContactRow;
 import ca.bc.gov.mof.lexis.repository.application.DuplicatePackageNumberException;
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
@@ -44,6 +47,8 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 class OracleApplicationDetailsRpcServiceTest {
 
   @Mock private ApplicationDetailsRpcRepository repository;
+  @Mock private ApplicationNotificationContactRepository notificationContactRepository;
+  @Mock private ApplicationNotificationRecipientResolver notificationRecipientResolver;
   @Mock private ClientLookupRepository clientRepository;
   @Mock private ExemptionService exemptionService;
   @InjectMocks private OracleApplicationDetailsRpcService service;
@@ -647,6 +652,115 @@ class OracleApplicationDetailsRpcServiceTest {
         .findLocationByClientNumberCodeRequired("00011111", "02");
     verify(repository).replaceApplicationEndUses(
         org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList());
+  }
+
+  @Test
+  void addApplicationShouldInsertAuthenticatedOwnerContact() {
+    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
+    when(notificationContactRepository.insert(any(InsertContactRecord.class)))
+        .thenReturn(Optional.of(savedContact(Boolean.FALSE)));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            validCreateApplicationRequest(180L),
+            "bceid\\submitter",
+            authenticatedOwnerContact(Boolean.FALSE));
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.applicationNumber()).isEqualTo(1000456L);
+    ArgumentCaptor<InsertContactRecord> contactCaptor =
+        ArgumentCaptor.forClass(InsertContactRecord.class);
+    verify(notificationContactRepository).insert(contactCaptor.capture());
+    assertThat(contactCaptor.getValue())
+        .extracting(
+            InsertContactRecord::applicationNumber,
+            InsertContactRecord::emailAddress,
+            InsertContactRecord::emailSourceCode,
+            InsertContactRecord::emailVerified,
+            InsertContactRecord::identityProviderCode,
+            InsertContactRecord::identityUserId,
+            InsertContactRecord::clientNumber,
+            InsertContactRecord::clientLocationCode,
+            InsertContactRecord::updateUserId)
+        .containsExactly(
+            1000456L,
+            "submitter@example.com",
+            "AUTHENTICATED_USER",
+            Boolean.FALSE,
+            "BCEIDBUSINESS",
+            "identity-1",
+            "00011111",
+            "02",
+            "bceid\\submitter");
+  }
+
+  @Test
+  void addApplicationShouldRollBackWhenAuthenticatedContactInsertReturnsEmpty() {
+    stubSuccessfulApplicationInsert();
+    when(notificationContactRepository.insert(any(InsertContactRecord.class)))
+        .thenReturn(Optional.empty());
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        transactionalService(transactionManager)
+            .addApplication(
+                validCreateApplicationRequest(180L),
+                "bceid\\submitter",
+                authenticatedOwnerContact(null));
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.applicationNumber()).isNull();
+    assertThat(response.message())
+        .isEqualTo("The application notification contact could not be saved.");
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
+  void addApplicationShouldRollBackWhenSavedContactDoesNotMatchCapture() {
+    stubSuccessfulApplicationInsert();
+    when(notificationContactRepository.insert(any(InsertContactRecord.class)))
+        .thenReturn(Optional.of(savedContact(Boolean.TRUE)));
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        transactionalService(transactionManager)
+            .addApplication(
+                validCreateApplicationRequest(180L),
+                "bceid\\submitter",
+                authenticatedOwnerContact(Boolean.FALSE));
+
+    assertThat(response.valid()).isFalse();
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
+  void addApplicationShouldRejectCapturedContactForDifferentOwnerBeforeOracleInsert() {
+    ApplicationDetailsRpcService.AuthenticatedSubmitterContact mismatched =
+        new ApplicationDetailsRpcService.AuthenticatedSubmitterContact(
+            "submitter@example.com",
+            Boolean.TRUE,
+            "BCEIDBUSINESS",
+            "identity-1",
+            "00099999",
+            "02");
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            validCreateApplicationRequest(180L), "bceid\\submitter", mismatched);
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.message())
+        .isEqualTo("The authenticated submitter contact does not match the application owner.");
+    verify(repository, never()).insertApplication(any());
+    verifyNoInteractions(notificationContactRepository);
   }
 
   @Test
@@ -3556,6 +3670,8 @@ class OracleApplicationDetailsRpcServiceTest {
   @Test
   void getApplicationSummarySnapshotShouldExposeEditableLegacyFields() {
     when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(notificationRecipientResolver.resolveCapturedOwner(1000456L, "00011111", "00"))
+        .thenReturn(Optional.of("submitter@example.com"));
 
     Optional<ApplicationDetailsRpcService.ApplicationSummarySnapshot> response =
         service.getApplicationSummarySnapshot(1000456L);
@@ -3566,6 +3682,7 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.get().ownerClientLocationCode()).isEqualTo("00");
     assertThat(response.get().ownerContactName()).isEqualTo("Owner Contact");
     assertThat(response.get().orgUnitNumber()).isEqualTo(11L);
+    assertThat(response.get().notificationEmail()).isEqualTo("submitter@example.com");
     verify(repository).findApplicationUpdateRecord(1000456L);
   }
 
@@ -4292,6 +4409,41 @@ class OracleApplicationDetailsRpcServiceTest {
         "PL",
         List.of("HE"),
         true);
+  }
+
+  private void stubSuccessfulApplicationInsert() {
+    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
+  }
+
+  private ApplicationDetailsRpcService.AuthenticatedSubmitterContact authenticatedOwnerContact(
+      Boolean emailVerified) {
+    return new ApplicationDetailsRpcService.AuthenticatedSubmitterContact(
+        "submitter@example.com",
+        emailVerified,
+        "BCEIDBUSINESS",
+        "identity-1",
+        "00011111",
+        "02");
+  }
+
+  private NotificationContactRow savedContact(Boolean emailVerified) {
+    return new NotificationContactRow(
+        1000456L,
+        "submitter@example.com",
+        "AUTHENTICATED_USER",
+        emailVerified,
+        "BCEIDBUSINESS",
+        "identity-1",
+        "00011111",
+        "02",
+        "bceid\\submitter",
+        Instant.parse("2026-07-14T18:00:00Z"));
   }
 
   private ApplicationDetailsRpcService.CreateApplicationRequest withRemark(

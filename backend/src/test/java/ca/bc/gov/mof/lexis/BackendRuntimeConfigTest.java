@@ -127,6 +127,32 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
+  void applicantEmailCaptureShouldRemainOffUntilTheOraclePackageIsDeployed()
+      throws IOException {
+    String applicationConfig =
+        Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
+    String deployment =
+        Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
+    String workflow =
+        Files.readString(resolve(Path.of(".github", "workflows", "reusable-deploy.yml")));
+
+    assertThat(applicationConfig)
+        .contains(
+            "applicant-email-capture-enabled:"
+                + " ${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:false}");
+    assertThat(deployment)
+        .contains("- name: LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED")
+        .contains("value: ${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED}");
+    assertThat(workflow)
+        .contains(
+            "LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:"
+                + " ${{ vars.LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED || 'false' }}")
+        .contains(
+            "-p LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED="
+                + "\"$LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED\"");
+  }
+
+  @Test
   void applicationShouldMountGeneratedOracleTruststoreReadOnly() throws IOException {
     String oracleConfig =
         Files.readString(

@@ -15,7 +15,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
-import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
@@ -60,7 +60,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   private static final double OFFER_VOLUME_MAX = 9_999_999.99d;
 
   private final PurchaseOfferRepository repository;
-  private final AuthoritativeClientEmailResolver clientEmailResolver;
+  private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
   private final EmailNotificationService notificationService;
   private final RegionalMailRecipientResolver regionalRecipientResolver;
   private final Clock clock;
@@ -68,12 +68,12 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   @Autowired
   public PurchaseOfferOracleService(
       PurchaseOfferRepository repository,
-      AuthoritativeClientEmailResolver clientEmailResolver,
+      ApplicationNotificationRecipientResolver notificationRecipientResolver,
       EmailNotificationService notificationService,
       RegionalMailRecipientResolver regionalRecipientResolver) {
     this(
         repository,
-        clientEmailResolver,
+        notificationRecipientResolver,
         notificationService,
         regionalRecipientResolver,
         LexisBusinessTime.systemClock());
@@ -81,12 +81,12 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
 
   PurchaseOfferOracleService(
       PurchaseOfferRepository repository,
-      AuthoritativeClientEmailResolver clientEmailResolver,
+      ApplicationNotificationRecipientResolver notificationRecipientResolver,
       EmailNotificationService notificationService,
       RegionalMailRecipientResolver regionalRecipientResolver,
       Clock clock) {
     this.repository = repository;
-    this.clientEmailResolver = clientEmailResolver;
+    this.notificationRecipientResolver = notificationRecipientResolver;
     this.notificationService = notificationService;
     this.regionalRecipientResolver = regionalRecipientResolver;
     this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
@@ -316,7 +316,8 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     try {
       PurchaseOfferRepository.ApplicationRecipientRow context =
           repository.findApplicationRecipient(applicationNumber).orElse(null);
-      String recipient = resolveApplicationRecipient(context).orElse(null);
+      String recipient =
+          resolveApplicationRecipient(applicationNumber, context).orElse(null);
       if (recipient == null) {
         return new EmailResult(
             true, false, null, "Offer saved, but no client email address was found.");
@@ -350,20 +351,17 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   }
 
   private Optional<String> resolveApplicationRecipient(
-      PurchaseOfferRepository.ApplicationRecipientRow row) {
+      Long applicationNumber, PurchaseOfferRepository.ApplicationRecipientRow row) {
     if (row == null) {
       return Optional.empty();
     }
-    String applicantType = trimToNull(row.applicantTypeCode());
-    if ("A".equalsIgnoreCase(applicantType)) {
-      return clientEmailResolver.resolve(
-          row.agentClientNumber(), row.agentClientLocationCode());
-    }
-    if ("O".equalsIgnoreCase(applicantType)) {
-      return clientEmailResolver.resolve(
-          row.ownerClientNumber(), row.ownerClientLocationCode());
-    }
-    return Optional.empty();
+    return notificationRecipientResolver.resolve(
+        applicationNumber,
+        row.applicantTypeCode(),
+        row.ownerClientNumber(),
+        row.ownerClientLocationCode(),
+        row.agentClientNumber(),
+        row.agentClientLocationCode());
   }
 
   private enum OfferEmailType {

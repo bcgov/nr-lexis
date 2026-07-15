@@ -87,6 +87,21 @@ public interface ApplicationDetailsRpcService {
   CreateApplicationResult addApplication(CreateApplicationRequest request, String userId);
 
   /**
+   * Creates a provincial application and atomically stores a server-derived submitter contact.
+   * The contact is deliberately separate from the browser-populated application request.
+   */
+  default CreateApplicationResult addApplication(
+      CreateApplicationRequest request,
+      String userId,
+      AuthenticatedSubmitterContact submitterContact) {
+    if (submitterContact != null) {
+      throw new UnsupportedOperationException(
+          "Authenticated submitter contact capture is not supported by this implementation.");
+    }
+    return addApplication(request, userId);
+  }
+
+  /**
    * Creates a federal application from the authenticated, dedicated federal submission ingress.
    * This trusted boundary is deliberately separate from user-facing provincial creation so source
    * workflow status and the external federal application number cannot be injected through the
@@ -395,7 +410,8 @@ public interface ApplicationDetailsRpcService {
       String growthTypeCode,
       String agentContactName,
       String ownerContactName,
-      String oicIndicator) {}
+      String oicIndicator,
+      String notificationEmail) {}
 
   record ApplicationEditContext(
       Long applicationNumber,
@@ -690,4 +706,12 @@ public interface ApplicationDetailsRpcService {
       Long applicationNumber,
       List<String> errors,
       List<String> warnings) {}
+
+  record AuthenticatedSubmitterContact(
+      String emailAddress,
+      Boolean emailVerified,
+      String identityProviderCode,
+      String identityUserId,
+      String clientNumber,
+      String clientLocationCode) {}
 }

@@ -140,7 +140,7 @@ const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
 const REJECT_EMAIL_REQUIRED_MESSAGE =
   'Enter one valid client email address or deselect Send status email.'
 const REJECT_EMAIL_PREVIEW_HELPER =
-  'Defaults from client data. Changes apply only to this notification.'
+  'Defaults from the captured submitter email, then client data. Changes apply only to this notification.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
 const isReviewableSourceStatus = (status: string | null | undefined): boolean =>
@@ -159,12 +159,13 @@ const reviewEmailCandidate = (
 ): string => {
   const ownerEmail = normalizeReviewEmail(ownerClientData?.email ?? '')
   const agentEmail = normalizeReviewEmail(agentClientData?.email ?? '')
+  const notificationEmail = normalizeReviewEmail(summary.notificationEmail)
 
   if (isAgentApplicant(summary.applicantTypeCode)) {
     return agentEmail
   }
 
-  return ownerEmail
+  return notificationEmail || ownerEmail
 }
 
 const buildSearchParams = (

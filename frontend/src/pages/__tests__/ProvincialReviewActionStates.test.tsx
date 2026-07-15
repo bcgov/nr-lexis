@@ -131,6 +131,7 @@ const applicationSummary = {
   agentContactName: '',
   ownerContactName: 'Owner Contact',
   oicIndicator: '',
+  notificationEmail: '',
   endUseCode: '',
   speciesCodes: [],
 }
@@ -328,7 +329,9 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByRole('checkbox', { name: 'Send status email' })).toBeChecked()
     expect(screen.getByLabelText('Client email address')).not.toHaveAttribute('readonly')
     expect(
-      screen.getByText('Defaults from client data. Changes apply only to this notification.'),
+      screen.getByText(
+        'Defaults from the captured submitter email, then client data. Changes apply only to this notification.',
+      ),
     ).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Client email address'), {
@@ -360,6 +363,23 @@ describe('Provincial Review Action State Smoke', () => {
       await screen.findByText('Updated application 1000123 and queued email.'),
     ).toBeInTheDocument()
   }, 15000)
+
+  it('prefills an owner rejection with the captured submitter email before client data', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummary,
+      notificationEmail: 'captured.submitter@example.com',
+    })
+
+    renderPage()
+    await screen.findByText('1000123')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Client email address')).toHaveValue(
+        'captured.submitter@example.com',
+      )
+    })
+  })
 
   it('rejects a single PND row through the same review workflow', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
@@ -410,6 +430,7 @@ describe('Provincial Review Action State Smoke', () => {
       applicantTypeCode: 'A',
       agentClientNumber: '00054321',
       agentClientLocationCode: '02',
+      notificationEmail: 'captured.owner@example.com',
     })
     mockedFetchApplicationClientData
       .mockResolvedValueOnce({

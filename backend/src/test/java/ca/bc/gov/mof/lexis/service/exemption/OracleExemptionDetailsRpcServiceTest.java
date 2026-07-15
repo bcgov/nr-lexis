@@ -12,7 +12,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
-import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
@@ -47,7 +47,7 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 class OracleExemptionDetailsRpcServiceTest {
 
   @Mock private ExemptionDetailsRpcRepository repository;
-  @Mock private AuthoritativeClientEmailResolver clientEmailResolver;
+  @Mock private ApplicationNotificationRecipientResolver notificationRecipientResolver;
   @Mock private EmailNotificationService notificationService;
   @Mock private ExemptionActivationEligibilityValidator activationEligibilityValidator;
 
@@ -2496,7 +2496,8 @@ class OracleExemptionDetailsRpcServiceTest {
     when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
         .thenReturn(true);
     when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(notificationRecipientResolver.resolve(
+            1000456L, "O", "00077881", "00", "00055667", "00"))
         .thenReturn(Optional.of("owner@example.com"));
 
     ExemptionDetailsRpcService.ExemptionApprovalResult response =
@@ -2533,7 +2534,7 @@ class OracleExemptionDetailsRpcServiceTest {
         .contains("current status:");
     verify(repository, never()).updateExemption(any());
     verify(repository, never()).findApplicationSummariesByExemptionNumber(any());
-    verifyNoInteractions(clientEmailResolver, notificationService);
+    verifyNoInteractions(notificationRecipientResolver, notificationService);
   }
 
   @Test
@@ -2593,7 +2594,7 @@ class OracleExemptionDetailsRpcServiceTest {
                 "EX-205",
                 "1000456",
                 "edited@example.com"));
-    verifyNoInteractions(clientEmailResolver);
+    verifyNoInteractions(notificationRecipientResolver);
   }
 
   @Test
@@ -2616,7 +2617,7 @@ class OracleExemptionDetailsRpcServiceTest {
         .publish(
             new WorkflowEmailEvent.ExemptionApproval(
                 "EX-205", "1000456", "attacker@example.com"));
-    verifyNoInteractions(clientEmailResolver);
+    verifyNoInteractions(notificationRecipientResolver);
   }
 
   @Test
@@ -2631,7 +2632,8 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
     when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
-    when(clientEmailResolver.resolve("00055667", "00"))
+    when(notificationRecipientResolver.resolve(
+            1000456L, "A", "00077881", "00", "00055667", "00"))
         .thenReturn(Optional.of("agent@example.com"));
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
@@ -2656,7 +2658,9 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
     when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
-    when(clientEmailResolver.resolve("00077881", "00")).thenReturn(Optional.empty());
+    when(notificationRecipientResolver.resolve(
+            1000456L, "O", "00077881", "00", "00055667", "00"))
+        .thenReturn(Optional.empty());
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmail("EX-205", " ");
@@ -2680,7 +2684,7 @@ class OracleExemptionDetailsRpcServiceTest {
         service.sendExemptionApprovalEmail("EX-205", " ");
 
     assertThat(response.success()).isFalse();
-    verifyNoInteractions(clientEmailResolver);
+    verifyNoInteractions(notificationRecipientResolver);
     verifyNoInteractions(notificationService);
   }
 
@@ -2698,7 +2702,9 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
     when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
-    when(clientEmailResolver.resolve("00077881", "00")).thenThrow(failure);
+    when(notificationRecipientResolver.resolve(
+            1000456L, "O", "00077881", "00", "00055667", "00"))
+        .thenThrow(failure);
 
     assertThatThrownBy(
             () -> service.sendExemptionApprovalEmail("EX-205", " "))
@@ -2716,7 +2722,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     verify(repository, never()).findApplicationSummariesByExemptionNumber(any());
-    verifyNoInteractions(clientEmailResolver, notificationService);
+    verifyNoInteractions(notificationRecipientResolver, notificationService);
   }
 
   @Test
@@ -2729,7 +2735,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     verify(repository, never()).findApplicationSummariesByExemptionNumber(any());
-    verifyNoInteractions(clientEmailResolver, notificationService);
+    verifyNoInteractions(notificationRecipientResolver, notificationService);
   }
 
   private static Stream<Arguments> mismatchedApplicantIdentities() {

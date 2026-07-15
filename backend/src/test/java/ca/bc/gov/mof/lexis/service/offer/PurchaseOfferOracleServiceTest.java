@@ -18,7 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
-import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
@@ -49,7 +49,7 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 class PurchaseOfferOracleServiceTest {
 
   @Mock private PurchaseOfferRepository repository;
-  @Mock private AuthoritativeClientEmailResolver clientEmailResolver;
+  @Mock private ApplicationNotificationRecipientResolver clientEmailResolver;
   @Mock private EmailNotificationService notificationService;
   @Mock private RegionalMailRecipientResolver regionalRecipientResolver;
   private PurchaseOfferOracleService service;
@@ -430,7 +430,7 @@ class PurchaseOfferOracleServiceTest {
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
                     "O", "00077881", "00", null, null)));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
@@ -448,7 +448,8 @@ class PurchaseOfferOracleServiceTest {
                 81001L,
                 WorkflowEmailEvent.OfferAction.NEW,
                 "client@example.com"));
-    verify(clientEmailResolver).resolve("00077881", "00");
+    verify(clientEmailResolver)
+        .resolve(1000456L, "O", "00077881", "00", null, null);
   }
 
   @Test
@@ -461,7 +462,7 @@ class PurchaseOfferOracleServiceTest {
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
                     "O", "00077881", "00", null, null, 1835L)));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
     when(regionalRecipientResolver.resolve(1835L))
         .thenReturn(List.of("coast.review@gov.bc.ca"));
@@ -491,7 +492,8 @@ class PurchaseOfferOracleServiceTest {
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
                     "A", "00011111", "01", "00077881", "02")));
-    when(clientEmailResolver.resolve("00077881", "02"))
+    when(clientEmailResolver.resolve(
+            1000456L, "A", "00011111", "01", "00077881", "02"))
         .thenReturn(Optional.of("agent@example.com"));
 
     PurchaseOfferService.CreateOfferResult response =
@@ -500,8 +502,8 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.success()).isTrue();
     assertThat(response.clientHasEmail()).isTrue();
     assertThat(response.toEmails()).isEqualTo("agent@example.com");
-    verify(clientEmailResolver).resolve("00077881", "02");
-    verify(clientEmailResolver, never()).resolve("00011111", "01");
+    verify(clientEmailResolver)
+        .resolve(1000456L, "A", "00011111", "01", "00077881", "02");
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.PurchaseOffer(
@@ -539,7 +541,8 @@ class PurchaseOfferOracleServiceTest {
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
                     "O", "00077881", "00", null, null)));
-    when(clientEmailResolver.resolve("00077881", "00")).thenReturn(Optional.empty());
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenReturn(Optional.empty());
 
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
@@ -563,7 +566,8 @@ class PurchaseOfferOracleServiceTest {
                     "O", "00077881", "00", null, null)));
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("client lookup unavailable");
-    when(clientEmailResolver.resolve("00077881", "00")).thenThrow(failure);
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenThrow(failure);
     RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
     PurchaseOfferService.CreateOfferResult response =
@@ -990,7 +994,7 @@ class PurchaseOfferOracleServiceTest {
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
                     "O", "00077881", "00", null, null)));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
 
     PurchaseOfferService.CreateOfferResult response =
@@ -1202,7 +1206,7 @@ class PurchaseOfferOracleServiceTest {
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
                     "O", "00077881", "00", null, null)));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
 
     PurchaseOfferService.CreateOfferResult response =
@@ -1265,7 +1269,7 @@ class PurchaseOfferOracleServiceTest {
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
                     "O", "00077881", "00", null, null)));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
 
     PurchaseOfferService.CreateOfferResult response =

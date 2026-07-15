@@ -521,6 +521,15 @@ export const sendPermitReviewRequestEmail = async (
     copyToEmailAddress: copyToEmailAddress.trim(),
   })
 
+export const fetchPermitApprovalEmailDefault = async (permitNumber: string): Promise<string> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/permit-details/approval-email-default', {
+      params: { permitNumber: permitNumber.trim() },
+    })
+  return asString(recordOrEmpty(response.data).clientEmailAddress)
+}
+
 export const sendPermitApprovalEmail = async (
   permitNumber: string,
   clientEmailAddress: string,

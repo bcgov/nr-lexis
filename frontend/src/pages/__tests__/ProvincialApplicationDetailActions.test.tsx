@@ -57,6 +57,7 @@ import {
   fetchApplicationSummarySnapshot,
   fetchApplicationUniqueScales,
   saveApplicationRemark,
+  type ApplicationSummarySnapshot,
   updateApplicationSummary,
   updateApplicationPackage,
 } from '@/service/provincial-application-items-service'
@@ -247,6 +248,36 @@ const applicationDetail: ProvincialApplicationDetail = {
     },
   ],
   offers: [],
+}
+
+const applicationSummarySnapshot: ApplicationSummarySnapshot = {
+  applicationNumber: '321',
+  federalApplicationNumber: '',
+  applicationDate: '2026-01-01',
+  receivedDate: '2026-01-02',
+  termDays: '30',
+  applicationVolume: '100',
+  averageLogVolume: '2',
+  exemptionReasonCode: 'U',
+  productLocation: 'BC',
+  exportScheduleId: '987',
+  agentClientNumber: '00033344',
+  agentClientLocationCode: '01',
+  ownerClientNumber: '00011122',
+  ownerClientLocationCode: '00',
+  exemptionNumber: 'EX-555',
+  applicationStatusCode: 'APP',
+  applicantTypeCode: 'A',
+  orgUnitNumber: '12',
+  productTypeCode: 'H',
+  jurisdictionCode: 'P',
+  growthTypeCode: 'O',
+  agentContactName: 'Agent Contact',
+  ownerContactName: 'Owner Contact',
+  oicIndicator: 'N',
+  notificationEmail: '',
+  endUseCode: 'LU',
+  speciesCodes: ['FI'],
 }
 
 const newExemptionDetail: ProvincialExemptionDetail = {
@@ -575,34 +606,7 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedDeleteApplicationPackage.mockResolvedValue({ success: true })
     mockedDeleteApplicationScale.mockResolvedValue({ success: true })
     mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: true })
-    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
-      applicationNumber: '321',
-      federalApplicationNumber: '',
-      applicationDate: '2026-01-01',
-      receivedDate: '2026-01-02',
-      termDays: '30',
-      applicationVolume: '100',
-      averageLogVolume: '2',
-      exemptionReasonCode: 'U',
-      productLocation: 'BC',
-      exportScheduleId: '987',
-      agentClientNumber: '00033344',
-      agentClientLocationCode: '01',
-      ownerClientNumber: '00011122',
-      ownerClientLocationCode: '00',
-      exemptionNumber: 'EX-555',
-      applicationStatusCode: 'APP',
-      applicantTypeCode: 'A',
-      orgUnitNumber: '12',
-      productTypeCode: 'H',
-      jurisdictionCode: 'P',
-      growthTypeCode: 'O',
-      agentContactName: 'Agent Contact',
-      ownerContactName: 'Owner Contact',
-      oicIndicator: 'N',
-      endUseCode: 'LU',
-      speciesCodes: ['FI'],
-    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue(applicationSummarySnapshot)
     mockedUpdateApplicationSummary.mockResolvedValue({
       valid: true,
       message: 'The application was saved successfully.',
@@ -3178,6 +3182,7 @@ describe('Provincial Application Detail Document Actions', () => {
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Alternate Contact',
       oicIndicator: 'Y',
+      notificationEmail: '',
       endUseCode: 'LU',
       speciesCodes: ['FI'],
     })
@@ -3299,6 +3304,7 @@ describe('Provincial Application Detail Document Actions', () => {
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Contact',
       oicIndicator: 'N',
+      notificationEmail: '',
       endUseCode: 'LU',
       speciesCodes: ['FI'],
     })
@@ -3447,6 +3453,7 @@ describe('Provincial Application Detail Document Actions', () => {
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Contact',
       oicIndicator: 'N',
+      notificationEmail: '',
       endUseCode: 'LU',
       speciesCodes: ['FI'],
     })
@@ -4010,9 +4017,73 @@ describe('Provincial Application Detail Document Actions', () => {
     )
     expect(
       within(reviewTile).getByText(
-        'Defaults from client data. Changes apply only to this notification.',
+        'Defaults from the captured submitter email, then client data. Changes apply only to this notification.',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('shows the captured submitter email separately from owner client data', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValueOnce({
+      ...applicationDetail,
+      agentClientNumber: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'O',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+      notificationEmail: 'captured.submitter@example.com',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Owner')
+    expect(await screen.findByText('Notification email')).toBeInTheDocument()
+    expect(screen.getByText('captured.submitter@example.com')).toBeInTheDocument()
+    expect(screen.getByText('owner@example.test')).toBeInTheDocument()
+  })
+
+  it('defaults owner application review mail to the captured submitter email', async () => {
+    mockedFetchProvincialApplicationDetail.mockReset().mockResolvedValue({
+      ...applicationDetail,
+      agentClientNumber: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockReset().mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'O',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+      notificationEmail: 'captured.submitter@example.com',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewTile = await selectApplicationReviewTile()
+    await waitFor(() => {
+      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
+        'captured.submitter@example.com',
+      )
+    })
   })
 
   it('does not substitute the owner email when an agent applicant has no email', async () => {

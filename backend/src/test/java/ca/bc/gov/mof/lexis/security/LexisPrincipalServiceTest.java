@@ -182,6 +182,102 @@ class LexisPrincipalServiceTest {
   }
 
   @Test
+  void shouldResolveVerifiedBusinessBceidEmailFromUserInfo() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken = jwt("stable-subject");
+
+    when(userInfoService.getUserInfo(accessToken))
+        .thenReturn(
+            Map.of(
+                "custom:idp_name", "dev-bceidbusiness",
+                "custom:idp_user_id", "business-user-id",
+                "email", "submitter@example.com",
+                "email_verified", true));
+
+    LexisPrincipalService.AuthenticatedEmailIdentity identity =
+        service
+            .resolveAuthenticatedEmail(new JwtAuthenticationToken(accessToken))
+            .orElseThrow();
+
+    assertThat(identity.emailAddress()).isEqualTo("submitter@example.com");
+    assertThat(identity.emailVerified()).isTrue();
+    assertThat(identity.identityProviderCode()).isEqualTo("BCEIDBUSINESS");
+    assertThat(identity.identityUserId()).isEqualTo("business-user-id");
+    assertThat(identity.businessBceid()).isTrue();
+  }
+
+  @Test
+  void shouldPreferTokenEmailAndFalseVerificationOverUserInfo() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken =
+        jwt(
+            "stable-subject",
+            Map.of(
+                "custom:idp_name", "bceidbusiness",
+                "custom:idp_username", "token-user",
+                "email", "token@example.com",
+                "email_verified", "false"));
+
+    when(userInfoService.getUserInfo(accessToken))
+        .thenReturn(
+            Map.of(
+                "custom:idp_name", "idir",
+                "custom:idp_username", "userinfo-user",
+                "email", "userinfo@example.com",
+                "email_verified", true));
+
+    LexisPrincipalService.AuthenticatedEmailIdentity identity =
+        service
+            .resolveAuthenticatedEmail(new JwtAuthenticationToken(accessToken))
+            .orElseThrow();
+
+    assertThat(identity.emailAddress()).isEqualTo("token@example.com");
+    assertThat(identity.emailVerified()).isFalse();
+    assertThat(identity.identityProviderCode()).isEqualTo("BCEIDBUSINESS");
+    assertThat(identity.identityUserId()).isEqualTo("token-user");
+  }
+
+  @Test
+  void shouldPreserveUnknownEmailVerificationStatus() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken = jwt("stable-subject");
+
+    when(userInfoService.getUserInfo(accessToken))
+        .thenReturn(
+            Map.of(
+                "custom:idp_name", "bceidbusiness",
+                "custom:idp_username", "industry-user",
+                "email", "submitter@example.com"));
+
+    LexisPrincipalService.AuthenticatedEmailIdentity identity =
+        service
+            .resolveAuthenticatedEmail(new JwtAuthenticationToken(accessToken))
+            .orElseThrow();
+
+    assertThat(identity.emailVerified()).isNull();
+  }
+
+  @Test
+  void shouldKeepIdentityButRejectInvalidAuthenticatedEmail() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken = jwt("stable-subject");
+
+    when(userInfoService.getUserInfo(accessToken))
+        .thenReturn(
+            Map.of(
+                "custom:idp_name", "bceidbusiness",
+                "custom:idp_username", "industry-user",
+                "email", "not-an-email"));
+    JwtAuthenticationToken authentication = new JwtAuthenticationToken(accessToken);
+
+    LexisPrincipalService.AuthenticatedEmailIdentity identity =
+        service.resolveAuthenticatedIdentity(authentication).orElseThrow();
+
+    assertThat(identity.emailAddress()).isNull();
+    assertThat(service.resolveAuthenticatedEmail(authentication)).isEmpty();
+  }
+
+  @Test
   void shouldResolveOrgUnitFromAccessTokenClaims() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
     Jwt accessToken =

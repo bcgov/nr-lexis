@@ -35,6 +35,9 @@ class ApplicationYamlDefaultsTest {
         .containsEntry(
             "lexis.mail.from", "${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}")
         .containsEntry(
+            "lexis.mail.applicant-email-capture-enabled",
+            "${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:false}")
+        .containsEntry(
             "lexis.mail.region-rco-recipients", "${LEXIS_MAIL_REGION_RCO_RECIPIENTS:}")
         .containsEntry(
             "lexis.mail.region-rni-recipients", "${LEXIS_MAIL_REGION_RNI_RECIPIENTS:}")

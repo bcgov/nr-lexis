@@ -100,6 +100,7 @@ lexis:
     prod-rtm-only: ${LEXIS_PROD_RTM_ONLY:false}
   mail:
     enabled: ${LEXIS_MAIL_ENABLED:false}
+    applicant-email-capture-enabled: ${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:false}
     non-production: ${LEXIS_MAIL_NON_PRODUCTION:true}
     from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
     override-recipients: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS:}

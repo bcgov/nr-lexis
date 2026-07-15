@@ -63,6 +63,7 @@ import {
 } from '@/service/application-client-lookup-service'
 import {
   fetchPermitFeeOverrideContext,
+  fetchPermitApprovalEmailDefault,
   fetchPermitDocuments,
   fetchPermitInvoices,
   openPermitDocument,
@@ -2225,6 +2226,25 @@ const ProvincialPermitDetailsPage = () => {
     [canSendPermitApproval, detail?.permitNumber, permitReviewReady, permitNumber],
   )
 
+  const onOpenPermitApprovalEmail = useCallback(async () => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!resolvedPermitNumber || !canSendPermitApproval || isSendingPermitEmail) {
+      return
+    }
+    setActionErrorMessage('')
+    setIsSendingPermitEmail(true)
+    try {
+      const defaultEmail = await fetchPermitApprovalEmailDefault(resolvedPermitNumber)
+      setPermitApprovalEmailAddress(defaultEmail.trim())
+      setPermitApprovalEmailOpen(true)
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to resolve the permit applicant notification email.')
+    } finally {
+      setIsSendingPermitEmail(false)
+    }
+  }, [canSendPermitApproval, detail?.permitNumber, isSendingPermitEmail, permitNumber])
+
   const onRemoveDocument = useCallback(
     async (row: PermitDocumentRow) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
@@ -2433,14 +2453,7 @@ const ProvincialPermitDetailsPage = () => {
                       kind="secondary"
                       size="sm"
                       disabled={isSendingPermitEmail}
-                      onClick={() => {
-                        const applicantEmail = detail?.blanketOic
-                          ? ownerClientData?.email
-                          : agentClientData?.email || ownerClientData?.email
-                        setPermitApprovalEmailAddress(applicantEmail?.trim() ?? '')
-                        setActionErrorMessage('')
-                        setPermitApprovalEmailOpen(true)
-                      }}
+                      onClick={() => void onOpenPermitApprovalEmail()}
                     >
                       Email approval
                     </Button>

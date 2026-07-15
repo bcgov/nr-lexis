@@ -29,6 +29,7 @@ import {
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
+  fetchPermitApprovalEmailDefault,
   fetchPermitFeeOverrideContext,
   fetchPermitDocuments,
   fetchPermitInvoices,
@@ -81,6 +82,7 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
 }))
 
 vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
+  fetchPermitApprovalEmailDefault: vi.fn(),
   fetchPermitFeeOverrideContext: vi.fn(),
   fetchPermitDocuments: vi.fn(),
   fetchPermitInvoices: vi.fn(),
@@ -154,6 +156,7 @@ const mockedDeleteBlanketOicPackage = vi.mocked(deleteBlanketOicPackage)
 const mockedFetchBlanketOicPackageEditContext = vi.mocked(fetchBlanketOicPackageEditContext)
 const mockedAddBlanketOicScale = vi.mocked(addBlanketOicScale)
 const mockedDeleteBlanketOicScale = vi.mocked(deleteBlanketOicScale)
+const mockedFetchPermitApprovalEmailDefault = vi.mocked(fetchPermitApprovalEmailDefault)
 const mockedFetchPermitFeeOverrideContext = vi.mocked(fetchPermitFeeOverrideContext)
 const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
 const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
@@ -470,6 +473,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       message: 'Permit approval email queued successfully.',
       permitRequestDate: '',
     })
+    mockedFetchPermitApprovalEmailDefault.mockResolvedValue('agent@example.test')
     mockedUpdatePermitDetail.mockResolvedValue({
       success: true,
       message: 'The permit was updated successfully.',
@@ -2413,16 +2417,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
-  it('defaults approval mail to the represented applicant and sends an edited address', async () => {
+  it('loads the server-resolved approval recipient and sends an edited address', async () => {
     renderPermitDetails()
 
     const approvalButton = await screen.findByRole('button', { name: 'Email approval' })
-    await waitFor(() => {
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03')
-    })
     await userEvent.click(approvalButton)
 
     const dialog = await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })
+    expect(mockedFetchPermitApprovalEmailDefault).toHaveBeenCalledWith('777')
     const recipient = within(dialog).getByLabelText('Applicant email address')
     expect(recipient).toHaveValue('agent@example.test')
 
@@ -2447,6 +2449,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       blanketOic: true,
       oicApplicationNumber: 111,
     })
+    mockedFetchPermitApprovalEmailDefault.mockResolvedValueOnce('owner@example.test')
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Email approval' }))
@@ -2455,6 +2458,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(dialog).getByLabelText('Applicant email address')).toHaveValue(
       'owner@example.test',
     )
+  })
+
+  it('does not open the approval dialog when the server cannot resolve a default', async () => {
+    mockedFetchPermitApprovalEmailDefault.mockRejectedValueOnce(new Error('Oracle unavailable'))
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Email approval' }))
+
+    expect(
+      await screen.findByText('Unable to resolve the permit applicant notification email.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull()
+    expect(mockedSendPermitApprovalEmail).not.toHaveBeenCalled()
   })
 
   it('blocks an invalid approval recipient and cancels without changing the permit', async () => {

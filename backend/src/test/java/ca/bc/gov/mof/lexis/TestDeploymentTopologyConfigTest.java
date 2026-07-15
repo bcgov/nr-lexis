@@ -62,6 +62,12 @@ class TestDeploymentTopologyConfigTest {
         .contains(
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}")
         .contains(
+            "LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:"
+                + " ${{ vars.LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED || 'false' }}")
+        .contains(
+            "-p LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED="
+                + "\"$LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED\"")
+        .contains(
             "LEXIS_MAIL_REGION_RCO_RECIPIENTS:"
                 + " ${{ secrets.LEXIS_MAIL_REGION_RCO_RECIPIENTS }}")
         .contains(
@@ -90,6 +96,13 @@ class TestDeploymentTopologyConfigTest {
         .contains("- name: LEXIS_PERMIT_INVOICE_MODE\n                  value: ${LEXIS_PERMIT_INVOICE_MODE}")
         .contains("- name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\n    description: Requested timeout for each isolated GBMS transaction\n    value: \"60\"")
         .contains("- name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\n                  value: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS}")
+        .contains(
+            "- name: LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED\n"
+                + "    description: Capture authenticated Business BCeID email after the Oracle contact package is deployed\n"
+                + "    value: \"false\"")
+        .contains(
+            "- name: LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED\n"
+                + "                  value: ${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED}")
         .contains(
             "- name: LEXIS_MAIL_REGION_RCO_RECIPIENTS\n"
                 + "    description: Externally managed RCO distribution list recipients\n"

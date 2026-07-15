@@ -193,7 +193,7 @@ class ApplicationReviewRepositoryTest {
     assertThat(repository.findAuthoritativeApplicantStatusContext(900101L))
         .contains(
             new ApplicationReviewRepository.AuthoritativeApplicantStatusContext(
-                "REJ", "00055667", "02"));
+                "REJ", "A", "00055667", "02"));
   }
 
   @Test

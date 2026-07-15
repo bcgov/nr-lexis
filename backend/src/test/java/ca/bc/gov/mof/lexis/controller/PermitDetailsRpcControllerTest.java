@@ -208,6 +208,75 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void approvalEmailDefaultShouldReturnResolvedApplicantForAuthorizedApprover() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApprovalPermitEmailDefault(7000123L))
+        .thenReturn(Optional.of("applicant@example.test"));
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().clientEmailAddress()).isEqualTo("applicant@example.test");
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+    verify(service).getApprovalPermitEmailDefault(7000123L);
+  }
+
+  @Test
+  void approvalEmailDefaultShouldReturnBlankWhenNoApplicantAddressExists() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApprovalPermitEmailDefault(7000123L)).thenReturn(Optional.empty());
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().clientEmailAddress()).isEmpty();
+  }
+
+  @Test
+  void approvalEmailDefaultShouldRejectUsersWithoutSavePermitAuthority() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(serviceProvider, service);
+  }
+
+  @Test
+  void approvalEmailDefaultShouldReturnNoContentWhenServiceIsUnavailable() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void approvalEmailDefaultShouldEnforcePermitObjectAccessBeforeLookup() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requirePermit(authentication, 7000123L);
+
+    assertThatThrownBy(
+            () -> controller.getApprovalPermitEmailDefault(7000123L, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("denied");
+    verify(service, never()).getApprovalPermitEmailDefault(any());
+  }
+
+  @Test
   void permitSummaryShouldForwardRequestAndResolveIndustryUserFlag() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitSummaryRpcResponseDto dto =

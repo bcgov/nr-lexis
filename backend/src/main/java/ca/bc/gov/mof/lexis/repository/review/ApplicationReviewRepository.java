@@ -280,7 +280,10 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
               return reference.map(
                   value ->
                       new AuthoritativeApplicantStatusContext(
-                          currentStatus, value.clientNumber(), value.locationCode()));
+                          currentStatus,
+                          applicantTypeCode,
+                          value.clientNumber(),
+                          value.locationCode()));
             });
   }
 
@@ -607,7 +610,16 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   public record ApplicantClientReference(String clientNumber, String locationCode) {}
 
   public record AuthoritativeApplicantStatusContext(
-      String statusCode, String clientNumber, String locationCode) {}
+      String statusCode,
+      String applicantTypeCode,
+      String clientNumber,
+      String locationCode) {
+
+    public AuthoritativeApplicantStatusContext(
+        String statusCode, String clientNumber, String locationCode) {
+      this(statusCode, "O", clientNumber, locationCode);
+    }
+  }
 
   public record ApplicationStatusTransitionRow(
       boolean updated,

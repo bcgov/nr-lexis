@@ -25,7 +25,7 @@ import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository.ApplicationStatusTransitionRow;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository.AuthoritativeApplicantStatusContext;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository.ReviewRemarkRow;
-import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
+import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalStatusMutationRequest;
@@ -51,7 +51,7 @@ class ApplicationReviewOracleServiceTest {
   @Mock private ApplicationReviewRepository repository;
   @Mock private ApplicationReviewStatusEmailSender emailSender;
   @Mock private ApplicationApprovalEligibilityService approvalEligibilityService;
-  @Mock private AuthoritativeClientEmailResolver clientEmailResolver;
+  @Mock private ApplicationNotificationRecipientResolver clientEmailResolver;
   @Mock private FederalApplicationService federalApplicationService;
   @InjectMocks private ApplicationReviewOracleService service;
 
@@ -565,7 +565,7 @@ class ApplicationReviewOracleServiceTest {
         new AuthoritativeApplicantStatusContext("REJ", "00077881", "00");
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(java.util.Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(java.util.Optional.of("client@example.test"));
     when(repository.findLatestAuthoritativeRemark(1000456L))
         .thenReturn(
@@ -614,7 +614,7 @@ class ApplicationReviewOracleServiceTest {
         new AuthoritativeApplicantStatusContext("APP", "00077881", "00");
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(java.util.Optional.of(rejected), java.util.Optional.of(changed));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(java.util.Optional.of("owner@example.test"));
     when(repository.findLatestAuthoritativeRemark(1000456L))
         .thenReturn(
@@ -640,7 +640,7 @@ class ApplicationReviewOracleServiceTest {
         new AuthoritativeApplicantStatusContext("REJ", "00077881", "00");
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("owner@example.test"));
     when(repository.findLatestAuthoritativeRemark(1000456L))
         .thenReturn(
@@ -666,7 +666,7 @@ class ApplicationReviewOracleServiceTest {
         new AuthoritativeApplicantStatusContext("REJ", "00077881", "00");
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("owner@example.test"));
     when(repository.findLatestAuthoritativeRemark(1000456L)).thenReturn(Optional.empty());
 
@@ -691,7 +691,7 @@ class ApplicationReviewOracleServiceTest {
             88L, 1000456L, "Withdrawn by applicant", "idir\\reviewer", Instant.EPOCH);
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("owner@example.test"));
     when(repository.findLatestAuthoritativeRemark(1000456L))
         .thenReturn(Optional.of(persisted));
@@ -722,7 +722,7 @@ class ApplicationReviewOracleServiceTest {
         new DataAccessResourceFailureException("remark lookup unavailable");
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("owner@example.test"));
     when(repository.findLatestAuthoritativeRemark(1000456L)).thenThrow(failure);
 
@@ -750,7 +750,7 @@ class ApplicationReviewOracleServiceTest {
             78L, 1000456L, "Later persisted note", "idir\\reviewer", Instant.EPOCH.plusSeconds(1));
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00"))
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("owner@example.test"));
     when(repository.findLatestAuthoritativeRemark(1000456L))
         .thenReturn(Optional.of(original), Optional.of(changed));
@@ -791,7 +791,8 @@ class ApplicationReviewOracleServiceTest {
         new AuthoritativeApplicantStatusContext("WDN", "00077881", "00");
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(java.util.Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00")).thenReturn(java.util.Optional.empty());
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenReturn(java.util.Optional.empty());
 
     ApplicationReviewStatusEmailResultDto result =
         service.sendStatusEmail(
@@ -813,7 +814,8 @@ class ApplicationReviewOracleServiceTest {
         new DataAccessResourceFailureException("client lookup unavailable");
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(java.util.Optional.of(applicant));
-    when(clientEmailResolver.resolve("00077881", "00")).thenThrow(failure);
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenThrow(failure);
 
     assertThatThrownBy(
             () ->
