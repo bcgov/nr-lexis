@@ -21,14 +21,10 @@ The six-hour maximum is a monitored hard runtime bound; the lock is not renewed.
 monitor runtime and keep runs comfortably below that duration so another replica cannot acquire an
 expired lock.
 
-If the table, grants, or Oracle lock provider are temporarily unavailable, the trigger and startup
-catch-up are skipped and logged; expiry never falls back to an uncoordinated run. API startup and
-traffic remain available while the database migration is deployed.
-
-ShedLock prevents concurrent runs but is not a durable per-day completion ledger. A backend pod
-starting later than the five-minute minimum can repeat an already completed same-day candidate
-scan. This is safe because expiry re-reads and locks each aggregate and converges on the same final
-state, but operators should expect the possible additional scan.
+If the table, grants, or Oracle lock provider are temporarily unavailable, the nightly trigger is
+skipped and logged; expiry never falls back to an uncoordinated run. API startup and traffic remain
+available while the database migration is deployed. Backend startup does not run expiry; a missed
+nightly trigger remains eligible on the following night.
 
 ## Configuration
 

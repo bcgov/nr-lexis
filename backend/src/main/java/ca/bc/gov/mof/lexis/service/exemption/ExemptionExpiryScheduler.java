@@ -8,7 +8,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Objects;
 import java.util.Optional;
@@ -24,9 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
-import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -38,7 +35,6 @@ public class ExemptionExpiryScheduler {
   private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionExpiryScheduler.class);
   private static final String RUN_METRIC = "lexis.expiry.runs";
   private static final String LOCK_NAME = "lexis-exemption-expiry";
-  private static final LocalTime LEGACY_DAILY_RUN_TIME = LocalTime.of(0, 0, 30);
 
   private final ExemptionExpiryService expiryService;
   private final LockProvider lockProvider;
@@ -110,20 +106,6 @@ public class ExemptionExpiryScheduler {
       zone = "${lexis.expiry.zone:America/Vancouver}")
   public void expireDueExemptions() {
     runForCurrentLocalDate("scheduled_run");
-  }
-
-  @EventListener(ApplicationReadyEvent.class)
-  public void catchUpExpiryAfterStartup() {
-    if (currentLocalTime().isBefore(LEGACY_DAILY_RUN_TIME)) {
-      return;
-    }
-    try {
-      runForCurrentLocalDate("startup_catch_up");
-    } catch (RuntimeException ignored) {
-      // The scheduled run remains available for retry. A dependency failure during catch-up must
-      // not turn an otherwise healthy deployment into an application restart loop.
-      LOGGER.warn("event=lexis_exemption_expiry operation=startup_catch_up outcome=deferred");
-    }
   }
 
   private void runForCurrentLocalDate(String operation) {
@@ -214,10 +196,6 @@ public class ExemptionExpiryScheduler {
 
   private LocalDate currentLocalDate() {
     return LocalDate.ofInstant(clock.instant(), expiryZone);
-  }
-
-  private LocalTime currentLocalTime() {
-    return LocalTime.ofInstant(clock.instant(), expiryZone);
   }
 
   private Counter runCounter(MeterRegistry registry, String outcome) {
