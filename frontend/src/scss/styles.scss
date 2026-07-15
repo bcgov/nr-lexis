@@ -904,6 +904,12 @@ body {
   border-top-right-radius: 4px;
 }
 
+.app-shell .cds--text-area {
+  block-size: var(--cds-layout-size-height-md, 2.5rem);
+  min-block-size: var(--cds-layout-size-height-md, 2.5rem);
+  resize: vertical;
+}
+
 label.cds--label,
 legend.cds--label {
   color: var(--cds-text-primary);
@@ -1425,7 +1431,8 @@ legend.cds--label {
   letter-spacing: 0.01rem;
 }
 
-.create-form-tile :is(.cds--text-input, .cds--select-input, .cds--date-picker__input) {
+.create-form-tile
+  :is(.cds--text-input, .cds--text-area, .cds--select-input, .cds--date-picker__input) {
   font-size: 1rem;
 }
 
@@ -1495,10 +1502,6 @@ legend.cds--label {
 
 .legacy-search-actions.create-form-actions {
   gap: 0.5rem;
-}
-
-.create-form-comments .cds--text-area {
-  min-block-size: 5rem;
 }
 
 .legacy-field-stack {
@@ -3244,10 +3247,8 @@ legend.cds--label {
 }
 
 .detail-document-upload .admin-upload-panel .cds--text-area {
-  block-size: 4rem;
   inline-size: 100%;
   max-inline-size: 100%;
-  min-block-size: 4rem;
 }
 
 .detail-document-upload__invoice-fields {
@@ -3566,7 +3567,8 @@ legend.cds--label {
   font-size: 0.875rem;
 }
 
-.application-detail-tab-panel :is(.cds--text-input, .cds--select-input, .cds--date-picker__input) {
+.application-detail-tab-panel
+  :is(.cds--text-input, .cds--text-area, .cds--select-input, .cds--date-picker__input) {
   font-size: 1rem;
 }
 

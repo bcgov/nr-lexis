@@ -2057,6 +2057,23 @@ test.describe('TEST IDIR admin regression', () => {
     )
     await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
 
+    const paragraphField = page.getByLabel('Location of logs')
+    const normalField = page.getByLabel('Application volume')
+    const [paragraphMetrics, normalFieldMetrics] = await Promise.all([
+      paragraphField.evaluate((element) => ({
+        fontSize: getComputedStyle(element).fontSize,
+        height: element.getBoundingClientRect().height,
+        resize: getComputedStyle(element).resize,
+      })),
+      normalField.evaluate((element) => ({
+        fontSize: getComputedStyle(element).fontSize,
+        height: element.getBoundingClientRect().height,
+      })),
+    ])
+    expect(paragraphMetrics.height).toBe(normalFieldMetrics.height)
+    expect(paragraphMetrics.fontSize).toBe(normalFieldMetrics.fontSize)
+    expect(paragraphMetrics.resize).toBe('vertical')
+
     await page.getByRole('tab', { name: 'Clients' }).click()
     await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
   })
