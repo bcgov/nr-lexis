@@ -364,21 +364,21 @@ true]]></printWhenExpression>
 				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
 				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
 			</subreport>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="bb76374e-cda3-4284-8a40-7c82eb9e6641" x="180" y="15" width="324" height="71" forecolor="#000000"/>
 				<textElement textAlignment="Center">
 					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<textFieldExpression><![CDATA["Province of British Columbia" + System.getProperty("line.separator") + "Log Exemption Information System" + System.getProperty("line.separator") + "Offers Ledger" + System.getProperty("line.separator") + $V{CCF6_F_DATE_RANGE}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="483402ea-3671-43f3-a3d1-c82be3fa7d5c" x="4" y="81" width="501" height="11" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<textFieldExpression><![CDATA["Region			: " + ( $F{ORG_UNIT_CODE} == null || $F{ORG_UNIT_CODE}.isEmpty() ? "" : $F{ORG_UNIT_CODE} + " - " ) + ( $F{ORG_UNIT_NAME} == null || $F{ORG_UNIT_NAME}.isEmpty() ? "" : $F{ORG_UNIT_NAME} )]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="adc22aa6-732f-44cd-a2df-cb6bc99d7def" x="4" y="92" width="501" height="10" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -570,7 +570,7 @@ $F{APPLICATION_NUMBER}!=null]]></printWhenExpression>
 				</textElement>
 				<textFieldExpression><![CDATA[$F{ADVERTISING_DATE}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="046cb241-8dd0-41cc-b504-48fe8fb9fd20" x="144" y="6" width="72" height="12" forecolor="#000000"/>
 				<textElement>
 					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -584,7 +584,7 @@ $F{APPLICATION_NUMBER}!=null]]></printWhenExpression>
 				</textElement>
 				<textFieldExpression><![CDATA[$F{OWNER_CLIENT_NUMBER}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="e9972ed9-c807-4190-9662-5ee08e8996ed" x="282" y="6" width="66" height="12" forecolor="#000000"/>
 				<textElement>
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -619,14 +619,14 @@ $F{APPLICATION_NUMBER}!=null]]></printWhenExpression>
 				</textElement>
 				<textFieldExpression><![CDATA[$F{VALID_OFFER_INDICATOR}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="0b1ccf0e-b0ff-427a-9604-65297cb946ce" x="450" y="6" width="102" height="12" forecolor="#000000"/>
 				<textElement>
 					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<textFieldExpression><![CDATA[$F{OFFER_REMARK}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="55cd2046-cb3a-4a9c-90c6-98700cd84cd4" x="552" y="6" width="66" height="12" forecolor="#000000"/>
 				<textElement>
 					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -676,7 +676,7 @@ Report Run Summary]]></text>
 				</textElement>
 				<text><![CDATA[Run Time Selection Options]]></text>
 			</staticText>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="4c9046ae-046d-44e8-a935-c4fc4a8f1603" x="336" y="146" width="342" height="11" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -785,28 +785,28 @@ $F{APPLICATION_NUMBER}==null]]></printWhenExpression>
 				</textElement>
 				<text><![CDATA[Jurisdiction]]></text>
 			</staticText>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="4c9046ae-046d-44e8-a935-c4fc4a8f1603" x="336" y="102" width="342" height="11" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<textFieldExpression><![CDATA[": " + $V{CCF1_FROM_DATE}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="4c9046ae-046d-44e8-a935-c4fc4a8f1603" x="336" y="113" width="342" height="11" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<textFieldExpression><![CDATA[": " + $V{CCF0_TO_DATE}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="4c9046ae-046d-44e8-a935-c4fc4a8f1603" x="336" y="133" width="342" height="11" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<textFieldExpression><![CDATA[": " + $V{CCF3_CLIENT}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="4c9046ae-046d-44e8-a935-c4fc4a8f1603" x="336" y="124" width="342" height="11" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -827,14 +827,14 @@ $F{APPLICATION_NUMBER}==null]]></printWhenExpression>
 				</textElement>
 				<text><![CDATA[Withdrawn To Date]]></text>
 			</staticText>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="4c9046ae-046d-44e8-a935-c4fc4a8f1603" x="336" y="157" width="342" height="11" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<textFieldExpression><![CDATA[": " + $V{CCF8_WITHDRAWN_FROM_DATE}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="4c9046ae-046d-44e8-a935-c4fc4a8f1603" x="336" y="168" width="342" height="11" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>

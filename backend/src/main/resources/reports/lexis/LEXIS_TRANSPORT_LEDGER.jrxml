@@ -452,7 +452,7 @@ $P{P_JURISDICTION} == null || $P{P_JURISDICTION}.isEmpty()
 				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
 				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
 			</subreport>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="7e539647-605f-432a-aece-c42e510b9c98" x="180" y="15" width="324" height="71" forecolor="#000000"/>
 				<textElement textAlignment="Center">
 					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -488,7 +488,7 @@ Date Printed]]></text>
 				</textElement>
 				<textFieldExpression><![CDATA[": " + new SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date()) + " " + new SimpleDateFormat("H:mm:ss").format(new java.util.Date())]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="e11bb5d4-e1b5-4590-824b-41e6886968bb" x="4" y="89" width="501" height="22" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -713,7 +713,7 @@ Destination Country
 Jurisdiction
 ]]></text>
 			</staticText>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="41911265-96a9-4064-a9ef-e662dba00cf5" x="336" y="110" width="330" height="92" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>

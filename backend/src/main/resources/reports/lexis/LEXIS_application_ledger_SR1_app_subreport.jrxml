@@ -26,14 +26,14 @@ P_APPLICATION_NUMBER => $P{P_APPLICATION_NUMBER}
 	<field name="REMARK" class="java.lang.String"/>
 	<detail>
 		<band height="14" splitType="Prevent">
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="249813e2-6543-4826-95f9-09f274ea398a" x="30" y="2" width="47" height="12" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<textFieldExpression><![CDATA["Remark " + new DecimalFormat("###0").format( $V{REPORT_COUNT} ) + ":"]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="f41650ce-2f6b-4c9d-b040-19641b729aa9" x="77" y="2" width="502" height="12" forecolor="#000000"/>
 				<textElement>
 					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>

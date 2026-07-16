@@ -499,7 +499,7 @@ $P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty()
 				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
 				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
 			</subreport>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="fd275722-2e35-4493-bd1d-506578244cd2" x="180" y="15" width="324" height="56" forecolor="#000000"/>
 				<textElement textAlignment="Center">
 					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -587,7 +587,7 @@ Growth Indicator]]></text>
 				</textElement>
 				<text><![CDATA[Total Fees]]></text>
 			</staticText>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="3bb5da56-a90d-483b-8769-b71463651d70" x="92" y="91" width="226" height="32" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>

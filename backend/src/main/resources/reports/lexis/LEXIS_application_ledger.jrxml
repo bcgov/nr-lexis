@@ -331,7 +331,7 @@ $F{APPLICATION_NUMBER}!=null]]></printWhenExpression>
 						<pen lineWidth="1.0" lineStyle="Solid"/>
 					</graphicElement>
 				</line>
-				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 					<reportElement uuid="aae44c90-1439-45d5-a4ef-53162186476f" x="4" y="1" width="291" height="32" forecolor="#000000"/>
 					<textElement textAlignment="Left">
 						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -578,7 +578,7 @@ Indicator]]></text>
 				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
 				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
 			</subreport>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="53400319-8d0a-463c-8430-b9258cd720e9" x="180" y="16" width="324" height="60" forecolor="#000000"/>
 				<textElement textAlignment="Center">
 					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -594,21 +594,21 @@ Indicator]]></text>
 Date/Time Printed
 ]]></text>
 			</staticText>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="8ca3b3cb-64d4-4beb-99d4-83b7dbea3576" x="582" y="0" width="60" height="20"/>
 				<textElement>
 					<font size="8"/>
 				</textElement>
 				<textFieldExpression><![CDATA[": "+$V{PAGE_NUMBER}+" of"]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" evaluationTime="Report" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" evaluationTime="Report" isBlankWhenNull="true">
 				<reportElement uuid="e97e596d-96f9-4ece-9f5e-021e4412c7a4" x="642" y="0" width="40" height="20"/>
 				<textElement>
 					<font size="8"/>
 				</textElement>
 				<textFieldExpression><![CDATA[" " + $V{PAGE_NUMBER}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="e51f0f2d-bc4e-465b-a96b-c5cf5b145c1a" x="582" y="9" width="100" height="43" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
