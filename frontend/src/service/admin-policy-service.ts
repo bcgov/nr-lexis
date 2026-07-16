@@ -45,6 +45,10 @@ export type AdminPolicyPage<TRow> = {
   size: number
 }
 
+export type FeePolicySortField = 'effective_date' | 'org_unit_no' | 'percent_increase'
+export type FilPolicySortField = 'effective_date' | 'fil_percent'
+export type AdminPolicySortDirection = 'asc' | 'desc'
+
 const DEFAULT_USER_ID = 'CURRENT_USER'
 const POLICY_CACHE_TTL_MS = 30_000
 const DEFAULT_ADMIN_PAGE = 0
@@ -52,15 +56,6 @@ const DEFAULT_ADMIN_PAGE_SIZE = 100
 
 const createTimestamp = (): string => new Date().toISOString()
 const createRowId = (): string => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-
-const sortByEffectiveDateDesc = <TRow extends { effectiveDate: string }>(rows: TRow[]): TRow[] => {
-  return [...rows].sort((a, b) => {
-    if (a.effectiveDate === b.effectiveDate) {
-      return 0
-    }
-    return a.effectiveDate > b.effectiveDate ? -1 : 1
-  })
-}
 
 const normalizeFeePolicyRow = (row: unknown): FeePolicyRow => {
   const source = recordOrEmpty(row)
@@ -126,6 +121,8 @@ const normalizePolicyPage = <TRow>(
 export const fetchFeePolicyPage = async (
   page = DEFAULT_ADMIN_PAGE,
   size = DEFAULT_ADMIN_PAGE_SIZE,
+  sortField: FeePolicySortField = 'effective_date',
+  sortDirection: AdminPolicySortDirection = 'desc',
 ): Promise<AdminPolicyPage<FeePolicyRow>> => {
   const response = await apiService.getCachedResponse<unknown>(
     '/lexis/admin/policies/fee',
@@ -133,25 +130,23 @@ export const fetchFeePolicyPage = async (
       params: {
         page,
         size,
+        sortField,
+        sortDirection,
       },
     },
     {
-      cacheKey: `admin-policies:fee:${page}:${size}`,
+      cacheKey: `admin-policies:fee:${sortField}:${sortDirection}:${page}:${size}`,
       ttlMs: POLICY_CACHE_TTL_MS,
     },
   )
-  const result = normalizePolicyPage(response.data, normalizeFeePolicyRow, page, size)
-  return {
-    ...result,
-    rows: sortByEffectiveDateDesc(result.rows),
-  }
+  return normalizePolicyPage(response.data, normalizeFeePolicyRow, page, size)
 }
 
 export const fetchFeePolicies = async (): Promise<FeePolicyRow[]> => {
   return (await fetchFeePolicyPage()).rows
 }
 
-export const upsertFeePolicy = async (request: UpsertFeePolicyRequest): Promise<FeePolicyRow[]> => {
+export const upsertFeePolicy = async (request: UpsertFeePolicyRequest): Promise<void> => {
   const payload = {
     effectiveDate: request.effectiveDate,
     orgUnitNo: request.orgUnitNo.trim(),
@@ -163,18 +158,17 @@ export const upsertFeePolicy = async (request: UpsertFeePolicyRequest): Promise<
   } else {
     await apiService.getAxiosInstance().post('/lexis/admin/policies/fee', payload)
   }
-
-  return fetchFeePolicies()
 }
 
-export const deleteFeePolicy = async (rowId: string): Promise<FeePolicyRow[]> => {
+export const deleteFeePolicy = async (rowId: string): Promise<void> => {
   await apiService.getAxiosInstance().delete(`/lexis/admin/policies/fee/${rowId}`)
-  return fetchFeePolicies()
 }
 
 export const fetchFilPolicyPage = async (
   page = DEFAULT_ADMIN_PAGE,
   size = DEFAULT_ADMIN_PAGE_SIZE,
+  sortField: FilPolicySortField = 'effective_date',
+  sortDirection: AdminPolicySortDirection = 'desc',
 ): Promise<AdminPolicyPage<FilPolicyRow>> => {
   const response = await apiService.getCachedResponse<unknown>(
     '/lexis/admin/policies/fil',
@@ -182,25 +176,23 @@ export const fetchFilPolicyPage = async (
       params: {
         page,
         size,
+        sortField,
+        sortDirection,
       },
     },
     {
-      cacheKey: `admin-policies:fil:${page}:${size}`,
+      cacheKey: `admin-policies:fil:${sortField}:${sortDirection}:${page}:${size}`,
       ttlMs: POLICY_CACHE_TTL_MS,
     },
   )
-  const result = normalizePolicyPage(response.data, normalizeFilPolicyRow, page, size)
-  return {
-    ...result,
-    rows: sortByEffectiveDateDesc(result.rows),
-  }
+  return normalizePolicyPage(response.data, normalizeFilPolicyRow, page, size)
 }
 
 export const fetchFilPolicies = async (): Promise<FilPolicyRow[]> => {
   return (await fetchFilPolicyPage()).rows
 }
 
-export const upsertFilPolicy = async (request: UpsertFilPolicyRequest): Promise<FilPolicyRow[]> => {
+export const upsertFilPolicy = async (request: UpsertFilPolicyRequest): Promise<void> => {
   const payload = {
     effectiveDate: request.effectiveDate,
     filPercentage: request.filPercentage.trim(),
@@ -211,11 +203,8 @@ export const upsertFilPolicy = async (request: UpsertFilPolicyRequest): Promise<
   } else {
     await apiService.getAxiosInstance().post('/lexis/admin/policies/fil', payload)
   }
-
-  return fetchFilPolicies()
 }
 
-export const deleteFilPolicy = async (rowId: string): Promise<FilPolicyRow[]> => {
+export const deleteFilPolicy = async (rowId: string): Promise<void> => {
   await apiService.getAxiosInstance().delete(`/lexis/admin/policies/fil/${rowId}`)
-  return fetchFilPolicies()
 }

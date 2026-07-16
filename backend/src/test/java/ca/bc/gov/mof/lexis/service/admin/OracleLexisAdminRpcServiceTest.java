@@ -162,6 +162,41 @@ class OracleLexisAdminRpcServiceTest {
   }
 
   @Test
+  void shouldSortModernFeePoliciesByOrganizationUnit() {
+    OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
+
+    LexisAdminPolicyRepository.FeePolicyRow row =
+        new LexisAdminPolicyRepository.FeePolicyRow(
+            15L,
+            LocalDate.of(2026, 7, 10),
+            1903L,
+            8L,
+            "idir\\admin",
+            LocalDate.of(2026, 7, 1),
+            "idir\\admin",
+            LocalDate.of(2026, 7, 2));
+
+    when(repository.countFeePolicies()).thenReturn(1L);
+    when(repository.findFeePolicies("org_unit_no asc", 0)).thenReturn(List.of(row));
+    when(repository.findOrgUnitByNumber(1903L))
+        .thenReturn(Optional.of(new LexisAdminPolicyRepository.OrgUnitRow(1903L, "RCB", "Cariboo")));
+
+    var response = service.listFeePolicies(0, 20, "org_unit_no", "asc").orElseThrow();
+
+    assertThat(response.total()).isEqualTo(1);
+    assertThat(response.page()).isZero();
+    assertThat(response.size()).isEqualTo(20);
+    assertThat(response.results())
+        .singleElement()
+        .satisfies(
+            result ->
+                assertThat(result)
+                    .containsEntry("lexisFeePolicyId", 15L)
+                    .containsEntry("orgUnitNo", "1903"));
+    verify(repository).findFeePolicies("org_unit_no asc", 0);
+  }
+
+  @Test
   void shouldNormalizeInvalidModernFeePolicyPagination() {
     OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
 

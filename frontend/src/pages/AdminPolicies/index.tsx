@@ -46,8 +46,11 @@ import {
   deleteFilPolicy as deleteFilPolicyRequest,
   fetchFeePolicyPage,
   fetchFilPolicyPage,
+  type AdminPolicySortDirection,
   type FeePolicyRow,
+  type FeePolicySortField,
   type FilPolicyRow,
+  type FilPolicySortField,
   upsertFeePolicy as upsertFeePolicyRequest,
   upsertFilPolicy as upsertFilPolicyRequest,
 } from '@/service/admin-policy-service'
@@ -123,6 +126,17 @@ const SCHEDULE_SORT_COLUMNS: Array<{ id: ExportScheduleSortField; label: string 
   { id: 'applicationCount', label: 'Applications' },
 ]
 
+const FEE_POLICY_SORT_COLUMNS: Array<{ id: FeePolicySortField; label: string }> = [
+  { id: 'effective_date', label: 'Effective Date' },
+  { id: 'org_unit_no', label: 'Region' },
+  { id: 'percent_increase', label: 'Fee Increase %' },
+]
+
+const FIL_POLICY_SORT_COLUMNS: Array<{ id: FilPolicySortField; label: string }> = [
+  { id: 'effective_date', label: 'Effective date' },
+  { id: 'fil_percent', label: 'Fee in lieu %' },
+]
+
 const applicationSearchPathForAdvertisingDate = (advertisingDate: string): string => {
   const searchParams = new URLSearchParams({
     listingFromDate: advertisingDate,
@@ -144,6 +158,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_ADMIN_PAGE_SIZE)
   const [totalRows, setTotalRows] = useState(0)
+  const [feeSortField, setFeeSortField] = useState<FeePolicySortField>('effective_date')
+  const [feeSortDirection, setFeeSortDirection] = useState<AdminPolicySortDirection>('desc')
+  const [filSortField, setFilSortField] = useState<FilPolicySortField>('effective_date')
+  const [filSortDirection, setFilSortDirection] = useState<AdminPolicySortDirection>('desc')
   const [scheduleSortField, setScheduleSortField] =
     useState<ExportScheduleSortField>('advertisingDate')
   const [scheduleSortDirection, setScheduleSortDirection] =
@@ -334,6 +352,22 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setPage(0)
   }
 
+  const onFeeSort = (sortField: FeePolicySortField): void => {
+    setFeeSortDirection((currentDirection) =>
+      feeSortField === sortField && currentDirection === 'asc' ? 'desc' : 'asc',
+    )
+    setFeeSortField(sortField)
+    setPage(0)
+  }
+
+  const onFilSort = (sortField: FilPolicySortField): void => {
+    setFilSortDirection((currentDirection) =>
+      filSortField === sortField && currentDirection === 'asc' ? 'desc' : 'asc',
+    )
+    setFilSortField(sortField)
+    setPage(0)
+  }
+
   const loadPolicies = useCallback(async () => {
     setIsLoadingPolicies(true)
     clearNotifications()
@@ -348,11 +382,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       }
 
       if (area === 'fee') {
-        const loadedPage = await fetchFeePolicyPage(page, pageSize)
+        const loadedPage = await fetchFeePolicyPage(page, pageSize, feeSortField, feeSortDirection)
         setFeePolicies(loadedPage.rows)
         setTotalRows(loadedPage.total)
       } else if (area === 'fil') {
-        const loadedPage = await fetchFilPolicyPage(page, pageSize)
+        const loadedPage = await fetchFilPolicyPage(page, pageSize, filSortField, filSortDirection)
         setFilPolicies(loadedPage.rows)
         setTotalRows(loadedPage.total)
       } else {
@@ -378,7 +412,18 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     } finally {
       setIsLoadingPolicies(false)
     }
-  }, [area, canAccessArea, page, pageSize, scheduleSortDirection, scheduleSortField])
+  }, [
+    area,
+    canAccessArea,
+    feeSortDirection,
+    feeSortField,
+    filSortDirection,
+    filSortField,
+    page,
+    pageSize,
+    scheduleSortDirection,
+    scheduleSortField,
+  ])
 
   useEffect(() => {
     void loadPolicies()
@@ -836,9 +881,20 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 <Table useZebraStyles>
                   <TableHead>
                     <TableRow>
-                      <TableHeader>Effective Date</TableHeader>
-                      <TableHeader>Region</TableHeader>
-                      <TableHeader>Fee Increase %</TableHeader>
+                      {FEE_POLICY_SORT_COLUMNS.map((column) => (
+                        <TableHeader key={column.id}>
+                          <button
+                            type="button"
+                            className="legacy-sort-button"
+                            onClick={() => onFeeSort(column.id)}
+                          >
+                            {column.label}
+                            {feeSortField === column.id
+                              ? ` (${feeSortDirection.toUpperCase()})`
+                              : ''}
+                          </button>
+                        </TableHeader>
+                      ))}
                       <TableHeader>Entry User</TableHeader>
                       <TableHeader>Entry Timestamp</TableHeader>
                       <TableHeader>Update User</TableHeader>
@@ -953,8 +1009,20 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 <Table useZebraStyles>
                   <TableHead>
                     <TableRow>
-                      <TableHeader>Effective date</TableHeader>
-                      <TableHeader>Fee in lieu %</TableHeader>
+                      {FIL_POLICY_SORT_COLUMNS.map((column) => (
+                        <TableHeader key={column.id}>
+                          <button
+                            type="button"
+                            className="legacy-sort-button"
+                            onClick={() => onFilSort(column.id)}
+                          >
+                            {column.label}
+                            {filSortField === column.id
+                              ? ` (${filSortDirection.toUpperCase()})`
+                              : ''}
+                          </button>
+                        </TableHeader>
+                      ))}
                       <TableHeader>Entry user</TableHeader>
                       <TableHeader>Entry timestamp</TableHeader>
                       <TableHeader>Update user</TableHeader>
