@@ -207,7 +207,7 @@ class TestDeploymentTopologyConfigTest {
         between(
             backendJob,
             "      - uses: actions/checkout@",
-            "      - name: Require Gold OpenShift target");
+            "      - name: Ensure Keycloak scopes and NEXCOL client");
     String keycloakStep =
         between(
             backendJob,

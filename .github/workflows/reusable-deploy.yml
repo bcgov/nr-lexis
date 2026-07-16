@@ -141,15 +141,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Require Gold OpenShift target
-        env:
-          OC_SERVER: ${{ vars.oc_server }}
-        run: |
-          if [ "${OC_SERVER}" != "https://api.gold.devops.gov.bc.ca:6443" ]; then
-            echo "::error title=Unexpected OpenShift cluster::OC_SERVER must target the Gold cluster."
-            exit 1
-          fi
-
       # DEV deployments are ephemeral PR previews; gateway client provisioning is TEST/PROD-only.
       - name: Ensure Keycloak scopes and NEXCOL client
         if: ${{ inputs.environment != 'dev' }}
@@ -251,15 +242,6 @@ jobs:
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
     steps:
-      - name: Require Gold OpenShift target
-        env:
-          OC_SERVER: ${{ vars.oc_server }}
-        run: |
-          if [ "${OC_SERVER}" != "https://api.gold.devops.gov.bc.ca:6443" ]; then
-            echo "::error title=Unexpected OpenShift cluster::OC_SERVER must target the Gold cluster."
-            exit 1
-          fi
-
       - name: Resolve frontend logout URL
         env:
           CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}

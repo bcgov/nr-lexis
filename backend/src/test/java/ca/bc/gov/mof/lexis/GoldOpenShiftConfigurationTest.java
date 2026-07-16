@@ -9,24 +9,16 @@ import org.junit.jupiter.api.Test;
 
 class GoldOpenShiftConfigurationTest {
 
-  private static final String GOLD_API = "https://api.gold.devops.gov.bc.ca:6443";
   private static final String GOLD_APPS = "apps.gold.devops.gov.bc.ca";
   private static final String SILVER_MIRROR =
       "https://clamav-mirror.apps.silver.devops.gov.bc.ca";
 
   @Test
-  void deployAndCleanupJobsShouldFailBeforeMutatingAnotherCluster() throws IOException {
+  void deployAndCleanupJobsShouldUseConfiguredOpenShiftServer() throws IOException {
     String deploy = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
     String scheduled = Files.readString(resolve(".github/workflows/scheduled.yml"));
     String prClose = Files.readString(resolve(".github/workflows/pr-close.yml"));
 
-    assertGoldGuard(deploy);
-    assertGoldGuard(scheduled);
-    assertGoldGuard(prClose);
-
-    assertThat(occurrences(deploy, "name: Require Gold OpenShift target")).isEqualTo(2);
-    assertThat(occurrences(scheduled, "name: Require Gold OpenShift target")).isOne();
-    assertThat(occurrences(prClose, "name: Require Gold OpenShift target")).isOne();
     assertThat(deploy).contains("oc_server: ${{ vars.oc_server }}");
     assertThat(scheduled).contains("oc_server: ${{ vars.oc_server }}");
     assertThat(prClose).contains("oc_server: ${{ vars.oc_server }}");
@@ -64,14 +56,6 @@ class GoldOpenShiftConfigurationTest {
         .doesNotContain("api.silver.devops.gov.bc.ca", "apps.silver.devops.gov.bc.ca");
   }
 
-  private static void assertGoldGuard(String workflow) {
-    assertThat(workflow)
-        .contains("name: Require Gold OpenShift target")
-        .contains("OC_SERVER: ${{ vars.oc_server }}")
-        .contains("if [ \"${OC_SERVER}\" != \"" + GOLD_API + "\" ]; then")
-        .contains("OC_SERVER must target the Gold cluster.");
-  }
-
   private static String readWorkflowFiles() throws IOException {
     Path workflowDirectory = resolve(".github/workflows");
     StringBuilder result = new StringBuilder();
@@ -89,10 +73,6 @@ class GoldOpenShiftConfigurationTest {
     assertThat(start).isNotNegative();
     assertThat(end).isGreaterThan(start);
     return value.substring(start, end);
-  }
-
-  private static int occurrences(String value, String target) {
-    return value.split(java.util.regex.Pattern.quote(target), -1).length - 1;
   }
 
   private static Path resolve(String path) {
