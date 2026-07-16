@@ -35,6 +35,42 @@ class AnalysisWorkflowSecurityTest {
         .doesNotContain("contains(needs.*.result, 'canceled')");
   }
 
+  @Test
+  void frontendTestsShouldNotInheritTheSonarSecret() throws IOException {
+    String workflow = read(".github/workflows/analysis.yml");
+    String frontendJob = section(workflow, "  frontend-tests:", "  clamav-daemon-detection:");
+    String testCommands = section(frontendJob, "          commands: |", "          dir: frontend");
+
+    assertThat(frontendJob)
+        .contains(
+            "sonar_token: ${{ github.event_name == 'push' && secrets.sonar_token_frontend || '' }}")
+        .doesNotContain("env:\n          sonar_token:", "sonar_token: ${{ env.sonar_token }}");
+    assertThat(testCommands).doesNotContain("secrets.", "sonar_token", "SONAR_TOKEN");
+  }
+
+  @Test
+  void ordinaryPullRequestTestsShouldNotReceiveRepositorySecrets() throws IOException {
+    String workflow = read(".github/workflows/pr-open.yml");
+    String backendJob = section(workflow, "  backend-tests:", "  frontend-tests:");
+    String frontendJob = section(workflow, "  frontend-tests:", "  clamav-daemon-detection:");
+
+    assertThat(backendJob).doesNotContain("secrets.", "environment:");
+    assertThat(frontendJob).doesNotContain("secrets.", "environment:");
+  }
+
+  @Test
+  void analysisBackendTestsShouldNotReceiveTheSonarSecret() throws IOException {
+    String workflow = read(".github/workflows/analysis.yml");
+    String backendJob = section(workflow, "  backend-tests:", "  frontend-tests:");
+    String testStep = section(backendJob, "      - name: Maven verify", "      - name: SonarCloud scan");
+    String sonarStep = backendJob.substring(backendJob.indexOf("      - name: SonarCloud scan"));
+
+    assertThat(testStep).doesNotContain("secrets.", "SONAR_TOKEN", "environment:");
+    assertThat(sonarStep)
+        .contains("if: github.event_name == 'push' && env.SONAR_TOKEN != ''")
+        .contains("SONAR_TOKEN: ${{ secrets.sonar_token_backend }}");
+  }
+
   private static String section(String source, String startMarker, String endMarker) {
     int start = source.indexOf(startMarker);
     int end = source.indexOf(endMarker, start + startMarker.length());

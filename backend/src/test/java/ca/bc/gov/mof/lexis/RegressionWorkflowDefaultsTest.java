@@ -17,13 +17,19 @@ class RegressionWorkflowDefaultsTest {
         .contains("name: Regression")
         .contains(
             "E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.gold.devops.gov.bc.ca")
+        .contains("if: github.ref_name == github.event.repository.default_branch")
         .contains("environment: test")
         .contains("E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}")
         .contains("E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}")
         .contains("test environment secret is required")
         .contains("test -n \"$E2E_IDIR_USER\"")
         .contains("test -n \"$E2E_IDIR_PASSWORD\"")
-        .contains("npm run e2e:regression -- --reporter=html,list")
+        .contains("::add-mask::$E2E_IDIR_USER")
+        .contains("::add-mask::$E2E_IDIR_PASSWORD")
+        .contains("npm run e2e:regression -- --reporter=line")
+        .doesNotContain("actions/upload-artifact")
+        .doesNotContain("playwright-report")
+        .doesNotContain("--reporter=html,list")
         .doesNotContain("E2E_BCEID")
         .doesNotContain("BCEID_PASSWORD")
         .doesNotContain("BCEID_USER");
@@ -48,9 +54,20 @@ class RegressionWorkflowDefaultsTest {
 
     assertThat(config)
         .contains("testMatch: /regression\\.spec\\.ts/")
+        .contains("reporter: [['line']]")
         .contains("trace: 'off'")
         .contains("screenshot: 'off'")
         .contains("video: 'off'");
+  }
+
+  @Test
+  void regressionDiagnosticsShouldRedactTheConfiguredCredentials() throws IOException {
+    String source = Files.readString(resolveRegressionAuthSource());
+
+    assertThat(source)
+        .contains("process.env.E2E_IDIR_USER")
+        .contains("process.env.E2E_IDIR_PASSWORD")
+        .contains("redacted.split(credential).join('[credential-redacted]')");
   }
 
   @Test
@@ -99,6 +116,14 @@ class RegressionWorkflowDefaultsTest {
       return fromRepositoryRoot;
     }
     return Path.of("..", "frontend", "e2e", "regression.spec.ts");
+  }
+
+  private static Path resolveRegressionAuthSource() {
+    Path fromRepositoryRoot = Path.of("frontend", "e2e", "utils", "regression-auth.ts");
+    if (Files.exists(fromRepositoryRoot)) {
+      return fromRepositoryRoot;
+    }
+    return Path.of("..", "frontend", "e2e", "utils", "regression-auth.ts");
   }
 
   private static Path resolveWaitForFrontendScript() {

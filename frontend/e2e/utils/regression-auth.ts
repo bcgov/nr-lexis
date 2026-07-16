@@ -332,7 +332,14 @@ const accessTokenDiagnostics = (accessToken?: string): AccessTokenDiagnostics | 
 }
 
 export const redactedTextSnippet = (text: string, maxLength = 500): string => {
-  const normalized = text
+  let redacted = text
+  for (const credential of [process.env.E2E_IDIR_USER, process.env.E2E_IDIR_PASSWORD]) {
+    if (credential) {
+      redacted = redacted.split(credential).join('[credential-redacted]')
+    }
+  }
+
+  const normalized = redacted
     .replace(/Bearer\s+eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/gi, 'Bearer [redacted]')
     .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt-redacted]')
     .replace(

@@ -14,6 +14,7 @@ permissions: {}
 jobs:
   credentialed-regression:
     name: TEST Regression (${{ matrix.project }})
+    if: github.ref_name == github.event.repository.default_branch
     environment: test
     defaults:
       run:
@@ -43,13 +44,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Check regression secrets
+      - name: Validate and mask regression secrets
         env:
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
         run: |
           test -n "$E2E_IDIR_USER" || (echo "E2E_IDIR_USER test environment secret is required." && exit 1)
           test -n "$E2E_IDIR_PASSWORD" || (echo "E2E_IDIR_PASSWORD test environment secret is required." && exit 1)
+          echo "::add-mask::$E2E_IDIR_USER"
+          echo "::add-mask::$E2E_IDIR_PASSWORD"
 
       - name: Install dependencies
         run: |
@@ -67,19 +70,12 @@ jobs:
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
         run: |
-          npm run e2e:regression -- --reporter=html,list
-
-      - uses: actions/upload-artifact@v7
-        if: (! cancelled())
-        with:
-          name: playwright-regression-${{ matrix.project }}-test
-          path: frontend/playwright-report
-          retention-days: 7
+          npm run e2e:regression -- --reporter=line
 
   regression-result:
     name: TEST Regression Result
     needs: [credentialed-regression]
-    if: ${{ always() }}
+    if: ${{ always() && github.ref_name == github.event.repository.default_branch }}
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
@@ -90,6 +86,6 @@ jobs:
             exit 1
           fi
           if [ "${{ needs.credentialed-regression.outputs.regression-outcome }}" != "success" ]; then
-            echo "TEST regression failed. Check the TEST Regression job logs and uploaded Playwright report."
+            echo "TEST regression failed. Check the redacted TEST Regression job logs."
             exit 1
           fi
