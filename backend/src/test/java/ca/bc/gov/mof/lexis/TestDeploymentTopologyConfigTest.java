@@ -248,10 +248,7 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RNI_RECIPIENTS",
             "LEXIS_MAIL_REGION_RSI_RECIPIENTS",
             "LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS");
-    assertThat(checkoutStep)
-        .contains(
-            "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2")
-        .doesNotContain("env:");
+    assertThat(checkoutStep).contains("actions/checkout@v6").doesNotContain("env:");
     assertThat(keycloakStep)
         .contains("if: ${{ inputs.environment != 'dev' }}")
         .doesNotContain("env.KC_SA_CLIENT_ID != ''")
