@@ -385,7 +385,9 @@ public class LexisReportController {
       String effectiveFormat,
       String outcome,
       int bytes) {
-    AUDIT_LOGGER.info(
+    var auditLog =
+        response.getStatusCode().isError() ? AUDIT_LOGGER.atWarn() : AUDIT_LOGGER.atDebug();
+    auditLog.log(
         "event=lexis_report actor={} reportAction={} requestedFormat={} effectiveFormat={} status={} outcome={} durationMs={} bytes={}",
         audit.actor(),
         audit.reportAction(),
@@ -405,7 +407,8 @@ public class LexisReportController {
       boolean successful,
       long durationNanos) {
     String outcome = successful ? "stream_write_succeeded" : "stream_write_failed";
-    AUDIT_LOGGER.info(
+    var auditLog = successful ? AUDIT_LOGGER.atDebug() : AUDIT_LOGGER.atWarn();
+    auditLog.log(
         "event=lexis_report_stream actor={} reportAction={} requestedFormat={} effectiveFormat={} outcome={} durationMs={} expectedBytes={}",
         audit.actor(),
         audit.reportAction(),

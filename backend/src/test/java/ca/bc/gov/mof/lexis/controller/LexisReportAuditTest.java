@@ -14,6 +14,10 @@ import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -27,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -42,20 +47,34 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class LexisReportAuditTest {
 
+  private static final String REPORT_AUDIT_LOGGER = "ca.bc.gov.mof.lexis.audit.report";
+
   @Mock private ObjectProvider<LexisReportService> reportServiceProvider;
   @Mock private LexisReportService reportService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private LexisPrincipalService principalService;
   @Mock private Authentication authentication;
+  private Logger auditLogger;
+  private Level originalAuditLevel;
+  private ListAppender<ILoggingEvent> auditAppender;
 
   @BeforeEach
   void setUpSecurityContext() {
     SecurityContextHolder.getContext().setAuthentication(authentication);
+    auditLogger = (Logger) LoggerFactory.getLogger(REPORT_AUDIT_LOGGER);
+    originalAuditLevel = auditLogger.getLevel();
+    auditLogger.setLevel(Level.DEBUG);
+    auditAppender = new ListAppender<>();
+    auditAppender.start();
+    auditLogger.addAppender(auditAppender);
   }
 
   @AfterEach
   void clearSecurityContext() {
     SecurityContextHolder.clearContext();
+    auditLogger.detachAppender(auditAppender);
+    auditAppender.stop();
+    auditLogger.setLevel(originalAuditLevel);
   }
 
   @Test
@@ -94,6 +113,8 @@ class LexisReportAuditTest {
         .contains("bytes=4")
         .doesNotContain("clientNumber")
         .doesNotContain("secret-filter-value");
+    assertAuditLevel("outcome=generation_succeeded", Level.DEBUG);
+    assertAuditLevel("outcome=stream_write_succeeded", Level.DEBUG);
     assertThat(
             meterRegistry
                 .get("lexis_report_stream_writes_total")
@@ -104,6 +125,37 @@ class LexisReportAuditTest {
                 .counter()
                 .count())
         .isEqualTo(1.0);
+  }
+
+  @Test
+  void infoThresholdShouldSuppressSuccessStatisticsButRetainFailures() {
+    auditLogger.setLevel(Level.INFO);
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\jsmith");
+    when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
+    when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
+        .thenReturn(
+            Optional.of(
+                new LexisGeneratedReport(
+                    "report.pdf", "application/pdf", new byte[] {1, 2, 3})));
+
+    var controller = reportController();
+    consume(controller.offerReport(new LexisReportRequestDto(Map.of(), "PDF")));
+
+    assertThat(auditAppender.list)
+        .noneMatch(
+            event -> event.getFormattedMessage().contains("outcome=generation_succeeded"))
+        .noneMatch(
+            event -> event.getFormattedMessage().contains("outcome=stream_write_succeeded"));
+
+    assertThatThrownBy(
+            () ->
+                controller.offerReport(
+                    new LexisReportRequestDto(Map.of("privateFilter", "not-logged"), "PPTX")))
+        .isInstanceOf(LexisReportValidationException.class);
+    assertAuditLevel("outcome=validation_failed", Level.WARN);
+    assertThat(auditAppender.list)
+        .noneMatch(event -> event.getFormattedMessage().contains("privateFilter"))
+        .noneMatch(event -> event.getFormattedMessage().contains("not-logged"));
   }
 
   @Test
@@ -142,6 +194,7 @@ class LexisReportAuditTest {
         .contains("event=lexis_report_stream")
         .contains("outcome=stream_write_failed")
         .doesNotContain("outcome=stream_write_succeeded");
+    assertAuditLevel("outcome=stream_write_failed", Level.WARN);
     assertThat(
             meterRegistry
                 .get("lexis_report_stream_writes_total")
@@ -181,6 +234,7 @@ class LexisReportAuditTest {
         .contains("bytes=0")
         .doesNotContain("clientNumber")
         .doesNotContain("another-secret-filter");
+    assertAuditLevel("outcome=generation_failed", Level.WARN);
   }
 
   @Test
@@ -298,5 +352,12 @@ class LexisReportAuditTest {
       fromIndex += needle.length();
     }
     return count;
+  }
+
+  private void assertAuditLevel(String messageFragment, Level expectedLevel) {
+    assertThat(auditAppender.list)
+        .filteredOn(event -> event.getFormattedMessage().contains(messageFragment))
+        .extracting(ILoggingEvent::getLevel)
+        .containsOnly(expectedLevel);
   }
 }

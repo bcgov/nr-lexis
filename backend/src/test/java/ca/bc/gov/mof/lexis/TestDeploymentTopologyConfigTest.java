@@ -97,9 +97,16 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_EXPIRY_LOCK_AT_LEAST_FOR:"
                 + " ${{ vars.LEXIS_EXPIRY_LOCK_AT_LEAST_FOR || 'PT5M' }}")
         .contains(
+            "LEXIS_REPORT_STATISTICS_LOG_LEVEL:"
+                + " ${{ (inputs.environment == 'dev' || inputs.environment == 'test')"
+                + " && 'DEBUG' || 'INFO' }}")
+        .contains(
             "-p LEXIS_EXPIRY_LOCK_AT_MOST_FOR=\"$LEXIS_EXPIRY_LOCK_AT_MOST_FOR\"")
         .contains(
             "-p LEXIS_EXPIRY_LOCK_AT_LEAST_FOR=\"$LEXIS_EXPIRY_LOCK_AT_LEAST_FOR\"")
+        .contains(
+            "-p LEXIS_REPORT_STATISTICS_LOG_LEVEL="
+                + "\"$LEXIS_REPORT_STATISTICS_LOG_LEVEL\"")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")
@@ -143,8 +150,10 @@ class TestDeploymentTopologyConfigTest {
         .contains("- name: MAX_REPLICAS\n    value: \"3\"")
         .contains("- name: LEXIS_EXPIRY_LOCK_AT_MOST_FOR")
         .contains("- name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR")
+        .contains("- name: LEXIS_REPORT_STATISTICS_LOG_LEVEL")
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR}")
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}")
+        .contains("value: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL}")
         .contains("type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 0\n          maxSurge: 1")
         .contains("averageUtilization: 70")
         .contains("topologySpreadConstraints:")

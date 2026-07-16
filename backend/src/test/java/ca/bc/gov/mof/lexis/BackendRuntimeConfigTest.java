@@ -15,7 +15,12 @@ class BackendRuntimeConfigTest {
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
 
     assertThat(applicationConfig)
-        .contains("ca.bc.gov.mof.lexis: ${APP_LOG_LEVEL:INFO}");
+        .contains("ca.bc.gov.mof.lexis: ${APP_LOG_LEVEL:INFO}")
+        .contains(
+            "ca.bc.gov.mof.lexis.audit.report: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}")
+        .contains(
+            "ca.bc.gov.mof.lexis.service.report.OracleLexisReportService:"
+                + " ${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}");
   }
 
   @Test

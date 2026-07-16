@@ -46,7 +46,13 @@ class ApplicationYamlDefaultsTest {
             "lexis.mail.region-rsi-recipients", "${LEXIS_MAIL_REGION_RSI_RECIPIENTS:}")
         .containsEntry(
             "lexis.mail.permit-request-recipients",
-            "${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:}");
+            "${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:}")
+        .containsEntry(
+            "logging.level.ca.bc.gov.mof.lexis.audit.report",
+            "${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}")
+        .containsEntry(
+            "logging.level.ca.bc.gov.mof.lexis.service.report.OracleLexisReportService",
+            "${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}");
   }
 
   @Test

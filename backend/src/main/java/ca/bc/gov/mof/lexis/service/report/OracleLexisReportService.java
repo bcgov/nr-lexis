@@ -218,7 +218,7 @@ public class OracleLexisReportService implements LexisReportService {
     parameters.put("SUBREPORT_EXT", ".jasper");
 
     long startedNanos = System.nanoTime();
-    LOGGER.info(
+    LOGGER.debug(
         "Generating Jasper report action [{}] format [{}]",
         definition.action(),
         effectiveFormat.name());
@@ -229,7 +229,7 @@ public class OracleLexisReportService implements LexisReportService {
           JasperFillManager.getInstance(reportResources.jasperReportsContext())
               .fill(jasperReport, parameters, connection);
       byte[] reportBytes = exportTemplateReport(print, effectiveFormat, definition);
-      LOGGER.info(
+      LOGGER.debug(
           "Generated Jasper report action [{}] format [{}] bytes [{}] durationMs [{}]",
           definition.action(),
           effectiveFormat.name(),

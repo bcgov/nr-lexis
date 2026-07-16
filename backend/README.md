@@ -56,6 +56,7 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Maximum Oracle ShedLock duration; releases a crashed run | PT6H |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Minimum Oracle ShedLock duration; absorbs multi-pod trigger skew | PT5M |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
+| `LEXIS_REPORT_STATISTICS_LOG_LEVEL` | Successful report generation/download statistics; DEBUG in DEV/TEST and hidden at the INFO threshold in PROD | INFO |
 | `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | legacy-best-effort |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Requested timeout in seconds for each isolated GBMS transaction (1-3600); cancellation can leave the outcome unknown | 60 |
 | `LEXIS_VIRUS_SCAN_ENABLED` | Enables ClamAV scanning. Deployed Oracle runtimes refuse to start when this is false. | false locally; true in OpenShift |
@@ -90,6 +91,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Variable `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` |
+| `LEXIS_REPORT_STATISTICS_LOG_LEVEL` | Derived from the deployment environment |
 | `LEXIS_PERMIT_INVOICE_MODE` | Variable `LEXIS_PERMIT_INVOICE_MODE` |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Variable `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` |
 | `LEXIS_VIRUS_SCAN_ENABLED` | OpenShift template default `true` |
