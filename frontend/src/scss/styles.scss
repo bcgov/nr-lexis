@@ -3415,7 +3415,7 @@ legend.cds--label {
 }
 
 .detail-page-grid {
-  row-gap: 2rem;
+  row-gap: 1rem;
 }
 
 .detail-page-header .lexis-page-header__subtitle {
@@ -3423,7 +3423,7 @@ legend.cds--label {
 }
 
 .application-detail-title-row {
-  align-items: end;
+  align-items: start;
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
@@ -3544,14 +3544,6 @@ legend.cds--label {
 .detail-list {
   margin: 0;
   padding-left: 1rem;
-}
-
-.provincial-application-detail {
-  row-gap: 0.75rem;
-}
-
-.provincial-application-detail > :first-child {
-  margin-block-end: 1.25rem;
 }
 
 .provincial-application-detail .cds--tile {
