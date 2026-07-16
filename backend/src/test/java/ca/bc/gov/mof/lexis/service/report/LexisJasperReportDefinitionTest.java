@@ -47,15 +47,15 @@ class LexisJasperReportDefinitionTest {
     String filename =
         LexisJasperReportDefinition.BIWEEKLY_LISTING.resolveFilename(LexisReportFormat.PDF);
 
-    assertThat(filename).isEqualTo("biweeklyListing.pdf");
+    assertThat(filename).isEqualTo("advertising-list.pdf");
   }
 
   @Test
   void resolveFilenameShouldKeepXlsAndXlsxDistinct() {
     assertThat(LexisJasperReportDefinition.OFFER_REPORT.resolveFilename(LexisReportFormat.XLS))
-        .isEqualTo("offerReport.xls");
+        .isEqualTo("offer-report.xls");
     assertThat(LexisJasperReportDefinition.OFFER_REPORT.resolveFilename(LexisReportFormat.XLSX))
-        .isEqualTo("offerReport.xlsx");
+        .isEqualTo("offer-report.xlsx");
     assertThat(LexisReportFormat.XLS.mediaType()).isEqualTo("application/vnd.ms-excel");
     assertThat(LexisReportFormat.XLSX.mediaType())
         .isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

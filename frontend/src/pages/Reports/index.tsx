@@ -16,7 +16,7 @@ import SearchableSelect from '../../components/SearchableSelect'
 import { setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { ReportRequestError, runReport } from '@/service/report-service'
-import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { triggerBrowserDownload } from '@/utils/download'
 import { businessDateParts, formatIsoDateParts, formatLocalIsoDate } from '@/utils/date'
 import { parseJsonValue } from '@/utils/json'
 import { isRecord } from '@/utils/record'
@@ -892,21 +892,6 @@ const buildReportSearchParams = (payload: {
   return params
 }
 
-const isDownloadReportRequest = (
-  values: Record<string, string>,
-  actionMapping?: string,
-): boolean => {
-  const normalizedActionMapping = actionMapping?.trim().toLowerCase() ?? ''
-  if (normalizedActionMapping.includes('csv')) {
-    return true
-  }
-  if (normalizedActionMapping.includes('pdf')) {
-    return false
-  }
-  const outputFormat = values.outputFormat?.trim().toUpperCase()
-  return outputFormat === 'CSV' || outputFormat === 'XLS' || outputFormat === 'XLSX'
-}
-
 const APPLICATION_REPORT_LIMITER_MESSAGE =
   'Choose at least one Application Report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.'
 const BIWEEKLY_DATE_RANGE_MESSAGE =
@@ -1326,20 +1311,7 @@ const ReportsPage = () => {
         values: effectiveReportValues,
       })
 
-      const shouldDownload = isDownloadReportRequest(effectiveReportValues, selectedActionMapping)
-
-      if (shouldDownload) {
-        triggerBrowserDownload(runResult.blob, runResult.filename)
-        return
-      }
-
-      const opened = openBlobInNewTab(runResult.blob, 'reportWindow')
-      if (!opened) {
-        triggerBrowserDownload(runResult.blob, runResult.filename)
-        setLaunchErrorMessage(
-          'Popup blocked while opening report preview. Downloaded the generated file instead.',
-        )
-      }
+      triggerBrowserDownload(runResult.blob, runResult.filename)
     } catch (error) {
       console.error(error)
       setLaunchErrorMessage(

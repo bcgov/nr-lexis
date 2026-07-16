@@ -109,7 +109,7 @@ import {
   shippingReferenceLabel,
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
-import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { triggerBrowserDownload } from '@/utils/download'
 import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 const formatAmount = (value: number): string => {
@@ -2161,13 +2161,7 @@ const ProvincialPermitDetailsPage = () => {
         actionMapping: 'generate',
         values: { permitNumber: resolvedPermitNumber },
       })
-      const opened = openBlobInNewTab(result.blob, 'Permit')
-      if (!opened) {
-        triggerBrowserDownload(result.blob, result.filename)
-        setActionInfoMessage(
-          'Popup blocked while opening permit report. Downloaded the report instead.',
-        )
-      }
+      triggerBrowserDownload(result.blob, result.filename)
     } catch (error) {
       console.error(error)
       setActionErrorMessage(

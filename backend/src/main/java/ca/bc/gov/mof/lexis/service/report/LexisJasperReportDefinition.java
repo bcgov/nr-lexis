@@ -6,20 +6,28 @@ import java.util.Optional;
 
 public enum LexisJasperReportDefinition {
   BIWEEKLY_LISTING(
-      "biweeklyListing", "biweeklyListing", "biweeklyListing", "LEXIS_biweekly"),
-  OFFER_REPORT("offerReport", "offerReport", "offerReport", "LEXIS_OFFERS_LEDGER"),
-  SPECIES_GRADE_REPORT("speciesGradeReport", "speciesGradeReport", "speciesGradeReport", null),
-  EXEMPTION_REPORT("exemptionReport", "exemptionReport", "exemptionLedger", "LEXIS_EXEMPTION_LEDGER"),
-  APPLICATION_REPORT("applicationReport", "applicationReport", "applicationLedger", "LEXIS_application_ledger"),
+      "biweeklyListing", "advertising-list", "biweeklyListing", "LEXIS_biweekly"),
+  OFFER_REPORT("offerReport", "offer-report", "offerReport", "LEXIS_OFFERS_LEDGER"),
+  SPECIES_GRADE_REPORT(
+      "speciesGradeReport", "species-and-grade-report", "speciesGradeReport", null),
+  EXEMPTION_REPORT(
+      "exemptionReport", "exemption-report", "exemptionLedger", "LEXIS_EXEMPTION_LEDGER"),
+  APPLICATION_REPORT(
+      "applicationReport",
+      "application-report",
+      "applicationLedger",
+      "LEXIS_application_ledger"),
   APPROVED_EXEMPTION_REPORT(
-      "approvedExemptionReport", "approvedExemptionReport", null),
-  PERMIT_REPORT("permitReport", "permitReport", "LEXIS_PERMIT"),
+      "approvedExemptionReport", "approved-exemption", null),
+  PERMIT_REPORT("permitReport", "permit", "LEXIS_PERMIT"),
   PERMIT_LEDGER_REPORT(
-      "permitLedgerReport", "permitLedgerReport", "permitLedger", "LEXIS_PERMIT_LEDGER"),
-  FEE_REPORT("feeReport", "feeReport", "feeReport", "EXPORT_FEE_SUMMARY"),
-  TRANSPORT_REPORT("transportReport", "transportReport", "transportReport", "LEXIS_TRANSPORT_LEDGER"),
-  TEAC_REPORT("teacReport", "teacReport", "TeacReport", null),
-  TENURE_REPORT("tenureReport", "tenureReport", "tenureAnalysis", "LEXIS_TENURE_ANALYSIS");
+      "permitLedgerReport", "permit-ledger-report", "permitLedger", "LEXIS_PERMIT_LEDGER"),
+  FEE_REPORT("feeReport", "fee-report", "feeReport", "EXPORT_FEE_SUMMARY"),
+  TRANSPORT_REPORT(
+      "transportReport", "transport-report", "transportReport", "LEXIS_TRANSPORT_LEDGER"),
+  TEAC_REPORT("teacReport", "teac-package-report", "TeacReport", null),
+  TENURE_REPORT(
+      "tenureReport", "tenure-analysis-report", "tenureAnalysis", "LEXIS_TENURE_ANALYSIS");
 
   private final String action;
   private final String outputName;

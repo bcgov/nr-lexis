@@ -56,7 +56,7 @@ import {
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
 import { createPermitFromExemption } from '@/service/provincial-permit-documents-invoices-service'
-import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { triggerBrowserDownload } from '@/utils/download'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import {
@@ -958,13 +958,7 @@ const ProvincialExemptionDetailsPage = () => {
         reportId: 'approvedExemptionReport',
         values: { exemptionNumber: detail.exemptionNumber },
       })
-      const opened = openBlobInNewTab(result.blob, 'Approved exemption')
-      if (!opened) {
-        triggerBrowserDownload(result.blob, result.filename)
-        setActionInfoMessage(
-          'Popup blocked while opening approved exemption report. Downloaded the report instead.',
-        )
-      }
+      triggerBrowserDownload(result.blob, result.filename)
     } catch (error) {
       console.error(error)
       setActionErrorMessage(

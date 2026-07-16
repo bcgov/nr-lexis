@@ -58,6 +58,20 @@ const shouldNormalizeLegacyUppercase = (reportId: string, key: string): boolean 
 
 const LEGACY_TENURE_FIELD_LIMIT = 6
 const PDF_ONLY_PROMPT_REPORT_IDS = new Set(['approvedExemptionReport', 'permitReport'])
+const REPORT_FILENAME_BASES: Readonly<Record<string, string>> = {
+  applicationReport: 'application-report',
+  approvedExemptionReport: 'approved-exemption',
+  biweeklyListing: 'advertising-list',
+  exemptionReport: 'exemption-report',
+  feeReport: 'fee-report',
+  offerReport: 'offer-report',
+  permitLedgerReport: 'permit-ledger-report',
+  permitReport: 'permit',
+  speciesGradeReport: 'species-and-grade-report',
+  teacReport: 'teac-package-report',
+  tenureReport: 'tenure-analysis-report',
+  transportReport: 'transport-report',
+}
 
 const compactLegacyIndexedValues = (
   values: Record<string, string>,
@@ -196,7 +210,8 @@ const getDefaultFilename = (
   values: Record<string, string>,
   actionMapping?: string,
 ): string => {
-  return `lexis-${reportId}.${resolveReportExtension(reportId, values, actionMapping)}`
+  const filenameBase = REPORT_FILENAME_BASES[reportId] ?? `lexis-${reportId}`
+  return `${filenameBase}.${resolveReportExtension(reportId, values, actionMapping)}`
 }
 
 const extractErrorMessage = (payload: unknown): string => {

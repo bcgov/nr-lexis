@@ -54,7 +54,7 @@ class OracleLegacyJasperTableReportServiceTest {
             LexisReportFormat.PDF);
 
     assertThat(report).isPresent();
-    assertThat(report.orElseThrow().filename()).isEqualTo("teacReport.pdf");
+    assertThat(report.orElseThrow().filename()).isEqualTo("teac-package-report.pdf");
     assertThat(report.orElseThrow().mediaType()).isEqualTo("application/pdf");
     assertThat(report.orElseThrow().content()).isNotEmpty();
   }
@@ -82,7 +82,7 @@ class OracleLegacyJasperTableReportServiceTest {
             LexisReportFormat.PDF);
 
     assertThat(report).isPresent();
-    assertThat(report.orElseThrow().filename()).isEqualTo("approvedExemptionReport.pdf");
+    assertThat(report.orElseThrow().filename()).isEqualTo("approved-exemption.pdf");
     assertThat(report.orElseThrow().mediaType()).isEqualTo("application/pdf");
     assertThat(report.orElseThrow().content()).isNotEmpty();
   }

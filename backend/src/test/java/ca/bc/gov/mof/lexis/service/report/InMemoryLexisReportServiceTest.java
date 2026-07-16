@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +22,7 @@ class InMemoryLexisReportServiceTest {
     LexisGeneratedReport report = service.generateReport("offerReport", request).orElseThrow();
     String content = new String(report.content(), StandardCharsets.UTF_8);
 
-    assertThat(report.filename()).isEqualTo("offerReport.csv");
+    assertThat(report.filename()).isEqualTo("offerReport" + LexisBusinessTime.today() + ".csv");
     assertThat(report.mediaType()).isEqualTo("application/vnd.ms-excel");
     assertThat(content).contains("mode=stub-reports");
     assertThat(content).contains("reportAction=offerReport");
@@ -36,7 +37,7 @@ class InMemoryLexisReportServiceTest {
     LexisGeneratedReport report = service.generateReport("biweeklyListing", null).orElseThrow();
     String content = new String(report.content(), StandardCharsets.UTF_8);
 
-    assertThat(report.filename()).isEqualTo("biweeklyListing.pdf");
+    assertThat(report.filename()).isEqualTo("advertising-list.pdf");
     assertThat(report.mediaType()).isEqualTo("application/pdf");
     assertThat(content).contains("format=PDF");
     assertThat(content).contains("parameters=<none>");

@@ -47,7 +47,7 @@ import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-s
 import { runReport } from '@/service/report-service'
 import { fetchProvincialPermitOptions } from '@/service/search-options-service'
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
-import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { triggerBrowserDownload } from '@/utils/download'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -135,7 +135,6 @@ vi.mock('@/service/shipping-reference-service', () => ({
 }))
 
 vi.mock('@/utils/download', () => ({
-  openBlobInNewTab: vi.fn(),
   triggerBrowserDownload: vi.fn(),
 }))
 
@@ -174,7 +173,6 @@ const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 const mockedRunReport = vi.mocked(runReport)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
 const mockedFetchShippingReferenceOptions = vi.mocked(fetchShippingReferenceOptions)
-const mockedOpenBlobInNewTab = vi.mocked(openBlobInNewTab)
 const mockedTriggerBrowserDownload = vi.mocked(triggerBrowserDownload)
 
 const permitDetail: ProvincialPermitDetail = {
@@ -516,7 +514,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       filename: 'permit-report.pdf',
       contentType: 'application/pdf',
     })
-    mockedOpenBlobInNewTab.mockReturnValue(true)
   })
 
   it('renders permit details, client contacts, and invoice history', async () => {
@@ -2692,7 +2689,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
   })
 
-  it('opens completed permit report with the legacy permit report request', async () => {
+  it('downloads the completed permit report with its response filename', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -2713,38 +2710,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
         actionMapping: 'generate',
         values: { permitNumber: '777' },
       })
-      expect(mockedOpenBlobInNewTab).toHaveBeenCalledWith(expect.any(Blob), 'Permit')
-      expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
-    })
-  })
-
-  it('downloads completed permit report when the popup is blocked', async () => {
-    mockedOpenBlobInNewTab.mockReturnValue(false)
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Print permit' }))
-
-    await waitFor(() => {
       expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(
         expect.any(Blob),
         'permit-report.pdf',
       )
     })
-    expect(
-      await screen.findByText(
-        'Popup blocked while opening permit report. Downloaded the report instead.',
-      ),
-    ).toBeInTheDocument()
   })
 
   it('hides permit report action when the user lacks report access', async () => {

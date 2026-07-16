@@ -3,7 +3,6 @@ package ca.bc.gov.mof.lexis.service.report;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -21,7 +20,8 @@ public class InMemoryLexisReportService implements LexisReportService {
   public Optional<LexisGeneratedReport> generateReport(String reportAction, LexisReportRequestDto request) {
     String normalizedAction = normalizeReportAction(reportAction);
     LexisReportRequestDto normalizedRequest = normalizeRequest(request);
-    String normalizedFormat = normalizedRequest.format().toUpperCase(Locale.ROOT);
+    LexisReportFormat reportFormat = LexisReportFormat.fromNullable(normalizedRequest.format());
+    String normalizedFormat = reportFormat.name();
     String extension = resolveExtension(normalizedFormat);
     String mediaType = resolveMediaType(extension);
 
@@ -29,7 +29,11 @@ public class InMemoryLexisReportService implements LexisReportService {
         buildStubBody(normalizedAction, normalizedFormat, normalizedRequest.parameters())
             .getBytes(StandardCharsets.UTF_8);
 
-    return Optional.of(new LexisGeneratedReport(normalizedAction + "." + extension, mediaType, content));
+    String filename =
+        LexisJasperReportDefinition.fromAction(normalizedAction)
+            .map(definition -> definition.resolveFilename(reportFormat))
+            .orElse(normalizedAction + "." + extension);
+    return Optional.of(new LexisGeneratedReport(filename, mediaType, content));
   }
 
   private LexisReportRequestDto normalizeRequest(LexisReportRequestDto request) {

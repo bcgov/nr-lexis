@@ -13,6 +13,7 @@ import {
 } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 import { businessDateParts, formatIsoDateParts } from '@/utils/date'
+import { triggerBrowserDownload } from '@/utils/download'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -35,12 +36,17 @@ vi.mock('@/service/search-options-service', () => ({
   fetchProvincialPermitOptions: vi.fn(),
 }))
 
+vi.mock('@/utils/download', () => ({
+  triggerBrowserDownload: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedRunReport = vi.mocked(runReport)
 const mockedFetchReportOptions = vi.mocked(fetchReportOptions)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
+const mockedTriggerBrowserDownload = vi.mocked(triggerBrowserDownload)
 
 const mockReportPermissions = (canPerform: (action: string) => boolean = () => true): void => {
   mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform }))
@@ -124,9 +130,6 @@ describe('Reports Page Actions', () => {
       filename: 'report.pdf',
       contentType: 'application/pdf',
     })
-    vi.spyOn(window, 'open').mockReturnValue({} as Window)
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:report')
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   })
 
   it('hides report controls when no report actions are granted', async () => {
@@ -957,10 +960,6 @@ describe('Reports Page Actions', () => {
         { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
       ],
     })
-    const anchorClickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
-
     render(
       <MemoryRouter initialEntries={['/reports/biweeklyListing']}>
         <Routes>
@@ -989,8 +988,10 @@ describe('Reports Page Actions', () => {
         },
       })
     })
-    expect(anchorClickSpy).toHaveBeenCalled()
-    expect(window.open).not.toHaveBeenCalled()
+    expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(
+      expect.any(Blob),
+      'biweeklyListing.csv',
+    )
   })
 
   it('applies the authoritative current advertising period without including the next list day', async () => {
@@ -1088,10 +1089,6 @@ describe('Reports Page Actions', () => {
         { value: '1002', label: '2026-07-08' },
       ],
     })
-    const anchorClickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
-
     render(
       <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
         <Routes>
@@ -1122,8 +1119,10 @@ describe('Reports Page Actions', () => {
         },
       })
     })
-    expect(anchorClickSpy).toHaveBeenCalled()
-    expect(window.open).not.toHaveBeenCalled()
+    expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(
+      expect.any(Blob),
+      'biweeklyListing.csv',
+    )
   })
 
   it('does not submit unchanged biweekly listing regions as every region option', async () => {
@@ -1253,10 +1252,6 @@ describe('Reports Page Actions', () => {
 
   it('downloads CSV reports without opening a popup window', async () => {
     mockReportPermissions()
-    const anchorClickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
-
     render(
       <MemoryRouter initialEntries={['/reports']}>
         <Routes>
@@ -1282,17 +1277,11 @@ describe('Reports Page Actions', () => {
         },
       })
     })
-    expect(window.open).not.toHaveBeenCalled()
-    expect(anchorClickSpy).toHaveBeenCalled()
+    expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(expect.any(Blob), 'report.pdf')
   })
 
-  it('falls back to download and shows error when pdf popup is blocked', async () => {
+  it('downloads PDF reports with the response filename', async () => {
     mockReportPermissions()
-    vi.spyOn(window, 'open').mockReturnValue(null)
-    const anchorClickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
-
     render(
       <MemoryRouter initialEntries={['/reports']}>
         <Routes>
@@ -1306,12 +1295,7 @@ describe('Reports Page Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          'Popup blocked while opening report preview. Downloaded the generated file instead.',
-        ),
-      ).toBeInTheDocument()
+      expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(expect.any(Blob), 'report.pdf')
     })
-    expect(anchorClickSpy).toHaveBeenCalled()
   })
 })

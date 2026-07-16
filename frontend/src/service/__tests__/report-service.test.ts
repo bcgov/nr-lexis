@@ -216,7 +216,7 @@ describe('report-service', () => {
       },
     })
 
-    expect(result.filename).toBe('lexis-biweeklyListing.csv')
+    expect(result.filename).toBe('advertising-list.csv')
 
     const [path, payload] = postMock.mock.calls[0]
     expect(path).toBe('/lexis/rpc/reports/biweeklyListing')
@@ -421,7 +421,7 @@ describe('report-service', () => {
       },
     })
 
-    expect(result.filename).toBe('lexis-tenureReport.xlsx')
+    expect(result.filename).toBe('tenure-analysis-report.xlsx')
 
     const [, payload] = postMock.mock.calls[0]
     expect(payload).toEqual(
@@ -448,7 +448,7 @@ describe('report-service', () => {
       },
     })
 
-    expect(result.filename).toBe('lexis-tenureReport.xlsx')
+    expect(result.filename).toBe('tenure-analysis-report.xlsx')
 
     const [, payload] = postMock.mock.calls[0]
     expect(payload).toEqual(
@@ -483,8 +483,8 @@ describe('report-service', () => {
       },
     })
 
-    expect(approvedResult.filename).toBe('lexis-approvedExemptionReport.pdf')
-    expect(permitResult.filename).toBe('lexis-permitReport.pdf')
+    expect(approvedResult.filename).toBe('approved-exemption.pdf')
+    expect(permitResult.filename).toBe('permit.pdf')
     expect(postMock.mock.calls[0][1]).toEqual(
       expect.objectContaining({
         format: 'PDF',

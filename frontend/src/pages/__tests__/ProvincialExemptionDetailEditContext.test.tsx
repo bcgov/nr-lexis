@@ -18,7 +18,7 @@ import {
   updateExemption,
 } from '@/service/provincial-exemption-detail-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
-import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { triggerBrowserDownload } from '@/utils/download'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -63,12 +63,10 @@ vi.mock('@/service/report-service', () => ({
 }))
 
 vi.mock('@/utils/download', () => ({
-  openBlobInNewTab: vi.fn(),
   triggerBrowserDownload: vi.fn(),
 }))
 
 const mockedRunReport = vi.mocked(runReport)
-const mockedOpenBlobInNewTab = vi.mocked(openBlobInNewTab)
 const mockedTriggerBrowserDownload = vi.mocked(triggerBrowserDownload)
 const mockedSendExemptionApprovalEmails = vi.mocked(sendExemptionApprovalEmails)
 
@@ -158,7 +156,6 @@ describe('Provincial exemption edit context', () => {
       filename: 'approved-exemption.pdf',
       contentType: 'application/pdf',
     })
-    mockedOpenBlobInNewTab.mockReturnValue(true)
   })
 
   it('renders BOIC status and fee empty state with one page heading', async () => {
@@ -852,7 +849,7 @@ describe('Provincial exemption edit context', () => {
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 
-  it('opens the approved exemption report in a new tab', async () => {
+  it('downloads the approved exemption report with its response filename', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === '/approvedExemptionReport',
@@ -877,43 +874,11 @@ describe('Provincial exemption edit context', () => {
         reportId: 'approvedExemptionReport',
         values: { exemptionNumber: 'BOIC-205' },
       })
-      expect(mockedOpenBlobInNewTab).toHaveBeenCalledWith(expect.any(Blob), 'Approved exemption')
-      expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
-    })
-  })
-
-  it('downloads an approved exemption report when the popup is blocked', async () => {
-    vi.mocked(useAuth).mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action === '/approvedExemptionReport',
-      }),
-    )
-    mockedOpenBlobInNewTab.mockReturnValue(false)
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
-        <Routes>
-          <Route
-            path="/provincial/exemption/:exemptionNumber"
-            element={<ProvincialExemptionDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Print approved exemption' }))
-
-    await waitFor(() => {
       expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(
         expect.any(Blob),
         'approved-exemption.pdf',
       )
     })
-    expect(
-      await screen.findByText(
-        'Popup blocked while opening approved exemption report. Downloaded the report instead.',
-      ),
-    ).toBeInTheDocument()
   })
 
   it('shows the approved exemption report request error', async () => {
@@ -943,7 +908,6 @@ describe('Provincial exemption edit context', () => {
     expect(
       await screen.findByText('No approved exemption data matched this exemption.'),
     ).toBeInTheDocument()
-    expect(mockedOpenBlobInNewTab).not.toHaveBeenCalled()
     expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
     consoleError.mockRestore()
   })
