@@ -33,9 +33,6 @@ class ApplicationYamlDefaultsTest {
         .containsEntry(
             "lexis.permit-invoice.mode", "${LEXIS_PERMIT_INVOICE_MODE:legacy-best-effort}")
         .containsEntry("lexis.mail.from", "${LEXIS_MAIL_FROM:}")
-        .containsEntry(
-            "lexis.mail.applicant-email-capture-enabled",
-            "${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:false}")
         .containsEntry("lexis.mail.environment", "${LEXIS_MAIL_ENVIRONMENT:non-prod}")
         .containsEntry(
             "lexis.mail.region-rco-recipients", "${LEXIS_MAIL_REGION_RCO_RECIPIENTS:}")

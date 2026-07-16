@@ -18,10 +18,7 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
-import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.AuthenticatedSubmitterContact;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
-import ca.bc.gov.mof.lexis.service.application.AuthenticatedSubmitterEmailCaptureService;
-import ca.bc.gov.mof.lexis.service.application.AuthenticatedSubmitterEmailCaptureService.CaptureResolution;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
@@ -133,7 +130,6 @@ public class ApplicationDetailsRpcController {
   private final ApplicationEditLockService editLockService;
   private final ProvincialAuthorizationService provincialAuthorizationService;
   private final ApplicationEditPolicyService applicationEditPolicyService;
-  private final AuthenticatedSubmitterEmailCaptureService submitterEmailCaptureService;
   private final ApplicationPermitOperationCoordinator operationCoordinator;
   private LexisPrincipalService principalService;
 
@@ -146,7 +142,6 @@ public class ApplicationDetailsRpcController {
       ApplicationEditLockService editLockService,
       ProvincialAuthorizationService provincialAuthorizationService,
       ApplicationEditPolicyService applicationEditPolicyService,
-      AuthenticatedSubmitterEmailCaptureService submitterEmailCaptureService,
       ApplicationPermitOperationCoordinator operationCoordinator) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
@@ -156,7 +151,6 @@ public class ApplicationDetailsRpcController {
     this.editLockService = editLockService;
     this.provincialAuthorizationService = provincialAuthorizationService;
     this.applicationEditPolicyService = applicationEditPolicyService;
-    this.submitterEmailCaptureService = submitterEmailCaptureService;
     this.operationCoordinator = operationCoordinator;
   }
 
@@ -548,8 +542,6 @@ public class ApplicationDetailsRpcController {
     ApplicationDetailsRpcService.CreateApplicationRequest createRequest =
         withScopedSubmitterOwnerIdentity(
             toCreateApplicationRequest(parameters), authentication);
-    CaptureResolution capture = resolveSubmitterContact(createRequest, authentication);
-    AuthenticatedSubmitterContact submitterContact = capture.contact().orElse(null);
     provincialAuthorizationService.requireOrgUnit(
         authentication, createRequest.orgUnitNumber(), OrgUnitSurface.APPLICATION_WRITE);
     String exemptionNumber = createRequest.exemptionNumber();
@@ -561,8 +553,7 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     if (exemptionNumber == null) {
-      return persistNewApplication(
-          service, createRequest, userId, submitterContact, capture.warning());
+      return persistNewApplication(service, createRequest, userId);
     }
 
     return operationCoordinator.executeRootCreateKnownAggregate(
@@ -588,8 +579,7 @@ public class ApplicationDetailsRpcController {
           boolean releaseExemptionLock =
               acquireExemptionLockForMutation(exemptionNumber, authentication);
           try {
-            return persistNewApplication(
-                service, createRequest, userId, submitterContact, capture.warning());
+            return persistNewApplication(service, createRequest, userId);
           } finally {
             if (releaseExemptionLock) {
               editLockService.releaseExemption(exemptionNumber, userId);
@@ -618,37 +608,16 @@ public class ApplicationDetailsRpcController {
   private ResponseEntity<ApplicationPersistenceResponseDto> persistNewApplication(
       ApplicationDetailsRpcService service,
       ApplicationDetailsRpcService.CreateApplicationRequest createRequest,
-      String userId,
-      AuthenticatedSubmitterContact submitterContact,
-      String captureWarning) {
+      String userId) {
     ApplicationDetailsRpcService.CreateApplicationResult result =
-        submitterContact == null
-            ? service.addApplication(createRequest, userId)
-            : service.addApplication(createRequest, userId, submitterContact);
-    List<String> warnings = new java.util.ArrayList<>(result.warnings());
-    if (result.valid()
-        && result.applicationNumber() != null
-        && trimToNull(captureWarning) != null) {
-      warnings.add(captureWarning);
-    }
+        service.addApplication(createRequest, userId);
     return ResponseEntity.ok(
         new ApplicationPersistenceResponseDto(
             result.valid(),
             result.message(),
             result.applicationNumber(),
             result.errors(),
-            List.copyOf(warnings)));
-  }
-
-  private CaptureResolution resolveSubmitterContact(
-      ApplicationDetailsRpcService.CreateApplicationRequest request,
-      Authentication authentication) {
-    if (!APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(request.applicantTypeCode())
-        || !provincialAuthorizationService.hasClientScope(authentication)) {
-      return CaptureResolution.empty();
-    }
-    return submitterEmailCaptureService.resolveForOwner(
-        authentication, request.ownerClientNumber(), request.ownerClientLocationCode());
+            result.warnings()));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_ADD_APPLICATION)
@@ -2146,8 +2115,7 @@ public class ApplicationDetailsRpcController {
         item.growthTypeCode(),
         item.agentContactName(),
         item.ownerContactName(),
-        item.oicIndicator(),
-        item.notificationEmail());
+        item.oicIndicator());
   }
 
   private PackageValidityResponseDto toPackageValidityResponse(
@@ -2281,8 +2249,7 @@ public class ApplicationDetailsRpcController {
       String growthTypeCode,
       String agentContactName,
       String ownerContactName,
-      String oicIndicator,
-      String notificationEmail) {}
+      String oicIndicator) {}
 
   public record ApplicationClientDataResponseDto(
       String clientNumber,

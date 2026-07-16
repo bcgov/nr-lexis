@@ -142,7 +142,7 @@ const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
 const REJECT_EMAIL_REQUIRED_MESSAGE =
   'Enter one valid client email address or deselect Send status email.'
 const REJECT_EMAIL_PREVIEW_HELPER =
-  'Defaults from the captured submitter email, then client data. Changes apply only to this notification.'
+  "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
 const STATUS_EMAIL_UNAVAILABLE_HELPER =
   'Status emails are sent only for rejected or withdrawn applications.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
@@ -163,13 +163,12 @@ const reviewEmailCandidate = (
 ): string => {
   const ownerEmail = normalizeReviewEmail(ownerClientData?.email ?? '')
   const agentEmail = normalizeReviewEmail(agentClientData?.email ?? '')
-  const notificationEmail = normalizeReviewEmail(summary.notificationEmail)
 
   if (isAgentApplicant(summary.applicantTypeCode)) {
-    return agentEmail
+    return agentEmail || ownerEmail
   }
 
-  return notificationEmail || ownerEmail
+  return ownerEmail
 }
 
 const buildSearchParams = (

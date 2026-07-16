@@ -245,10 +245,7 @@ class OraclePermitDetailsRpcServiceTest {
     PermitMutationRow permit = permitMutationRow("COM");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permit));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(notificationRecipientResolver.resolveForLinkedOwnerApplications(
-            List.of(1000456L), "00077880", "01"))
+    when(notificationRecipientResolver.resolveClientLocation("00077880", "01"))
         .thenReturn(Optional.of("agent@example.test"));
 
     Optional<String> result = service.getApprovalPermitEmailDefault(7000123L);
@@ -273,10 +270,7 @@ class OraclePermitDetailsRpcServiceTest {
         new DataAccessResourceFailureException("client lookup unavailable");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(notificationRecipientResolver.resolveForLinkedOwnerApplications(
-            List.of(1000456L), "00077880", "01"))
+    when(notificationRecipientResolver.resolveClientLocation("00077880", "01"))
         .thenThrow(failure);
 
     assertThatThrownBy(() -> service.getApprovalPermitEmailDefault(7000123L))
@@ -310,10 +304,7 @@ class OraclePermitDetailsRpcServiceTest {
     PermitMutationRow permit = permitMutationRow("PPD");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permit));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(notificationRecipientResolver.resolveForLinkedOwnerApplications(
-            List.of(1000456L), "00077880", "01"))
+    when(notificationRecipientResolver.resolveClientLocation("00077880", "01"))
         .thenReturn(Optional.of("agent@example.test"));
     when(repository.findPackageNumbersByPermitNumberRequired(7000123L)).thenReturn(List.of());
     when(permitEmailService.sendApproval(7000123L, "PPD", List.of(), "agent@example.test"))
@@ -326,7 +317,7 @@ class OraclePermitDetailsRpcServiceTest {
     verify(permitEmailService)
         .sendApproval(7000123L, "PPD", List.of(), "agent@example.test");
     verify(notificationRecipientResolver, never())
-        .resolveForLinkedOwnerApplications(any(), eq("00077881"), eq("01"));
+        .resolveClientLocation(eq("00077881"), eq("01"));
   }
 
   @Test
@@ -336,8 +327,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permit));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
-    when(notificationRecipientResolver.resolveForLinkedOwnerApplications(
-            List.of(111L), "00077881", "01"))
+    when(notificationRecipientResolver.resolveClientLocation("00077881", "01"))
         .thenReturn(Optional.of("owner@example.test"));
     when(repository.findPackageNumbersByPermitNumberRequired(7000123L)).thenReturn(List.of());
     when(permitEmailService.sendApproval(7000123L, "COM", List.of(), "owner@example.test"))
@@ -350,7 +340,7 @@ class OraclePermitDetailsRpcServiceTest {
     verify(permitEmailService)
         .sendApproval(7000123L, "COM", List.of(), "owner@example.test");
     verify(notificationRecipientResolver, never())
-        .resolveForLinkedOwnerApplications(any(), eq("00077880"), eq("01"));
+        .resolveClientLocation(eq("00077880"), eq("01"));
   }
 
   @Test
@@ -387,10 +377,7 @@ class OraclePermitDetailsRpcServiceTest {
         permitMutationRowWithClients("00077881", "01", "00077880", null, "COM");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permit));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(notificationRecipientResolver.resolveForLinkedOwnerApplications(
-            List.of(1000456L), "00077881", "01"))
+    when(notificationRecipientResolver.resolveClientLocation("00077881", "01"))
         .thenReturn(Optional.of("owner@example.test"));
     when(repository.findPackageNumbersByPermitNumberRequired(7000123L)).thenReturn(List.of());
     when(permitEmailService.sendApproval(7000123L, "COM", List.of(), "owner@example.test"))
@@ -403,17 +390,14 @@ class OraclePermitDetailsRpcServiceTest {
     verify(permitEmailService)
         .sendApproval(7000123L, "COM", List.of(), "owner@example.test");
     verify(notificationRecipientResolver, never())
-        .resolveForLinkedOwnerApplications(any(), eq("00077880"), eq(null));
+        .resolveClientLocation(eq("00077880"), eq(null));
   }
 
   @Test
   void approvalEmailShouldPublishNothingWhenTheAuthoritativeEmailIsInvalid() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(notificationRecipientResolver.resolveForLinkedOwnerApplications(
-            List.of(1000456L), "00077880", "01"))
+    when(notificationRecipientResolver.resolveClientLocation("00077880", "01"))
         .thenReturn(Optional.empty());
 
     PermitDetailsRpcService.PermitEmailResult response =
@@ -429,10 +413,7 @@ class OraclePermitDetailsRpcServiceTest {
         new DataAccessResourceFailureException("client lookup unavailable");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(notificationRecipientResolver.resolveForLinkedOwnerApplications(
-            List.of(1000456L), "00077880", "01"))
+    when(notificationRecipientResolver.resolveClientLocation("00077880", "01"))
         .thenThrow(failure);
 
     assertThatThrownBy(
@@ -447,10 +428,7 @@ class OraclePermitDetailsRpcServiceTest {
         new DataAccessResourceFailureException("package lookup unavailable");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(notificationRecipientResolver.resolveForLinkedOwnerApplications(
-            List.of(1000456L), "00077880", "01"))
+    when(notificationRecipientResolver.resolveClientLocation("00077880", "01"))
         .thenReturn(Optional.of("agent@example.test"));
     when(repository.findPackageNumbersByPermitNumberRequired(7000123L)).thenThrow(failure);
 

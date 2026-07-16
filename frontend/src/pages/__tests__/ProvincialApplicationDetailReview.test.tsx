@@ -372,12 +372,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
     expect(
       within(reviewTile).getByText(
-        'Defaults from the captured submitter email, then client data. Changes apply only to this notification.',
+        "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification.",
       ),
     ).toBeInTheDocument()
   })
 
-  it('shows the captured submitter email separately from owner client data', async () => {
+  it('shows the owner client-location email without a separate notification field', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValueOnce({
       ...applicationDetail,
       agentClientNumber: null,
@@ -388,7 +388,6 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       agentClientNumber: '',
       agentClientLocationCode: '',
       agentContactName: '',
-      notificationEmail: 'captured.submitter@example.com',
     })
 
     render(
@@ -403,12 +402,11 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationDetailTab('Owner')
-    expect(await screen.findByText('Notification email')).toBeInTheDocument()
-    expect(screen.getByText('captured.submitter@example.com')).toBeInTheDocument()
-    expect(screen.getByText('owner@example.test')).toBeInTheDocument()
+    expect(await screen.findByText('owner@example.test')).toBeInTheDocument()
+    expect(screen.queryByText('Notification email')).not.toBeInTheDocument()
   })
 
-  it('defaults owner application review mail to the captured submitter email', async () => {
+  it('defaults owner application review mail to the owner client-location email', async () => {
     mockedFetchProvincialApplicationDetail.mockReset().mockResolvedValue({
       ...applicationDetail,
       agentClientNumber: null,
@@ -419,7 +417,6 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       agentClientNumber: '',
       agentClientLocationCode: '',
       agentContactName: '',
-      notificationEmail: 'captured.submitter@example.com',
     })
 
     render(
@@ -436,7 +433,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     const reviewTile = await selectApplicationReviewTile()
     await waitFor(() => {
       expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-        'captured.submitter@example.com',
+        'owner@example.test',
       )
     })
   })

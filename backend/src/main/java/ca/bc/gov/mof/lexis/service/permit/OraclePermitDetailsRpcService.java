@@ -355,12 +355,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (clientNumber == null || locationCode == null) {
       return Optional.empty();
     }
-    List<Long> applicationNumbers =
-        permit.oicApplicationNumber() != null && permit.oicApplicationNumber() > 0
-            ? List.of(permit.oicApplicationNumber())
-            : repository.findApplicationNumbersByPermitNumberRequired(permit.permitNumber());
-    return notificationRecipientResolver.resolveForLinkedOwnerApplications(
-        applicationNumbers, clientNumber, locationCode);
+    return notificationRecipientResolver.resolveClientLocation(clientNumber, locationCode);
   }
 
   @Override

@@ -6,15 +6,11 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
 
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
-import ca.bc.gov.mof.lexis.repository.application.ApplicationNotificationContactRepository;
-import ca.bc.gov.mof.lexis.repository.application.ApplicationNotificationContactRepository.InsertContactRecord;
-import ca.bc.gov.mof.lexis.repository.application.ApplicationNotificationContactRepository.NotificationContactRow;
 import ca.bc.gov.mof.lexis.repository.application.DuplicatePackageNumberException;
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator.ScaleValues;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
-import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -63,7 +59,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String SPECIES_TYPE_CEDAR = "CE";
   private static final String EXPORT_SPECIES_ENDUSE_OTHER = "OT";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
-  private static final String AUTHENTICATED_EMAIL_SOURCE = "AUTHENTICATED_USER";
   private static final Set<String> MUTATION_LOCKED_EXPORT_PERMIT_STATUSES =
       Set.of("COM", "PPD", "EXP", "CAN");
   private static final Set<Long> COASTAL_ORG_UNITS =
@@ -87,20 +82,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final double MAX_AVERAGE_LOG_VOLUME = 99.9d;
 
   private final ApplicationDetailsRpcRepository repository;
-  private final ApplicationNotificationContactRepository notificationContactRepository;
-  private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
   private final ClientLookupRepository clientRepository;
   private final ExemptionService exemptionService;
 
   public OracleApplicationDetailsRpcService(
       ApplicationDetailsRpcRepository repository,
-      ApplicationNotificationContactRepository notificationContactRepository,
-      ApplicationNotificationRecipientResolver notificationRecipientResolver,
       ClientLookupRepository clientRepository,
       ExemptionService exemptionService) {
     this.repository = repository;
-    this.notificationContactRepository = notificationContactRepository;
-    this.notificationRecipientResolver = notificationRecipientResolver;
     this.clientRepository = clientRepository;
     this.exemptionService = exemptionService;
   }
@@ -295,94 +284,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   @Transactional
   public CreateApplicationResult addApplication(CreateApplicationRequest request, String userId) {
     return persistApplication(normalizePublicProvincialCreateRequest(request), userId, true);
-  }
-
-  @Override
-  @Transactional
-  public CreateApplicationResult addApplication(
-      CreateApplicationRequest request,
-      String userId,
-      AuthenticatedSubmitterContact submitterContact) {
-    CreateApplicationRequest normalized = normalizePublicProvincialCreateRequest(request);
-    if (!matchesOwnerContact(normalized, submitterContact)) {
-      return new CreateApplicationResult(
-          false,
-          "The authenticated submitter contact does not match the application owner.",
-          null,
-          List.of(),
-          List.of());
-    }
-
-    CreateApplicationResult result = persistApplication(normalized, userId, true);
-    if (!result.valid() || result.applicationNumber() == null) {
-      return result;
-    }
-
-    NotificationContactRow saved =
-        notificationContactRepository
-            .insert(
-                new InsertContactRecord(
-                    result.applicationNumber(),
-                    submitterContact.emailAddress(),
-                    AUTHENTICATED_EMAIL_SOURCE,
-                    submitterContact.emailVerified(),
-                    submitterContact.identityProviderCode(),
-                    submitterContact.identityUserId(),
-                    submitterContact.clientNumber(),
-                    submitterContact.clientLocationCode(),
-                    userId))
-            .orElse(null);
-    if (!matchesSavedContact(result.applicationNumber(), submitterContact, saved)) {
-      markRollbackOnly();
-      return new CreateApplicationResult(
-          false,
-          "The application notification contact could not be saved.",
-          null,
-          List.of(),
-          List.of());
-    }
-    return result;
-  }
-
-  private boolean matchesOwnerContact(
-      CreateApplicationRequest request, AuthenticatedSubmitterContact contact) {
-    return contact != null
-        && APPLICANT_TYPE_OWNER.equalsIgnoreCase(trimToNull(request.applicantTypeCode()))
-        && MailRecipientValidator.normalize(contact.emailAddress()).isPresent()
-        && "BCEIDBUSINESS".equals(contact.identityProviderCode())
-        && trimToNull(contact.identityUserId()) != null
-        && java.util.Objects.equals(
-            TextUtils.normalizeClientNumber(request.ownerClientNumber()),
-            TextUtils.normalizeClientNumber(contact.clientNumber()))
-        && java.util.Objects.equals(
-            normalizedLocationCode(request.ownerClientLocationCode()),
-            normalizedLocationCode(contact.clientLocationCode()));
-  }
-
-  private boolean matchesSavedContact(
-      Long applicationNumber,
-      AuthenticatedSubmitterContact expected,
-      NotificationContactRow saved) {
-    return saved != null
-        && java.util.Objects.equals(applicationNumber, saved.applicationNumber())
-        && java.util.Objects.equals(
-            trimToNull(expected.emailAddress()), trimToNull(saved.emailAddress()))
-        && AUTHENTICATED_EMAIL_SOURCE.equals(saved.emailSourceCode())
-        && java.util.Objects.equals(expected.emailVerified(), saved.emailVerified())
-        && java.util.Objects.equals(
-            expected.identityProviderCode(), saved.identityProviderCode())
-        && java.util.Objects.equals(expected.identityUserId(), saved.identityUserId())
-        && java.util.Objects.equals(
-            TextUtils.normalizeClientNumber(expected.clientNumber()),
-            TextUtils.normalizeClientNumber(saved.clientNumber()))
-        && java.util.Objects.equals(
-            normalizedLocationCode(expected.clientLocationCode()),
-            normalizedLocationCode(saved.clientLocationCode()));
-  }
-
-  private String normalizedLocationCode(String value) {
-    String normalized = trimToNull(value);
-    return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
   }
 
   @Override
@@ -2936,15 +2837,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private ApplicationSummarySnapshot toApplicationSummarySnapshot(
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
-    String notificationEmail =
-        APPLICANT_TYPE_OWNER.equalsIgnoreCase(trimToNull(record.applicantTypeCode()))
-            ? notificationRecipientResolver
-                .resolveCapturedOwner(
-                    record.applicationNumber(),
-                    record.ownerClientNumber(),
-                    record.ownerClientLocationCode())
-                .orElse(null)
-            : null;
     return new ApplicationSummarySnapshot(
         record.applicationNumber(),
         record.federalApplicationNumber(),
@@ -2969,8 +2861,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         record.growthTypeCode(),
         record.agentContactName(),
         record.ownerContactName(),
-        record.oicIndicator(),
-        notificationEmail);
+        record.oicIndicator());
   }
 
   private ApplicationDetailsRpcRepository.ApplicationInsertRecord toInsertRecord(

@@ -625,7 +625,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Alternate Contact',
       oicIndicator: 'Y',
-      notificationEmail: '',
       endUseCode: 'LU',
       speciesCodes: ['FI'],
     })
@@ -751,7 +750,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Contact',
       oicIndicator: 'N',
-      notificationEmail: '',
       endUseCode: 'LU',
       speciesCodes: ['FI'],
     })
@@ -952,7 +950,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Contact',
       oicIndicator: 'N',
-      notificationEmail: '',
       endUseCode: 'LU',
       speciesCodes: ['FI'],
     })

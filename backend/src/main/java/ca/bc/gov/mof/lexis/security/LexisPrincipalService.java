@@ -1,6 +1,5 @@
 package ca.bc.gov.mof.lexis.security;
 
-import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import java.security.Principal;
 import java.util.Collection;
 import java.util.HashMap;
@@ -8,7 +7,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Stream;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -58,45 +56,6 @@ public class LexisPrincipalService {
             claims.get("orgUnitNos"))
         .forEach(value -> appendPositiveLongs(orgUnits, value));
     return List.copyOf(orgUnits);
-  }
-
-  /**
-   * Resolves identity email metadata exclusively from the authenticated token and Cognito
-   * user-info response. The browser request is never an input to this value.
-   */
-  public Optional<AuthenticatedEmailIdentity> resolveAuthenticatedEmail(Principal principal) {
-    return resolveAuthenticatedIdentity(principal)
-        .filter(identity -> identity.emailAddress() != null);
-  }
-
-  public Optional<AuthenticatedEmailIdentity> resolveAuthenticatedIdentity(Principal principal) {
-    if (!(principal instanceof JwtAuthenticationToken jwtAuthentication)) {
-      return Optional.empty();
-    }
-
-    Map<String, Object> claims = resolveJwtClaims(jwtAuthentication);
-    if (resolveServiceClientId(claims) != null) {
-      return Optional.empty();
-    }
-    String provider = canonicalEmailProvider(resolveProvider(claims));
-    String identityUserId = resolveIdentityUserId(claims, jwtAuthentication.getToken());
-    Optional<String> email = MailRecipientValidator.normalize(claimValue(claims, "email"));
-    if (provider == null || identityUserId == null) {
-      return Optional.empty();
-    }
-
-    return Optional.of(
-        new AuthenticatedEmailIdentity(
-            email.orElse(null),
-            verifiedClaim(claims.get("email_verified")),
-            provider,
-            identityUserId));
-  }
-
-  public boolean isBusinessBceid(Principal principal) {
-    return resolveAuthenticatedIdentity(principal)
-        .map(AuthenticatedEmailIdentity::businessBceid)
-        .orElse(false);
   }
 
   private void appendPositiveLongs(LinkedHashSet<Long> values, Object claim) {
@@ -180,45 +139,6 @@ public class LexisPrincipalService {
     return clientId;
   }
 
-  private String resolveIdentityUserId(Map<String, Object> claims, Jwt accessToken) {
-    return Stream.of(
-            claimValue(claims, "custom:idp_user_id"),
-            claimValue(claims, "custom:idp_username"),
-            claimValue(claims, "preferred_username"),
-            accessToken.getSubject())
-        .filter(value -> value != null && !value.isBlank())
-        .findFirst()
-        .orElse(null);
-  }
-
-  private String canonicalEmailProvider(String provider) {
-    if (provider == null) {
-      return null;
-    }
-    String normalized = provider.toUpperCase(Locale.ROOT);
-    if (normalized.endsWith("BCEIDBUSINESS")) {
-      return "BCEIDBUSINESS";
-    }
-    return normalized;
-  }
-
-  private Boolean verifiedClaim(Object value) {
-    if (value instanceof Boolean verified) {
-      return verified;
-    }
-    if (value == null) {
-      return null;
-    }
-    String normalized = value.toString().trim();
-    if ("true".equalsIgnoreCase(normalized)) {
-      return Boolean.TRUE;
-    }
-    if ("false".equalsIgnoreCase(normalized)) {
-      return Boolean.FALSE;
-    }
-    return null;
-  }
-
   private boolean hasInteractiveIdentitySignal(Map<String, Object> claims) {
     if (Stream.of(
             "custom:idp_name",
@@ -272,16 +192,5 @@ public class LexisPrincipalService {
       return null;
     }
     return value;
-  }
-
-  public record AuthenticatedEmailIdentity(
-      String emailAddress,
-      Boolean emailVerified,
-      String identityProviderCode,
-      String identityUserId) {
-
-    public boolean businessBceid() {
-      return "BCEIDBUSINESS".equals(identityProviderCode);
-    }
   }
 }

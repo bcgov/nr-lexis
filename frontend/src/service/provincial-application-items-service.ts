@@ -175,7 +175,6 @@ export type ApplicationSummarySnapshot = Omit<ApplicationSummaryMutation, 'appli
   applicationStatusCode: string
   applicantTypeCode: string
   jurisdictionCode: string
-  notificationEmail: string
 }
 
 const ITEMS_CACHE_TTL_MS = 30_000
@@ -377,7 +376,6 @@ const normalizeApplicationSummarySnapshot = (payload: unknown): ApplicationSumma
     agentContactName: asString(source.agentContactName),
     ownerContactName: asString(source.ownerContactName),
     oicIndicator: asString(source.oicIndicator),
-    notificationEmail: asString(source.notificationEmail),
     endUseCode: asString(source.endUseCode),
     speciesCodes: asStringArray(source.speciesCodes),
   }

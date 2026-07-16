@@ -317,8 +317,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     try {
       PurchaseOfferRepository.ApplicationRecipientRow context =
           repository.findApplicationRecipient(applicationNumber).orElse(null);
-      String recipient =
-          resolveApplicationRecipient(applicationNumber, context).orElse(null);
+      String recipient = resolveApplicationRecipient(applicationNumber, context).orElse(null);
       if (recipient == null) {
         return new EmailResult(
             true, false, null, "Offer saved, but no client email address was found.");

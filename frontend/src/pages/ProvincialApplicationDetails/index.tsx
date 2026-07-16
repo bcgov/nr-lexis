@@ -154,7 +154,7 @@ const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
   'Status email is only supported for rejected or withdrawn applications.'
 const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
 const REVIEW_EMAIL_PREVIEW_HELPER =
-  'Defaults from the captured submitter email, then client data. Changes apply only to this notification.'
+  "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
 const APPLICATION_STATUS_LABELS: Record<string, string> = {
   APP: 'Approved',
   EXP: 'Expired',
@@ -452,19 +452,17 @@ const normalizeReviewEmail = (value: string | null | undefined): string => {
 
 const reviewEmailCandidate = (
   applicantTypeCode: string,
-  notificationEmailAddress: string,
   ownerClientData: ApplicationClientData | null,
   agentClientData: ApplicationClientData | null,
 ): string => {
   const ownerEmail = normalizeReviewEmail(ownerClientData?.email ?? '')
   const agentEmail = normalizeReviewEmail(agentClientData?.email ?? '')
-  const notificationEmail = normalizeReviewEmail(notificationEmailAddress)
 
   if (isAgentApplicant(applicantTypeCode)) {
     return agentEmail
   }
 
-  return notificationEmail || ownerEmail
+  return ownerEmail
 }
 
 const latestPersistedRemark = (
@@ -530,7 +528,6 @@ const ProvincialApplicationDetailsPage = () => {
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [summaryBaselineForm, setSummaryBaselineForm] =
     useState<ApplicationSummaryFormState | null>(null)
-  const [notificationEmail, setNotificationEmail] = useState('')
   const [summaryVolumeWarningAccepted, setSummaryVolumeWarningAccepted] = useState(false)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
   const [summaryAccuracyConfirmationOpen, setSummaryAccuracyConfirmationOpen] = useState(false)
@@ -585,13 +582,8 @@ const ProvincialApplicationDetailsPage = () => {
   const [reviewStatusRemarkBaseline, setReviewStatusRemarkBaseline] = useState('')
   const reviewStatusEmailCandidate = useMemo(
     () =>
-      reviewEmailCandidate(
-        summaryForm?.applicantTypeCode ?? '',
-        notificationEmail,
-        ownerClientData,
-        agentClientData,
-      ),
-    [agentClientData, notificationEmail, ownerClientData, summaryForm?.applicantTypeCode],
+      reviewEmailCandidate(summaryForm?.applicantTypeCode ?? '', ownerClientData, agentClientData),
+    [agentClientData, ownerClientData, summaryForm?.applicantTypeCode],
   )
   const [reviewStatusEmailOverride, setReviewStatusEmailOverride] = useState<{
     applicationNumber: string
@@ -656,7 +648,6 @@ const ProvincialApplicationDetailsPage = () => {
       setLoading(false)
       setSummaryForm(null)
       setSummaryBaselineForm(null)
-      setNotificationEmail('')
       setReviewStatusCode('')
       setReviewStatusRemark('')
       setReviewStatusBaselineCode('')
@@ -671,7 +662,6 @@ const ProvincialApplicationDetailsPage = () => {
     setActionErrorMessage('')
     setActionInfoMessage('')
     setIndustryViewableExemptionNumber(null)
-    setNotificationEmail('')
     setDocumentRows([])
     setPermitRows([])
     setDocumentLookupAvailability('loading')
@@ -755,11 +745,9 @@ const ProvincialApplicationDetailsPage = () => {
           )
           setSummaryForm(editableSummaryForm)
           setSummaryBaselineForm(editableSummaryForm)
-          setNotificationEmail(summarySnapshot.notificationEmail)
         }
       } catch {
         if (isLatestRequest()) {
-          setNotificationEmail('')
           setActionErrorMessage('Unable to retrieve complete application summary fields.')
         }
       }
@@ -800,7 +788,6 @@ const ProvincialApplicationDetailsPage = () => {
         setIndustryViewableExemptionNumber(null)
         setSummaryForm(null)
         setSummaryBaselineForm(null)
-        setNotificationEmail('')
         setShowSummaryValidationErrors(false)
         setDocumentRows([])
         setPermitRows([])
@@ -2545,9 +2532,6 @@ const ProvincialApplicationDetailsPage = () => {
     ['Applicant type', ownerApplicantTypeLabel],
     ['Client location', summaryForm?.ownerClientLocationCode ?? ''],
     ['Contact name', summaryForm?.ownerContactName ?? ''],
-    ...(notificationEmail
-      ? ([['Notification email', notificationEmail]] as Array<[string, string]>)
-      : []),
     ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
   ]
   const ownerClientSummaryContent =

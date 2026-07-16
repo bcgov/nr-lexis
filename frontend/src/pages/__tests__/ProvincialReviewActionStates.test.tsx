@@ -137,7 +137,6 @@ const applicationSummary = {
   agentContactName: '',
   ownerContactName: 'Owner Contact',
   oicIndicator: '',
-  notificationEmail: '',
   endUseCode: '',
   speciesCodes: [],
 }
@@ -343,7 +342,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByLabelText('Client email address')).not.toHaveAttribute('readonly')
     expect(
       screen.getByText(
-        'Defaults from the captured submitter email, then client data. Changes apply only to this notification.',
+        "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification.",
       ),
     ).toBeInTheDocument()
 
@@ -378,20 +377,13 @@ describe('Provincial Review Action State Smoke', () => {
     ).toBeInTheDocument()
   }, 15000)
 
-  it('prefills an owner rejection with the captured submitter email before client data', async () => {
-    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
-      ...applicationSummary,
-      notificationEmail: 'captured.submitter@example.com',
-    })
-
+  it('prefills an owner rejection with the owner client-location email', async () => {
     renderPage()
     await screen.findByText('1000123')
     await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Client email address')).toHaveValue(
-        'captured.submitter@example.com',
-      )
+      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
     })
   })
 
@@ -489,7 +481,6 @@ describe('Provincial Review Action State Smoke', () => {
       applicantTypeCode: 'A',
       agentClientNumber: '00054321',
       agentClientLocationCode: '02',
-      notificationEmail: 'captured.owner@example.com',
     })
     mockedFetchApplicationClientData
       .mockResolvedValueOnce({
@@ -554,7 +545,7 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
-  it('does not substitute the owner email when an agent applicant has no email', async () => {
+  it('falls back to the owner email when an agent applicant has no email', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummary,
       applicantTypeCode: 'A',
@@ -593,7 +584,9 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
     await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
 
-    await waitFor(() => expect(screen.getByLabelText('Client email address')).toHaveValue(''))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Client email address')).toHaveValue('owner@example.com'),
+    )
   })
 
   it('validates single-row rejection before status update', async () => {

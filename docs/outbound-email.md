@@ -14,7 +14,13 @@ Email responses mean **queued**, not delivered. Delivery is best effort; failure
 
 ## Recipient routing
 
-The backend resolves the RCO, RNI, or RSI distribution list from the record's persisted organization unit. Permit-review requests send to that list and purchase-offer notifications copy it. Applicant notifications use the validated recipient resolved for the affected application; staff-facing workflows allow that address to be reviewed before the notification is sent.
+The backend resolves the RCO, RNI, or RSI distribution list from the record's persisted organization unit. Permit-review requests send to that list and purchase-offer notifications copy it.
+
+Applicant notification defaults come from `CLIENT_LOCATION.EMAIL_ADDRESS` for the workflow's recorded owner or agent client/location. They do not come from the logged-in WebADE, Cognito, or FAM identity, and they do not use `CLIENT_CONTACT` as an automatic fallback. Application Review uses the legacy agent-email-when-present, otherwise-owner rule. Other workflows retain their own legacy owner/agent selection rules rather than universally substituting the owner when an agent address is missing.
+
+Authorized staff may edit the default recipient for an application-status, exemption-approval, or permit notification. The edited address applies only to that send and is not persisted to the application or shared client data. A missing recipient is a recoverable client-data condition: the business mutation remains committed, and purchase-offer workflows report that manual notification is required.
+
+LEXIS does not persist the authenticated Business BCeID email for legacy parity. No application notification-contact table/package or email-capture deployment setting is required.
 
 `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` remains available as a migration fallback when a regional list is not configured or the organization unit is not mapped. Configure all three regional lists before removing that fallback.
 

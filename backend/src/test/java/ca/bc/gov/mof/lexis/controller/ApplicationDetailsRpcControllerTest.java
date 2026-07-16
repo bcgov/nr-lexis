@@ -19,7 +19,6 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
-import ca.bc.gov.mof.lexis.service.application.AuthenticatedSubmitterEmailCaptureService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
@@ -75,7 +74,6 @@ class ApplicationDetailsRpcControllerTest {
   @Mock private ApplicationEditLockService editLockService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private ApplicationEditPolicyService applicationEditPolicyService;
-  @Mock private AuthenticatedSubmitterEmailCaptureService submitterEmailCaptureService;
 
   private ApplicationDetailsRpcController controller;
   private ApplicationPermitOperationCoordinator operationCoordinator;
@@ -94,7 +92,6 @@ class ApplicationDetailsRpcControllerTest {
             editLockService,
             provincialAuthorizationService,
             applicationEditPolicyService,
-            submitterEmailCaptureService,
             operationCoordinator);
     lenient()
         .when(editLockService.requireEditable(any(), any(), any()))
@@ -546,23 +543,6 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void applicationSummaryShouldExposeCapturedNotificationEmail() {
-    TestingAuthenticationToken authentication = authorized("/applicationDetails");
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.getApplicationSummarySnapshot(1000456L))
-        .thenReturn(Optional.of(summarySnapshotWithNotificationEmail()));
-
-    ResponseEntity<ApplicationDetailsRpcController.ApplicationSummaryResponseDto> response =
-        controller.getApplicationSummary("1000456", authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().notificationEmail()).isEqualTo("submitter@example.com");
-    verify(provincialAuthorizationService).requireApplication(authentication, 1000456L);
-    verify(service).getApplicationSummarySnapshot(1000456L);
-  }
-
-  @Test
   void checkFormChangesShouldCompareLegacyApplicationSummaryFields() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
@@ -736,7 +716,6 @@ class ApplicationDetailsRpcControllerTest {
         editLockService,
         provincialAuthorizationService,
         applicationEditPolicyService,
-        submitterEmailCaptureService,
         coordinator);
   }
 
@@ -2165,8 +2144,7 @@ class ApplicationDetailsRpcControllerTest {
         "O",
         "Agent Contact",
         "Owner Contact",
-        "N",
-        null);
+        "N");
   }
 
   private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithBlankOwnerContact() {
@@ -2194,8 +2172,7 @@ class ApplicationDetailsRpcControllerTest {
         "O",
         "Agent Contact",
         null,
-        "N",
-        null);
+        "N");
   }
 
   private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithStatus(String status) {
@@ -2224,39 +2201,7 @@ class ApplicationDetailsRpcControllerTest {
         snapshot.growthTypeCode(),
         snapshot.agentContactName(),
         snapshot.ownerContactName(),
-        snapshot.oicIndicator(),
-        snapshot.notificationEmail());
-  }
-
-  private ApplicationDetailsRpcService.ApplicationSummarySnapshot
-      summarySnapshotWithNotificationEmail() {
-    ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot = summarySnapshot();
-    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
-        snapshot.applicationNumber(),
-        snapshot.federalApplicationNumber(),
-        snapshot.applicationDate(),
-        snapshot.termDays(),
-        snapshot.receivedDate(),
-        snapshot.applicationVolume(),
-        snapshot.averageLogVolume(),
-        snapshot.productLocation(),
-        snapshot.exportScheduleId(),
-        snapshot.agentClientNumber(),
-        snapshot.agentClientLocationCode(),
-        snapshot.ownerClientNumber(),
-        snapshot.ownerClientLocationCode(),
-        snapshot.exemptionNumber(),
-        snapshot.exemptionReasonCode(),
-        snapshot.applicationStatusCode(),
-        "O",
-        snapshot.orgUnitNumber(),
-        snapshot.productTypeCode(),
-        snapshot.jurisdictionCode(),
-        snapshot.growthTypeCode(),
-        snapshot.agentContactName(),
-        snapshot.ownerContactName(),
-        snapshot.oicIndicator(),
-        "submitter@example.com");
+        snapshot.oicIndicator());
   }
 
   private MultiValueMap<String, String> matchingSummaryParameters() {

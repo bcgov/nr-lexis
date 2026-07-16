@@ -369,7 +369,6 @@ describe('provincial-application-items-service', () => {
         agentContactName: 'Agent Contact',
         ownerContactName: 'Owner Contact',
         oicIndicator: 'N',
-        notificationEmail: 'captured.submitter@example.com',
         endUseCode: 'LU',
         speciesCodes: ['FI', 'CE'],
       },
@@ -383,7 +382,6 @@ describe('provincial-application-items-service', () => {
       productLocation: 'BC',
       ownerClientLocationCode: '00',
       agentContactName: 'Agent Contact',
-      notificationEmail: 'captured.submitter@example.com',
       endUseCode: 'LU',
       speciesCodes: ['FI', 'CE'],
     })

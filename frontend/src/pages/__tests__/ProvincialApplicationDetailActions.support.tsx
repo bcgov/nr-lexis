@@ -266,7 +266,6 @@ const applicationSummarySnapshot: ApplicationSummarySnapshot = {
   agentContactName: 'Agent Contact',
   ownerContactName: 'Owner Contact',
   oicIndicator: 'N',
-  notificationEmail: '',
   endUseCode: 'LU',
   speciesCodes: ['FI'],
 }
