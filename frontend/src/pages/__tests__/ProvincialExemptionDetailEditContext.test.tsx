@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -283,15 +283,13 @@ describe('Provincial exemption edit context', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
     const expiryDate = screen.getByLabelText('Expiry date')
-    await userEvent.clear(expiryDate)
-    await userEvent.type(expiryDate, '2026-02-01')
+    fireEvent.change(expiryDate, { target: { value: '2026-02-01' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(screen.getByText('Expiry date must be after the approval date.')).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
 
-    await userEvent.clear(expiryDate)
-    await userEvent.type(expiryDate, '2026-02-02')
+    fireEvent.change(expiryDate, { target: { value: '2026-02-02' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     await waitFor(() =>
