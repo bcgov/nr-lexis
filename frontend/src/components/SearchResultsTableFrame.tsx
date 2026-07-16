@@ -9,7 +9,7 @@ export type SearchResultsTableFrameProps = {
   totalItemsLabel?: string
 }
 
-export const formatSearchResultCount = (totalItems: number): string => {
+const formatSearchResultCount = (totalItems: number): string => {
   const formattedTotal = new Intl.NumberFormat('en-CA').format(totalItems)
   return `${formattedTotal} ${totalItems === 1 ? 'result' : 'results'} found`
 }

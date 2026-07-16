@@ -62,11 +62,6 @@ export const setPageDataCache = <T>(
   return true
 }
 
-export const clearPageDataCache = (key: string): void => {
-  pageDataCache.delete(key)
-  pageDataCacheGeneration += 1
-}
-
 export const clearAllPageDataCache = (): void => {
   pageDataCache.clear()
   pageDataCacheGeneration += 1

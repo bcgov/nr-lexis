@@ -116,8 +116,7 @@ frontend/
 
 ## UI Components
 
-The application uses [Carbon Design System](https://carbondesignsystem.com/) with BC Gov theming:
+The application uses [Carbon Design System](https://carbondesignsystem.com/) components:
 
 - `@carbon/react` - React components
 - `@carbon/icons-react` - Icon library
-- `@bcgov-nr/nr-theme` - BC Gov theme

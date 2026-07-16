@@ -663,11 +663,6 @@ export const expectAccessiblePage = async (
   await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
 }
 
-export const expectRouteUnauthorized = async (page: Page, path: string): Promise<void> => {
-  await navigateSpaRoute(page, path)
-  await expect(page.getByRole('heading', { name: 'Unauthorized' })).toBeVisible()
-}
-
 export const postWithCsrf = async (
   page: Page,
   path: string,
@@ -714,15 +709,6 @@ export const deleteWithCsrf = async (
     },
     failOnStatusCode: false,
   })
-}
-
-export const expectForbiddenPost = async (
-  page: Page,
-  path: string,
-  options: PostWithCsrfOptions = {},
-): Promise<void> => {
-  const response = await postWithCsrf(page, path, options)
-  expect(response.status(), `${path} should be forbidden for this user`).toBe(403)
 }
 
 export const expectInvalidApplicationCreateValidation = async (

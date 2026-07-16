@@ -25,7 +25,6 @@
     "e2e:report": "playwright show-report"
   },
   "dependencies": {
-    "@bcgov-nr/nr-theme": "^1.8.9",
     "@carbon/icons-react": "^11.64.0",
     "@carbon/react": "^1.88.0",
     "@types/node": "^24.0.0",
