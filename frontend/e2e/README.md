@@ -28,6 +28,10 @@ regression coverage uses a separate TEST-only Playwright config.
 - The IDIR suite asserts the account establishes an authenticated session, has admin grants, can
   reach representative UI/API contracts, and can validate/submit/review/clean fresh TEST application
   data at runtime.
+- The suite submits the EICAR test payload to document and submission uploads and expects a
+  rejection. This verifies TEST LEXIS can reach its shared ClamAV service; see
+  [Shared ClamAV service](../../docs/shared-clamav-service.md) for the deployment and network
+  requirements.
 - Business BCeID browser regression is intentionally not scheduled because repeated automated login
   attempts can lock the TEST account. BCeID button and routing behavior stay covered by smoke and
   unit tests.

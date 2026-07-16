@@ -29,6 +29,11 @@ Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 
 Both options share the same prerequisites and property files below. Reports use the checked-in JRXML templates in the Spring Boot backend.
 
+Virus scanning is disabled by default for local development, and neither option starts a ClamAV
+container. Deployed environments use a shared ClamAV service; see
+[Shared ClamAV service](docs/shared-clamav-service.md) for configuration and network-policy
+ownership.
+
 ### Shared prerequisites
 
 1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
@@ -152,4 +157,5 @@ default URL from `VITE_ZONE`.
 
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
 - [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.
+- [docs/shared-clamav-service.md](docs/shared-clamav-service.md) - Shared scanner deployment, policy, verification, and ownership.
 - [docs/rtm-amv-ui-and-procedure-contract.md](docs/rtm-amv-ui-and-procedure-contract.md) - RTM AMV UI rules and Oracle procedure constraints.

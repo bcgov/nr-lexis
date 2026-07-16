@@ -31,7 +31,9 @@ nc -z localhost 8080
 
 ### Environment Variables
 
-In OpenShift deployments these come from the Secret created by `openshift.deploy.yml`. For local development, keep credentials in `src/main/resources/application-local.yml` (gitignored).
+In OpenShift deployments, credentials come from the Secret created by `openshift.deploy.yml` and
+runtime values are injected by the deployment template. For local development, keep credentials in
+`src/main/resources/application-local.yml` (gitignored).
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -49,9 +51,23 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 | `KEYCLOAK_ISSUER_URI` | Optional Keycloak issuer URI for machine-to-machine NEXCOL service-client tokens | - |
 | `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
 | `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
+| `LEXIS_VIRUS_SCAN_ENABLED` | Enables ClamAV scanning for file uploads | false locally; true in the OpenShift template |
+| `LEXIS_VIRUS_SCAN_HOST` | Shared ClamAV service hostname | localhost locally; required in the OpenShift template |
+| `LEXIS_VIRUS_SCAN_PORT` | Shared ClamAV `clamd` TCP port | 3310 |
+| `LEXIS_VIRUS_SCAN_TIMEOUT` | Socket connect/read timeout for a scan | 10s |
+| `LEXIS_VIRUS_SCAN_CHUNK_SIZE` | Bytes streamed per `clamd` protocol chunk | 8192 |
 | `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
 | `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
+
+### Virus Scanning
+
+OpenShift deployments use a shared ClamAV service in a separate namespace rather than a
+LEXIS-managed scanner workload. The deployment workflow resolves the cluster-local `clamd`
+endpoint and supplies it through `LEXIS_VIRUS_SCAN_HOST`.
+
+See [Shared ClamAV service](../docs/shared-clamav-service.md) for GitHub environment setup,
+receiver-side NetworkPolicy requirements, local configuration, and verification.
 
 ### Spring Profiles
 
