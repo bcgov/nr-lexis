@@ -565,7 +565,7 @@ public class ApplicationDetailsRpcController {
           service, createRequest, userId, submitterContact, capture.warning());
     }
 
-    return operationCoordinator.executeKnownAggregate(
+    return operationCoordinator.executeRootCreateKnownAggregate(
         List.of(exemptionNumber),
         List.of(),
         List.of(),
@@ -2214,21 +2214,16 @@ public class ApplicationDetailsRpcController {
         applicationNumber == null
             ? new ApplicationReviewStatusEmailResultDto(
                 false, "Application number must be a positive value.")
-            : operationCoordinator.executeApplicationLocalMutation(
+            : service.sendStatusEmail(
                 applicationNumber,
-                () -> {
-                  requireApplicationAccess(applicationNumber, authentication);
-                  return service.sendStatusEmail(
-                      applicationNumber,
-                      new ApplicationReviewStatusEmailRequestDto(
-                          statusCode,
-                          first(parameters, "toEmailAddress", "clientEmailAddress"),
-                          first(
-                              parameters,
-                              "additionalRemarks",
-                              "remark",
-                              "remarkBody")));
-                });
+                new ApplicationReviewStatusEmailRequestDto(
+                    statusCode,
+                    first(parameters, "toEmailAddress", "clientEmailAddress"),
+                    first(
+                        parameters,
+                        "additionalRemarks",
+                        "remark",
+                        "remarkBody")));
     return ResponseEntity.ok(new ApplicationStatusEmailResponseDto(result.success(), result.message()));
   }
 

@@ -178,8 +178,8 @@ public class LexisUploadController {
       provincialAuthorizationService.requireApplicationAttachmentPersistence(
           authentication, applicationNumber);
     }
-    return permitOperationMutex.executeApplications(
-        List.of(applicationNumber),
+    return permitOperationMutex.executeRootCreateAggregate(
+        List.of(), List.of(applicationNumber), List.of(),
         () -> {
           if (provincialAuthorizationService != null) {
             provincialAuthorizationService.requireApplicationAttachmentPersistence(
@@ -261,8 +261,8 @@ public class LexisUploadController {
     if (provincialAuthorizationService != null) {
       provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
     }
-    return permitOperationMutex.execute(
-        permitNumber,
+    return permitOperationMutex.executeRootCreateAggregate(
+        List.of(), List.of(), List.of(permitNumber),
         () -> {
           if (provincialAuthorizationService != null) {
             provincialAuthorizationService.requirePermitAttachmentMutation(
@@ -342,8 +342,8 @@ public class LexisUploadController {
       provincialAuthorizationService.requireExemptionAttachmentMutation(
           authentication, exemptionNumber);
     }
-    return permitOperationMutex.executeExemptions(
-        List.of(exemptionNumber),
+    return permitOperationMutex.executeRootCreateAggregate(
+        List.of(exemptionNumber), List.of(), List.of(),
         () -> {
           if (provincialAuthorizationService != null) {
             provincialAuthorizationService.requireExemptionAttachmentMutation(
@@ -439,8 +439,8 @@ public class LexisUploadController {
     if (provincialAuthorizationService != null) {
       provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
     }
-    return permitOperationMutex.execute(
-        permitNumber,
+    return permitOperationMutex.executeRootCreateAggregate(
+        List.of(), List.of(), List.of(permitNumber),
         () -> {
           if (provincialAuthorizationService != null) {
             provincialAuthorizationService.requirePermitAttachmentMutation(

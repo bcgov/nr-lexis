@@ -1,25 +1,18 @@
-import type { AxiosResponse } from 'axios'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import OptimisticConflictModal, {
   normalizeChangedFields,
 } from '@/components/OptimisticConflictModal'
-import {
-  OptimisticOverwriteConflictError,
-  createOptimisticConflictEvent,
-} from '@/service/optimistic-conflict'
-
-const completedResponse = {} as AxiosResponse<unknown>
+import { createOptimisticConflictEvent } from '@/service/optimistic-conflict'
 
 describe('OptimisticConflictModal', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('shows newer values and retries the preserved save when overwrite is confirmed', async () => {
+  it('shows newer values and requires the user to refresh', async () => {
     const user = userEvent.setup()
-    const overwrite = vi.fn().mockResolvedValue(completedResponse)
     const refresh = vi.fn()
     render(<OptimisticConflictModal />)
 
@@ -28,42 +21,36 @@ describe('OptimisticConflictModal', () => {
         createOptimisticConflictEvent({
           problem: {
             code: 'STALE_RECORD',
-            detail: 'Application 46079 was saved by another user.',
+            detail: 'Application 999000001 was saved by another user.',
             currentVersion: 'v2',
             changedFields: [
               { field: 'receivedDate', currentValue: '2026-07-15' },
               { label: 'Remarks', currentValue: 'Updated review note' },
             ],
           },
-          overwrite,
           refresh,
         }),
       )
     })
 
     expect(screen.getByRole('dialog', { name: 'Newer changes were saved' })).toBeVisible()
-    expect(screen.getByText('Application 46079 was saved by another user.')).toBeVisible()
+    expect(screen.getByText('Application 999000001 was saved by another user.')).toBeVisible()
     expect(screen.getByText('Received Date').closest('li')).toHaveTextContent(
       'Received Date: 2026-07-15',
     )
     expect(screen.getByText('Remarks').closest('li')).toHaveTextContent(
       'Remarks: Updated review note',
     )
+    expect(screen.getByText(/Your changes were not saved/)).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Overwrite' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Overwrite' }))
+    await user.click(screen.getByRole('button', { name: 'Refresh' }))
 
-    await waitFor(() => expect(overwrite).toHaveBeenCalledWith('v2'))
-    expect(refresh).not.toHaveBeenCalled()
-    await waitFor(() =>
-      expect(document.querySelector('.lexis-optimistic-conflict-modal')).not.toHaveClass(
-        'is-visible',
-      ),
-    )
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 
-  it('refreshes instead of overwriting when the user requests current data', async () => {
+  it('refreshes when the user requests current data', async () => {
     const user = userEvent.setup()
-    const overwrite = vi.fn().mockResolvedValue(completedResponse)
     const refresh = vi.fn()
     render(<OptimisticConflictModal />)
 
@@ -71,7 +58,6 @@ describe('OptimisticConflictModal', () => {
       window.dispatchEvent(
         createOptimisticConflictEvent({
           problem: { code: 'STALE_RECORD' },
-          overwrite,
           refresh,
         }),
       )
@@ -80,7 +66,31 @@ describe('OptimisticConflictModal', () => {
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
 
     expect(refresh).toHaveBeenCalledTimes(1)
-    expect(overwrite).not.toHaveBeenCalled()
+  })
+
+  it('requires refresh when an existing record was loaded without a version', async () => {
+    const refresh = vi.fn()
+    render(<OptimisticConflictModal />)
+
+    act(() => {
+      window.dispatchEvent(
+        createOptimisticConflictEvent({
+          problem: {
+            code: 'RECORD_VERSION_REQUIRED',
+            detail: 'A current record version is required before saving.',
+          },
+          refresh,
+        }),
+      )
+    })
+
+    expect(screen.getByRole('dialog', { name: 'Refresh required before saving' })).toBeVisible()
+    expect(screen.getByText(/loaded without a current version/)).toBeVisible()
+    expect(screen.getByText('A current record version is required before saving.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeVisible()
+    expect(
+      screen.queryByText('Changes detected since you opened this record'),
+    ).not.toBeInTheDocument()
   })
 
   it('normalizes changed-field arrays and records supplied by the server', () => {
@@ -91,38 +101,5 @@ describe('OptimisticConflictModal', () => {
     expect(normalizeChangedFields({ applicationStatus: 'Approved' })).toEqual([
       { label: 'Application Status', currentValue: 'Approved' },
     ])
-  })
-
-  it('shows a newer conflict and requires another decision when the guarded retry conflicts', async () => {
-    const user = userEvent.setup()
-    const overwrite = vi
-      .fn()
-      .mockRejectedValueOnce(
-        new OptimisticOverwriteConflictError({
-          code: 'STALE_RECORD',
-          currentVersion: 'v3',
-          changedFields: [{ field: 'remarks', currentValue: 'Third save' }],
-        }),
-      )
-      .mockResolvedValueOnce(completedResponse)
-    render(<OptimisticConflictModal />)
-
-    act(() => {
-      window.dispatchEvent(
-        createOptimisticConflictEvent({
-          problem: { code: 'STALE_RECORD', currentVersion: 'v2' },
-          overwrite,
-          refresh: vi.fn(),
-        }),
-      )
-    })
-
-    await user.click(screen.getByRole('button', { name: 'Overwrite' }))
-
-    expect(await screen.findByText('Newer changes were saved again')).toBeVisible()
-    expect(screen.getByText('Remarks').closest('li')).toHaveTextContent('Remarks: Third save')
-
-    await user.click(screen.getByRole('button', { name: 'Overwrite' }))
-    await waitFor(() => expect(overwrite).toHaveBeenLastCalledWith('v3'))
   })
 })

@@ -304,6 +304,23 @@ describe('provincial exemption detail service', () => {
     expect(body.get('exemptionNumbers')).toBe('EX-777,EX-778')
   })
 
+  it('sends an explicitly supplied version with an off-detail approval', async () => {
+    postMock.mockResolvedValue({ data: { success: true, valid: true, sendGrid: [] } })
+
+    await approveExemptions(['TEST-EX-001'], 'exemption-version-4')
+
+    expect(postMock).toHaveBeenCalledWith(
+      '/lexis/rpc/exemption-details/approve-exemptions',
+      expect.any(URLSearchParams),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Lexis-Record-Version': 'exemption-version-4',
+        },
+      },
+    )
+  })
+
   it('serializes approval email recipients and short-circuits an empty recipient list', async () => {
     await expect(
       sendExemptionApprovalEmails([

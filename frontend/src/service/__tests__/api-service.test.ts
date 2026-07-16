@@ -431,21 +431,21 @@ describe('api-service cached GET support', () => {
 
   it('attaches the active detail record version only to a matching mutation request', async () => {
     const previousPath = window.location.pathname
-    window.history.replaceState({}, '', '/provincial/application/46079')
+    window.history.replaceState({}, '', '/provincial/application/999000001')
     apiService.registerRecordVersion(
       'application',
-      '46079',
+      '999000001',
       {
         headers: { [RECORD_VERSION_HEADER]: 'version-2' },
-        data: { applicationNumber: '46079', remarks: 'Original remarks' },
+        data: { applicationNumber: '999000001', remarks: 'Original remarks' },
       } as unknown as AxiosResponse<unknown>,
-      '/lexis/applications/46079',
+      '/lexis/applications/999000001',
     )
 
     const result = await registeredRequestInterceptor()({
       method: 'put',
       url: '/lexis/rpc/application-details/application-summary',
-      data: new URLSearchParams({ applicationNumber: '46079' }),
+      data: new URLSearchParams({ applicationNumber: '999000001' }),
       headers: {},
     })
 
@@ -457,15 +457,15 @@ describe('api-service cached GET support', () => {
 
   it('does not attach a detail version to unrelated writes or another record', async () => {
     const previousPath = window.location.pathname
-    window.history.replaceState({}, '', '/provincial/application/46079')
+    window.history.replaceState({}, '', '/provincial/application/999000001')
     apiService.registerRecordVersion(
       'application',
-      '46079',
+      '999000001',
       {
         headers: { [RECORD_VERSION_HEADER]: 'version-2' },
-        data: { applicationNumber: '46079' },
+        data: { applicationNumber: '999000001' },
       } as unknown as AxiosResponse<unknown>,
-      '/lexis/applications/46079',
+      '/lexis/applications/999000001',
     )
 
     const unrelated = await registeredRequestInterceptor()({
@@ -477,7 +477,7 @@ describe('api-service cached GET support', () => {
     const anotherApplication = await registeredRequestInterceptor()({
       method: 'post',
       url: '/lexis/rpc/application-details/remark',
-      data: new URLSearchParams({ applicationNumber: '46080' }),
+      data: new URLSearchParams({ applicationNumber: '999000002' }),
       headers: {},
     })
 
@@ -886,19 +886,18 @@ describe('api-service cached GET support', () => {
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
   })
 
-  it('offers an explicit overwrite for stale-record conflicts and retries the same request', async () => {
-    const completedResponse = buildResponse({ updated: true }) as AxiosResponse<unknown>
-    requestMock.mockResolvedValueOnce(completedResponse)
+  it('requires refresh for stale-record conflicts and never resubmits the stale request', async () => {
+    let receivedConflict: OptimisticConflictEvent['detail'] | undefined
     const conflictListener = (event: Event) => {
       const conflictEvent = event as OptimisticConflictEvent
       event.preventDefault()
-      void conflictEvent.detail.overwrite(conflictEvent.detail.problem.currentVersion)
+      receivedConflict = conflictEvent.detail
     }
     window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
     const staleError = {
       config: {
         method: 'put',
-        url: '/lexis/applications/46079',
+        url: '/lexis/applications/999000001',
         data: { remarks: 'My saved draft' },
         headers: { 'If-Match': 'v1' },
       },
@@ -913,76 +912,110 @@ describe('api-service cached GET support', () => {
       },
     }
 
-    await expect(registeredResponseRejectedInterceptor()(staleError)).resolves.toBe(
-      completedResponse,
-    )
-    expect(requestMock).toHaveBeenCalledWith(
+    void registeredResponseRejectedInterceptor()(staleError)
+
+    await vi.waitFor(() => expect(receivedConflict).toBeDefined())
+    expect(receivedConflict?.problem).toEqual(
       expect.objectContaining({
-        method: 'put',
-        url: '/lexis/applications/46079',
-        data: { remarks: 'My saved draft' },
-        headers: expect.objectContaining({
-          'If-Match': 'v1',
-          [RECORD_VERSION_HEADER]: 'v2',
-        }),
-        lexisOptimisticRetry: true,
+        code: 'STALE_RECORD',
+        currentVersion: 'v2',
       }),
     )
+    expect(receivedConflict).not.toHaveProperty('overwrite')
+    expect(receivedConflict?.refresh).toBeTypeOf('function')
+    expect(requestMock).not.toHaveBeenCalled()
+
+    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+  })
+
+  it('requires refresh when an existing mutation is missing its record version', async () => {
+    let receivedConflict: OptimisticConflictEvent['detail'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedConflict = conflictEvent.detail
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    void registeredResponseRejectedInterceptor()({
+      config: {
+        method: 'put',
+        url: '/lexis/applications/999000001',
+        data: { remarks: 'Unsaved draft' },
+      },
+      response: {
+        status: 428,
+        data: {
+          code: 'RECORD_VERSION_REQUIRED',
+          detail: 'A current record version is required before saving.',
+        },
+      },
+    })
+
+    await vi.waitFor(() => expect(receivedConflict).toBeDefined())
+    expect(receivedConflict?.problem).toEqual({
+      code: 'RECORD_VERSION_REQUIRED',
+      detail: 'A current record version is required before saving.',
+      currentVersion: undefined,
+      changedFields: undefined,
+      savedAt: undefined,
+      updatedBy: undefined,
+    })
+    expect(receivedConflict).not.toHaveProperty('overwrite')
+    expect(requestMock).not.toHaveBeenCalled()
 
     window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
   })
 
   it('compares the retained detail snapshot with a fresh detail response on conflict', async () => {
     const previousPath = window.location.pathname
-    window.history.replaceState({}, '', '/provincial/application/46079')
+    window.history.replaceState({}, '', '/provincial/application/999000001')
     apiService.registerRecordVersion(
       'application',
-      '46079',
+      '999000001',
       {
         headers: { [RECORD_VERSION_HEADER]: 'version-1' },
         data: {
-          applicationNumber: '46079',
+          applicationNumber: '999000001',
           remarks: 'Original remarks',
           updateTimestamp: '2026-07-15T09:00:00-07:00',
           updateUserId: 'IDIR\\FIRST',
         },
       } as unknown as AxiosResponse<unknown>,
-      '/lexis/applications/46079',
+      '/lexis/applications/999000001',
     )
     getMock.mockResolvedValueOnce({
       ...buildResponse({
-        applicationNumber: '46079',
+        applicationNumber: '999000001',
         remarks: 'Newer remarks',
         updateTimestamp: '2026-07-15T09:10:00-07:00',
         updateUserId: 'IDIR\\SECOND',
       }),
       headers: { [RECORD_VERSION_HEADER]: 'version-2' },
     })
-    requestMock.mockResolvedValueOnce(buildResponse({ updated: true }))
     let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
     const conflictListener = (event: Event) => {
       const conflictEvent = event as OptimisticConflictEvent
       event.preventDefault()
       receivedProblem = conflictEvent.detail.problem
-      void conflictEvent.detail.overwrite(conflictEvent.detail.problem.currentVersion)
     }
     window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
 
-    await expect(
-      registeredResponseRejectedInterceptor()({
-        config: {
-          method: 'put',
-          url: '/lexis/applications/46079',
-          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
-        },
-        response: {
-          status: 409,
-          data: { code: 'STALE_RECORD', currentVersion: 'version-1.5' },
-        },
-      }),
-    ).resolves.toEqual(expect.objectContaining({ data: { updated: true } }))
+    void registeredResponseRejectedInterceptor()({
+      config: {
+        method: 'put',
+        url: '/lexis/applications/999000001',
+        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+      },
+      response: {
+        status: 409,
+        data: { code: 'STALE_RECORD', currentVersion: 'version-1.5' },
+      },
+    })
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/applications/46079', {
+    await vi.waitFor(() => expect(receivedProblem).toBeDefined())
+
+    expect(getMock).toHaveBeenCalledWith('/lexis/applications/999000001', {
       headers: { 'Cache-Control': 'no-cache' },
     })
     expect(receivedProblem).toEqual(
@@ -1043,17 +1076,15 @@ describe('api-service cached GET support', () => {
         headers: { [RECORD_VERSION_HEADER]: 'supplemental-version-3' },
       })
     })
-    requestMock.mockResolvedValueOnce(buildResponse({ updated: true }))
     let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
     const conflictListener = (event: Event) => {
       const conflictEvent = event as OptimisticConflictEvent
       event.preventDefault()
       receivedProblem = conflictEvent.detail.problem
-      void conflictEvent.detail.overwrite(conflictEvent.detail.problem.currentVersion)
     }
     window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
 
-    await registeredResponseRejectedInterceptor()({
+    void registeredResponseRejectedInterceptor()({
       config: {
         method: 'post',
         url: '/lexis/rpc/permit-details/update-permit',
@@ -1064,6 +1095,8 @@ describe('api-service cached GET support', () => {
         data: { code: 'STALE_RECORD', currentVersion: 'version-2' },
       },
     })
+
+    await vi.waitFor(() => expect(receivedProblem).toBeDefined())
 
     expect(getMock).toHaveBeenNthCalledWith(1, '/lexis/permits/777', {
       headers: { 'Cache-Control': 'no-cache' },
@@ -1088,7 +1121,7 @@ describe('api-service cached GET support', () => {
     const listener = vi.fn()
     window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, listener)
     const validationConflict = {
-      config: { method: 'put', url: '/lexis/applications/46079' },
+      config: { method: 'put', url: '/lexis/applications/999000001' },
       response: { status: 409, data: { code: 'DUPLICATE_APPLICATION' } },
     }
 
@@ -1097,27 +1130,6 @@ describe('api-service cached GET support', () => {
     )
     expect(listener).not.toHaveBeenCalled()
     expect(requestMock).not.toHaveBeenCalled()
-
-    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, listener)
-  })
-
-  it('does not recursively open a conflict dialog when a guarded overwrite is rejected', async () => {
-    const listener = vi.fn()
-    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, listener)
-    const overwriteConflict = {
-      config: {
-        method: 'put',
-        url: '/lexis/applications/46079',
-        headers: { [RECORD_VERSION_HEADER]: 'v2' },
-        lexisOptimisticRetry: true,
-      },
-      response: { status: 409, data: { code: 'STALE_RECORD' } },
-    }
-
-    await expect(registeredResponseRejectedInterceptor()(overwriteConflict)).rejects.toBe(
-      overwriteConflict,
-    )
-    expect(listener).not.toHaveBeenCalled()
 
     window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, listener)
   })

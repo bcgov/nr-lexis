@@ -5,7 +5,6 @@ import { notifySessionExpired } from '@/context/auth/session-expiry'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import {
   RECORD_VERSION_HEADER,
-  OptimisticOverwriteConflictError,
   createOptimisticConflictEvent,
   type OptimisticConflictProblem,
   type OptimisticRecordType,
@@ -41,10 +40,6 @@ type RecordSnapshotSource = {
 type ActiveRecord = {
   recordType: OptimisticRecordType
   recordId: string
-}
-
-type OptimisticAxiosRequestConfig = AxiosRequestConfig & {
-  lexisOptimisticRetry?: boolean
 }
 
 type HeaderAccessors = {
@@ -161,9 +156,9 @@ class APIService {
           this.clearRecordVersions()
           notifySessionExpired('api-unauthorized')
         }
-        const staleRecordProblem = this.staleRecordProblem(error)
-        if (status === 409 && staleRecordProblem && !this.isOptimisticRetry(error)) {
-          return this.handleOptimisticConflict(error, staleRecordProblem)
+        const optimisticConflictProblem = this.optimisticConflictProblem(error)
+        if ((status === 409 || status === 428) && optimisticConflictProblem) {
+          return this.handleOptimisticConflict(error, optimisticConflictProblem)
         }
         return Promise.reject(error)
       },
@@ -423,7 +418,7 @@ class APIService {
     return typeof status === 'number' ? status : undefined
   }
 
-  private staleRecordProblem(error: unknown): OptimisticConflictProblem | null {
+  private optimisticConflictProblem(error: unknown): OptimisticConflictProblem | null {
     if (!error || typeof error !== 'object') {
       return null
     }
@@ -434,12 +429,12 @@ class APIService {
     }
 
     const problem = data as Record<string, unknown>
-    if (problem.code !== 'STALE_RECORD') {
+    if (problem.code !== 'STALE_RECORD' && problem.code !== 'RECORD_VERSION_REQUIRED') {
       return null
     }
 
     return {
-      code: 'STALE_RECORD',
+      code: problem.code,
       detail: typeof problem.detail === 'string' ? problem.detail : undefined,
       currentVersion:
         typeof problem.currentVersion === 'string' ? problem.currentVersion : undefined,
@@ -447,15 +442,6 @@ class APIService {
       savedAt: typeof problem.savedAt === 'string' ? problem.savedAt : undefined,
       updatedBy: typeof problem.updatedBy === 'string' ? problem.updatedBy : undefined,
     }
-  }
-
-  private isOptimisticRetry(error: unknown): boolean {
-    if (!error || typeof error !== 'object') {
-      return false
-    }
-    return Boolean(
-      (error as { config?: OptimisticAxiosRequestConfig }).config?.lexisOptimisticRetry,
-    )
   }
 
   private handleOptimisticConflict(
@@ -472,35 +458,9 @@ class APIService {
 
     return this.enrichOptimisticConflict(problem).then(
       (enrichedProblem) =>
-        new Promise<AxiosResponse<unknown>>((resolve, reject) => {
+        new Promise<AxiosResponse<unknown>>((_, reject) => {
           const event = createOptimisticConflictEvent({
             problem: enrichedProblem,
-            overwrite: async (currentVersion) => {
-              if (!currentVersion?.trim()) {
-                throw new Error('A current record version is required to overwrite safely.')
-              }
-              const retryConfig: OptimisticAxiosRequestConfig = {
-                ...originalConfig,
-                headers: {
-                  ...this.toHeaderRecord(originalConfig.headers),
-                  [RECORD_VERSION_HEADER]: currentVersion.trim(),
-                },
-                lexisOptimisticRetry: true,
-              }
-              try {
-                const response = await this.client.request(retryConfig)
-                resolve(response)
-                return response
-              } catch (retryError) {
-                const retryProblem = this.staleRecordProblem(retryError)
-                if (this.responseStatus(retryError) === 409 && retryProblem) {
-                  throw new OptimisticOverwriteConflictError(
-                    await this.enrichOptimisticConflict(retryProblem),
-                  )
-                }
-                throw retryError
-              }
-            },
             refresh: () => {
               this.clearCachedGetData()
               this.clearRecordVersions()

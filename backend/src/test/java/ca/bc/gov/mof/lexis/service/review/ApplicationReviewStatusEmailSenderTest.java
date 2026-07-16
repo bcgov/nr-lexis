@@ -17,7 +17,7 @@ class ApplicationReviewStatusEmailSenderTest {
     ApplicationReviewStatusEmailSender sender =
         new ApplicationReviewStatusEmailSender(notificationService);
 
-    sender.sendStatusEmail(108511L, "REJ", "client@example.test", "test");
+    sender.sendStatusEmail(999000001L, "REJ", "client@example.test", "test");
 
     ArgumentCaptor<WorkflowEmailEvent> eventCaptor =
         ArgumentCaptor.forClass(WorkflowEmailEvent.class);
@@ -25,7 +25,7 @@ class ApplicationReviewStatusEmailSenderTest {
     assertThat(eventCaptor.getValue())
         .isEqualTo(
             new WorkflowEmailEvent.ApplicationStatus(
-                108511L,
+                999000001L,
                 "REJECTED",
                 "test",
                 "client@example.test"));
@@ -38,12 +38,12 @@ class ApplicationReviewStatusEmailSenderTest {
     ApplicationReviewStatusEmailSender sender =
         new ApplicationReviewStatusEmailSender(notificationService);
 
-    sender.sendStatusEmail(108512L, "WDN", "client@example.test", "Withdrawn by client");
+    sender.sendStatusEmail(999000002L, "WDN", "client@example.test", "Withdrawn by client");
 
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.ApplicationStatus(
-                108512L,
+                999000002L,
                 "WITHDRAWN",
                 "Withdrawn by client",
                 "client@example.test"));

@@ -215,7 +215,8 @@ final class LexisApiAuthorizationRules {
               ACTION_APPLICATION_DETAILS,
               "/api/lexis/applicationDetails",
               "/api/lexis/applicationDetails.do",
-              "/api/lexis/applications/*"),
+              "/api/lexis/applications/*",
+              "/api/lexis/record-versions/application"),
           action(
               HttpMethod.GET,
               "/exemptionSearch",
@@ -229,7 +230,8 @@ final class LexisApiAuthorizationRules {
               ACTION_EXEMPTION_DETAILS,
               "/api/lexis/exemptionDetails",
               "/api/lexis/exemptionDetails.do",
-              "/api/lexis/exemptions/*"),
+              "/api/lexis/exemptions/*",
+              "/api/lexis/record-versions/exemption"),
           action(
               HttpMethod.GET,
               "/federalApplicationSearch",

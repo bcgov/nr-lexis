@@ -42,8 +42,8 @@ describe('text utilities', () => {
 
   it('does not expose opaque audit identifiers as authors', () => {
     expect(displayAuditIdentity('IDIR\\JSMITH')).toBe('IDIR\\JSMITH')
-    expect(displayAuditIdentity('8c5df5b8-c041-7016-0f61-92b0d0000000')).toBe('Not available')
-    expect(displayAuditIdentity('BCSC\\8c5df5b8-c041-4016-8f61-92b0d0000000')).toBe('BCSC user')
+    expect(displayAuditIdentity('00000000-0000-4000-8000-000000000001')).toBe('Not available')
+    expect(displayAuditIdentity('BCSC\\00000000-0000-4000-8000-000000000002')).toBe('BCSC user')
     expect(displayAuditIdentity(null)).toBe('Not provided')
   })
 

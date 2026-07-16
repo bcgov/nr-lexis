@@ -23,6 +23,7 @@ import ca.bc.gov.mof.lexis.service.application.AuthenticatedSubmitterEmailCaptur
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
+import ca.bc.gov.mof.lexis.service.permit.OracleAggregateRowLockService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
@@ -652,6 +653,10 @@ class ApplicationDetailsRpcControllerTest {
   @Test
   void sendApplicationRejectEmailLegacyShouldDelegateToReviewEmailService() {
     when(applicationReviewServiceProvider.getIfAvailable()).thenReturn(applicationReviewService);
+    OracleAggregateRowLockService rowLocks =
+        org.mockito.Mockito.mock(OracleAggregateRowLockService.class);
+    ApplicationDetailsRpcController emailController =
+        controllerWithOracleLocks(rowLocks);
     when(applicationReviewService.sendStatusEmail(
             org.mockito.ArgumentMatchers.eq(1000456L),
             org.mockito.ArgumentMatchers.any(ApplicationReviewStatusEmailRequestDto.class)))
@@ -664,7 +669,7 @@ class ApplicationDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = authorized("/applicationsReview");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationStatusEmailResponseDto> response =
-        controller.sendApplicationRejectEmailLegacy(params, authentication);
+        emailController.sendApplicationRejectEmailLegacy(params, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -677,11 +682,17 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(requestCaptor.getValue().statusCode()).isEqualTo("REJ");
     assertThat(requestCaptor.getValue().clientEmailAddress()).isEqualTo("client@example.test");
     assertThat(requestCaptor.getValue().remark()).isEqualTo("Rejected during review");
+    verify(provincialAuthorizationService).requireApplication(authentication, 1000456L);
+    verifyNoInteractions(rowLocks);
   }
 
   @Test
   void sendApplicationWithdrawnEmailLegacyShouldUseWithdrawnStatus() {
     when(applicationReviewServiceProvider.getIfAvailable()).thenReturn(applicationReviewService);
+    OracleAggregateRowLockService rowLocks =
+        org.mockito.Mockito.mock(OracleAggregateRowLockService.class);
+    ApplicationDetailsRpcController emailController =
+        controllerWithOracleLocks(rowLocks);
     when(applicationReviewService.sendStatusEmail(
             org.mockito.ArgumentMatchers.eq(1000456L),
             org.mockito.ArgumentMatchers.any(ApplicationReviewStatusEmailRequestDto.class)))
@@ -694,7 +705,7 @@ class ApplicationDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = authorized("/applicationsReview");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationStatusEmailResponseDto> response =
-        controller.sendApplicationWithdrawnEmailLegacy(params, authentication);
+        emailController.sendApplicationWithdrawnEmailLegacy(params, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -704,6 +715,29 @@ class ApplicationDetailsRpcControllerTest {
         ArgumentCaptor.forClass(ApplicationReviewStatusEmailRequestDto.class);
     verify(applicationReviewService).sendStatusEmail(org.mockito.ArgumentMatchers.eq(1000456L), requestCaptor.capture());
     assertThat(requestCaptor.getValue().statusCode()).isEqualTo("WDN");
+    verify(provincialAuthorizationService).requireApplication(authentication, 1000456L);
+    verifyNoInteractions(rowLocks);
+  }
+
+  private ApplicationDetailsRpcController controllerWithOracleLocks(
+      OracleAggregateRowLockService rowLocks) {
+    @SuppressWarnings("unchecked")
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider =
+        org.mockito.Mockito.mock(ObjectProvider.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    ApplicationPermitOperationCoordinator coordinator =
+        new ApplicationPermitOperationCoordinator(new PermitOperationMutex(rowLockProvider));
+    return new ApplicationDetailsRpcController(
+        serviceProvider,
+        clientLookupServiceProvider,
+        applicationReviewServiceProvider,
+        sessionService,
+        authorizationService,
+        editLockService,
+        provincialAuthorizationService,
+        applicationEditPolicyService,
+        submitterEmailCaptureService,
+        coordinator);
   }
 
   @Test

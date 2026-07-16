@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository.RootRecordSnapshot;
 import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
 import ca.bc.gov.mof.lexis.service.coordination.InvalidRecordVersionException;
+import ca.bc.gov.mof.lexis.service.coordination.MissingRecordVersionException;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticLockRequest;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticLockRequestReader;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordType;
@@ -68,6 +69,54 @@ public class OracleAggregateRowLockService {
       Collection<Long> offerNumbers,
       Collection<Long> permitNumbers,
       Supplier<T> operation) {
+    return execute(
+        exemptionNumbers,
+        applicationNumbers,
+        offerNumbers,
+        permitNumbers,
+        true,
+        operation);
+  }
+
+  @Transactional
+  public <T> T executeSystemMutation(
+      Collection<String> exemptionNumbers,
+      Collection<Long> applicationNumbers,
+      Collection<Long> offerNumbers,
+      Collection<Long> permitNumbers,
+      Supplier<T> operation) {
+    return execute(
+        exemptionNumbers,
+        applicationNumbers,
+        offerNumbers,
+        permitNumbers,
+        false,
+        operation);
+  }
+
+  @Transactional
+  public <T> T executeRootCreateMutation(
+      Collection<String> exemptionNumbers,
+      Collection<Long> applicationNumbers,
+      Collection<Long> offerNumbers,
+      Collection<Long> permitNumbers,
+      Supplier<T> operation) {
+    return execute(
+        exemptionNumbers,
+        applicationNumbers,
+        offerNumbers,
+        permitNumbers,
+        false,
+        operation);
+  }
+
+  private <T> T execute(
+      Collection<String> exemptionNumbers,
+      Collection<Long> applicationNumbers,
+      Collection<Long> offerNumbers,
+      Collection<Long> permitNumbers,
+      boolean requireExpectedVersion,
+      Supplier<T> operation) {
     Objects.requireNonNull(operation, "operation");
     try {
       List<LockedRecord> lockedRecords = new ArrayList<>();
@@ -103,7 +152,8 @@ public class OracleAggregateRowLockService {
                           OptimisticRecordType.PERMIT,
                           value.toString(),
                           repository.lockPermit(value))));
-      LockedRecord optimisticTarget = verifyExpectedVersion(lockedRecords);
+      LockedRecord optimisticTarget =
+          verifyExpectedVersion(lockedRecords, requireExpectedVersion);
       T result = operation.get();
       if (TransactionSynchronizationManager.isActualTransactionActive()
           && TransactionAspectSupport.currentTransactionStatus().isRollbackOnly()) {
@@ -137,12 +187,31 @@ public class OracleAggregateRowLockService {
         safeSnapshot.map(value -> versionService.toVersion(recordType, recordId, value)));
   }
 
-  private LockedRecord verifyExpectedVersion(List<LockedRecord> lockedRecords) {
+  private LockedRecord verifyExpectedVersion(
+      List<LockedRecord> lockedRecords, boolean requireExpectedVersion) {
     OptimisticLockRequest request = optimisticLockRequestReader.currentRequest();
     if (request.expectedVersion().isEmpty()) {
+      if (requireExpectedVersion
+          && lockedRecords.stream().anyMatch(record -> record.version().isPresent())) {
+        throw new MissingRecordVersionException();
+      }
       return null;
     }
     var expected = request.expectedVersion().orElseThrow();
+    long existingTargetsOfExpectedType =
+        lockedRecords.stream()
+            .filter(
+                locked ->
+                    locked.recordType() == expected.recordType()
+                        && locked.version().isPresent())
+            .count();
+    if (existingTargetsOfExpectedType > 1) {
+      throw new InvalidRecordVersionException(
+          "A single record version cannot authorize an operation that updates multiple "
+              + expected.recordType().name().toLowerCase(Locale.ROOT)
+              + " records.",
+          null);
+    }
     LockedRecord target =
         lockedRecords.stream()
             .filter(

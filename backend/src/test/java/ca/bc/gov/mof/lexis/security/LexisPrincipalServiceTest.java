@@ -22,12 +22,15 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 @DisplayName("Unit Test | LexisPrincipalService")
 class LexisPrincipalServiceTest {
 
+  private static final String SYNTHETIC_UUID_SUBJECT =
+      "00000000-0000-4000-8000-000000000001";
+
   @Mock private CognitoUserInfoService userInfoService;
 
   @Test
   void shouldResolveIdirUserFromUserInfoClaims() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
-    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+    Jwt accessToken = jwt(SYNTHETIC_UUID_SUBJECT);
 
     when(userInfoService.getUserInfo(accessToken))
         .thenReturn(
@@ -43,7 +46,7 @@ class LexisPrincipalServiceTest {
   @Test
   void shouldResolveBusinessBceidUserFromUserInfoClaims() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
-    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+    Jwt accessToken = jwt(SYNTHETIC_UUID_SUBJECT);
 
     when(userInfoService.getUserInfo(accessToken))
         .thenReturn(
@@ -59,7 +62,7 @@ class LexisPrincipalServiceTest {
   @Test
   void shouldResolveBceidUserIdWhenUsernameClaimIsMissing() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
-    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+    Jwt accessToken = jwt(SYNTHETIC_UUID_SUBJECT);
 
     when(userInfoService.getUserInfo(accessToken))
         .thenReturn(
@@ -158,7 +161,7 @@ class LexisPrincipalServiceTest {
   @Test
   void shouldRejectOpaqueJwtSubjectWhenNoStableIdentityExists() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
-    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+    Jwt accessToken = jwt(SYNTHETIC_UUID_SUBJECT);
 
     when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of());
 
@@ -280,8 +283,7 @@ class LexisPrincipalServiceTest {
   @Test
   void shouldResolveOrgUnitFromAccessTokenClaims() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
-    Jwt accessToken =
-        jwt("5cdd5598-30c1-708e-3288-187b41a253e8", Map.of("custom:org_unit_no", "76"));
+    Jwt accessToken = jwt(SYNTHETIC_UUID_SUBJECT, Map.of("custom:org_unit_no", "76"));
 
     when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of());
 
@@ -293,7 +295,7 @@ class LexisPrincipalServiceTest {
   @Test
   void shouldResolveOrgUnitFromUserInfoClaims() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
-    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+    Jwt accessToken = jwt(SYNTHETIC_UUID_SUBJECT);
 
     when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of("orgUnitNo", "1826"));
 
@@ -307,7 +309,7 @@ class LexisPrincipalServiceTest {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
     Jwt accessToken =
         jwt(
-            "5cdd5598-30c1-708e-3288-187b41a253e8",
+            SYNTHETIC_UUID_SUBJECT,
             Map.of("custom:org_unit_nos", List.of("76", "1826, 76", "invalid")));
 
     when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of());

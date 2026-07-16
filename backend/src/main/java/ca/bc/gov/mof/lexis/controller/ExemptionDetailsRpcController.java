@@ -684,7 +684,7 @@ public class ExemptionDetailsRpcController {
         };
     return exemptionNumbers.isEmpty() && applicationNumbers.isEmpty()
         ? mutation.get()
-        : operationCoordinator.executeExemptionMutation(
+        : operationCoordinator.executeRootCreateExemptionMutation(
             exemptionNumbers,
             () ->
                 linkedApplicationNumbersForMutation(

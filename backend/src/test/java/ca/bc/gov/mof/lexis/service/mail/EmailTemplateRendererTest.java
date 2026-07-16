@@ -15,13 +15,13 @@ class EmailTemplateRendererTest {
         renderer.render(
             "application_status",
             Map.of(
-                "applicationNumber", "108511",
+                "applicationNumber", "999000001",
                 "statusDescription", "REJECTED",
                 "remark", "Cost is $5 at C:\\temp"));
 
     assertThat(body)
         .isEqualTo(
-            "Application #108511 status was changed to REJECTED with the following reason:\n\n"
+            "Application #999000001 status was changed to REJECTED with the following reason:\n\n"
                 + "Cost is $5 at C:\\temp\n");
   }
 

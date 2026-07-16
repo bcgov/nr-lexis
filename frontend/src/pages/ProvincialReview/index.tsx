@@ -87,6 +87,7 @@ import {
   type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
+import { fetchCurrentApplicationRecordVersion } from '@/service/record-version-service'
 import {
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
@@ -620,7 +621,12 @@ const ProvincialReviewPage = () => {
     setRejectValidationMessage('')
 
     try {
-      const updateResult = await updateApplicationReviewStatus(rejectApplicationNumber, payload)
+      const recordVersion = await fetchCurrentApplicationRecordVersion(rejectApplicationNumber)
+      const updateResult = await updateApplicationReviewStatus(
+        rejectApplicationNumber,
+        payload,
+        recordVersion,
+      )
       if (!updateResult.valid || !updateResult.updated) {
         setReviewActionStatus({
           kind: 'error',
@@ -701,7 +707,8 @@ const ProvincialReviewPage = () => {
       const approvalResults = []
       for (const applicationNumber of selectedNumbers) {
         try {
-          const result = await approveApplicationReview(applicationNumber)
+          const recordVersion = await fetchCurrentApplicationRecordVersion(applicationNumber)
+          const result = await approveApplicationReview(applicationNumber, recordVersion)
           approvalResults.push({
             applicationNumber,
             success: result.updated && result.valid,

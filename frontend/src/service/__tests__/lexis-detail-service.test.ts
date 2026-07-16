@@ -26,6 +26,7 @@ const response = (data: unknown, status = 200) => ({
   data,
   status,
 })
+const syntheticApplicationNumber = '999000001'
 
 describe('lexis detail service', () => {
   beforeEach(() => {
@@ -93,18 +94,18 @@ describe('lexis detail service', () => {
 
   it('registers application and exemption detail versions against their authoritative URLs', async () => {
     getCachedResponseMock
-      .mockResolvedValueOnce(response({ applicationNumber: 46079 }))
+      .mockResolvedValueOnce(response({ applicationNumber: Number(syntheticApplicationNumber) }))
       .mockResolvedValueOnce(response({ exemptionNumber: 'EX-9' }))
 
-    await fetchProvincialApplicationDetail('46079')
+    await fetchProvincialApplicationDetail(syntheticApplicationNumber)
     await fetchProvincialExemptionDetail('EX-9')
 
     expect(registerRecordVersionMock).toHaveBeenNthCalledWith(
       1,
       'application',
-      '46079',
+      syntheticApplicationNumber,
       expect.any(Object),
-      '/lexis/applications/46079',
+      `/lexis/applications/${syntheticApplicationNumber}`,
     )
     expect(registerRecordVersionMock).toHaveBeenNthCalledWith(
       2,

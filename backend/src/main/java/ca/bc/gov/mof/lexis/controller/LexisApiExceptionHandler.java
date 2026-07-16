@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
 import ca.bc.gov.mof.lexis.service.coordination.InvalidRecordVersionException;
+import ca.bc.gov.mof.lexis.service.coordination.MissingRecordVersionException;
 import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import java.util.List;
@@ -75,6 +76,18 @@ class LexisApiExceptionHandler {
         .body(problem);
   }
 
+  @ExceptionHandler(MissingRecordVersionException.class)
+  ResponseEntity<ProblemDetail> handleMissingRecordVersionException(
+      MissingRecordVersionException exception) {
+    ProblemDetail problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_REQUIRED, exception.getMessage());
+    problem.setTitle("Record refresh required");
+    problem.setProperty("code", "RECORD_VERSION_REQUIRED");
+    return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED)
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .body(problem);
+  }
+
   @ExceptionHandler(StaleRecordException.class)
   ResponseEntity<ProblemDetail> handleStaleRecordException(StaleRecordException exception) {
     ProblemDetail problem =
@@ -91,7 +104,6 @@ class LexisApiExceptionHandler {
         exception.currentSavedAt() == null ? null : exception.currentSavedAt().toString());
     problem.setProperty("updatedBy", exception.currentUpdatedBy());
     problem.setProperty("changedFields", List.of());
-    problem.setProperty("overwriteAllowed", true);
     return ResponseEntity.status(HttpStatus.CONFLICT)
         .contentType(MediaType.APPLICATION_PROBLEM_JSON)
         .body(problem);

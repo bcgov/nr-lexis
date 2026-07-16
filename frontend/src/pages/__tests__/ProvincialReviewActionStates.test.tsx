@@ -12,6 +12,7 @@ import {
 } from '@/service/application-review-search-service'
 import { fetchApplicationClientData } from '@/service/application-client-lookup-service'
 import { fetchApplicationSummarySnapshot } from '@/service/provincial-application-items-service'
+import { fetchCurrentApplicationRecordVersion } from '@/service/record-version-service'
 import { fetchApplicationReviewOptions } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
@@ -39,6 +40,10 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationSummarySnapshot: vi.fn(),
 }))
 
+vi.mock('@/service/record-version-service', () => ({
+  fetchCurrentApplicationRecordVersion: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchApplicationReviews = vi.mocked(searchApplicationReviews)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
@@ -46,6 +51,7 @@ const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewSta
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
 const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
+const mockedFetchCurrentApplicationRecordVersion = vi.mocked(fetchCurrentApplicationRecordVersion)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 
 const reviewResponse = {
@@ -188,6 +194,9 @@ describe('Provincial Review Action State Smoke', () => {
       message: 'Sent',
     })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue(applicationSummary)
+    mockedFetchCurrentApplicationRecordVersion.mockImplementation((applicationNumber) =>
+      Promise.resolve(`application-${applicationNumber}-version`),
+    )
     mockedFetchApplicationClientData.mockResolvedValue({
       clientNumber: '00012345',
       companyName: 'Client Ltd.',
@@ -307,7 +316,10 @@ describe('Provincial Review Action State Smoke', () => {
 
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
-      expect(mockedApproveApplicationReview).toHaveBeenCalledWith('1000456')
+      expect(mockedApproveApplicationReview).toHaveBeenCalledWith(
+        '1000456',
+        'application-1000456-version',
+      )
     })
     expect(await screen.findByText('Approved 1 application(s).')).toBeInTheDocument()
   })
@@ -349,6 +361,7 @@ describe('Provincial Review Action State Smoke', () => {
           remark: 'Rejected from review queue',
           clientEmailAddress: 'edited.client@example.com',
         }),
+        'application-1000123-version',
       )
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
         '1000123',
@@ -409,6 +422,7 @@ describe('Provincial Review Action State Smoke', () => {
           remark: 'Pending application rejected',
           clientEmailAddress: 'client@example.com',
         }),
+        'application-1000456-version',
       )
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
         '1000456',
@@ -482,6 +496,7 @@ describe('Provincial Review Action State Smoke', () => {
           remark: 'Rejected from review queue',
           clientEmailAddress: 'agent@example.com',
         }),
+        'application-1000123-version',
       )
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
         '1000123',
@@ -617,6 +632,7 @@ describe('Provincial Review Action State Smoke', () => {
           remark: 'Rejected without notification',
           clientEmailAddress: '',
         }),
+        'application-1000123-version',
       )
     })
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
@@ -701,7 +717,12 @@ describe('Provincial Review Action State Smoke', () => {
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
     })
-    expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(1, '2000001')
+    expect(mockedFetchCurrentApplicationRecordVersion).toHaveBeenNthCalledWith(1, '2000001')
+    expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(
+      1,
+      '2000001',
+      'application-2000001-version',
+    )
 
     await act(async () => {
       resolveFirstApproval?.({
@@ -717,7 +738,12 @@ describe('Provincial Review Action State Smoke', () => {
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(2)
     })
-    expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(2, '2000002')
+    expect(mockedFetchCurrentApplicationRecordVersion).toHaveBeenNthCalledWith(2, '2000002')
+    expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(
+      2,
+      '2000002',
+      'application-2000002-version',
+    )
 
     await act(async () => {
       resolveSecondApproval?.({

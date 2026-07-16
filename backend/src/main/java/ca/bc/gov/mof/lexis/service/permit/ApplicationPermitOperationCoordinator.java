@@ -122,6 +122,54 @@ public final class ApplicationPermitOperationCoordinator {
       Supplier<? extends Collection<Long>> applicationDiscovery,
       Supplier<? extends Collection<Long>> permitDiscovery,
       Supplier<T> operation) {
+    return executeExemptionMutation(
+        exemptionNumbers,
+        applicationDiscovery,
+        permitDiscovery,
+        MutationMode.INTERACTIVE,
+        operation);
+  }
+
+  public <T> T executeRootCreateExemptionMutation(
+      Collection<String> exemptionNumbers,
+      Supplier<? extends Collection<Long>> applicationDiscovery,
+      Supplier<T> operation) {
+    return executeRootCreateExemptionMutation(
+        exemptionNumbers, applicationDiscovery, List::of, operation);
+  }
+
+  public <T> T executeRootCreateExemptionMutation(
+      Collection<String> exemptionNumbers,
+      Supplier<? extends Collection<Long>> applicationDiscovery,
+      Supplier<? extends Collection<Long>> permitDiscovery,
+      Supplier<T> operation) {
+    return executeExemptionMutation(
+        exemptionNumbers,
+        applicationDiscovery,
+        permitDiscovery,
+        MutationMode.ROOT_CREATE,
+        operation);
+  }
+
+  public <T> T executeSystemExemptionMutation(
+      Collection<String> exemptionNumbers,
+      Supplier<? extends Collection<Long>> applicationDiscovery,
+      Supplier<? extends Collection<Long>> permitDiscovery,
+      Supplier<T> operation) {
+    return executeExemptionMutation(
+        exemptionNumbers,
+        applicationDiscovery,
+        permitDiscovery,
+        MutationMode.SYSTEM,
+        operation);
+  }
+
+  private <T> T executeExemptionMutation(
+      Collection<String> exemptionNumbers,
+      Supplier<? extends Collection<Long>> applicationDiscovery,
+      Supplier<? extends Collection<Long>> permitDiscovery,
+      MutationMode mutationMode,
+      Supplier<T> operation) {
     NavigableSet<String> lockedExemptions = normalizeExemptions(exemptionNumbers);
     Objects.requireNonNull(applicationDiscovery, "applicationDiscovery");
     Objects.requireNonNull(permitDiscovery, "permitDiscovery");
@@ -134,23 +182,31 @@ public final class ApplicationPermitOperationCoordinator {
     for (int attempt = 0; attempt < MAX_DISCOVERY_ATTEMPTS; attempt++) {
       NavigableSet<Long> lockedApplications = new TreeSet<>(expectedApplications);
       NavigableSet<Long> lockedPermits = new TreeSet<>(expectedPermits);
+      Supplier<DiscoveryAttempt<T>> lockedOperation =
+          () -> {
+            NavigableSet<Long> actualApplications =
+                normalizeNumbers(applicationDiscovery.get(), "application");
+            NavigableSet<Long> actualPermits =
+                normalizeNumbers(permitDiscovery.get(), "permit");
+            if (!lockedApplications.containsAll(actualApplications)
+                || !lockedPermits.containsAll(actualPermits)) {
+              return DiscoveryAttempt.retry(
+                  new TreeSet<>(), actualApplications, actualPermits);
+            }
+            return DiscoveryAttempt.completed(operation.get());
+          };
       DiscoveryAttempt<T> result =
-          operationMutex.executeAggregate(
-              lockedExemptions,
-              lockedApplications,
-              lockedPermits,
-              () -> {
-                NavigableSet<Long> actualApplications =
-                    normalizeNumbers(applicationDiscovery.get(), "application");
-                NavigableSet<Long> actualPermits =
-                    normalizeNumbers(permitDiscovery.get(), "permit");
-                if (!lockedApplications.containsAll(actualApplications)
-                    || !lockedPermits.containsAll(actualPermits)) {
-                  return DiscoveryAttempt.retry(
-                      new TreeSet<>(), actualApplications, actualPermits);
-                }
-                return DiscoveryAttempt.completed(operation.get());
-              });
+          switch (mutationMode) {
+            case INTERACTIVE ->
+                operationMutex.executeAggregate(
+                    lockedExemptions, lockedApplications, lockedPermits, lockedOperation);
+            case ROOT_CREATE ->
+                operationMutex.executeRootCreateAggregate(
+                    lockedExemptions, lockedApplications, lockedPermits, lockedOperation);
+            case SYSTEM ->
+                operationMutex.executeSystemAggregate(
+                    lockedExemptions, lockedApplications, lockedPermits, lockedOperation);
+          };
       if (!result.retry()) {
         return result.value();
       }
@@ -173,11 +229,31 @@ public final class ApplicationPermitOperationCoordinator {
         operation);
   }
 
+  public <T> T executeRootCreateKnownAggregate(
+      Collection<String> exemptionNumbers,
+      Collection<Long> applicationNumbers,
+      Collection<Long> permitNumbers,
+      Supplier<T> operation) {
+    return operationMutex.executeRootCreateAggregate(
+        normalizeExemptions(exemptionNumbers),
+        normalizeNumbers(applicationNumbers, "application"),
+        normalizeNumbers(permitNumbers, "permit"),
+        operation);
+  }
+
   public <T> T executeApplicationLocalMutation(
       Long applicationNumber, Supplier<T> operation) {
     validateNumber(applicationNumber, "application");
     Objects.requireNonNull(operation, "operation");
     return operationMutex.executeApplications(List.of(applicationNumber), operation);
+  }
+
+  public <T> T executeRootCreateApplicationLocalMutation(
+      Long applicationNumber, Supplier<T> operation) {
+    validateNumber(applicationNumber, "application");
+    Objects.requireNonNull(operation, "operation");
+    return operationMutex.executeRootCreateAggregate(
+        List.of(), List.of(applicationNumber), List.of(), operation);
   }
 
   public <T> T executeApplicationOfferMutation(
@@ -261,5 +337,11 @@ public final class ApplicationPermitOperationCoordinator {
           new TreeSet<>(),
           new TreeSet<>());
     }
+  }
+
+  private enum MutationMode {
+    INTERACTIVE,
+    ROOT_CREATE,
+    SYSTEM
   }
 }

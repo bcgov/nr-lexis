@@ -31,15 +31,15 @@ class EmailEventDispatcherTest {
   void shouldDispatchApplicationStatusSnapshot() {
     dispatcher.onWorkflowEmailEvent(
         new WorkflowEmailEvent.ApplicationStatus(
-            108511L,
+            999000001L,
             "REJECTED",
             "Missing documents",
             "client@example.com"));
 
     verify(mailService)
         .send(
-            "Application #108511 status to REJECTED",
-            "Application #108511 status was changed to REJECTED with the following reason:\n\n"
+            "Application #999000001 status to REJECTED",
+            "Application #999000001 status was changed to REJECTED with the following reason:\n\n"
                 + "Missing documents\n",
             List.of("client@example.com"),
             List.of());

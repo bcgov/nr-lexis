@@ -25,6 +25,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
+import ca.bc.gov.mof.lexis.service.permit.OracleAggregateRowLockService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
@@ -304,6 +305,8 @@ class ApplicationReviewControllerTest {
   @Test
   void sendStatusEmailShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    ApplicationReviewController emailController = controllerWithOracleLocks(rowLocks);
     ApplicationReviewStatusEmailRequestDto body =
         new ApplicationReviewStatusEmailRequestDto("REJ", "client@gov.bc.ca", "Missing docs");
     ApplicationReviewStatusEmailResultDto dto =
@@ -311,11 +314,13 @@ class ApplicationReviewControllerTest {
     when(service.sendStatusEmail(1000456L, body)).thenReturn(dto);
 
     ResponseEntity<ApplicationReviewStatusEmailResultDto> response =
-        controller.sendStatusEmail(1000456L, body);
+        emailController.sendStatusEmail(1000456L, body);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).sendStatusEmail(1000456L, body);
+    verify(provincialAuthorizationService).requireApplicationReview(null, 1000456L);
+    verifyNoInteractions(rowLocks);
   }
 
   @Test
@@ -431,6 +436,8 @@ class ApplicationReviewControllerTest {
   @Test
   void sendStatusEmailLegacyShouldReturnLegacyStringSuccessPayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    ApplicationReviewController emailController = controllerWithOracleLocks(rowLocks);
     MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
     parameters.add("applicationNumber", "1000456");
     parameters.add("appStatus", "WDN");
@@ -442,7 +449,8 @@ class ApplicationReviewControllerTest {
         ArgumentCaptor.forClass(ApplicationReviewStatusEmailRequestDto.class);
     when(service.sendStatusEmail(any(), any())).thenReturn(dto);
 
-    ResponseEntity<Map<String, Object>> response = controller.sendStatusEmailLegacy(parameters);
+    ResponseEntity<Map<String, Object>> response =
+        emailController.sendStatusEmailLegacy(parameters);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody())
@@ -451,5 +459,22 @@ class ApplicationReviewControllerTest {
     verify(service).sendStatusEmail(any(), requestCaptor.capture());
     assertThat(requestCaptor.getValue())
         .isEqualTo(new ApplicationReviewStatusEmailRequestDto("WDN", "client@gov.bc.ca", "Withdrawn"));
+    verify(provincialAuthorizationService).requireApplicationReview(null, 1000456L);
+    verifyNoInteractions(rowLocks);
+  }
+
+  private ApplicationReviewController controllerWithOracleLocks(
+      OracleAggregateRowLockService rowLocks) {
+    @SuppressWarnings("unchecked")
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider =
+        mock(ObjectProvider.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    ApplicationPermitOperationCoordinator coordinator =
+        new ApplicationPermitOperationCoordinator(new PermitOperationMutex(rowLockProvider));
+    return new ApplicationReviewController(
+        serviceProvider,
+        applicationDetailsServiceProvider,
+        provincialAuthorizationService,
+        coordinator);
   }
 }

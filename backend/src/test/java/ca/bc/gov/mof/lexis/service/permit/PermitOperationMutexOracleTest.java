@@ -66,6 +66,56 @@ class PermitOperationMutexOracleTest {
   }
 
   @Test
+  void systemAggregateShouldUseTheExplicitSystemOraclePath() {
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider =
+        mock(ObjectProvider.class);
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    doAnswer(invocation -> ((Supplier<?>) invocation.getArgument(4)).get())
+        .when(rowLocks)
+        .executeSystemMutation(anyList(), anyList(), anyList(), anyList(), any(Supplier.class));
+    PermitOperationMutex mutex = new PermitOperationMutex(rowLockProvider);
+
+    String result =
+        mutex.executeSystemAggregate(
+            List.of("EX-100"), List.of(10L), List.of(100L), () -> "expired");
+
+    verify(rowLocks)
+        .executeSystemMutation(
+            eq(List.of("EX-100")),
+            eq(List.of(10L)),
+            eq(List.of()),
+            eq(List.of(100L)),
+            any(Supplier.class));
+    assertThat(result).isEqualTo("expired");
+  }
+
+  @Test
+  void rootCreateAggregateShouldUseTheExplicitRootCreateOraclePath() {
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider =
+        mock(ObjectProvider.class);
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    doAnswer(invocation -> ((Supplier<?>) invocation.getArgument(4)).get())
+        .when(rowLocks)
+        .executeRootCreateMutation(anyList(), anyList(), anyList(), anyList(), any(Supplier.class));
+    PermitOperationMutex mutex = new PermitOperationMutex(rowLockProvider);
+
+    String result =
+        mutex.executeRootCreateAggregate(
+            List.of("EX-100"), List.of(10L), List.of(), () -> "application-created");
+
+    verify(rowLocks)
+        .executeRootCreateMutation(
+            eq(List.of("EX-100")),
+            eq(List.of(10L)),
+            eq(List.of()),
+            eq(List.of()),
+            any(Supplier.class));
+    assertThat(result).isEqualTo("application-created");
+  }
+
+  @Test
   void applicationCoordinatorShouldLockTheApplicationAndPermitsInOneOracleTransaction() {
     ObjectProvider<OracleAggregateRowLockService> rowLockProvider =
         mock(ObjectProvider.class);

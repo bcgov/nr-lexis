@@ -10,6 +10,11 @@ import org.junit.jupiter.api.Test;
 
 class ApplicationEditLockServiceTest {
 
+  private static final long SYNTHETIC_APPLICATION_NUMBER = 999_000_001L;
+  private static final long SYNTHETIC_PERMIT_NUMBER = 999_000_002L;
+  private static final long SYNTHETIC_OFFER_NUMBER = 999_000_003L;
+  private static final String SYNTHETIC_EXEMPTION_NUMBER = "TEST-EX-001";
+
   private ApplicationEditLockService service;
 
   @BeforeEach
@@ -19,29 +24,39 @@ class ApplicationEditLockServiceTest {
 
   @Test
   void openingTheSameApplicationFromDifferentUsersShouldNotCreateALease() {
-    var first = service.acquire(45970L, "IDIR\\FIRST", "First User", true);
-    var second = service.acquire(45970L, "IDIR\\SECOND", "Second User", true);
+    var first = service.acquire(SYNTHETIC_APPLICATION_NUMBER, "IDIR\\FIRST", "First User", true);
+    var second =
+        service.acquire(SYNTHETIC_APPLICATION_NUMBER, "IDIR\\SECOND", "Second User", true);
 
     assertThat(first.locked()).isFalse();
     assertThat(second.locked()).isFalse();
-    assertThat(service.snapshot(45970L, "IDIR\\THIRD", true).locked()).isFalse();
-    assertThat(service.lockedApplicationNumbers(List.of(45970L))).isEmpty();
+    assertThat(service.snapshot(SYNTHETIC_APPLICATION_NUMBER, "IDIR\\THIRD", true).locked())
+        .isFalse();
+    assertThat(service.lockedApplicationNumbers(List.of(SYNTHETIC_APPLICATION_NUMBER))).isEmpty();
   }
 
   @Test
   void allInteractiveAggregateTypesShouldRemainEditable() {
-    assertThat(service.acquirePermit(70001L, "IDIR\\USER", "User", true).locked()).isFalse();
-    assertThat(service.acquireExemption("EX-1", "IDIR\\USER", "User", true).locked()).isFalse();
-    assertThat(service.acquireOffer(80001L, "IDIR\\USER", "User", true).locked()).isFalse();
+    assertThat(
+            service.acquirePermit(SYNTHETIC_PERMIT_NUMBER, "IDIR\\USER", "User", true).locked())
+        .isFalse();
+    assertThat(
+            service
+                .acquireExemption(SYNTHETIC_EXEMPTION_NUMBER, "IDIR\\USER", "User", true)
+                .locked())
+        .isFalse();
+    assertThat(
+            service.acquireOffer(SYNTHETIC_OFFER_NUMBER, "IDIR\\USER", "User", true).locked())
+        .isFalse();
   }
 
   @Test
   void compatibilityTouchAndReleaseShouldNotDependOnStoredState() {
-    assertThat(service.touch(45970L, "IDIR\\USER")).isTrue();
-    assertThat(service.touchOffer(80001L, "IDIR\\USER")).isTrue();
-    assertThat(service.release(45970L, "IDIR\\USER")).isTrue();
-    assertThat(service.releasePermit(70001L, "IDIR\\USER")).isTrue();
-    assertThat(service.releaseExemption("EX-1", "IDIR\\USER")).isTrue();
-    assertThat(service.releaseOffer(80001L, "IDIR\\USER")).isTrue();
+    assertThat(service.touch(SYNTHETIC_APPLICATION_NUMBER, "IDIR\\USER")).isTrue();
+    assertThat(service.touchOffer(SYNTHETIC_OFFER_NUMBER, "IDIR\\USER")).isTrue();
+    assertThat(service.release(SYNTHETIC_APPLICATION_NUMBER, "IDIR\\USER")).isTrue();
+    assertThat(service.releasePermit(SYNTHETIC_PERMIT_NUMBER, "IDIR\\USER")).isTrue();
+    assertThat(service.releaseExemption(SYNTHETIC_EXEMPTION_NUMBER, "IDIR\\USER")).isTrue();
+    assertThat(service.releaseOffer(SYNTHETIC_OFFER_NUMBER, "IDIR\\USER")).isTrue();
   }
 }

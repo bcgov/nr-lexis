@@ -330,7 +330,7 @@ public class OfferDetailsRpcController {
           request.applicationNumber(), null, false, "A valid application number is required.");
     }
 
-    return operationCoordinator.executeApplicationLocalMutation(
+    return operationCoordinator.executeRootCreateApplicationLocalMutation(
         request.applicationNumber(),
         () ->
             addOfferWhileSerialized(

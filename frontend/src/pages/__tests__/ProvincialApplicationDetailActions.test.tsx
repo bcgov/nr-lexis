@@ -644,7 +644,7 @@ describe('Provincial Application Detail Document Actions', () => {
   it('does not display a historical Cognito subject as the application author', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
-      author: '8c5df5b8-c041-7016-0f61-92b0d0000000',
+      author: '00000000-0000-4000-8000-000000000001',
     })
 
     render(
@@ -660,7 +660,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const highlights = await screen.findByRole('group', { name: 'Application highlights' })
     expect(within(highlights).getByText('Not available')).toBeInTheDocument()
-    expect(within(highlights).queryByText(/8c5df5b8/i)).not.toBeInTheDocument()
+    expect(within(highlights).queryByText(/00000000-0000-4000/i)).not.toBeInTheDocument()
   })
 
   it('uses the legacy application detail tab order', async () => {

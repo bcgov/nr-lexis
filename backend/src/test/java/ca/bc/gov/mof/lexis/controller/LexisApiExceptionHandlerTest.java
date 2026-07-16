@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.service.coordination.InvalidRecordVersionException;
+import ca.bc.gov.mof.lexis.service.coordination.MissingRecordVersionException;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordType;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordVersion;
 import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
@@ -134,7 +135,7 @@ class LexisApiExceptionHandlerTest {
   }
 
   @Test
-  void staleSaveShouldReturnConflictMetadataForRefreshOrOverwrite() throws Exception {
+  void staleSaveShouldRequireRefreshWithoutAdvertisingOverwrite() throws Exception {
     mockMvc
         .perform(get("/test/stale-record"))
         .andExpect(status().isConflict())
@@ -147,7 +148,20 @@ class LexisApiExceptionHandlerTest {
         .andExpect(jsonPath("$.savedAt").value("2026-07-15T18:01:00Z"))
         .andExpect(jsonPath("$.updatedBy").value("IDIR\\SECOND"))
         .andExpect(jsonPath("$.changedFields").isArray())
-        .andExpect(jsonPath("$.overwriteAllowed").value(true));
+        .andExpect(jsonPath("$.overwriteAllowed").doesNotExist())
+        .andExpect(jsonPath("$.detail").value(containsString("Refresh")));
+  }
+
+  @Test
+  void missingVersionShouldRequireRefreshBeforeMutation() throws Exception {
+    mockMvc
+        .perform(get("/test/missing-record-version"))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.status").value(428))
+        .andExpect(jsonPath("$.title").value("Record refresh required"))
+        .andExpect(jsonPath("$.code").value("RECORD_VERSION_REQUIRED"))
+        .andExpect(jsonPath("$.detail").value(containsString("Refresh")));
   }
 
   @Test
@@ -193,6 +207,11 @@ class LexisApiExceptionHandlerTest {
     @GetMapping("/test/invalid-record-version")
     String invalidRecordVersion() {
       throw new InvalidRecordVersionException("Invalid version", null);
+    }
+
+    @GetMapping("/test/missing-record-version")
+    String missingRecordVersion() {
+      throw new MissingRecordVersionException();
     }
 
     @PostMapping("/test/report-request")

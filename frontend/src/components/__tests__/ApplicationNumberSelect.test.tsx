@@ -116,11 +116,11 @@ describe('ApplicationNumberSelect', () => {
     const onChange = vi.fn()
     mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
       {
-        value: '28077',
-        label: '28077 - Approved - Owner 00016245 - Region RKB',
+        value: '999000001',
+        label: '999000001 - Approved - Owner 99999999 - Region RKB',
         status: 'Approved',
         applicantClientNumber: '',
-        ownerClientNumber: '00016245',
+        ownerClientNumber: '99999999',
         region: 'RKB',
         listingDate: '2012-05-11',
         exemptionNumber: '',
@@ -131,21 +131,21 @@ describe('ApplicationNumberSelect', () => {
       <ApplicationNumberSelect
         id="applicationNumber"
         labelText="Application Number (required)"
-        value="28077"
+        value="999000001"
         onChange={onChange}
       />,
     )
 
     const input = screen.getByRole('combobox', { name: 'Application Number (required)' })
     await waitFor(() => {
-      expect(input).toHaveValue('28077 - Approved - Owner 00016245 - Region RKB')
+      expect(input).toHaveValue('999000001 - Approved - Owner 99999999 - Region RKB')
     })
     onChange.mockClear()
 
     await userEvent.click(input)
     await userEvent.click(
       await screen.findByRole('option', {
-        name: '28077 - Approved - Owner 00016245 - Region RKB',
+        name: '999000001 - Approved - Owner 99999999 - Region RKB',
       }),
     )
 

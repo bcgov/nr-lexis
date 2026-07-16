@@ -74,6 +74,50 @@ public final class PermitOperationMutex {
       Collection<Long> offerNumbers,
       Collection<Long> permitNumbers,
       Supplier<T> operation) {
+    return executeAggregate(
+        exemptionNumbers,
+        applicationNumbers,
+        offerNumbers,
+        permitNumbers,
+        MutationMode.INTERACTIVE,
+        operation);
+  }
+
+  public <T> T executeSystemAggregate(
+      Collection<String> exemptionNumbers,
+      Collection<Long> applicationNumbers,
+      Collection<Long> permitNumbers,
+      Supplier<T> operation) {
+    return executeAggregate(
+        exemptionNumbers,
+        applicationNumbers,
+        List.of(),
+        permitNumbers,
+        MutationMode.SYSTEM,
+        operation);
+  }
+
+  public <T> T executeRootCreateAggregate(
+      Collection<String> exemptionNumbers,
+      Collection<Long> applicationNumbers,
+      Collection<Long> permitNumbers,
+      Supplier<T> operation) {
+    return executeAggregate(
+        exemptionNumbers,
+        applicationNumbers,
+        List.of(),
+        permitNumbers,
+        MutationMode.ROOT_CREATE,
+        operation);
+  }
+
+  private <T> T executeAggregate(
+      Collection<String> exemptionNumbers,
+      Collection<Long> applicationNumbers,
+      Collection<Long> offerNumbers,
+      Collection<Long> permitNumbers,
+      MutationMode mutationMode,
+      Supplier<T> operation) {
     Objects.requireNonNull(exemptionNumbers, "exemptionNumbers");
     Objects.requireNonNull(applicationNumbers, "applicationNumbers");
     Objects.requireNonNull(offerNumbers, "offerNumbers");
@@ -88,21 +132,32 @@ public final class PermitOperationMutex {
     if (keys.isEmpty()) {
       throw new IllegalArgumentException("At least one aggregate key is required.");
     }
-    return executeKeys(List.copyOf(keys), operation);
+    return executeKeys(List.copyOf(keys), mutationMode, operation);
   }
 
   private <T> T executeKeys(List<OperationKey> keys, Supplier<T> operation) {
+    return executeKeys(keys, MutationMode.INTERACTIVE, operation);
+  }
+
+  private <T> T executeKeys(
+      List<OperationKey> keys,
+      MutationMode mutationMode,
+      Supplier<T> operation) {
     Objects.requireNonNull(operation, "operation");
-    return executeInOrder(keys, 0, operation);
+    return executeInOrder(keys, 0, mutationMode, operation);
   }
 
   private <T> T executeInOrder(
-      List<OperationKey> keys, int index, Supplier<T> operation) {
+      List<OperationKey> keys,
+      int index,
+      MutationMode mutationMode,
+      Supplier<T> operation) {
     if (index >= keys.size()) {
-      return executeWithOracleRowLocks(keys, operation);
+      return executeWithOracleRowLocks(keys, mutationMode, operation);
     }
     return executeKey(
-        keys.get(index), () -> executeInOrder(keys, index + 1, operation));
+        keys.get(index),
+        () -> executeInOrder(keys, index + 1, mutationMode, operation));
   }
 
   private <T> T executeKey(OperationKey key, Supplier<T> operation) {
@@ -215,7 +270,9 @@ public final class PermitOperationMutex {
   }
 
   private <T> T executeWithOracleRowLocks(
-      Collection<OperationKey> keys, Supplier<T> operation) {
+      Collection<OperationKey> keys,
+      MutationMode mutationMode,
+      Supplier<T> operation) {
     if (oracleRowLocks == null) {
       return operation.get();
     }
@@ -240,8 +297,17 @@ public final class PermitOperationMutex {
             .map(OperationKey::numericValue)
             .toList();
     try {
-      return oracleRowLocks.execute(
-          exemptionNumbers, applicationNumbers, offerNumbers, permitNumbers, operation);
+      return switch (mutationMode) {
+        case INTERACTIVE ->
+            oracleRowLocks.execute(
+                exemptionNumbers, applicationNumbers, offerNumbers, permitNumbers, operation);
+        case ROOT_CREATE ->
+            oracleRowLocks.executeRootCreateMutation(
+                exemptionNumbers, applicationNumbers, offerNumbers, permitNumbers, operation);
+        case SYSTEM ->
+            oracleRowLocks.executeSystemMutation(
+                exemptionNumbers, applicationNumbers, offerNumbers, permitNumbers, operation);
+      };
     } catch (CoordinatedRollbackResultException exception) {
       return exception.result();
     }
@@ -258,6 +324,12 @@ public final class PermitOperationMutex {
     APPLICATION,
     OFFER,
     PERMIT
+  }
+
+  private enum MutationMode {
+    INTERACTIVE,
+    ROOT_CREATE,
+    SYSTEM
   }
 
   private record OperationKey(OperationType type, String textValue, Long numericValue)

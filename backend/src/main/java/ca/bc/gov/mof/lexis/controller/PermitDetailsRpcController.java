@@ -547,7 +547,7 @@ public class PermitDetailsRpcController {
 
     String exemptionNumber = requiredExemptionNumber(mutationRequest.exemptionNumber());
     PermitMutationRpcResponseDto response =
-        operationCoordinator.executeExemptionMutation(
+        operationCoordinator.executeRootCreateExemptionMutation(
             List.of(exemptionNumber),
             () -> applicationNumbersForExemptionMutation(service, mutationRequest),
             () -> addPermitWhileSerialized(service, mutationRequest, authentication));
@@ -576,7 +576,7 @@ public class PermitDetailsRpcController {
     requireExemptionAccess(normalizedExemptionNumber, authentication);
 
     PermitMutationRpcResponseDto response =
-        operationCoordinator.executeExemptionMutation(
+        operationCoordinator.executeRootCreateExemptionMutation(
             List.of(normalizedExemptionNumber),
             () -> service.getApplicationNumbersForExemptionMutation(normalizedExemptionNumber),
             () ->

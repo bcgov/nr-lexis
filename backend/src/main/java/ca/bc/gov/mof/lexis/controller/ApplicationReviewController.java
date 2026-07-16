@@ -317,14 +317,7 @@ public class ApplicationReviewController {
     }
 
     provincialAuthorizationService.requireApplicationReview(authentication, applicationNumber);
-    return ResponseEntity.ok(
-        operationCoordinator.executeApplicationLocalMutation(
-            applicationNumber,
-            () -> {
-              provincialAuthorizationService.requireApplicationReview(
-                  authentication, applicationNumber);
-              return service.sendStatusEmail(applicationNumber, requestBody);
-            }));
+    return ResponseEntity.ok(service.sendStatusEmail(applicationNumber, requestBody));
   }
 
   ResponseEntity<ApplicationReviewStatusEmailResultDto> sendStatusEmail(
@@ -422,22 +415,16 @@ public class ApplicationReviewController {
         applicationNumber == null
             ? new ApplicationReviewStatusEmailResultDto(
                 false, "Application number must be a positive value.")
-            : operationCoordinator.executeApplicationLocalMutation(
+            : service.sendStatusEmail(
                 applicationNumber,
-                () -> {
-                  provincialAuthorizationService.requireApplicationReview(
-                      authentication, applicationNumber);
-                  return service.sendStatusEmail(
-                      applicationNumber,
-                      new ApplicationReviewStatusEmailRequestDto(
-                          first(
-                              parameters,
-                              "appStatus",
-                              "statusCode",
-                              "applicationReviewStatus"),
-                          first(parameters, "clientEmailAddress"),
-                          first(parameters, "remark", "remarkBody")));
-                });
+                new ApplicationReviewStatusEmailRequestDto(
+                    first(
+                        parameters,
+                        "appStatus",
+                        "statusCode",
+                        "applicationReviewStatus"),
+                    first(parameters, "clientEmailAddress"),
+                    first(parameters, "remark", "remarkBody")));
 
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("success", Boolean.toString(result.success()));

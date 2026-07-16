@@ -11,6 +11,7 @@ import {
   approveExemptions,
   sendExemptionApprovalEmails,
 } from '@/service/provincial-exemption-detail-service'
+import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -31,11 +32,16 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
   sendExemptionApprovalEmails: vi.fn(),
 }))
 
+vi.mock('@/service/record-version-service', () => ({
+  fetchCurrentExemptionRecordVersion: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchProvincialExemptions = vi.mocked(searchProvincialExemptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedApproveExemptions = vi.mocked(approveExemptions)
 const mockedSendExemptionApprovalEmails = vi.mocked(sendExemptionApprovalEmails)
+const mockedFetchCurrentExemptionRecordVersion = vi.mocked(fetchCurrentExemptionRecordVersion)
 
 const exemptionSearchResponse = (
   content: ProvincialExemptionSearchResponse['content'],
@@ -113,6 +119,9 @@ describe('Provincial Exemption Search Actions', () => {
       errors: [],
       warnings: [],
     })
+    mockedFetchCurrentExemptionRecordVersion.mockImplementation((exemptionNumber) =>
+      Promise.resolve(`exemption-${exemptionNumber}-version`),
+    )
     mockedSendExemptionApprovalEmails.mockResolvedValue({
       success: true,
       message: 'Email queued successfully.',
@@ -174,7 +183,12 @@ describe('Provincial Exemption Search Actions', () => {
     await userEvent.click(reopenedCertification)
     await userEvent.click(reopenedConfirm)
 
-    await waitFor(() => expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001']))
+    await waitFor(() =>
+      expect(mockedApproveExemptions).toHaveBeenCalledWith(
+        ['EX-1001'],
+        'exemption-EX-1001-version',
+      ),
+    )
     await waitFor(() =>
       expect(
         screen.queryByRole('dialog', { name: 'Approve selected exemptions' }),
@@ -248,13 +262,112 @@ describe('Provincial Exemption Search Actions', () => {
         screen.queryByRole('dialog', { name: 'Send approval notification' }),
       ).not.toBeInTheDocument(),
     )
-    expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001'])
+    expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001'], 'exemption-EX-1001-version')
     expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
     expect(screen.getByText('Approval completed with warnings')).toBeInTheDocument()
     expect(
       screen.getByText('Approved 1 exemption. Approval notification was skipped.'),
     ).toBeInTheDocument()
     expect(screen.queryByText('Approval failed')).not.toBeInTheDocument()
+  })
+
+  it('approves selected exemptions one at a time with a freshly loaded version', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        {
+          exemptionNumber: 'TEST-EX-001',
+          type: 'Section 1',
+          typeCode: 'SECTION_1',
+          status: 'New',
+          statusCode: 'NEW',
+          applicantClientNumber: 'TEST0001',
+          ownerClientNumber: 'TEST0002',
+          approvedVolume: 100,
+          balanceRemaining: 100,
+          listingDate: '2026-01-10',
+          expiryDate: '2026-12-31',
+          region: '11',
+          canApprove: true,
+          isLocked: false,
+          canViewExemption: true,
+        },
+        {
+          exemptionNumber: 'TEST-EX-002',
+          type: 'Section 1',
+          typeCode: 'SECTION_1',
+          status: 'New',
+          statusCode: 'NEW',
+          applicantClientNumber: 'TEST0003',
+          ownerClientNumber: 'TEST0004',
+          approvedVolume: 200,
+          balanceRemaining: 200,
+          listingDate: '2026-01-11',
+          expiryDate: '2026-12-31',
+          region: '12',
+          canApprove: true,
+          isLocked: false,
+          canViewExemption: true,
+        },
+      ]),
+    )
+    mockedApproveExemptions
+      .mockResolvedValueOnce({
+        success: true,
+        valid: true,
+        sendGrid: [['TEST-EX-001', 'first@example.test']],
+        errorMessage: '',
+        errors: [],
+        warnings: [],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        valid: true,
+        sendGrid: [['TEST-EX-002', 'second@example.test']],
+        errorMessage: '',
+        errors: [],
+        warnings: [],
+      })
+
+    renderPage()
+    await screen.findByText('TEST-EX-001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    await userEvent.click(
+      within(approvalDialog).getByRole('checkbox', {
+        name: 'I certify that these exemptions have been approved.',
+      }),
+    )
+    await userEvent.click(
+      within(approvalDialog).getByRole('button', { name: 'Approve exemptions' }),
+    )
+
+    await waitFor(() => expect(mockedApproveExemptions).toHaveBeenCalledTimes(2))
+    expect(mockedFetchCurrentExemptionRecordVersion).toHaveBeenNthCalledWith(1, 'TEST-EX-001')
+    expect(mockedApproveExemptions).toHaveBeenNthCalledWith(
+      1,
+      ['TEST-EX-001'],
+      'exemption-TEST-EX-001-version',
+    )
+    expect(mockedFetchCurrentExemptionRecordVersion).toHaveBeenNthCalledWith(2, 'TEST-EX-002')
+    expect(mockedApproveExemptions).toHaveBeenNthCalledWith(
+      2,
+      ['TEST-EX-002'],
+      'exemption-TEST-EX-002-version',
+    )
+
+    const notificationDialog = await screen.findByRole('dialog', {
+      name: 'Send notifications',
+    })
+    expect(
+      within(notificationDialog).getByLabelText('Recipient for exemption TEST-EX-001'),
+    ).toHaveValue('first@example.test')
+    expect(
+      within(notificationDialog).getByLabelText('Recipient for exemption TEST-EX-002'),
+    ).toHaveValue('second@example.test')
   })
 
   it('displays and prevents selection of an actively locked new exemption', async () => {

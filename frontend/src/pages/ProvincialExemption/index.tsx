@@ -86,6 +86,7 @@ import {
   approveExemptions,
   sendExemptionApprovalEmails,
 } from '@/service/provincial-exemption-detail-service'
+import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-service'
 import { formatLocalIsoDate } from '@/utils/date'
 
 type ApprovalStatus = {
@@ -625,21 +626,41 @@ const ProvincialExemptionPage = () => {
     setApproving(true)
     setApprovalStatus(null)
     try {
-      const approval = await approveExemptions(selectedNumbers)
-      if (!approval.success || !approval.valid) {
-        const message =
-          normalizeApprovalMessage(approval.errorMessage) ||
-          approval.errors.join(' ') ||
-          'No selected exemptions could be approved.'
-        setApprovalStatus({ kind: 'error', message })
+      const approvals = []
+      let failureCount = 0
+      for (const exemptionNumber of selectedNumbers) {
+        try {
+          const recordVersion = await fetchCurrentExemptionRecordVersion(exemptionNumber)
+          const approval = await approveExemptions([exemptionNumber], recordVersion)
+          if (approval.success && approval.valid) {
+            approvals.push(approval)
+          } else {
+            failureCount += 1
+          }
+        } catch (error) {
+          console.warn(`Unable to approve exemption ${exemptionNumber}.`, error)
+          failureCount += 1
+        }
+      }
+
+      if (approvals.length === 0) {
+        setApprovalStatus({ kind: 'error', message: 'No selected exemptions could be approved.' })
         return
       }
 
-      const partialFailure = normalizeApprovalMessage(approval.errorMessage)
-      const recipients = approval.sendGrid.map(
-        ([number, email]): ExemptionApprovalRecipient => [number, email],
+      const partialMessages = approvals
+        .map((approval) => normalizeApprovalMessage(approval.errorMessage))
+        .filter(Boolean)
+      if (failureCount > 0) {
+        partialMessages.push(
+          `${failureCount} selected ${failureCount === 1 ? 'exemption' : 'exemptions'} failed to approve.`,
+        )
+      }
+      const partialFailure = [...new Set(partialMessages)].join(' ')
+      const recipients = approvals.flatMap((approval) =>
+        approval.sendGrid.map(([number, email]): ExemptionApprovalRecipient => [number, email]),
       )
-      const approvedCount = recipients.length || selectedNumbers.length
+      const approvedCount = approvals.length
       const messages = [approvedExemptionMessage(approvedCount)]
       messages.push(
         recipients.length > 0

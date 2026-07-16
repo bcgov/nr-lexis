@@ -1,8 +1,7 @@
-import { Button, InlineNotification, Loading, Modal } from '@carbon/react'
+import { Button, Modal } from '@carbon/react'
 import { useEffect, useMemo, useState } from 'react'
 import {
   OPTIMISTIC_CONFLICT_EVENT,
-  OptimisticOverwriteConflictError,
   type OptimisticConflictEvent,
   type OptimisticConflictRequest,
 } from '@/service/optimistic-conflict'
@@ -71,8 +70,6 @@ export const normalizeChangedFields = (value: unknown): ChangedField[] => {
   }))
 }
 
-const PendingIcon = () => <Loading small withOverlay={false} description="" />
-
 const formatSavedAt = (value: string | undefined): string | undefined => {
   if (!value) return undefined
   const date = new Date(value)
@@ -86,14 +83,14 @@ const formatSavedAt = (value: string | undefined): string | undefined => {
 
 const OptimisticConflictModal = () => {
   const [queue, setQueue] = useState<OptimisticConflictRequest[]>([])
-  const [overwriting, setOverwriting] = useState(false)
-  const [overwriteError, setOverwriteError] = useState<'changed-again' | 'failed' | null>(null)
   const activeConflict = queue[0]
   const changedFields = useMemo(
     () => normalizeChangedFields(activeConflict?.problem.changedFields),
     [activeConflict],
   )
   const savedAt = formatSavedAt(activeConflict?.problem.savedAt)
+  const versionRequired = activeConflict?.problem.code === 'RECORD_VERSION_REQUIRED'
+  const heading = versionRequired ? 'Refresh required before saving' : 'Newer changes were saved'
 
   useEffect(() => {
     const handleConflict = (event: Event) => {
@@ -106,40 +103,10 @@ const OptimisticConflictModal = () => {
     return () => window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, handleConflict)
   }, [])
 
-  const removeActiveConflict = () => {
-    setQueue((current) => current.slice(1))
-    setOverwriteError(null)
-  }
-
   const refresh = () => {
-    if (!activeConflict || overwriting) return
+    if (!activeConflict) return
     activeConflict.refresh()
     setQueue([])
-    setOverwriteError(null)
-  }
-
-  const overwrite = async () => {
-    if (!activeConflict || overwriting) return
-
-    setOverwriting(true)
-    setOverwriteError(null)
-    try {
-      await activeConflict.overwrite(activeConflict.problem.currentVersion)
-      removeActiveConflict()
-    } catch (error) {
-      if (error instanceof OptimisticOverwriteConflictError) {
-        setQueue((current) =>
-          current.length > 0
-            ? [{ ...current[0], problem: error.problem }, ...current.slice(1)]
-            : current,
-        )
-        setOverwriteError('changed-again')
-      } else {
-        setOverwriteError('failed')
-      }
-    } finally {
-      setOverwriting(false)
-    }
   }
 
   return (
@@ -147,19 +114,25 @@ const OptimisticConflictModal = () => {
       open={Boolean(activeConflict)}
       passiveModal
       size="sm"
-      modalHeading="Newer changes were saved"
-      aria-label="Newer changes were saved"
+      modalHeading={heading}
+      aria-label={heading}
       className="lexis-optimistic-conflict-modal"
       selectorPrimaryFocus="#lexis-conflict-refresh"
       preventCloseOnClickOutside
       onRequestClose={refresh}
     >
       <div className="lexis-optimistic-conflict-modal__body">
-        <p>
-          Another user saved newer changes after you opened this record. Refresh to review all newer
-          data. Overwrite retries your original save and may replace newer values included in that
-          save. Other sections are not intentionally changed.
-        </p>
+        {versionRequired ? (
+          <p>
+            This record was loaded without a current version. Your changes were not saved. Refresh
+            before editing and saving again.
+          </p>
+        ) : (
+          <p>
+            Another user saved newer changes after you opened this record. Your changes were not
+            saved. Refresh to load the current record before editing and saving again.
+          </p>
+        )}
 
         {activeConflict?.problem.detail ? (
           <p className="lexis-optimistic-conflict-modal__detail">{activeConflict.problem.detail}</p>
@@ -173,7 +146,7 @@ const OptimisticConflictModal = () => {
           </p>
         ) : null}
 
-        {changedFields.length > 0 ? (
+        {versionRequired ? null : changedFields.length > 0 ? (
           <div>
             <h3>Changes detected since you opened this record</h3>
             <ul className="lexis-optimistic-conflict-modal__changes">
@@ -194,54 +167,13 @@ const OptimisticConflictModal = () => {
         ) : (
           <p className="lexis-optimistic-conflict-modal__detail">
             The newer fields could not be summarized here. Refresh to review the complete record
-            before deciding whether to overwrite.
+            before editing and saving again.
           </p>
         )}
 
-        {overwriteError ? (
-          <InlineNotification
-            lowContrast
-            hideCloseButton
-            kind="error"
-            title={
-              overwriteError === 'changed-again'
-                ? 'Newer changes were saved again'
-                : 'Overwrite failed'
-            }
-            subtitle={
-              overwriteError === 'changed-again'
-                ? 'Review the latest values, then refresh or choose Overwrite again.'
-                : 'The save could not be completed. Refresh the record and try again.'
-            }
-          />
-        ) : null}
-
-        {activeConflict && !activeConflict.problem.currentVersion ? (
-          <InlineNotification
-            lowContrast
-            hideCloseButton
-            kind="warning"
-            title="Overwrite unavailable"
-            subtitle="Refresh the record to load the latest version before saving again."
-          />
-        ) : null}
-
         <div className="lexis-optimistic-conflict-modal__actions">
-          <Button
-            id="lexis-conflict-refresh"
-            kind="secondary"
-            disabled={overwriting}
-            onClick={refresh}
-          >
+          <Button id="lexis-conflict-refresh" onClick={refresh}>
             Refresh
-          </Button>
-          <Button
-            kind="danger"
-            disabled={overwriting || !activeConflict?.problem.currentVersion}
-            renderIcon={overwriting ? PendingIcon : undefined}
-            onClick={() => void overwrite()}
-          >
-            {overwriting ? 'Overwriting…' : 'Overwrite'}
           </Button>
         </div>
       </div>

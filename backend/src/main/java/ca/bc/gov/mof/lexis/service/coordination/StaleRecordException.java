@@ -16,7 +16,7 @@ public class StaleRecordException extends RuntimeException {
       String recordId,
       String expectedVersion,
       OptimisticRecordVersion currentVersion) {
-    super("This record was saved by another user. Refresh before saving, or confirm overwrite.");
+    super("This record was saved by another user. Refresh the record before saving again.");
     this.recordType = recordType;
     this.recordId = recordId;
     this.expectedVersion = expectedVersion;

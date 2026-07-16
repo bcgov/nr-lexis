@@ -5,6 +5,7 @@ import {
   documentValueAsStringArray as asStringArray,
 } from '@/service/document-service-utils'
 import { LEGACY_FORM_CONTENT_TYPE, toUrlEncodedParams } from '@/service/legacy-form-utils'
+import { RECORD_VERSION_HEADER } from '@/service/optimistic-conflict'
 import { isRecord, recordOrEmpty } from '@/utils/record'
 
 export type ExemptionApplicationRow = {
@@ -78,9 +79,16 @@ export type UpdateExemptionRequest = {
   regionNumbers: string[]
 }
 
-const postForm = async (path: string, values: Record<string, string>): Promise<unknown> => {
+const postForm = async (
+  path: string,
+  values: Record<string, string>,
+  recordVersion?: string,
+): Promise<unknown> => {
   const response = await apiService.getAxiosInstance().post(path, toUrlEncodedParams(values), {
-    headers: { 'Content-Type': LEGACY_FORM_CONTENT_TYPE },
+    headers: {
+      'Content-Type': LEGACY_FORM_CONTENT_TYPE,
+      ...(recordVersion ? { [RECORD_VERSION_HEADER]: recordVersion } : {}),
+    },
   })
   return response.data
 }
@@ -279,13 +287,18 @@ export const updateExemption = async (
 
 export const approveExemptions = async (
   exemptionNumbers: string[],
+  recordVersion?: string,
 ): Promise<ExemptionApprovalResult> => {
-  const payload = await postForm('/lexis/rpc/exemption-details/approve-exemptions', {
-    exemptionNumbers: exemptionNumbers
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .join(','),
-  })
+  const payload = await postForm(
+    '/lexis/rpc/exemption-details/approve-exemptions',
+    {
+      exemptionNumbers: exemptionNumbers
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .join(','),
+    },
+    recordVersion,
+  )
   const value = recordOrEmpty(payload)
   const rawSendGrid = Array.isArray(value.sendGrid) ? value.sendGrid : []
   const sendGrid = rawSendGrid

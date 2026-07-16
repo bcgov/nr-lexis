@@ -11,6 +11,7 @@ import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository.RootRecordSnapshot;
 import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
 import ca.bc.gov.mof.lexis.service.coordination.InvalidRecordVersionException;
+import ca.bc.gov.mof.lexis.service.coordination.MissingRecordVersionException;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticLockRequest;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticLockRequestReader;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordType;
@@ -85,6 +86,98 @@ class OracleAggregateRowLockServiceTest {
         .hasMessageContaining("same record")
         .hasCauseInstanceOf(CannotAcquireLockException.class);
     assertThat(invoked).isFalse();
+  }
+
+  @Test
+  void shouldRejectExistingInteractiveMutationWhenVersionIsMissing() {
+    AtomicBoolean invoked = new AtomicBoolean();
+    when(repository.lockApplication(10L))
+        .thenReturn(
+            Optional.of(
+                new RootRecordSnapshot(
+                    "current-fingerprint",
+                    Instant.parse("2026-07-15T18:01:00Z"),
+                    "IDIR\\EDITOR")));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    List.of(),
+                    List.of(10L),
+                    List.of(),
+                    () -> {
+                      invoked.set(true);
+                      return "not-reached";
+                    }))
+        .isInstanceOf(MissingRecordVersionException.class)
+        .hasMessageContaining("Refresh");
+
+    assertThat(invoked).isFalse();
+  }
+
+  @Test
+  void shouldAllowCreateWhenTheLockedRootDoesNotExist() {
+    when(repository.lockApplication(10L)).thenReturn(Optional.empty());
+
+    assertThat(service.execute(List.of(), List.of(10L), List.of(), () -> "created"))
+        .isEqualTo("created");
+  }
+
+  @Test
+  void shouldAllowExplicitSystemMutationWithoutARecordVersion() {
+    when(repository.lockExemption("EX-100"))
+        .thenReturn(
+            Optional.of(
+                new RootRecordSnapshot(
+                    "current-fingerprint",
+                    Instant.parse("2026-07-15T18:01:00Z"),
+                    "EXPIRY_MONITOR")));
+
+    assertThat(
+            service.executeSystemMutation(
+                List.of("EX-100"), List.of(), List.of(), List.of(), () -> "expired"))
+        .isEqualTo("expired");
+  }
+
+  @Test
+  void shouldAllowExplicitRootCreateWithAnExistingParentWithoutARecordVersion() {
+    when(repository.lockApplication(10L))
+        .thenReturn(
+            Optional.of(
+                new RootRecordSnapshot(
+                    "current-fingerprint",
+                    Instant.parse("2026-07-15T18:01:00Z"),
+                    "IDIR\\EDITOR")));
+
+    assertThat(
+            service.executeRootCreateMutation(
+                List.of(), List.of(10L), List.of(), List.of(), () -> "offer-created"))
+        .isEqualTo("offer-created");
+  }
+
+  @Test
+  void shouldRejectExplicitRootCreateWhenASuppliedVersionIsStale() {
+    RootRecordSnapshot current =
+        new RootRecordSnapshot(
+            "current-fingerprint", Instant.parse("2026-07-15T18:01:00Z"), "IDIR\\SECOND");
+    when(repository.lockApplication(10L)).thenReturn(Optional.of(current));
+    OptimisticRecordVersion expected =
+        new OptimisticRecordVersion(
+            OptimisticRecordType.APPLICATION,
+            "10",
+            Instant.parse("2026-07-15T18:00:00Z"),
+            "IDIR\\FIRST",
+            "original-fingerprint");
+    when(requestReader.currentRequest())
+        .thenReturn(
+            new OptimisticLockRequest(
+                Optional.of(OptimisticRecordVersion.parse(expected.token()))));
+
+    assertThatThrownBy(
+            () ->
+                service.executeRootCreateMutation(
+                    List.of(), List.of(10L), List.of(), List.of(), () -> "not-reached"))
+        .isInstanceOf(StaleRecordException.class);
   }
 
   @Test
@@ -177,5 +270,31 @@ class OracleAggregateRowLockServiceTest {
             () -> service.execute(List.of(), List.of(10L), List.of(), () -> "not-reached"))
         .isInstanceOf(InvalidRecordVersionException.class)
         .hasMessageContaining("does not belong");
+  }
+
+  @Test
+  void shouldRejectSingleVersionForMultipleExistingRecordsOfTheSameType() {
+    RootRecordSnapshot first =
+        new RootRecordSnapshot(
+            "first-fingerprint", Instant.parse("2026-07-15T18:00:00Z"), "IDIR\\FIRST");
+    RootRecordSnapshot second =
+        new RootRecordSnapshot(
+            "second-fingerprint", Instant.parse("2026-07-15T18:01:00Z"), "IDIR\\SECOND");
+    when(repository.lockApplication(10L)).thenReturn(Optional.of(first));
+    when(repository.lockApplication(11L)).thenReturn(Optional.of(second));
+    OptimisticRecordVersion expected =
+        new OracleOptimisticRecordVersionService(repository)
+            .toVersion(OptimisticRecordType.APPLICATION, "10", first);
+    when(requestReader.currentRequest())
+        .thenReturn(
+            new OptimisticLockRequest(
+                Optional.of(OptimisticRecordVersion.parse(expected.token()))));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    List.of(), List.of(10L, 11L), List.of(), () -> "not-reached"))
+        .isInstanceOf(InvalidRecordVersionException.class)
+        .hasMessageContaining("multiple application records");
   }
 }

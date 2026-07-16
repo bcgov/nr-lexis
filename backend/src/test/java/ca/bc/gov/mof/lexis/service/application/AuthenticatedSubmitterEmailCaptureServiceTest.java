@@ -20,6 +20,7 @@ import org.springframework.security.core.Authentication;
 @DisplayName("Unit Test | AuthenticatedSubmitterEmailCaptureService")
 class AuthenticatedSubmitterEmailCaptureServiceTest {
 
+  private static final String SYNTHETIC_CLIENT_NUMBER = "00009999";
   private static final String UNAVAILABLE_WARNING =
       "The authenticated submitter email was unavailable and was not captured.";
 
@@ -49,7 +50,7 @@ class AuthenticatedSubmitterEmailCaptureServiceTest {
                     "BCEIDBUSINESS",
                     "business-user-id")));
 
-    CaptureResolution result = service.resolveForOwner(authentication, "1012", "ab");
+    CaptureResolution result = service.resolveForOwner(authentication, "9999", "xy");
 
     assertThat(result.warning()).isNull();
     assertThat(result.contact())
@@ -59,8 +60,8 @@ class AuthenticatedSubmitterEmailCaptureServiceTest {
                 false,
                 "BCEIDBUSINESS",
                 "business-user-id",
-                "00001012",
-                "AB"));
+                SYNTHETIC_CLIENT_NUMBER,
+                "XY"));
   }
 
   @Test
@@ -72,7 +73,8 @@ class AuthenticatedSubmitterEmailCaptureServiceTest {
                 new AuthenticatedEmailIdentity(
                     "submitter@example.com", null, "BCEIDBUSINESS", "business-user-id")));
 
-    CaptureResolution result = service.resolveForOwner(authentication, "00001012", "00");
+    CaptureResolution result =
+        service.resolveForOwner(authentication, SYNTHETIC_CLIENT_NUMBER, "00");
 
     assertThat(result.contact()).isPresent();
     assertThat(result.contact().orElseThrow().emailVerified()).isNull();
@@ -88,7 +90,8 @@ class AuthenticatedSubmitterEmailCaptureServiceTest {
                 new AuthenticatedEmailIdentity(
                     "idir.user@gov.bc.ca", true, "IDIR", "idir-user-id")));
 
-    CaptureResolution result = service.resolveForOwner(authentication, "00001012", "00");
+    CaptureResolution result =
+        service.resolveForOwner(authentication, SYNTHETIC_CLIENT_NUMBER, "00");
 
     assertThat(result.contact()).isEmpty();
     assertThat(result.warning()).isNull();
@@ -102,7 +105,8 @@ class AuthenticatedSubmitterEmailCaptureServiceTest {
             Optional.of(
                 new AuthenticatedEmailIdentity(null, null, "BCEIDBUSINESS", "business-user-id")));
 
-    CaptureResolution result = service.resolveForOwner(authentication, "00001012", "00");
+    CaptureResolution result =
+        service.resolveForOwner(authentication, SYNTHETIC_CLIENT_NUMBER, "00");
 
     assertThat(result.contact()).isEmpty();
     assertThat(result.warning()).isEqualTo(UNAVAILABLE_WARNING);
@@ -117,7 +121,8 @@ class AuthenticatedSubmitterEmailCaptureServiceTest {
                 new AuthenticatedEmailIdentity(
                     "résumé@example.com", true, "BCEIDBUSINESS", "business-user-id")));
 
-    CaptureResolution result = service.resolveForOwner(authentication, "00001012", "00");
+    CaptureResolution result =
+        service.resolveForOwner(authentication, SYNTHETIC_CLIENT_NUMBER, "00");
 
     assertThat(result.contact()).isEmpty();
     assertThat(result.warning()).isEqualTo(UNAVAILABLE_WARNING);

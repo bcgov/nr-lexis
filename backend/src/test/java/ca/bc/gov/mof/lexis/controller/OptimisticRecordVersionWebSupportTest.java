@@ -27,17 +27,19 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class OptimisticRecordVersionWebSupportTest {
 
+  private static final String SYNTHETIC_EXEMPTION_NUMBER = "TEST/0001";
+  private static final long SYNTHETIC_PERMIT_NUMBER = 999_000_001L;
   private static final OptimisticRecordVersion EXEMPTION_VERSION =
       new OptimisticRecordVersion(
           OptimisticRecordType.EXEMPTION,
-          "440/2015",
+          SYNTHETIC_EXEMPTION_NUMBER,
           Instant.parse("2026-07-15T16:00:00Z"),
           "IDIR\\EDITOR",
           "abcdef");
   private static final OptimisticRecordVersion PERMIT_VERSION =
       new OptimisticRecordVersion(
           OptimisticRecordType.PERMIT,
-          "77631",
+          Long.toString(SYNTHETIC_PERMIT_NUMBER),
           Instant.parse("2026-07-15T16:00:00Z"),
           "IDIR\\EDITOR",
           "123456");
@@ -46,10 +48,10 @@ class OptimisticRecordVersionWebSupportTest {
   void interceptorShouldPreReadVersionForMainExemptionDetail() {
     OracleOptimisticRecordVersionService versionService =
         mock(OracleOptimisticRecordVersionService.class);
-    when(versionService.find(OptimisticRecordType.EXEMPTION, "440/2015"))
+    when(versionService.find(OptimisticRecordType.EXEMPTION, SYNTHETIC_EXEMPTION_NUMBER))
         .thenReturn(Optional.of(EXEMPTION_VERSION));
     MockHttpServletRequest request =
-        new MockHttpServletRequest("GET", "/api/lexis/exemptions/440%2F2015");
+        new MockHttpServletRequest("GET", "/api/lexis/exemptions/TEST%2F0001");
 
     new OptimisticRecordVersionInterceptor(versionService)
         .preHandle(request, new MockHttpServletResponse(), new Object());
@@ -64,10 +66,12 @@ class OptimisticRecordVersionWebSupportTest {
   void interceptorShouldPreReadVersionForMainPermitDetail() {
     OracleOptimisticRecordVersionService versionService =
         mock(OracleOptimisticRecordVersionService.class);
-    when(versionService.find(OptimisticRecordType.PERMIT, "77631"))
+    when(
+            versionService.find(
+                OptimisticRecordType.PERMIT, Long.toString(SYNTHETIC_PERMIT_NUMBER)))
         .thenReturn(Optional.of(PERMIT_VERSION));
     MockHttpServletRequest request =
-        new MockHttpServletRequest("GET", "/api/lexis/permits/77631");
+        new MockHttpServletRequest("GET", "/api/lexis/permits/999000001");
 
     new OptimisticRecordVersionInterceptor(versionService)
         .preHandle(request, new MockHttpServletResponse(), new Object());
@@ -93,11 +97,11 @@ class OptimisticRecordVersionWebSupportTest {
   @Test
   void responseAdviceShouldReturnPreReadVersionForMainDetailDtos() {
     MockHttpServletRequest exemptionRequest =
-        new MockHttpServletRequest("GET", "/api/lexis/exemptions/440%2F2015");
+        new MockHttpServletRequest("GET", "/api/lexis/exemptions/TEST%2F0001");
     exemptionRequest.setAttribute(
         OptimisticRecordVersionInterceptor.RECORD_VERSION_ATTRIBUTE, EXEMPTION_VERSION);
     MockHttpServletRequest permitRequest =
-        new MockHttpServletRequest("GET", "/api/lexis/permits/77631");
+        new MockHttpServletRequest("GET", "/api/lexis/permits/999000001");
     permitRequest.setAttribute(
         OptimisticRecordVersionInterceptor.RECORD_VERSION_ATTRIBUTE, PERMIT_VERSION);
 
@@ -113,7 +117,7 @@ class OptimisticRecordVersionWebSupportTest {
 
   private ExemptionDetailDto exemptionDetail() {
     return new ExemptionDetailDto(
-        "440/2015",
+        SYNTHETIC_EXEMPTION_NUMBER,
         null,
         null,
         null,
@@ -135,7 +139,7 @@ class OptimisticRecordVersionWebSupportTest {
 
   private PermitDetailDto permitDetail() {
     return new PermitDetailDto(
-        77631L,
+        SYNTHETIC_PERMIT_NUMBER,
         null,
         null,
         null,

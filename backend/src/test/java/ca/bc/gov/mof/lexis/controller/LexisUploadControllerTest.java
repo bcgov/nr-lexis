@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,8 @@ import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.security.CognitoUserInfoService;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
+import ca.bc.gov.mof.lexis.service.permit.OracleAggregateRowLockService;
+import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
@@ -46,6 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -130,6 +134,93 @@ class LexisUploadControllerTest {
     verify(applicationEditLockService)
         .acquire(7000123L, "idir\\jsmith", "idir\\jsmith", false);
     verify(uploadService).uploadApplication(file, 7000123L, "App file", "idir\\jsmith");
+  }
+
+  @Test
+  void persistenceUploadsShouldUseOptionalVersionRootCreateClassification() {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    @SuppressWarnings("unchecked")
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider =
+        mock(ObjectProvider.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    PermitOperationMutex mutex = new PermitOperationMutex(rowLockProvider);
+    when(rowLocks.executeRootCreateMutation(any(), any(), any(), any(), any()))
+        .thenAnswer(
+            invocation ->
+                invocation.<Supplier<ResponseEntity<LexisUploadResultDto>>>getArgument(4).get());
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
+    lenient()
+        .when(applicationEditLockService.acquire(any(), any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient()
+        .when(applicationEditLockService.acquirePermit(any(), any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient()
+        .when(applicationEditLockService.acquireExemption(any(), any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    LexisUploadController classifiedController =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider,
+            mutex);
+    classifiedController.setProvincialAuthorizationService(provincialAuthorizationService);
+    classifiedController.setDocumentUploadMutationPolicy(documentUploadMutationPolicy);
+
+    MultipartFile applicationFile = sampleFile("application.pdf");
+    MultipartFile permitFile = sampleFile("permit.pdf");
+    MultipartFile exemptionFile = sampleFile("exemption.pdf");
+    MultipartFile invoiceFile = sampleFile("invoice.pdf");
+    when(uploadService.uploadApplication(applicationFile, 999000001L, "Application", null))
+        .thenReturn(Optional.of(uploadResult("application", applicationFile)));
+    when(uploadService.uploadPermit(permitFile, 999000002L, "Permit", null))
+        .thenReturn(Optional.of(uploadResult("permit", permitFile)));
+    when(uploadService.uploadExemption(exemptionFile, "TEST-EX-001", "Exemption", null))
+        .thenReturn(Optional.of(uploadResult("exemption", exemptionFile)));
+    when(
+            uploadService.uploadInvoice(
+                invoiceFile,
+                999000002L,
+                "TEST-INV-001",
+                "Invoice",
+                null,
+                null,
+                null,
+                null))
+        .thenReturn(Optional.of(uploadResult("invoice", invoiceFile)));
+
+    classifiedController.fileApplicationUpload(
+        applicationFile, null, 999000001L, "Application", null, null);
+    classifiedController.filePermitUpload(
+        permitFile, null, 999000002L, "Permit", null, null);
+    classifiedController.fileExemptionUpload(
+        exemptionFile, null, "TEST-EX-001", "Exemption", null, null);
+    classifiedController.fileInvoiceUpload(
+        invoiceFile,
+        null,
+        999000002L,
+        "TEST-INV-001",
+        "Invoice",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+
+    verify(rowLocks)
+        .executeRootCreateMutation(
+            eq(List.of()), eq(List.of(999000001L)), eq(List.of()), eq(List.of()), any());
+    verify(rowLocks)
+        .executeRootCreateMutation(
+            eq(List.of("TEST-EX-001")), eq(List.of()), eq(List.of()), eq(List.of()), any());
+    verify(rowLocks, times(2))
+        .executeRootCreateMutation(
+            eq(List.of()), eq(List.of()), eq(List.of()), eq(List.of(999000002L)), any());
+    verify(rowLocks, never()).execute(any(), any(), any(), any(), any());
   }
 
   @Test
@@ -3414,6 +3505,11 @@ class LexisUploadControllerTest {
     controller.setLexisPrincipalService(
         new LexisPrincipalService(new CognitoUserInfoService("")));
     return controller;
+  }
+
+  private LexisUploadResultDto uploadResult(String type, MultipartFile file) {
+    return new LexisUploadResultDto(
+        type, file.getOriginalFilename(), file.getSize(), "accepted", "queued");
   }
 
   private ApplicationSubmissionImportResultDto withTrace(

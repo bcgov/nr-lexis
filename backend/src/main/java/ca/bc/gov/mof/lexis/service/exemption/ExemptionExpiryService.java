@@ -71,7 +71,7 @@ public class ExemptionExpiryService {
   }
 
   private boolean expireOneWhileSerialized(String exemptionNumber) {
-    return operationCoordinator.executeExemptionMutation(
+    return operationCoordinator.executeSystemExemptionMutation(
         List.of(exemptionNumber),
         () -> applicationNumbersForMutation(exemptionNumber),
         () -> permitNumbersForMutation(exemptionNumber),

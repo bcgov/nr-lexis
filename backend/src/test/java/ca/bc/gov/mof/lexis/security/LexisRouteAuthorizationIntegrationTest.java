@@ -181,6 +181,16 @@ class LexisRouteAuthorizationIntegrationTest {
   void knownModernAndLegacyEntryPointsShouldResolveExpectedActions() {
     List.of(
             expected(HttpMethod.GET, "/api/lexis/applications/search", null, "/applicationSearch"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/record-versions/application",
+                null,
+                "/applicationDetails"),
+            expected(
+                HttpMethod.GET,
+                "/api/lexis/record-versions/exemption",
+                null,
+                "/exemptionDetails"),
             expected(HttpMethod.GET, "/api/lexis/applicationSearch.do", "view", "/applicationSearch"),
             expected(HttpMethod.GET, "/api/lexis/federal/applications/search", null, "/federalApplicationSearch"),
             expected(HttpMethod.GET, "/api/lexis/federal/applications/9001", null, "/federalApplicationDetails"),
