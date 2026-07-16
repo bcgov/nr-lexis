@@ -126,10 +126,10 @@ vi.mock('@/service/admin-upload-service', () => ({
 vi.setConfig({ testTimeout: 20000 })
 
 const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
-  await userEvent.click(combobox)
+  fireEvent.click(combobox)
   fireEvent.change(combobox, { target: { value: optionName } })
   const options = await screen.findAllByRole('option', { name: optionName })
-  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+  fireEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
 }
 
 const clearComboBox = async (combobox: HTMLElement) => {
@@ -336,7 +336,7 @@ const selectApplicationDetailTab = async (name: string): Promise<void> => {
   const tab = await screen.findByRole('tab', { name })
 
   if (tab.getAttribute('aria-selected') !== 'true') {
-    await userEvent.click(tab)
+    fireEvent.click(tab)
   }
 }
 

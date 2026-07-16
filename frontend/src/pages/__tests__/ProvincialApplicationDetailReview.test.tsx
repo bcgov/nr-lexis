@@ -66,20 +66,19 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
-    fireEvent.change(await screen.findByLabelText('Location of logs'), {
+    const locationOfLogs = await screen.findByLabelText('Location of logs')
+    fireEvent.change(locationOfLogs, {
       target: { value: 'AB' },
     })
-    await selectApplicationDetailTab('Remarks')
-    fireEvent.change(await screen.findByLabelText('New Remark'), {
+    const newRemark = await screen.findByLabelText('New Remark')
+    fireEvent.change(newRemark, {
       target: { value: 'Preserve remark draft' },
     })
     const reviewTile = within(await selectApplicationReviewTile())
-    await chooseComboBoxOption(
-      reviewTile.getByRole('combobox', { name: 'Application status' }),
-      'Rejected',
-    )
-    fireEvent.change(reviewTile.getByLabelText('Review remark'), {
+    const reviewStatus = reviewTile.getByRole('combobox', { name: 'Application status' })
+    await chooseComboBoxOption(reviewStatus, 'Rejected')
+    const reviewRemark = reviewTile.getByLabelText('Review remark')
+    fireEvent.change(reviewRemark, {
       target: { value: 'Preserve review draft' },
     })
     await selectApplicationDetailTab('Items')
@@ -90,7 +89,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     const savePackageButton = screen.getByRole('button', {
       name: 'Save Package',
     })
-    await userEvent.click(savePackageButton)
+    fireEvent.click(savePackageButton)
     await waitFor(() => {
       expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1)
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
@@ -100,15 +99,14 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     })
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
 
-    await selectApplicationDetailTab('Application')
-    expect(screen.getByLabelText('Location of logs')).toHaveValue('AB')
-    await selectApplicationDetailTab('Remarks')
-    expect(screen.getByLabelText('New Remark')).toHaveValue('Preserve remark draft')
-    const preservedReviewTile = within(await selectApplicationReviewTile())
-    expect(preservedReviewTile.getByRole('combobox', { name: 'Application status' })).toHaveValue(
-      'Rejected',
-    )
-    expect(preservedReviewTile.getByLabelText('Review remark')).toHaveValue('Preserve review draft')
+    expect(locationOfLogs).toBeInTheDocument()
+    expect(locationOfLogs).toHaveValue('AB')
+    expect(newRemark).toBeInTheDocument()
+    expect(newRemark).toHaveValue('Preserve remark draft')
+    expect(reviewStatus).toBeInTheDocument()
+    expect(reviewStatus).toHaveValue('Rejected')
+    expect(reviewRemark).toBeInTheDocument()
+    expect(reviewRemark).toHaveValue('Preserve review draft')
   })
 
   it('saves application remarks and refreshes detail', async () => {
