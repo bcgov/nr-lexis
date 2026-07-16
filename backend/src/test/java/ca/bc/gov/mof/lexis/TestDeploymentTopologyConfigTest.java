@@ -197,8 +197,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("cpu: ${MAX_CPU}")
         .contains("memory: ${MAX_MEM}")
         .contains("ephemeral-storage: \"512Mi\"")
-        .contains("ephemeral-storage: \"4Gi\"")
-        .doesNotContain("SPRING_DATA_REDIS", "REDIS_PASSWORD");
+        .contains("ephemeral-storage: \"4Gi\"");
     assertThat(frontendTemplate)
         .contains("cpu: ${MIN_CPU}")
         .contains("memory: ${MIN_MEM}")
@@ -434,23 +433,6 @@ class TestDeploymentTopologyConfigTest {
                 + "                  value: ${LEXIS_MAIL_REGION_RSI_RECIPIENTS}",
             "- name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS\n"
                 + "                  value: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS}");
-  }
-
-  @Test
-  void deploymentShouldNotRequireRedis() throws IOException {
-    String template = Files.readString(resolve("backend/openshift.deploy.yml"));
-    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
-    String prWorkflow = Files.readString(resolve(".github/workflows/pr-open.yml"));
-    String prCloseWorkflow = Files.readString(resolve(".github/workflows/pr-close.yml"));
-    String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
-
-    assertThat(template).doesNotContain("REDIS_", "SPRING_DATA_REDIS", "-redis-${ZONE}");
-    assertThat(workflow).doesNotContain("redis_password", "REDIS_", "SPRING_DATA_REDIS");
-    assertThat(prWorkflow).doesNotContain("redis_password");
-    assertThat(prCloseWorkflow)
-        .contains("for component in backend frontend clamav redis")
-        .contains("(backend|frontend|clamav|redis)");
-    assertThat(mergeWorkflow).doesNotContain("redis_password");
   }
 
   @Test

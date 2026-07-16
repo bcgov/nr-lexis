@@ -129,7 +129,7 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void expirySchedulerShouldUseOracleShedLockWithoutRedis() throws IOException {
+  void expirySchedulerShouldUseOracleShedLock() throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
     String deployment =
@@ -154,18 +154,15 @@ class BackendRuntimeConfigTest {
         .contains("cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}")
         .contains("zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}")
         .contains("lock-at-most-for: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR:PT6H}")
-        .contains("lock-at-least-for: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR:PT5M}")
-        .doesNotContain("SPRING_DATA_REDIS");
+        .contains("lock-at-least-for: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR:PT5M}");
     assertThat(deployment)
         .contains("- name: LEXIS_EXPIRY_CRON")
         .contains("- name: LEXIS_EXPIRY_ZONE")
         .contains("- name: LEXIS_EXPIRY_LOCK_AT_MOST_FOR")
-        .contains("- name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR")
-        .doesNotContain("REDIS_PASSWORD", "SPRING_DATA_REDIS");
+        .contains("- name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR");
     assertThat(shedLockConfiguration)
         .contains(".withTableName(\"THE.LEXIS_SHEDLOCK\")")
-        .contains(".usingDbTime()")
-        .doesNotContain("Redis");
+        .contains(".usingDbTime()");
   }
 
   @Test

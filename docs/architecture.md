@@ -86,7 +86,7 @@ The backend deployment uses a CPU-based Horizontal Pod Autoscaler with environme
 and maximum replica counts. Interactive saves use optimistic version checks: stale saves return a
 conflict instead of silently replacing newer work. Short multi-row mutations take Oracle row locks
 in a consistent order and rely on Oracle transactions, constraints, and conditional updates for
-correctness across replicas. No Redis service is required.
+correctness across replicas.
 
 The daily expiry process is disabled by default and is enabled per environment. JDBC ShedLock uses
 `THE.LEXIS_SHEDLOCK` and the existing Oracle datasource so only one backend replica executes a

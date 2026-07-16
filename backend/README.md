@@ -111,9 +111,8 @@ The reusable deployment workflow maps these GitHub settings:
 Backend replicas use optimistic version checks for interactive saves. A stale save returns a
 conflict so the user can refresh or explicitly overwrite after reviewing newer changes. Short
 multi-row mutations take Oracle row locks in a consistent order, with Oracle transactions,
-constraints, and conditional writes as the data-integrity boundary. The application has no Redis
-runtime dependency. When expiry is enabled, its scheduler uses `THE.LEXIS_SHEDLOCK` through the
-existing Oracle connection.
+constraints, and conditional writes as the data-integrity boundary. When expiry is enabled, its
+scheduler uses `THE.LEXIS_SHEDLOCK` through the existing Oracle connection.
 
 ### Spring Profiles
 
