@@ -21,7 +21,9 @@ class EmailEventDispatcherTest {
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyList(),
-            org.mockito.ArgumentMatchers.anyList()))
+            org.mockito.ArgumentMatchers.anyList(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()))
         .thenReturn(true);
     meterRegistry = new SimpleMeterRegistry();
     dispatcher = new EmailEventDispatcher(mailService, new EmailTemplateRenderer(), meterRegistry);
@@ -42,7 +44,9 @@ class EmailEventDispatcherTest {
             "Application #999000001 status was changed to REJECTED with the following reason:\n\n"
                 + "Missing documents\n",
             List.of("client@example.com"),
-            List.of());
+            List.of(),
+            "client@example.com",
+            null);
     assertThatCount("ApplicationStatus", "attempted", 1.0);
     assertThatCount("ApplicationStatus", "delivered", 1.0);
   }
@@ -60,7 +64,8 @@ class EmailEventDispatcherTest {
             81001L,
             WorkflowEmailEvent.OfferAction.NEW,
             "client@example.com",
-            List.of("regional.reviewers@gov.bc.ca")));
+            List.of("regional.reviewers@gov.bc.ca"),
+            "REGION_RCO"));
     dispatcher.onWorkflowEmailEvent(
         new WorkflowEmailEvent.PurchaseOffer(
             1000456L,
@@ -80,28 +85,36 @@ class EmailEventDispatcherTest {
             "Exemption #EX-205 has been approved.\n\nApplication number(s):\n"
                 + "1000456\n1000457\n\nThis is an automated notification; do not reply.\n",
             List.of("client@example.com"),
-            List.of());
+            List.of(),
+            "client@example.com",
+            null);
     verify(mailService)
         .send(
             "New LEXIS offer to purchase",
             "Please be advised an Offer to Purchase #81001 has been made on Application #1000456."
                 + " Details can be found in LEXIS.\n",
             List.of("client@example.com"),
-            List.of("regional.reviewers@gov.bc.ca"));
+            List.of("regional.reviewers@gov.bc.ca"),
+            "client@example.com",
+            "REGION_RCO");
     verify(mailService)
         .send(
             "Updated LEXIS offer to purchase",
             "Please be advised there is an update on Offer to Purchase #81002."
                 + " Details can be found in LEXIS.\n",
             List.of("client@example.com"),
-            List.of());
+            List.of(),
+            "client@example.com",
+            null);
     verify(mailService)
         .send(
             "Withdrawn LEXIS offer to purchase",
             "Please be advised that Offer to Purchase #81003 on Application #1000456"
                 + " has been withdrawn. Details can be found in LEXIS.\n",
             List.of("client@example.com"),
-            List.of());
+            List.of(),
+            "client@example.com",
+            null);
     assertThatCount("ExemptionApproval", "attempted", 1.0);
     assertThatCount("ExemptionApproval", "delivered", 1.0);
     assertThatCount("PurchaseOffer", "attempted", 3.0);
@@ -114,7 +127,8 @@ class EmailEventDispatcherTest {
         new WorkflowEmailEvent.PermitReview(
             7000123L,
             List.of("reviewers@gov.bc.ca"),
-            List.of("applicant@example.com")));
+            List.of("applicant@example.com"),
+            "REGION_RCO"));
     dispatcher.onWorkflowEmailEvent(
         new WorkflowEmailEvent.PermitApproval(
             7000123L,
@@ -133,7 +147,9 @@ class EmailEventDispatcherTest {
             "LEXIS permit #7000123 ready for review",
             "Permit #7000123 is ready for review.\n",
             List.of("reviewers@gov.bc.ca"),
-            List.of("applicant@example.com"));
+            List.of("applicant@example.com"),
+            "REGION_RCO",
+            null);
     verify(mailService)
         .send(
             "LEXIS permit #7000123 payment pending",
@@ -141,7 +157,9 @@ class EmailEventDispatcherTest {
                 + "Package(s): PKG-1, PKG-2\n\n"
                 + "This is an automated notification; do not reply.\n",
             List.of("applicant@example.com"),
-            List.of());
+            List.of(),
+            "applicant@example.com",
+            null);
     verify(mailService)
         .send(
             "LEXIS permit #7000124 approved",
@@ -149,7 +167,9 @@ class EmailEventDispatcherTest {
                 + "Package(s): PKG-3\n\n"
                 + "This is an automated notification; do not reply.\n",
             List.of("applicant@example.com"),
-            List.of());
+            List.of(),
+            "applicant@example.com",
+            null);
     assertThatCount("PermitReview", "attempted", 1.0);
     assertThatCount("PermitReview", "delivered", 1.0);
     assertThatCount("PermitApproval", "attempted", 2.0);
@@ -162,14 +182,17 @@ class EmailEventDispatcherTest {
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyList(),
-            org.mockito.ArgumentMatchers.anyList()))
+            org.mockito.ArgumentMatchers.anyList(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()))
         .thenReturn(false);
 
     dispatcher.onWorkflowEmailEvent(
         new WorkflowEmailEvent.PermitReview(
             7000123L,
             List.of("reviewers@gov.bc.ca"),
-            List.of()));
+            List.of(),
+            "PERMIT_REQUEST"));
 
     assertThatCount("PermitReview", "attempted", 1.0);
     assertThatCount("PermitReview", "not_delivered", 1.0);
@@ -181,14 +204,17 @@ class EmailEventDispatcherTest {
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyList(),
-            org.mockito.ArgumentMatchers.anyList()))
+            org.mockito.ArgumentMatchers.anyList(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()))
         .thenThrow(new IllegalStateException("test failure"));
 
     dispatcher.onWorkflowEmailEvent(
         new WorkflowEmailEvent.PermitReview(
             7000123L,
             List.of("reviewers@gov.bc.ca"),
-            List.of()));
+            List.of(),
+            "PERMIT_REQUEST"));
 
     assertThatCount("PermitReview", "attempted", 1.0);
     assertThatCount("PermitReview", "dispatch_failed", 1.0);

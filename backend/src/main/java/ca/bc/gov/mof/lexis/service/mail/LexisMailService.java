@@ -8,6 +8,7 @@ import jakarta.mail.internet.InternetAddress;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,26 +29,39 @@ public class LexisMailService {
   private final boolean nonProduction;
   private final String fromAddress;
   private final List<String> overrideRecipients;
+  private final String environment;
 
   public LexisMailService(
       JavaMailSender mailSender,
       @Value("${lexis.mail.enabled:false}") boolean enabled,
       @Value("${lexis.mail.non-production:true}") boolean nonProduction,
       @Value("${lexis.mail.from:" + DEFAULT_FROM_ADDRESS + "}") String fromAddress,
-      @Value("${lexis.mail.override-recipients:}") String overrideRecipients) {
+      @Value("${lexis.mail.override-recipients:}") String overrideRecipients,
+      @Value("${lexis.mail.environment:non-prod}") String environment) {
     this.mailSender = mailSender;
     this.enabled = enabled;
     this.nonProduction = nonProduction;
     this.fromAddress = trimToNull(fromAddress) == null ? DEFAULT_FROM_ADDRESS : fromAddress.trim();
     this.overrideRecipients = parseAddresses(overrideRecipients);
+    this.environment = subjectLabel(environment, "NON-PROD").toUpperCase(Locale.ROOT);
   }
 
   public boolean send(String subject, String body, List<String> recipients) {
-    return send(subject, body, recipients, List.of());
+    return send(subject, body, recipients, List.of(), null, null);
   }
 
   public boolean send(
       String subject, String body, List<String> recipients, List<String> copyRecipients) {
+    return send(subject, body, recipients, copyRecipients, null, null);
+  }
+
+  public boolean send(
+      String subject,
+      String body,
+      List<String> recipients,
+      List<String> copyRecipients,
+      String recipientRouteLabel,
+      String copyRecipientRouteLabel) {
     List<String> normalizedTo = validAddresses(recipients);
     List<String> normalizedCc = validAddresses(copyRecipients);
     if (!enabled) {
@@ -67,7 +81,16 @@ public class LexisMailService {
     message.setFrom(fromAddress);
     if (nonProduction) {
       message.setTo(overrideRecipients.toArray(String[]::new));
-      message.setSubject("[NON-PROD] " + safe(subject));
+      message.setSubject(
+          "["
+              + environment
+              + " - "
+              + intendedRecipient(normalizedTo, recipientRouteLabel)
+              + (normalizedCc.isEmpty()
+                  ? ""
+                  : "; CC " + intendedRecipient(normalizedCc, copyRecipientRouteLabel))
+              + "] "
+              + safe(subject));
       message.setText(
           "Original To: "
               + String.join(", ", normalizedTo)
@@ -123,6 +146,18 @@ public class LexisMailService {
     } catch (AddressException ex) {
       return false;
     }
+  }
+
+  private String intendedRecipient(List<String> recipients, String routeLabel) {
+    return subjectLabel(routeLabel, String.join(", ", recipients));
+  }
+
+  private String subjectLabel(String value, String fallback) {
+    String normalized = trimToNull(value);
+    if (normalized == null) {
+      return fallback;
+    }
+    return normalized.replace('\r', ' ').replace('\n', ' ').trim();
   }
 
   private String safe(String value) {

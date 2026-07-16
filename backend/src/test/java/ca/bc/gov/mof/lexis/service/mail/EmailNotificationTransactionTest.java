@@ -42,7 +42,9 @@ class EmailNotificationTransactionTest {
               "LEXIS permit #7000123 ready for review",
               "Permit #7000123 is ready for review.\n",
               List.of("reviewers@gov.bc.ca"),
-              List.of());
+              List.of(),
+              "PERMIT_REQUEST",
+              null);
     }
   }
 
@@ -76,7 +78,9 @@ class EmailNotificationTransactionTest {
               "LEXIS permit #7000123 ready for review",
               "Permit #7000123 is ready for review.\n",
               List.of("reviewers@gov.bc.ca"),
-              List.of());
+              List.of(),
+              "PERMIT_REQUEST",
+              null);
     }
   }
 
@@ -88,7 +92,8 @@ class EmailNotificationTransactionTest {
     return new WorkflowEmailEvent.PermitReview(
         7000123L,
         List.of("reviewers@gov.bc.ca"),
-        List.of());
+        List.of(),
+        "PERMIT_REQUEST");
   }
 
   @Configuration

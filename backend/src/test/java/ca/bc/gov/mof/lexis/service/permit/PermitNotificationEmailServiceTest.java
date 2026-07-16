@@ -28,7 +28,27 @@ class PermitNotificationEmailServiceTest {
             new WorkflowEmailEvent.PermitReview(
                 123L,
                 List.of("review.one@gov.bc.ca", "review.two@gov.bc.ca"),
-                List.of()));
+                List.of(),
+                "REGION_RCO"));
+  }
+
+  @Test
+  void shouldLabelFallbackPermitRequestRecipients() {
+    EmailNotificationService notificationService =
+        org.mockito.Mockito.mock(EmailNotificationService.class);
+    PermitNotificationEmailService service =
+        new PermitNotificationEmailService(
+            notificationService,
+            new RegionalMailRecipientResolver("", "", "", "fallback@gov.bc.ca"));
+
+    assertThat(service.sendRequest(123L, 9999L)).isTrue();
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PermitReview(
+                123L,
+                List.of("fallback@gov.bc.ca"),
+                List.of(),
+                "PERMIT_REQUEST"));
   }
 
   @Test

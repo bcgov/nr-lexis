@@ -180,6 +180,7 @@ jobs:
           LEXIS_MAIL_ENABLED: ${{ vars.LEXIS_MAIL_ENABLED || 'false' }}
           LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED: ${{ vars.LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED || 'false' }}
           LEXIS_MAIL_NON_PRODUCTION: ${{ inputs.environment == 'prod' && 'false' || 'true' }}
+          LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}
           LEXIS_MAIL_FROM: ${{ vars.LEXIS_MAIL_FROM || 'Provincial.Log.Export.Analyst@gov.bc.ca' }}
           LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}
           LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${{ secrets.lexis_mail_region_rco_recipients }}
@@ -230,6 +231,7 @@ jobs:
             -p LEXIS_MAIL_ENABLED="$LEXIS_MAIL_ENABLED"
             -p LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED="$LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED"
             -p LEXIS_MAIL_NON_PRODUCTION="$LEXIS_MAIL_NON_PRODUCTION"
+            -p LEXIS_MAIL_ENVIRONMENT="$LEXIS_MAIL_ENVIRONMENT"
             -p LEXIS_MAIL_FROM="$LEXIS_MAIL_FROM"
             -p LEXIS_MAIL_OVERRIDE_RECIPIENTS="$LEXIS_MAIL_OVERRIDE_RECIPIENTS"
             -p LEXIS_MAIL_REGION_RCO_RECIPIENTS="$LEXIS_MAIL_REGION_RCO_RECIPIENTS"

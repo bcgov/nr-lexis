@@ -64,8 +64,9 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | End-to-end deadline for one ClamAV scan | 10s |
 | `LEXIS_MAIL_ENABLED` | Enables outbound workflow email | false |
 | `LEXIS_MAIL_NON_PRODUCTION` | Replaces original recipients with override recipients and marks the message as non-production | true outside PROD |
+| `LEXIS_MAIL_ENVIRONMENT` | Non-secret environment label shown on intercepted DEV/TEST messages | non-prod locally; derived from deployment environment |
 | `LEXIS_MAIL_FROM` | Approved sender mailbox for LEXIS workflow messages | Provincial analyst mailbox |
-| `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Comma/semicolon-separated recipients receiving all DEV/TEST messages | Required when non-production mail is enabled |
+| `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Comma/semicolon-separated recipients receiving all DEV/TEST messages | Required when non-production mail is enabled; must be unset in PROD |
 | `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | RCO distribution list recipient(s) | Required in PROD |
 | `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | RNI distribution list recipient(s) | Required in PROD |
 | `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | RSI distribution list recipient(s) | Required in PROD |
@@ -97,6 +98,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | OpenShift template default `10s` |
 | `LEXIS_MAIL_ENABLED` | Variable `LEXIS_MAIL_ENABLED` |
 | `LEXIS_MAIL_NON_PRODUCTION` | Derived from the deployment environment |
+| `LEXIS_MAIL_ENVIRONMENT` | Workflow input `environment` |
 | `LEXIS_MAIL_FROM` | Variable `LEXIS_MAIL_FROM` |
 | `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Secret `LEXIS_MAIL_OVERRIDE_RECIPIENTS` |
 | `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RCO_RECIPIENTS` |

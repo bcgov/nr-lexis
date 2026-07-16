@@ -49,6 +49,23 @@ class MailNotificationConfigurationValidatorTest {
   }
 
   @Test
+  void productionMailShouldRejectAnOverrideEvenWhenDeliveryIsDisabled() {
+    assertThatThrownBy(
+            () ->
+                new MailNotificationConfigurationValidator(
+                    false,
+                    false,
+                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "test-recipient@gov.bc.ca",
+                    "",
+                    "",
+                    "",
+                    ""))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Production mail must not configure override recipients.");
+  }
+
+  @Test
   void enabledMailShouldRejectAnInvalidFromAddress() {
     assertThatThrownBy(
             () ->

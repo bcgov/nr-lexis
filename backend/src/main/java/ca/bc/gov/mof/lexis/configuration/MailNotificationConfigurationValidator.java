@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/** Fails startup when enabled mail would silently discard a workflow notification. */
+/** Fails startup when mail configuration could discard or misroute a notification. */
 @Component
 public class MailNotificationConfigurationValidator {
 
@@ -23,6 +23,10 @@ public class MailNotificationConfigurationValidator {
       @Value("${lexis.mail.region-rco-recipients:}") String rcoRecipients,
       @Value("${lexis.mail.region-rni-recipients:}") String rniRecipients,
       @Value("${lexis.mail.region-rsi-recipients:}") String rsiRecipients) {
+    if (!nonProduction && trimToNull(overrideRecipients) != null) {
+      throw new IllegalStateException(
+          "Production mail must not configure override recipients.");
+    }
     if (!enabled) {
       return;
     }

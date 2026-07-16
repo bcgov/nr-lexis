@@ -15,6 +15,14 @@ public sealed interface WorkflowEmailEvent {
     return List.of();
   }
 
+  default String recipientRouteLabel() {
+    return String.join(", ", recipients());
+  }
+
+  default String copyRecipientRouteLabel() {
+    return null;
+  }
+
   String reference();
 
   record ApplicationStatus(
@@ -83,7 +91,8 @@ public sealed interface WorkflowEmailEvent {
       long offerNumber,
       OfferAction action,
       String recipient,
-      List<String> copyRecipients)
+      List<String> copyRecipients,
+      String copyRecipientRouteLabel)
       implements WorkflowEmailEvent {
 
     public PurchaseOffer {
@@ -94,8 +103,17 @@ public sealed interface WorkflowEmailEvent {
         long applicationNumber,
         long offerNumber,
         OfferAction action,
+        String recipient,
+        List<String> copyRecipients) {
+      this(applicationNumber, offerNumber, action, recipient, copyRecipients, null);
+    }
+
+    public PurchaseOffer(
+        long applicationNumber,
+        long offerNumber,
+        OfferAction action,
         String recipient) {
-      this(applicationNumber, offerNumber, action, recipient, List.of());
+      this(applicationNumber, offerNumber, action, recipient, List.of(), null);
     }
 
     @Override
@@ -130,12 +148,20 @@ public sealed interface WorkflowEmailEvent {
   record PermitReview(
       long permitNumber,
       List<String> recipients,
-      List<String> copyRecipients)
+      List<String> copyRecipients,
+      String recipientRouteLabel)
       implements WorkflowEmailEvent {
 
     public PermitReview {
       recipients = recipients == null ? List.of() : List.copyOf(recipients);
       copyRecipients = copyRecipients == null ? List.of() : List.copyOf(copyRecipients);
+    }
+
+    public PermitReview(
+        long permitNumber,
+        List<String> recipients,
+        List<String> copyRecipients) {
+      this(permitNumber, recipients, copyRecipients, null);
     }
 
     @Override

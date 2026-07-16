@@ -15,10 +15,13 @@ class RegionalMailRecipientResolverTest {
   @ParameterizedTest
   @MethodSource("regionalOrgUnits")
   void shouldResolveTheConfiguredRegionForEachLegacyOrgUnit(
-      Long orgUnitNumber, String expectedRecipient) {
+      Long orgUnitNumber, String expectedLabel, String expectedRecipient) {
     RegionalMailRecipientResolver resolver = resolver("rco@test.ca", "rni@test.ca", "rsi@test.ca");
 
-    assertThat(resolver.resolve(orgUnitNumber)).containsExactly(expectedRecipient);
+    RegionalMailRecipientResolver.RecipientGroup group = resolver.resolveGroup(orgUnitNumber);
+
+    assertThat(group.label()).isEqualTo(expectedLabel);
+    assertThat(group.recipients()).containsExactly(expectedRecipient);
   }
 
   @Test
@@ -27,7 +30,7 @@ class RegionalMailRecipientResolverTest {
         new RegionalMailRecipientResolver(
             " first@test.ca;second@test.ca, first@test.ca ; ; ", "", "", "fallback@test.ca");
 
-    List<String> recipients = resolver.resolve(1835L);
+    List<String> recipients = resolver.resolveGroup(1835L).recipients();
 
     assertThat(recipients).containsExactly("first@test.ca", "second@test.ca");
     assertThatThrownBy(() -> recipients.add("other@test.ca"))
@@ -40,7 +43,10 @@ class RegionalMailRecipientResolverTest {
         new RegionalMailRecipientResolver(
             "rco@test.ca", " ", "rsi@test.ca", " fallback@test.ca; fallback@test.ca ");
 
-    assertThat(resolver.resolve(1906L)).containsExactly("fallback@test.ca");
+    RegionalMailRecipientResolver.RecipientGroup group = resolver.resolveGroup(1906L);
+
+    assertThat(group.label()).isEqualTo("PERMIT_REQUEST");
+    assertThat(group.recipients()).containsExactly("fallback@test.ca");
   }
 
   @Test
@@ -48,8 +54,8 @@ class RegionalMailRecipientResolverTest {
     RegionalMailRecipientResolver resolver =
         new RegionalMailRecipientResolver("", "", "", "fallback@test.ca");
 
-    assertThat(resolver.resolve(9999L)).containsExactly("fallback@test.ca");
-    assertThat(resolver.resolve(null)).containsExactly("fallback@test.ca");
+    assertThat(resolver.resolveGroup(9999L).label()).isEqualTo("PERMIT_REQUEST");
+    assertThat(resolver.resolveGroup(null).label()).isEqualTo("PERMIT_REQUEST");
   }
 
   @Test
@@ -57,7 +63,7 @@ class RegionalMailRecipientResolverTest {
     RegionalMailRecipientResolver resolver =
         new RegionalMailRecipientResolver("", "", "", "");
 
-    assertThat(resolver.resolve(1835L)).isEmpty();
+    assertThat(resolver.resolveGroup(1835L).recipients()).isEmpty();
   }
 
   private static RegionalMailRecipientResolver resolver(String rco, String rni, String rsi) {
@@ -66,16 +72,16 @@ class RegionalMailRecipientResolverTest {
 
   private static Stream<Arguments> regionalOrgUnits() {
     return Stream.of(
-        Arguments.of(1835L, "rco@test.ca"),
-        Arguments.of(1909L, "rco@test.ca"),
-        Arguments.of(1910L, "rco@test.ca"),
-        Arguments.of(1833L, "rni@test.ca"),
-        Arguments.of(1905L, "rni@test.ca"),
-        Arguments.of(1906L, "rni@test.ca"),
-        Arguments.of(1908L, "rni@test.ca"),
-        Arguments.of(1834L, "rsi@test.ca"),
-        Arguments.of(1903L, "rsi@test.ca"),
-        Arguments.of(1904L, "rsi@test.ca"),
-        Arguments.of(1907L, "rsi@test.ca"));
+        Arguments.of(1835L, "REGION_RCO", "rco@test.ca"),
+        Arguments.of(1909L, "REGION_RCO", "rco@test.ca"),
+        Arguments.of(1910L, "REGION_RCO", "rco@test.ca"),
+        Arguments.of(1833L, "REGION_RNI", "rni@test.ca"),
+        Arguments.of(1905L, "REGION_RNI", "rni@test.ca"),
+        Arguments.of(1906L, "REGION_RNI", "rni@test.ca"),
+        Arguments.of(1908L, "REGION_RNI", "rni@test.ca"),
+        Arguments.of(1834L, "REGION_RSI", "rsi@test.ca"),
+        Arguments.of(1903L, "REGION_RSI", "rsi@test.ca"),
+        Arguments.of(1904L, "REGION_RSI", "rsi@test.ca"),
+        Arguments.of(1907L, "REGION_RSI", "rsi@test.ca"));
   }
 }

@@ -11,6 +11,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class RegionalMailRecipientResolver {
 
+  private static final String REGION_RCO = "REGION_RCO";
+  private static final String REGION_RNI = "REGION_RNI";
+  private static final String REGION_RSI = "REGION_RSI";
+  private static final String PERMIT_REQUEST = "PERMIT_REQUEST";
+
   private static final Set<Long> RCO_ORG_UNITS = Set.of(1835L, 1909L, 1910L);
   private static final Set<Long> RNI_ORG_UNITS = Set.of(1833L, 1905L, 1906L, 1908L);
   private static final Set<Long> RSI_ORG_UNITS = Set.of(1834L, 1903L, 1904L, 1907L);
@@ -31,25 +36,30 @@ public class RegionalMailRecipientResolver {
     this.fallbackRecipients = parseRecipients(fallbackRecipients);
   }
 
-  public List<String> resolve(Long orgUnitNumber) {
-    List<String> regionalRecipients = recipientsFor(orgUnitNumber);
-    return regionalRecipients.isEmpty() ? fallbackRecipients : regionalRecipients;
+  public RecipientGroup resolveGroup(Long orgUnitNumber) {
+    RecipientGroup regionalGroup = regionalGroupFor(orgUnitNumber);
+    if (!regionalGroup.recipients().isEmpty()) {
+      return regionalGroup;
+    }
+    return fallbackRecipients.isEmpty()
+        ? RecipientGroup.empty()
+        : new RecipientGroup(PERMIT_REQUEST, fallbackRecipients);
   }
 
-  private List<String> recipientsFor(Long orgUnitNumber) {
+  private RecipientGroup regionalGroupFor(Long orgUnitNumber) {
     if (orgUnitNumber == null) {
-      return List.of();
+      return RecipientGroup.empty();
     }
     if (RCO_ORG_UNITS.contains(orgUnitNumber)) {
-      return rcoRecipients;
+      return new RecipientGroup(REGION_RCO, rcoRecipients);
     }
     if (RNI_ORG_UNITS.contains(orgUnitNumber)) {
-      return rniRecipients;
+      return new RecipientGroup(REGION_RNI, rniRecipients);
     }
     if (RSI_ORG_UNITS.contains(orgUnitNumber)) {
-      return rsiRecipients;
+      return new RecipientGroup(REGION_RSI, rsiRecipients);
     }
-    return List.of();
+    return RecipientGroup.empty();
   }
 
   private static List<String> parseRecipients(String value) {
@@ -65,5 +75,16 @@ public class RegionalMailRecipientResolver {
 
   private static String normalizedRecipient(String value) {
     return trimToNull(value);
+  }
+
+  public record RecipientGroup(String label, List<String> recipients) {
+
+    public RecipientGroup {
+      recipients = recipients == null ? List.of() : List.copyOf(recipients);
+    }
+
+    private static RecipientGroup empty() {
+      return new RecipientGroup(null, List.of());
+    }
   }
 }

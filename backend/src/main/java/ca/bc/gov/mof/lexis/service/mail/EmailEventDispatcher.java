@@ -39,7 +39,13 @@ public class EmailEventDispatcher {
     try {
       String body = renderer.render(event.templateName(), context(event));
       boolean sent =
-          mailService.send(event.subject(), body, event.recipients(), event.copyRecipients());
+          mailService.send(
+              event.subject(),
+              body,
+              event.recipients(),
+              event.copyRecipients(),
+              event.recipientRouteLabel(),
+              event.copyRecipientRouteLabel());
       if (sent) {
         count(eventType, "delivered");
         LOGGER.info(

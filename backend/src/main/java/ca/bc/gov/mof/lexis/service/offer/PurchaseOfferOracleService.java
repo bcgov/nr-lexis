@@ -18,6 +18,7 @@ import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver.RecipientGroup;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
@@ -322,8 +323,8 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         return new EmailResult(
             true, false, null, "Offer saved, but no client email address was found.");
       }
-      List<String> regionalRecipients =
-          safeList(regionalRecipientResolver.resolve(context.orgUnitNumber()));
+      RecipientGroup regionalGroup = regionalRecipientResolver.resolveGroup(context.orgUnitNumber());
+      List<String> regionalRecipients = safeList(regionalGroup.recipients());
       notificationService.publish(
           new WorkflowEmailEvent.PurchaseOffer(
               applicationNumber,
@@ -334,7 +335,8 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
                 case WITHDRAWN -> WorkflowEmailEvent.OfferAction.WITHDRAWN;
               },
               recipient,
-              regionalRecipients));
+              regionalRecipients,
+              regionalGroup.label()));
       String warning =
           regionalRecipients.isEmpty()
               ? "Offer saved and applicant email queued, but no ministry regional recipient was configured."

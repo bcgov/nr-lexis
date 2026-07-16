@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver.RecipientGroup;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -22,15 +23,16 @@ public class PermitNotificationEmailService {
   }
 
   public boolean sendRequest(Long permitNumber, Long orgUnitNumber) {
-    List<String> requestRecipients = regionalRecipientResolver.resolve(orgUnitNumber);
-    if (permitNumber == null || permitNumber < 1 || requestRecipients.isEmpty()) {
+    RecipientGroup recipientGroup = regionalRecipientResolver.resolveGroup(orgUnitNumber);
+    if (permitNumber == null || permitNumber < 1 || recipientGroup.recipients().isEmpty()) {
       return false;
     }
     notificationService.publish(
         new WorkflowEmailEvent.PermitReview(
             permitNumber,
-            requestRecipients,
-            List.of()));
+            recipientGroup.recipients(),
+            List.of(),
+            recipientGroup.label()));
     return true;
   }
 

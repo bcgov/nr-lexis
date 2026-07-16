@@ -65,6 +65,11 @@ class PurchaseOfferOracleServiceTest {
             notificationService,
             regionalRecipientResolver,
             clock);
+    org.mockito.Mockito.lenient()
+        .when(
+            regionalRecipientResolver.resolveGroup(
+                org.mockito.ArgumentMatchers.nullable(Long.class)))
+        .thenReturn(new RegionalMailRecipientResolver.RecipientGroup(null, List.of()));
   }
 
   @Test
@@ -464,8 +469,10 @@ class PurchaseOfferOracleServiceTest {
                     "O", "00077881", "00", null, null, 1835L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
-    when(regionalRecipientResolver.resolve(1835L))
-        .thenReturn(List.of("coast.review@gov.bc.ca"));
+    when(regionalRecipientResolver.resolveGroup(1835L))
+        .thenReturn(
+            new RegionalMailRecipientResolver.RecipientGroup(
+                "REGION_RCO", List.of("coast.review@gov.bc.ca")));
 
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
@@ -479,7 +486,8 @@ class PurchaseOfferOracleServiceTest {
                 81001L,
                 WorkflowEmailEvent.OfferAction.NEW,
                 "client@example.com",
-                List.of("coast.review@gov.bc.ca")));
+                List.of("coast.review@gov.bc.ca"),
+                "REGION_RCO"));
   }
 
   @Test

@@ -81,6 +81,9 @@ parameters:
   - name: LEXIS_MAIL_NON_PRODUCTION
     description: Route all messages to override recipients when true
     value: "true"
+  - name: LEXIS_MAIL_ENVIRONMENT
+    description: Non-secret deployment environment label used on intercepted messages
+    value: non-prod
   - name: LEXIS_MAIL_FROM
     value: Provincial.Log.Export.Analyst@gov.bc.ca
   - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
@@ -280,6 +283,8 @@ objects:
                   value: ${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED}
                 - name: LEXIS_MAIL_NON_PRODUCTION
                   value: ${LEXIS_MAIL_NON_PRODUCTION}
+                - name: LEXIS_MAIL_ENVIRONMENT
+                  value: ${LEXIS_MAIL_ENVIRONMENT}
                 - name: LEXIS_MAIL_FROM
                   value: ${LEXIS_MAIL_FROM}
                 - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
