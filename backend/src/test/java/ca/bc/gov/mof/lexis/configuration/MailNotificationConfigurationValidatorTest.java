@@ -23,7 +23,7 @@ class MailNotificationConfigurationValidatorTest {
                 new MailNotificationConfigurationValidator(
                     true,
                     true,
-                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "sender@example.com",
                     "admin.one@gov.bc.ca;admin.two@gov.bc.ca",
                     "",
                     "coast.reviewers@gov.bc.ca",
@@ -39,7 +39,7 @@ class MailNotificationConfigurationValidatorTest {
                 new MailNotificationConfigurationValidator(
                     true,
                     false,
-                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "sender@example.com",
                     "",
                     "reviewers@gov.bc.ca",
                     "",
@@ -55,7 +55,7 @@ class MailNotificationConfigurationValidatorTest {
                 new MailNotificationConfigurationValidator(
                     false,
                     false,
-                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "sender@example.com",
                     "test-recipient@gov.bc.ca",
                     "",
                     "",
@@ -76,13 +76,23 @@ class MailNotificationConfigurationValidatorTest {
   }
 
   @Test
+  void enabledMailShouldRejectMissingFromAddress() {
+    assertThatThrownBy(
+            () ->
+                new MailNotificationConfigurationValidator(
+                    true, false, "", "", "reviewers@gov.bc.ca", "", "", ""))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Enabled mail requires one valid from address.");
+  }
+
+  @Test
   void enabledNonProductionMailShouldRejectMissingOrInvalidOverrides() {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
                     true,
                     true,
-                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "sender@example.com",
                     "admin@gov.bc.ca;invalid",
                     "reviewers@gov.bc.ca",
                     "",
@@ -99,7 +109,7 @@ class MailNotificationConfigurationValidatorTest {
                 new MailNotificationConfigurationValidator(
                     true,
                     false,
-                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "sender@example.com",
                     "",
                     "",
                     "",
@@ -117,7 +127,7 @@ class MailNotificationConfigurationValidatorTest {
                 new MailNotificationConfigurationValidator(
                     true,
                     false,
-                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "sender@example.com",
                     "",
                     "review.one@gov.bc.ca,,review.two@gov.bc.ca",
                     "",
@@ -134,7 +144,7 @@ class MailNotificationConfigurationValidatorTest {
                 new MailNotificationConfigurationValidator(
                     true,
                     false,
-                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "sender@example.com",
                     "",
                     "reviewers@gov.bc.ca",
                     "coast.reviewers@gov.bc.ca",
@@ -150,7 +160,7 @@ class MailNotificationConfigurationValidatorTest {
                 new MailNotificationConfigurationValidator(
                     true,
                     false,
-                    "Provincial.Log.Export.Analyst@gov.bc.ca",
+                    "sender@example.com",
                     "",
                     "reviewers@gov.bc.ca",
                     "invalid",

@@ -310,9 +310,7 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_NON_PRODUCTION:"
                 + " ${{ inputs.environment == 'prod' && 'false' || 'true' }}")
         .contains("LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}")
-        .contains(
-            "LEXIS_MAIL_FROM:"
-                + " ${{ vars.LEXIS_MAIL_FROM || 'Provincial.Log.Export.Analyst@gov.bc.ca' }}")
+        .contains("LEXIS_MAIL_FROM: ${{ vars.LEXIS_MAIL_FROM }}")
         .contains(
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}")
         .contains(

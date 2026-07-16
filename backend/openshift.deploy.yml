@@ -88,7 +88,8 @@ parameters:
     description: Non-secret deployment environment label used on intercepted messages
     value: non-prod
   - name: LEXIS_MAIL_FROM
-    value: Provincial.Log.Export.Analyst@gov.bc.ca
+    description: Approved sender mailbox supplied by the GitHub Environment
+    value: ""
   - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
     description: Comma- or semicolon-separated TEST/DEV administrator email addresses
     value: ""

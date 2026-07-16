@@ -22,7 +22,6 @@ import org.springframework.stereotype.Service;
 public class LexisMailService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisMailService.class);
-  private static final String DEFAULT_FROM_ADDRESS = "Provincial.Log.Export.Analyst@gov.bc.ca";
 
   private final JavaMailSender mailSender;
   private final boolean enabled;
@@ -35,13 +34,13 @@ public class LexisMailService {
       JavaMailSender mailSender,
       @Value("${lexis.mail.enabled:false}") boolean enabled,
       @Value("${lexis.mail.non-production:true}") boolean nonProduction,
-      @Value("${lexis.mail.from:" + DEFAULT_FROM_ADDRESS + "}") String fromAddress,
+      @Value("${lexis.mail.from:}") String fromAddress,
       @Value("${lexis.mail.override-recipients:}") String overrideRecipients,
       @Value("${lexis.mail.environment:non-prod}") String environment) {
     this.mailSender = mailSender;
     this.enabled = enabled;
     this.nonProduction = nonProduction;
-    this.fromAddress = trimToNull(fromAddress) == null ? DEFAULT_FROM_ADDRESS : fromAddress.trim();
+    this.fromAddress = trimToNull(fromAddress) == null ? "" : fromAddress.trim();
     this.overrideRecipients = parseAddresses(overrideRecipients);
     this.environment = subjectLabel(environment, "NON-PROD").toUpperCase(Locale.ROOT);
   }

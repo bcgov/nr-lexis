@@ -32,8 +32,7 @@ class ApplicationYamlDefaultsTest {
             "${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:60}")
         .containsEntry(
             "lexis.permit-invoice.mode", "${LEXIS_PERMIT_INVOICE_MODE:legacy-best-effort}")
-        .containsEntry(
-            "lexis.mail.from", "${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}")
+        .containsEntry("lexis.mail.from", "${LEXIS_MAIL_FROM:}")
         .containsEntry(
             "lexis.mail.applicant-email-capture-enabled",
             "${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:false}")

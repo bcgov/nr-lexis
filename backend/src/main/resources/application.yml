@@ -92,7 +92,7 @@ lexis:
     applicant-email-capture-enabled: ${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:false}
     non-production: ${LEXIS_MAIL_NON_PRODUCTION:true}
     environment: ${LEXIS_MAIL_ENVIRONMENT:non-prod}
-    from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
+    from: ${LEXIS_MAIL_FROM:}
     override-recipients: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS:}
     region-rco-recipients: ${LEXIS_MAIL_REGION_RCO_RECIPIENTS:}
     region-rni-recipients: ${LEXIS_MAIL_REGION_RNI_RECIPIENTS:}

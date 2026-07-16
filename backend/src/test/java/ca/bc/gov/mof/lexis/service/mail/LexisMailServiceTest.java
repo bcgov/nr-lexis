@@ -21,7 +21,7 @@ class LexisMailServiceTest {
             sender,
             true,
             true,
-            "Provincial.Log.Export.Analyst@gov.bc.ca",
+            "sender@example.com",
             "admin.one@gov.bc.ca;admin.two@gov.bc.ca",
             "test");
 
@@ -55,7 +55,7 @@ class LexisMailServiceTest {
             sender,
             true,
             true,
-            "Provincial.Log.Export.Analyst@gov.bc.ca",
+            "sender@example.com",
             "test.admin@gov.bc.ca",
             "test");
 
@@ -95,7 +95,7 @@ class LexisMailServiceTest {
             sender,
             true,
             true,
-            "Provincial.Log.Export.Analyst@gov.bc.ca",
+            "sender@example.com",
             "test.admin@gov.bc.ca",
             "test");
 
@@ -120,7 +120,7 @@ class LexisMailServiceTest {
     JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
     LexisMailService service =
         new LexisMailService(
-            sender, true, true, "Provincial.Log.Export.Analyst@gov.bc.ca", "", "test");
+            sender, true, true, "sender@example.com", "", "test");
 
     assertThat(service.send("Subject", "Body", List.of("client@example.com"))).isFalse();
 
@@ -135,7 +135,7 @@ class LexisMailServiceTest {
             sender,
             true,
             false,
-            "Provincial.Log.Export.Analyst@gov.bc.ca",
+            "sender@example.com",
             "test.admin@gov.bc.ca",
             "prod");
 
@@ -162,7 +162,7 @@ class LexisMailServiceTest {
     JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
     LexisMailService service =
         new LexisMailService(
-            sender, false, false, "Provincial.Log.Export.Analyst@gov.bc.ca", "", "prod");
+            sender, false, false, "sender@example.com", "", "prod");
 
     assertThat(service.send("Subject", "Body", List.of("client@example.com"))).isFalse();
 
@@ -174,7 +174,7 @@ class LexisMailServiceTest {
     JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
     LexisMailService service =
         new LexisMailService(
-            sender, true, false, "Provincial.Log.Export.Analyst@gov.bc.ca", "", "prod");
+            sender, true, false, "sender@example.com", "", "prod");
 
     assertThat(
             service.send(
@@ -198,7 +198,7 @@ class LexisMailServiceTest {
         .send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
     LexisMailService service =
         new LexisMailService(
-            sender, true, false, "Provincial.Log.Export.Analyst@gov.bc.ca", "", "prod");
+            sender, true, false, "sender@example.com", "", "prod");
 
     assertThat(service.send("Subject", "Body", List.of("client@example.com"))).isFalse();
   }

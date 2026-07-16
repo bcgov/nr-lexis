@@ -17,7 +17,7 @@ public class MailNotificationConfigurationValidator {
   public MailNotificationConfigurationValidator(
       @Value("${lexis.mail.enabled:false}") boolean enabled,
       @Value("${lexis.mail.non-production:true}") boolean nonProduction,
-      @Value("${lexis.mail.from:Provincial.Log.Export.Analyst@gov.bc.ca}") String fromAddress,
+      @Value("${lexis.mail.from:}") String fromAddress,
       @Value("${lexis.mail.override-recipients:}") String overrideRecipients,
       @Value("${lexis.mail.permit-request-recipients:}") String permitRequestRecipients,
       @Value("${lexis.mail.region-rco-recipients:}") String rcoRecipients,
