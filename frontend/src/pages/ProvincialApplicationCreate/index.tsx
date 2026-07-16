@@ -3,13 +3,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
+  DismissibleTag,
   Grid,
+  Modal,
   Tab,
   TabList,
   TabPanel,
   TabPanels,
   Tabs,
-  Tag,
   TextArea,
   TextInput,
   Tile,
@@ -109,6 +110,9 @@ const APPLICATION_CREATE_TAB_INDEX = {
   documents: 5,
   remarks: 6,
 } as const
+
+const productTypeSupportsPackages = (productTypeCode: string): boolean =>
+  ['H', 'T'].includes(productTypeCode.trim().toUpperCase())
 
 const APPLICATION_CREATE_FIELD_TAB: Partial<Record<ProvincialApplicationCreateField, number>> = {
   ownerClientNumber: APPLICATION_CREATE_TAB_INDEX.clients,
@@ -308,6 +312,8 @@ const ProvincialApplicationCreatePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [accuracyConfirmationOpen, setAccuracyConfirmationOpen] = useState(false)
   const [accuracyConfirmed, setAccuracyConfirmed] = useState(false)
+  const [packageSavePromptOpen, setPackageSavePromptOpen] = useState(false)
+  const createPackageButtonRef = useRef<HTMLButtonElement>(null)
   const [touchedFields, setTouchedFields] = useState<
     TouchedFields<ProvincialApplicationCreateField>
   >({})
@@ -1776,6 +1782,38 @@ const ProvincialApplicationCreatePage = () => {
                         {fieldError('speciesCodes')}
                       </p>
                     )}
+                    <div className="application-species-actions">
+                      <Button
+                        type="button"
+                        kind="secondary"
+                        size="sm"
+                        disabled={
+                          !applicationSpeciesCandidate ||
+                          !availableApplicationSpeciesOptions.some(
+                            (option) => option.code === applicationSpeciesCandidate,
+                          )
+                        }
+                        onClick={onAddApplicationSpecies}
+                      >
+                        Add application species
+                      </Button>
+                      <ul
+                        className="application-species-list"
+                        aria-label="Selected application species"
+                      >
+                        {form.speciesCodes.map((speciesCode) => (
+                          <li key={speciesCode}>
+                            <DismissibleTag
+                              type="blue"
+                              text={speciesCode}
+                              title={`Remove ${speciesCode} from application`}
+                              dismissTooltipLabel={`Remove ${speciesCode} from application`}
+                              onClose={() => onRemoveApplicationSpecies(speciesCode)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                   <SearchableSelect
                     id="applicationEndUse"
@@ -1794,33 +1832,50 @@ const ProvincialApplicationCreatePage = () => {
                     }}
                   />
                 </div>
-                <div className="legacy-search-actions">
-                  <Button
-                    kind="secondary"
-                    size="sm"
-                    disabled={
-                      !applicationSpeciesCandidate ||
-                      !availableApplicationSpeciesOptions.some(
-                        (option) => option.code === applicationSpeciesCandidate,
-                      )
-                    }
-                    onClick={onAddApplicationSpecies}
-                  >
-                    Add Application species
-                  </Button>
-                  {form.speciesCodes.map((speciesCode) => (
-                    <span key={speciesCode} className="legacy-search-actions">
-                      <Tag type="blue">{speciesCode}</Tag>
+                {productTypeSupportsPackages(form.productTypeCode) && (
+                  <section className="application-items-section application-items-section--package-details application-create-package-shell">
+                    <div className="application-items-section-header">
+                      <h3>Package Details</h3>
+                      <SearchableSelect
+                        id="applicationCreatePackageSelect"
+                        labelText="Selected Package"
+                        value=""
+                        disabled
+                        placeholder="No packages"
+                        options={[]}
+                        onChange={() => undefined}
+                      />
+                    </div>
+                    <dl className="detail-field-grid application-items-summary">
+                      {[
+                        ['Package Number', 'None selected'],
+                        ['Package Volume', 'Not provided'],
+                        ['Total Scale Volume', 'Not provided'],
+                        ['Total Pieces', '0'],
+                        ['Average Length', 'Not provided'],
+                        ['Average Top Diameter', 'Not provided'],
+                        ['Package Status', 'Not provided'],
+                        ['Reprocessed', 'Not provided'],
+                      ].map(([label, value]) => (
+                        <div key={label} className="detail-field-item">
+                          <dt className="detail-field-label">{label}</dt>
+                          <dd className="detail-field-value">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <div className="application-create-package-actions">
                       <Button
-                        kind="ghost"
+                        ref={createPackageButtonRef}
+                        type="button"
+                        kind="secondary"
                         size="sm"
-                        onClick={() => onRemoveApplicationSpecies(speciesCode)}
+                        onClick={() => setPackageSavePromptOpen(true)}
                       >
-                        Remove
+                        Create New Package
                       </Button>
-                    </span>
-                  ))}
-                </div>
+                    </div>
+                  </section>
+                )}
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
@@ -1938,6 +1993,17 @@ const ProvincialApplicationCreatePage = () => {
           onClose={closeAccuracyConfirmation}
         />
       )}
+      <Modal
+        open={packageSavePromptOpen}
+        size="xs"
+        modalHeading="Application not saved"
+        primaryButtonText="OK"
+        launcherButtonRef={createPackageButtonRef}
+        onRequestClose={() => setPackageSavePromptOpen(false)}
+        onRequestSubmit={() => setPackageSavePromptOpen(false)}
+      >
+        <p>Please save this application before adding packages.</p>
+      </Modal>
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}
         isBusy={isSubmitting}

@@ -344,6 +344,86 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
   })
 
+  it('requires the application to be saved before creating a package', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=H&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Packages / Scales')
+    expect(await screen.findByRole('heading', { name: 'Package Details' })).toBeInTheDocument()
+
+    const createPackageButton = screen.getByRole('button', { name: 'Create New Package' })
+    await userEvent.click(createPackageButton)
+
+    const dialog = screen.getByRole('dialog', { name: 'Application not saved' })
+    expect(
+      within(dialog).getByText('Please save this application before adding packages.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+    const modalRoot = dialog.closest('.cds--modal')
+    expect(modalRoot).not.toBeNull()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'OK' }))
+
+    await waitFor(() => {
+      expect(modalRoot).not.toHaveClass('is-visible')
+      expect(createPackageButton).toHaveFocus()
+    })
+  })
+
+  it('removes selected application species independently', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?productTypeCode=H&ageClass=O&region=11&speciesCodes=HE%2CBA&endUseCode=SA',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Packages / Scales')
+    const selectedSpecies = await screen.findByRole('list', {
+      name: 'Selected application species',
+    })
+    const removeHemlock = within(selectedSpecies).getByRole('button', {
+      name: 'Remove HE from application',
+    })
+    expect(
+      within(selectedSpecies).getByRole('button', { name: 'Remove BA from application' }),
+    ).toBeInTheDocument()
+
+    await userEvent.click(removeHemlock)
+
+    expect(
+      screen.queryByRole('button', { name: 'Remove HE from application' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove BA from application' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove BA from application' }))
+
+    expect(
+      screen.queryByRole('button', { name: 'Remove BA from application' }),
+    ).not.toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
   it('requires and resets application accuracy confirmation for a provincial submitter', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -487,7 +567,7 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('combobox', { name: 'Application species' }),
       'HE - Hemlock',
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Add Application species' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add application species' }))
     expect(await screen.findByText('HE')).toBeInTheDocument()
     const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())

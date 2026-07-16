@@ -2078,7 +2078,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
   })
 
-  test('shows create application tabs, save workflow, and disabled document upload', async () => {
+  test('shows create application tabs and guards record-dependent actions', async () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(
@@ -2104,6 +2104,89 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Save Draft' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Back to Search' })).toHaveCount(0)
+
+    const regionSelect = page.getByRole('combobox', { name: 'Region' })
+    await expect(regionSelect).toBeEnabled({ timeout: 30_000 })
+    if (!(await regionSelect.inputValue()).trim()) {
+      await regionSelect.click()
+      const regionMenuId = await regionSelect.getAttribute('aria-controls')
+      expect(regionMenuId, 'region should control a dropdown menu').toBeTruthy()
+      await page.locator(`#${regionMenuId}`).getByRole('option').first().click()
+    }
+
+    await page.getByRole('tab', { name: 'Packages / Scales' }).click()
+    const packagesPanel = page.getByRole('region', { name: 'Packages / Scales' })
+    await expect(packagesPanel).toBeVisible()
+    await expect(packagesPanel).toHaveCSS('overflow', 'visible')
+
+    const speciesSelect = packagesPanel.getByRole('combobox', {
+      name: 'Application species',
+    })
+    await expect(speciesSelect).toBeEnabled({ timeout: 30_000 })
+    await speciesSelect.click()
+    await expect(speciesSelect).toHaveAttribute('aria-expanded', 'true')
+    const speciesMenuId = await speciesSelect.getAttribute('aria-controls')
+    expect(speciesMenuId, 'application species should control a dropdown menu').toBeTruthy()
+    const speciesMenu = page.locator(`#${speciesMenuId}`)
+    await expect(speciesMenu).toBeVisible()
+    expect(await speciesMenu.getByRole('option').count()).toBeGreaterThan(0)
+    const firstSpeciesOption = speciesMenu.getByRole('option').first()
+    const firstSpeciesLabel = (await firstSpeciesOption.textContent())?.trim() ?? ''
+    const firstSpeciesCode = firstSpeciesLabel.split(/\s+-\s+/, 1)[0]?.trim() ?? ''
+    expect(firstSpeciesCode, 'application species option should include a code').not.toBe('')
+    await firstSpeciesOption.click()
+
+    const addSpeciesButton = packagesPanel.getByRole('button', {
+      name: 'Add application species',
+      exact: true,
+    })
+    await expect(addSpeciesButton).toBeEnabled()
+    await addSpeciesButton.click()
+
+    const selectedSpeciesList = packagesPanel.getByRole('list', {
+      name: 'Selected application species',
+    })
+    const selectedSpeciesItem = selectedSpeciesList.getByRole('listitem').filter({
+      hasText: firstSpeciesCode,
+    })
+    const removeSpeciesButton = selectedSpeciesItem.getByRole('button', {
+      name: `Remove ${firstSpeciesCode} from application`,
+      exact: true,
+    })
+    await expect(removeSpeciesButton).toBeVisible()
+    await expect(packagesPanel.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
+
+    const [addSpeciesBox, selectedSpeciesBox] = await Promise.all([
+      addSpeciesButton.boundingBox(),
+      selectedSpeciesItem.boundingBox(),
+    ])
+    expect(addSpeciesBox).not.toBeNull()
+    expect(selectedSpeciesBox).not.toBeNull()
+    expect(selectedSpeciesBox!.x).toBeGreaterThanOrEqual(addSpeciesBox!.x + addSpeciesBox!.width)
+    expect(Math.abs(selectedSpeciesBox!.y - addSpeciesBox!.y)).toBeLessThan(12)
+
+    await removeSpeciesButton.click()
+    await expect(removeSpeciesButton).toHaveCount(0)
+
+    await expect(
+      packagesPanel.getByRole('heading', { name: 'Package Details', exact: true }),
+    ).toBeVisible()
+    const createPackageButton = packagesPanel.getByRole('button', {
+      name: 'Create New Package',
+      exact: true,
+    })
+    await expect(createPackageButton).toBeEnabled()
+    await createPackageButton.click()
+
+    const unsavedPackageDialog = page.getByRole('dialog', { name: 'Application not saved' })
+    await expect(unsavedPackageDialog).toBeVisible()
+    await expect(
+      unsavedPackageDialog.getByText('Please save this application before adding packages.'),
+    ).toBeVisible()
+    await unsavedPackageDialog.getByRole('button', { name: 'OK', exact: true }).click()
+    await expect(unsavedPackageDialog).toBeHidden()
+    await expect(createPackageButton).toBeFocused()
+    await expect(page).toHaveURL(/\/provincial\/application\/create(?:\?|$)/)
 
     await page.getByRole('tab', { name: 'Documents' }).click()
     const createDocumentsHeading = page.getByRole('heading', { name: 'Documents', exact: true })

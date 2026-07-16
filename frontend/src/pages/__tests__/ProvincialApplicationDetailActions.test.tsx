@@ -3421,6 +3421,50 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
+  it('removes application species through individually labelled dismiss controls', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummarySnapshot,
+      speciesCodes: ['FI', 'CE'],
+    })
+    mockedFetchApplicationSpecies.mockResolvedValueOnce([
+      { species: 'FI', endUse: 'LU', endUseDescription: 'Lumber' },
+      { species: 'CE', endUse: 'LU', endUseDescription: 'Lumber' },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const selectedSpecies = summaryControls.getByRole('list', {
+      name: 'Selected application species',
+    })
+    const removeFir = within(selectedSpecies).getByRole('button', {
+      name: 'Remove FI from application',
+    })
+
+    expect(
+      within(selectedSpecies).getByRole('button', { name: 'Remove CE from application' }),
+    ).toBeInTheDocument()
+    expect(within(selectedSpecies).queryByRole('button', { name: 'Remove' })).toBeNull()
+
+    await userEvent.click(removeFir)
+
+    expect(
+      within(selectedSpecies).queryByRole('button', { name: 'Remove FI from application' }),
+    ).toBeNull()
+    expect(
+      within(selectedSpecies).getByRole('button', { name: 'Remove CE from application' }),
+    ).toBeInTheDocument()
+  })
+
   it('uses natural resource region names in application summary edits', async () => {
     const detailWithNaturalResourceRegion: ProvincialApplicationDetail = {
       ...applicationDetail,

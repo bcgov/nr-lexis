@@ -1423,6 +1423,10 @@ legend.cds--label {
   overflow: hidden;
 }
 
+.provincial-application-create-page .application-detail-section.create-form-tile {
+  overflow: visible;
+}
+
 .create-form-tile .cds--label {
   margin-block-end: 0.25rem;
   color: var(--csp-text-primary);
@@ -1521,6 +1525,31 @@ legend.cds--label {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+.application-species-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 0.5rem;
+}
+
+.application-species-list {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.application-species-list > li {
+  display: flex;
 }
 
 .provincial-application-create-link {
@@ -3645,6 +3674,15 @@ legend.cds--label {
 
 .application-items-section--create-package {
   order: 3;
+}
+
+.application-create-package-shell {
+  margin-block-start: 1.5rem;
+}
+
+.application-create-package-actions {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .application-items-summary {

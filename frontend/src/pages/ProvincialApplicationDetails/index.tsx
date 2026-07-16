@@ -4,6 +4,7 @@ import {
   AccordionItem,
   Button,
   Column,
+  DismissibleTag,
   Grid,
   InlineLoading,
   Tab,
@@ -17,7 +18,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   TextArea,
   TextInput,
   Tile,
@@ -3469,15 +3469,49 @@ const ProvincialApplicationDetailsPage = () => {
                               </div>
                             )}
                             <div className="legacy-search-grid">
-                              <SearchableSelect
-                                id="applicationSummarySpeciesCandidate"
-                                labelText="Application species"
-                                value={applicationSpeciesCandidate}
-                                disabled={applicationSpeciesSelectOptions.length === 0}
-                                placeholder={speciesPlaceholder}
-                                options={applicationSpeciesSelectOptions}
-                                onChange={setApplicationSpeciesCandidate}
-                              />
+                              <div className="legacy-field-stack">
+                                <SearchableSelect
+                                  id="applicationSummarySpeciesCandidate"
+                                  labelText="Application species"
+                                  value={applicationSpeciesCandidate}
+                                  disabled={applicationSpeciesSelectOptions.length === 0}
+                                  placeholder={speciesPlaceholder}
+                                  options={applicationSpeciesSelectOptions}
+                                  onChange={setApplicationSpeciesCandidate}
+                                />
+                                <div className="application-species-actions">
+                                  <Button
+                                    type="button"
+                                    kind="secondary"
+                                    size="sm"
+                                    disabled={
+                                      !applicationSpeciesCandidate ||
+                                      !availableApplicationSpeciesOptions.some(
+                                        (option) => option.code === applicationSpeciesCandidate,
+                                      )
+                                    }
+                                    onClick={onAddApplicationSpecies}
+                                  >
+                                    Add application species
+                                  </Button>
+                                  <ul
+                                    className="application-species-list"
+                                    aria-label="Selected application species"
+                                  >
+                                    {(summaryForm.speciesCodes ?? []).map((speciesCode) => (
+                                      <li key={speciesCode}>
+                                        <DismissibleTag
+                                          type="blue"
+                                          text={speciesCode}
+                                          title={`Remove ${speciesCode} from application`}
+                                          dismissTooltipLabel={`Remove ${speciesCode} from application`}
+                                          onClose={() => onRemoveApplicationSpecies(speciesCode)}
+                                        />
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
                               <SearchableSelect
                                 id="applicationSummaryEndUse"
                                 labelText="Application end use"
@@ -3490,33 +3524,6 @@ const ProvincialApplicationDetailsPage = () => {
                                 options={applicationEndUseSelectOptions}
                                 onChange={(value) => onSummaryFormChange('endUseCode', value)}
                               />
-                            </div>
-                            <div className="legacy-search-actions">
-                              <Button
-                                kind="secondary"
-                                size="sm"
-                                disabled={
-                                  !applicationSpeciesCandidate ||
-                                  !availableApplicationSpeciesOptions.some(
-                                    (option) => option.code === applicationSpeciesCandidate,
-                                  )
-                                }
-                                onClick={onAddApplicationSpecies}
-                              >
-                                Add Application species
-                              </Button>
-                              {(summaryForm.speciesCodes ?? []).map((speciesCode) => (
-                                <span key={speciesCode} className="legacy-search-actions">
-                                  <Tag type="blue">{speciesCode}</Tag>
-                                  <Button
-                                    kind="ghost"
-                                    size="sm"
-                                    onClick={() => onRemoveApplicationSpecies(speciesCode)}
-                                  >
-                                    Remove
-                                  </Button>
-                                </span>
-                              ))}
                             </div>
                             <div className="legacy-search-actions">
                               <Button
