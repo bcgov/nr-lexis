@@ -110,21 +110,13 @@ public interface ApplicationDetailsRpcService {
   CreateApplicationResult addFederalImportedApplication(
       CreateApplicationRequest request, String userId);
 
-  /**
-   * Creates the system-owned application used to hold Blanket OIC packages. This is the only
-   * application creation path allowed to bypass the user-facing application validation rules;
-   * callers must not expose it through an HTTP endpoint.
-   */
+  /** Creates the internal application used to store Blanket OIC packages. */
   CreateApplicationResult addHiddenBlanketOicApplication(
       CreateApplicationRequest request, String userId);
 
   CreateApplicationResult updateApplicationSummary(ApplicationSummaryUpdateRequest request, String userId);
 
-  /**
-   * Synchronizes the owner binding of an application as an internal permit side effect. This is
-   * deliberately separate from the user-facing application edit policy because permit transitions
-   * must also update the hidden BOIC application after its normal edit window has closed.
-   */
+  /** Keeps the hidden Blanket OIC application owner aligned with its permit. */
   boolean synchronizeApplicationOwner(
       Long applicationNumber,
       String ownerClientNumber,
