@@ -53,7 +53,7 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
    * filters. RTM_EMS_LOG_AMV_SELECT requires exact species and growth-code values, so passing
    * null for either filter cannot produce a usable matrix.
    *
-   * <p>An empty list is a successful query with no values for the requested date. Failure to read
+   * An empty list is a successful query with no values for the requested date. Failure to read
    * both the public synonym and the THE schema table is surfaced as an authoritative data-source
    * outage.
    */

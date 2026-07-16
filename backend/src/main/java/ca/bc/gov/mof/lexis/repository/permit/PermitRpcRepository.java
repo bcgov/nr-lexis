@@ -864,7 +864,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
    * Loads GBMS history from the caller-appropriate package without converting an Oracle failure
    * into an empty history.
    *
-   * <p>Mutation decisions use the mutable package through the two-argument overload. Read-only
+   * Mutation decisions use the mutable package through the two-argument overload. Read-only
    * report users use this overload so they retain the legacy package boundary while report
    * rendering still fails closed when invoice history cannot be loaded.
    */
@@ -1663,7 +1663,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   /**
    * Package/application relationship returned by the legacy package cursors.
    *
-   * <p>Those cursors do not return a provincial permit number. Provincial permit assignment is
+   * Those cursors do not return a provincial permit number. Provincial permit assignment is
    * authoritative only on {@code EXPORT_SCALE_DETAIL.EXPORT_PERMIT_DETAIL_NUMBER}.
    */
   public record PackageCandidateRow(Long applicationNumber, String packageNumber) {}

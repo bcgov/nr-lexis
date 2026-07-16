@@ -7,7 +7,7 @@ import java.util.List;
  * Port for the permit-invoice aggregate transition that legacy LEXIS performed when a permit was
  * completed, moved to payment pending, cancelled, or reactivated.
  *
- * <p>Implementations are selected by configuration. Permit status changes that require invoice
+ * Implementations are selected by configuration. Permit status changes that require invoice
  * work fail closed when no implementation is available for the requested destination.
  */
 public interface PermitInvoiceOrchestrationService {

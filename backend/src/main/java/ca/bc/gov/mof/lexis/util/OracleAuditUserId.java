@@ -19,7 +19,7 @@ public final class OracleAuditUserId {
   /**
    * Returns a trimmed Oracle-safe audit identity, or {@code null} when the value is absent.
    *
-   * <p>Printable ASCII identities that already fit the legacy column are preserved. Other values
+   * Printable ASCII identities that already fit the legacy column are preserved. Other values
    * retain a readable ASCII prefix and receive a 48-bit SHA-256-derived suffix calculated from the
    * complete trimmed identity.
    */

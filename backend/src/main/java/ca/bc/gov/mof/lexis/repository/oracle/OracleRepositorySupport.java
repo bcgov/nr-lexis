@@ -434,7 +434,7 @@ public abstract class OracleRepositorySupport {
   /**
    * Executes a mutation procedure and propagates dependency failures.
    *
-   * <p>Propagation allows Spring to roll back the surrounding transaction instead of committing
+   * Propagation allows Spring to roll back the surrounding transaction instead of committing
    * earlier writes.
    */
   protected void executeProcedureRequired(

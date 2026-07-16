@@ -53,7 +53,7 @@ public class PermitInvoiceRepository extends OracleRepositorySupport {
   /**
    * Finds invoices by export permit detail number.
    *
-   * <p>The legacy parameter name says "permit invoice number", but the deployed procedure compares
+   * The legacy parameter name says "permit invoice number", but the deployed procedure compares
    * it to {@code EXPORT_PERMIT_DETAIL_NUMBER}. The permit detail number is therefore intentional.
    */
   public List<PermitInvoiceRow> findByPermitDetailNumberRequired(Long permitDetailNumber) {
