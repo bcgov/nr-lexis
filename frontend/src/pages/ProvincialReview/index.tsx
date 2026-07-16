@@ -136,12 +136,15 @@ const SORT_FIELD_OPTIONS = RESULT_COLUMNS.flatMap((column) =>
 )
 const REJECT_STATUS_CODE = 'REJ'
 const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
+const EMAIL_STATUS_CODES = new Set(['REJ', 'WDN'])
 const REJECT_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating.'
 const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
 const REJECT_EMAIL_REQUIRED_MESSAGE =
   'Enter one valid client email address or deselect Send status email.'
 const REJECT_EMAIL_PREVIEW_HELPER =
   'Defaults from the captured submitter email, then client data. Changes apply only to this notification.'
+const STATUS_EMAIL_UNAVAILABLE_HELPER =
+  'Status emails are sent only for rejected or withdrawn applications.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
 const isReviewableSourceStatus = (status: string | null | undefined): boolean =>
@@ -285,6 +288,7 @@ const ProvincialReviewPage = () => {
   const rejectStatusAvailable = reviewStatusOptions.some(
     (option) => option.value === REJECT_STATUS_CODE,
   )
+  const rejectStatusSupportsEmail = EMAIL_STATUS_CODES.has(normalizeReviewStatus(rejectStatusCode))
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(
@@ -593,6 +597,7 @@ const ProvincialReviewPage = () => {
     const statusCode = normalizeReviewStatus(rejectStatusCode)
     const clientEmailAddress = normalizeReviewEmail(rejectEmailAddress)
     const remark = rejectRemark.trim()
+    const sendStatusEmail = EMAIL_STATUS_CODES.has(statusCode) && sendRejectEmail
     if (!statusCode) {
       setRejectValidationMessage(REJECT_STATUS_REQUIRED_MESSAGE)
       return
@@ -601,7 +606,7 @@ const ProvincialReviewPage = () => {
       setRejectValidationMessage(REJECT_REMARK_REQUIRED_MESSAGE)
       return
     }
-    if (sendRejectEmail && (!clientEmailAddress || !isValidEmail(clientEmailAddress))) {
+    if (sendStatusEmail && (!clientEmailAddress || !isValidEmail(clientEmailAddress))) {
       setRejectValidationMessage(REJECT_EMAIL_REQUIRED_MESSAGE)
       return
     }
@@ -609,7 +614,7 @@ const ProvincialReviewPage = () => {
     const payload = {
       statusCode,
       remark,
-      clientEmailAddress: sendRejectEmail ? clientEmailAddress : '',
+      clientEmailAddress: sendStatusEmail ? clientEmailAddress : '',
     }
 
     setSubmittingReject(true)
@@ -631,7 +636,7 @@ const ProvincialReviewPage = () => {
         return
       }
 
-      if (!sendRejectEmail) {
+      if (!sendStatusEmail) {
         setReviewActionStatus({
           kind: 'success',
           message: `Updated application ${rejectApplicationNumber}.`,
@@ -889,7 +894,9 @@ const ProvincialReviewPage = () => {
               invalidText={rejectValidationMessage}
               disabled={optionsUnavailable || !rejectStatusAvailable || submittingReject}
               onChange={(value) => {
-                setRejectStatusCode(value.toUpperCase())
+                const statusCode = value.toUpperCase()
+                setRejectStatusCode(statusCode)
+                setSendRejectEmail(EMAIL_STATUS_CODES.has(statusCode))
                 setRejectValidationMessage('')
               }}
             />
@@ -910,7 +917,7 @@ const ProvincialReviewPage = () => {
               id="reviewRejectSendEmail"
               labelText="Send status email"
               checked={sendRejectEmail}
-              disabled={loadingRejectEmail || submittingReject}
+              disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
               onChange={(_, payload) => {
                 setSendRejectEmail(Boolean(payload.checked))
                 setRejectValidationMessage('')
@@ -920,10 +927,14 @@ const ProvincialReviewPage = () => {
               id="reviewRejectEmail"
               labelText="Client email address"
               helperText={
-                loadingRejectEmail ? 'Loading from client account...' : REJECT_EMAIL_PREVIEW_HELPER
+                !rejectStatusSupportsEmail
+                  ? STATUS_EMAIL_UNAVAILABLE_HELPER
+                  : loadingRejectEmail
+                    ? 'Loading from client account...'
+                    : REJECT_EMAIL_PREVIEW_HELPER
               }
               value={rejectEmailAddress}
-              disabled={loadingRejectEmail || submittingReject}
+              disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
               invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
               invalidText={rejectValidationMessage}
               onChange={(event) => {

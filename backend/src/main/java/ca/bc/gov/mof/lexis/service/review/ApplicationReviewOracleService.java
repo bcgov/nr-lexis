@@ -277,11 +277,8 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           null,
           "Application jurisdiction could not be verified.");
     }
-    if (FEDERAL_JURISDICTION.equals(jurisdiction.get())) {
-      return updateFederalStatus(
-          applicationNumber, statusCode, remark, clientEmail, updateUserId);
-    }
-    if (!PROVINCIAL_JURISDICTION.equals(jurisdiction.get())) {
+    if (!PROVINCIAL_JURISDICTION.equals(jurisdiction.get())
+        && !FEDERAL_JURISDICTION.equals(jurisdiction.get())) {
       return statusUpdateResult(
           false,
           false,

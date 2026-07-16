@@ -171,6 +171,7 @@ describe('Provincial Review Action State Smoke', () => {
       reviewStatuses: [
         { value: 'REJ', label: 'Rejected' },
         { value: 'WDN', label: 'Withdrawn' },
+        { value: 'EXP', label: 'Expired' },
       ],
     })
     mockedApproveApplicationReview.mockResolvedValue({
@@ -436,6 +437,50 @@ describe('Provincial Review Action State Smoke', () => {
     expect(
       await screen.findByText('Updated application 1000456 and queued email.'),
     ).toBeInTheDocument()
+  }, 15000)
+
+  it('expires a federal review row without attempting a status email', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummary,
+      jurisdictionCode: 'F',
+    })
+
+    renderPage()
+    await screen.findByText('1000123')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await waitFor(() =>
+      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
+    )
+
+    const statusSelect = screen.getByRole('combobox', { name: 'Application status' })
+    await userEvent.click(statusSelect)
+    const listboxId = statusSelect.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(listbox).not.toBeNull()
+    await userEvent.click(within(listbox as HTMLElement).getByRole('option', { name: 'Expired' }))
+
+    expect(screen.getByRole('checkbox', { name: 'Send status email' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Send status email' })).toBeDisabled()
+    expect(
+      screen.getByText('Status emails are sent only for rejected or withdrawn applications.'),
+    ).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Expired after manual review')
+    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+        '1000123',
+        {
+          statusCode: 'EXP',
+          remark: 'Expired after manual review',
+          clientEmailAddress: '',
+        },
+        'application-1000123-version',
+      )
+    })
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
   }, 15000)
 
   it('prefills the agent client email when rejecting an agent application', async () => {

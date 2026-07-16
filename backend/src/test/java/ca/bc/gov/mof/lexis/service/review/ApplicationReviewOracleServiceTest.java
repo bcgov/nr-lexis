@@ -348,36 +348,66 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void updateStatusShouldDelegateFederalApplicationsToFederalPolicy() {
+  void updateStatusShouldApplyReviewPolicyToFederalRejectWithdrawAndExpire() {
     when(repository.findAuthoritativeJurisdictionCode(1000456L))
         .thenReturn(Optional.of("F"));
-    when(federalApplicationService.updateStatus(
-            1000456L,
-            new FederalStatusMutationRequest("REJ", "Missing docs"),
-            "reviewer"))
+    when(repository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "REJ", "Review decision", "reviewer", List.of("NEW", "PND")))
         .thenReturn(
-            new FederalMutationResult(
-                false,
-                null,
-                null,
-                List.of("Federal applications can only be rejected or withdrawn from APP.")));
+            new ApplicationStatusTransitionRow(
+                true,
+                true,
+                true,
+                "NEW",
+                new ReviewRemarkRow(1L, "Review decision", "reviewer", Instant.EPOCH)));
+    when(repository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "WDN", "Review decision", "reviewer", List.of("NEW", "PND")))
+        .thenReturn(
+            new ApplicationStatusTransitionRow(
+                true,
+                true,
+                true,
+                "PND",
+                new ReviewRemarkRow(2L, "Review decision", "reviewer", Instant.EPOCH)));
+    when(repository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "EXP", "Review decision", "reviewer", List.of("NEW", "PND")))
+        .thenReturn(
+            new ApplicationStatusTransitionRow(
+                true,
+                true,
+                true,
+                "NEW",
+                new ReviewRemarkRow(3L, "Review decision", "reviewer", Instant.EPOCH)));
 
-    ApplicationReviewStatusUpdateResultDto result =
-        service.updateStatus(
-            1000456L,
-            new ApplicationReviewStatusUpdateRequestDto(
-                "REJ", "Missing docs", "client@gov.bc.ca"),
-            "reviewer");
+    List<ApplicationReviewStatusUpdateResultDto> results =
+        List.of(
+            service.updateStatus(
+                1000456L,
+                new ApplicationReviewStatusUpdateRequestDto(
+                    "REJ", "Review decision", "client@gov.bc.ca"),
+                "reviewer"),
+            service.updateStatus(
+                1000456L,
+                new ApplicationReviewStatusUpdateRequestDto(
+                    "WDN", "Review decision", "client@gov.bc.ca"),
+                "reviewer"),
+            service.updateStatus(
+                1000456L,
+                new ApplicationReviewStatusUpdateRequestDto(
+                    "EXP", "Review decision", "client@gov.bc.ca"),
+                "reviewer"));
 
-    assertThat(result.valid()).isFalse();
-    assertThat(result.updated()).isFalse();
-    assertThat(result.statusCode()).isEqualTo("REJ");
-    assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
-    assertThat(result.remark()).isEqualTo("Missing docs");
-    assertThat(result.message())
-        .isEqualTo("Federal applications can only be rejected or withdrawn from APP.");
-    verify(repository, org.mockito.Mockito.never())
-        .updateStatusWithRemarkFromAllowedSources(any(), any(), any(), any(), any());
+    assertThat(results)
+        .allSatisfy(
+            result -> {
+              assertThat(result.valid()).isTrue();
+              assertThat(result.updated()).isTrue();
+              assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
+              assertThat(result.remark()).isEqualTo("Review decision");
+            })
+        .extracting(ApplicationReviewStatusUpdateResultDto::statusCode)
+        .containsExactly("REJ", "WDN", "EXP");
+    verifyNoInteractions(federalApplicationService);
   }
 
   @Test
@@ -467,6 +497,8 @@ class ApplicationReviewOracleServiceTest {
 
   @Test
   void updateStatusShouldRejectForgedTransitionFromAuthoritativeTerminalStatus() {
+    when(repository.findAuthoritativeJurisdictionCode(1000456L))
+        .thenReturn(Optional.of("F"));
     when(repository.updateStatusWithRemarkFromAllowedSources(
             1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND")))
         .thenReturn(ApplicationStatusTransitionRow.notAllowed("APP"));
