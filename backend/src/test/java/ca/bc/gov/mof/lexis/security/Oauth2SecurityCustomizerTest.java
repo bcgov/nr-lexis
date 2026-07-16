@@ -12,13 +12,20 @@ import org.springframework.security.oauth2.jwt.Jwt;
 
 class Oauth2SecurityCustomizerTest {
 
+  private static final String COGNITO_ISSUER = "https://cognito.example.test/user-pool";
+  private static final String COGNITO_JWKS = COGNITO_ISSUER + "/.well-known/jwks.json";
+  private static final String KEYCLOAK_ISSUER =
+      "https://loginproxy.example.test/auth/realms/standard";
+  private static final String KEYCLOAK_FORESTS_ISSUER =
+      "https://loginproxy.example.test/auth/realms/forests";
+
   @Test
   void cognitoAuthoritiesShouldIncludeGroupsButIgnoreOauthScopes() {
     Oauth2SecurityCustomizer customizer =
         new Oauth2SecurityCustomizer(
-            "https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
-            "https://cognito-idp.ca-central-1.amazonaws.com/test",
-            "https://dev.loginproxy.gov.bc.ca/auth/realms/standard",
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            KEYCLOAK_ISSUER,
             "",
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
 
@@ -26,7 +33,7 @@ class Oauth2SecurityCustomizerTest {
         jwt(
             Map.of(
                 "iss",
-                "https://cognito-idp.ca-central-1.amazonaws.com/test",
+                COGNITO_ISSUER,
                 "cognito:groups",
                 List.of("LEXIS_READ_ONLY"),
                 "scope",
@@ -45,9 +52,9 @@ class Oauth2SecurityCustomizerTest {
   void keycloakAuthoritiesShouldIncludeOauthScopesButIgnoreCognitoGroups() {
     Oauth2SecurityCustomizer customizer =
         new Oauth2SecurityCustomizer(
-            "https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
-            "https://cognito-idp.ca-central-1.amazonaws.com/test",
-            "https://dev.loginproxy.gov.bc.ca/auth/realms/standard",
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            KEYCLOAK_ISSUER,
             "",
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
 
@@ -55,7 +62,7 @@ class Oauth2SecurityCustomizerTest {
         jwt(
             Map.of(
                 "iss",
-                "https://dev.loginproxy.gov.bc.ca/auth/realms/standard",
+                KEYCLOAK_ISSUER,
                 "cognito:groups",
                 List.of("LEXIS_ADMIN"),
                 "scope",
@@ -75,8 +82,8 @@ class Oauth2SecurityCustomizerTest {
   void normalizedAuthoritiesShouldPreserveConcreteFamClientScopeAndAddBaseRole() {
     Oauth2SecurityCustomizer customizer =
         new Oauth2SecurityCustomizer(
-            "https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
-            "https://cognito-idp.ca-central-1.amazonaws.com/test",
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
             "",
             "",
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
@@ -85,7 +92,7 @@ class Oauth2SecurityCustomizerTest {
         jwt(
             Map.of(
                 "iss",
-                "https://cognito-idp.ca-central-1.amazonaws.com/test",
+                COGNITO_ISSUER,
                 "cognito:groups",
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")));
 
@@ -101,9 +108,9 @@ class Oauth2SecurityCustomizerTest {
   void normalizedAuthoritiesShouldNotTreatKeycloakClientRolesAsOauthScopes() {
     Oauth2SecurityCustomizer customizer =
         new Oauth2SecurityCustomizer(
-            "https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
-            "https://cognito-idp.ca-central-1.amazonaws.com/test",
-            "https://dev.loginproxy.gov.bc.ca/auth/realms/forests",
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            KEYCLOAK_FORESTS_ISSUER,
             "",
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
 
@@ -111,7 +118,7 @@ class Oauth2SecurityCustomizerTest {
         jwt(
             Map.of(
                 "iss",
-                "https://dev.loginproxy.gov.bc.ca/auth/realms/forests",
+                KEYCLOAK_FORESTS_ISSUER,
                 "resource_access",
                 Map.of(
                     "ap-gw-lexis-default-dev",
@@ -128,7 +135,7 @@ class Oauth2SecurityCustomizerTest {
 
   @Test
   void accessTokenUseValidatorShouldAllowKeycloakTokensWithoutTokenUseClaim() {
-    Jwt jwt = jwt(Map.of("iss", "https://dev.loginproxy.gov.bc.ca/auth/realms/standard"));
+    Jwt jwt = jwt(Map.of("iss", KEYCLOAK_ISSUER));
 
     assertThat(Oauth2SecurityCustomizer.accessTokenUseValidator().validate(jwt).hasErrors())
         .isFalse();
@@ -140,7 +147,7 @@ class Oauth2SecurityCustomizerTest {
         jwt(
             Map.of(
                 "iss",
-                "https://cognito-idp.ca-central-1.amazonaws.com/test",
+                COGNITO_ISSUER,
                 "token_use",
                 "id"));
 
@@ -152,8 +159,8 @@ class Oauth2SecurityCustomizerTest {
   void normalizeIssuerUriShouldStripTrailingSlashesForKeycloakIssuerMatching() {
     assertThat(
             Oauth2SecurityCustomizer.normalizeIssuerUri(
-                "https://dev.loginproxy.gov.bc.ca/auth/realms/standard/"))
-        .isEqualTo("https://dev.loginproxy.gov.bc.ca/auth/realms/standard");
+                KEYCLOAK_ISSUER + "/"))
+        .isEqualTo(KEYCLOAK_ISSUER);
   }
 
   private Jwt jwt(Map<String, Object> claims) {
