@@ -7,6 +7,7 @@ import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver.RecipientGroup;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -14,17 +15,24 @@ public class PermitNotificationEmailService {
 
   private final EmailNotificationService notificationService;
   private final RegionalMailRecipientResolver regionalRecipientResolver;
+  private final boolean routeOnlyDeliveryAvailable;
 
   public PermitNotificationEmailService(
       EmailNotificationService notificationService,
-      RegionalMailRecipientResolver regionalRecipientResolver) {
+      RegionalMailRecipientResolver regionalRecipientResolver,
+      @Value("${lexis.mail.non-production:true}") boolean nonProduction,
+      @Value("${lexis.mail.override-recipients:}") String overrideRecipients) {
     this.notificationService = notificationService;
     this.regionalRecipientResolver = regionalRecipientResolver;
+    this.routeOnlyDeliveryAvailable = nonProduction && trimToNull(overrideRecipients) != null;
   }
 
   public boolean sendRequest(Long permitNumber, Long orgUnitNumber) {
     RecipientGroup recipientGroup = regionalRecipientResolver.resolveGroup(orgUnitNumber);
-    if (permitNumber == null || permitNumber < 1 || recipientGroup.recipients().isEmpty()) {
+    if (permitNumber == null
+        || permitNumber < 1
+        || (recipientGroup.recipients().isEmpty()
+            && (!routeOnlyDeliveryAvailable || trimToNull(recipientGroup.label()) == null))) {
       return false;
     }
     notificationService.publish(

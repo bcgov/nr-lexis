@@ -22,9 +22,10 @@ import org.springframework.stereotype.Service;
 public class LexisMailService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisMailService.class);
+  private static final Set<String> INTERCEPTABLE_ROUTE_LABELS =
+      Set.of("REGION_RCO", "REGION_RNI", "REGION_RSI", "PERMIT_REQUEST");
 
   private final JavaMailSender mailSender;
-  private final boolean enabled;
   private final boolean nonProduction;
   private final String fromAddress;
   private final List<String> overrideRecipients;
@@ -32,13 +33,11 @@ public class LexisMailService {
 
   public LexisMailService(
       JavaMailSender mailSender,
-      @Value("${lexis.mail.enabled:false}") boolean enabled,
       @Value("${lexis.mail.non-production:true}") boolean nonProduction,
       @Value("${lexis.mail.from:}") String fromAddress,
       @Value("${lexis.mail.override-recipients:}") String overrideRecipients,
       @Value("${lexis.mail.environment:non-prod}") String environment) {
     this.mailSender = mailSender;
-    this.enabled = enabled;
     this.nonProduction = nonProduction;
     this.fromAddress = trimToNull(fromAddress) == null ? "" : fromAddress.trim();
     this.overrideRecipients = parseAddresses(overrideRecipients);
@@ -63,37 +62,41 @@ public class LexisMailService {
       String copyRecipientRouteLabel) {
     List<String> normalizedTo = validAddresses(recipients);
     List<String> normalizedCc = validAddresses(copyRecipients);
-    if (!enabled) {
-      LOGGER.info("event=lexis_email_delivery outcome=disabled");
-      return false;
-    }
-    if (normalizedTo.isEmpty()) {
+    boolean intercept = nonProduction && !overrideRecipients.isEmpty();
+    boolean routeOnlyTo =
+        intercept
+            && normalizedTo.isEmpty()
+            && isInterceptableRouteLabel(recipientRouteLabel);
+    if (normalizedTo.isEmpty() && !routeOnlyTo) {
       LOGGER.warn("event=lexis_email_delivery outcome=no_valid_recipient");
       return false;
     }
-    if (nonProduction && overrideRecipients.isEmpty()) {
-      LOGGER.error("event=lexis_email_delivery outcome=missing_nonprod_override");
-      return false;
-    }
+    boolean routeOnlyCc =
+        intercept
+            && normalizedCc.isEmpty()
+            && isInterceptableRouteLabel(copyRecipientRouteLabel);
 
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(fromAddress);
-    if (nonProduction) {
+    if (intercept) {
       message.setTo(overrideRecipients.toArray(String[]::new));
       message.setSubject(
           "["
               + environment
               + " - "
               + intendedRecipient(normalizedTo, recipientRouteLabel)
-              + (normalizedCc.isEmpty()
+              + (normalizedCc.isEmpty() && !routeOnlyCc
                   ? ""
                   : "; CC " + intendedRecipient(normalizedCc, copyRecipientRouteLabel))
               + "] "
               + safe(subject));
       message.setText(
           "Original To: "
-              + String.join(", ", normalizedTo)
-              + (normalizedCc.isEmpty() ? "" : "\nOriginal Cc: " + String.join(", ", normalizedCc))
+              + originalRecipient(normalizedTo, recipientRouteLabel)
+              + (normalizedCc.isEmpty() && !routeOnlyCc
+                  ? ""
+                  : "\nOriginal Cc: "
+                      + originalRecipient(normalizedCc, copyRecipientRouteLabel))
               + "\n\n"
               + safe(body));
     } else {
@@ -149,6 +152,19 @@ public class LexisMailService {
 
   private String intendedRecipient(List<String> recipients, String routeLabel) {
     return subjectLabel(routeLabel, String.join(", ", recipients));
+  }
+
+  private String originalRecipient(List<String> recipients, String routeLabel) {
+    if (!recipients.isEmpty()) {
+      return String.join(", ", recipients);
+    }
+    return subjectLabel(routeLabel, "Not configured") + " (not configured)";
+  }
+
+  private boolean isInterceptableRouteLabel(String routeLabel) {
+    String normalized = trimToNull(routeLabel);
+    return normalized != null
+        && INTERCEPTABLE_ROUTE_LABELS.contains(normalized.toUpperCase(Locale.ROOT));
   }
 
   private String subjectLabel(String value, String fallback) {

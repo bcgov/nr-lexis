@@ -20,7 +20,6 @@ class LexisMailServiceTest {
         new LexisMailService(
             sender,
             true,
-            true,
             "sender@example.com",
             "admin.one@gov.bc.ca;admin.two@gov.bc.ca",
             "test");
@@ -53,7 +52,6 @@ class LexisMailServiceTest {
     LexisMailService service =
         new LexisMailService(
             sender,
-            true,
             true,
             "sender@example.com",
             "test.admin@gov.bc.ca",
@@ -94,7 +92,6 @@ class LexisMailServiceTest {
         new LexisMailService(
             sender,
             true,
-            true,
             "sender@example.com",
             "test.admin@gov.bc.ca",
             "test");
@@ -116,15 +113,87 @@ class LexisMailServiceTest {
   }
 
   @Test
-  void nonProductionShouldFailClosedWithoutOverrideRecipients() {
+  void nonProductionWithoutOverrideShouldUseIntendedRecipients() {
+    JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
+    LexisMailService service =
+        new LexisMailService(sender, true, "sender@example.com", "", "test");
+
+    assertThat(
+            service.send(
+                "Subject",
+                "Body",
+                List.of("client@example.com"),
+                List.of("regional@gov.bc.ca")))
+        .isTrue();
+
+    ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+    verify(sender).send(captor.capture());
+    assertThat(captor.getValue().getTo()).containsExactly("client@example.com");
+    assertThat(captor.getValue().getCc()).containsExactly("regional@gov.bc.ca");
+    assertThat(captor.getValue().getSubject()).isEqualTo("Subject");
+    assertThat(captor.getValue().getText()).isEqualTo("Body");
+  }
+
+  @Test
+  void nonProductionOverrideShouldAllowControlledRoutesWithoutConfiguredAddresses() {
     JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
     LexisMailService service =
         new LexisMailService(
-            sender, true, true, "sender@example.com", "", "test");
+            sender, true, "sender@example.com", "test.admin@gov.bc.ca", "test");
 
-    assertThat(service.send("Subject", "Body", List.of("client@example.com"))).isFalse();
+    for (String route : List.of("REGION_RCO", "REGION_RNI", "REGION_RSI", "PERMIT_REQUEST")) {
+      assertThat(service.send("Review", "Body", List.of(), List.of(), route, null)).isTrue();
+    }
+
+    ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+    verify(sender, org.mockito.Mockito.times(4)).send(captor.capture());
+    assertThat(captor.getAllValues())
+        .extracting(SimpleMailMessage::getSubject)
+        .containsExactly(
+            "[TEST - REGION_RCO] Review",
+            "[TEST - REGION_RNI] Review",
+            "[TEST - REGION_RSI] Review",
+            "[TEST - PERMIT_REQUEST] Review");
+    assertThat(captor.getAllValues().getFirst().getText())
+        .startsWith("Original To: REGION_RCO (not configured)");
+  }
+
+  @Test
+  void nonProductionOverrideShouldRejectUncontrolledRouteWithoutAnAddress() {
+    JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
+    LexisMailService service =
+        new LexisMailService(
+            sender, true, "sender@example.com", "test.admin@gov.bc.ca", "test");
+
+    assertThat(service.send("Subject", "Body", List.of(), List.of(), "APPLICANT", null))
+        .isFalse();
 
     verify(sender, never()).send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
+  }
+
+  @Test
+  void nonProductionOverrideShouldIncludeControlledUnconfiguredCopyRoute() {
+    JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
+    LexisMailService service =
+        new LexisMailService(
+            sender, true, "sender@example.com", "test.admin@gov.bc.ca", "test");
+
+    assertThat(
+            service.send(
+                "Offer created",
+                "Body",
+                List.of("client@example.com"),
+                List.of(),
+                "client@example.com",
+                "REGION_RCO"))
+        .isTrue();
+
+    ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+    verify(sender).send(captor.capture());
+    assertThat(captor.getValue().getSubject())
+        .isEqualTo("[TEST - client@example.com; CC REGION_RCO] Offer created");
+    assertThat(captor.getValue().getText())
+        .contains("Original Cc: REGION_RCO (not configured)");
   }
 
   @Test
@@ -133,7 +202,6 @@ class LexisMailServiceTest {
     LexisMailService service =
         new LexisMailService(
             sender,
-            true,
             false,
             "sender@example.com",
             "test.admin@gov.bc.ca",
@@ -158,23 +226,11 @@ class LexisMailServiceTest {
   }
 
   @Test
-  void disabledDeliveryShouldNotCallTransport() {
-    JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
-    LexisMailService service =
-        new LexisMailService(
-            sender, false, false, "sender@example.com", "", "prod");
-
-    assertThat(service.send("Subject", "Body", List.of("client@example.com"))).isFalse();
-
-    verify(sender, never()).send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
-  }
-
-  @Test
   void productionShouldDeduplicateRecipientsAndPreserveCopies() {
     JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
     LexisMailService service =
         new LexisMailService(
-            sender, true, false, "sender@example.com", "", "prod");
+            sender, false, "sender@example.com", "", "prod");
 
     assertThat(
             service.send(
@@ -198,7 +254,7 @@ class LexisMailServiceTest {
         .send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
     LexisMailService service =
         new LexisMailService(
-            sender, true, false, "sender@example.com", "", "prod");
+            sender, false, "sender@example.com", "", "prod");
 
     assertThat(service.send("Subject", "Body", List.of("client@example.com"))).isFalse();
   }

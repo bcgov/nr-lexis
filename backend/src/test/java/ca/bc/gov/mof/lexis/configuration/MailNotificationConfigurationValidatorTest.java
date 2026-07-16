@@ -1,27 +1,34 @@
 package ca.bc.gov.mof.lexis.configuration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Profile;
 
 class MailNotificationConfigurationValidatorTest {
 
   @Test
-  void disabledMailShouldNotRequireRecipientConfiguration() {
+  void validatorShouldOnlyRunWithTheOracleProfile() {
+    assertThat(MailNotificationConfigurationValidator.class.getAnnotation(Profile.class).value())
+        .containsExactly("oracle");
+  }
+
+  @Test
+  void nonProductionMailShouldAllowNoOverrideOrRegionalRecipients() {
     assertThatCode(
             () ->
                 new MailNotificationConfigurationValidator(
-                    false, true, "invalid", "", "", "", "", ""))
+                    true, "sender@example.com", "", "", "", "", ""))
         .doesNotThrowAnyException();
   }
 
   @Test
-  void enabledNonProductionMailShouldAcceptCompleteConfiguration() {
+  void nonProductionMailShouldAcceptOptionalOverrideAndRegionalRecipients() {
     assertThatCode(
             () ->
                 new MailNotificationConfigurationValidator(
-                    true,
                     true,
                     "sender@example.com",
                     "admin.one@gov.bc.ca;admin.two@gov.bc.ca",
@@ -33,11 +40,10 @@ class MailNotificationConfigurationValidatorTest {
   }
 
   @Test
-  void enabledProductionMailShouldNotRequireAnOverride() {
+  void productionMailShouldAcceptFallbackWithoutAnOverride() {
     assertThatCode(
             () ->
                 new MailNotificationConfigurationValidator(
-                    true,
                     false,
                     "sender@example.com",
                     "",
@@ -49,11 +55,25 @@ class MailNotificationConfigurationValidatorTest {
   }
 
   @Test
-  void productionMailShouldRejectAnOverrideEvenWhenDeliveryIsDisabled() {
-    assertThatThrownBy(
+  void productionMailShouldAcceptAllRegionalRecipientsWithoutFallback() {
+    assertThatCode(
             () ->
                 new MailNotificationConfigurationValidator(
                     false,
+                    "sender@example.com",
+                    "",
+                    "",
+                    "coast.reviewers@gov.bc.ca",
+                    "north.reviewers@gov.bc.ca",
+                    "south.reviewers@gov.bc.ca"))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void productionMailShouldRejectAnOverride() {
+    assertThatThrownBy(
+            () ->
+                new MailNotificationConfigurationValidator(
                     false,
                     "sender@example.com",
                     "test-recipient@gov.bc.ca",
@@ -66,31 +86,30 @@ class MailNotificationConfigurationValidatorTest {
   }
 
   @Test
-  void enabledMailShouldRejectAnInvalidFromAddress() {
+  void mailShouldRejectAnInvalidFromAddress() {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
-                    true, false, "invalid", "", "reviewers@gov.bc.ca", "", "", ""))
+                    true, "invalid", "", "", "", "", ""))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessage("Enabled mail requires one valid from address.");
+        .hasMessage("Mail requires one valid from address.");
   }
 
   @Test
-  void enabledMailShouldRejectMissingFromAddress() {
+  void mailShouldRejectMissingFromAddress() {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
-                    true, false, "", "", "reviewers@gov.bc.ca", "", "", ""))
+                    true, "", "", "", "", "", ""))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessage("Enabled mail requires one valid from address.");
+        .hasMessage("Mail requires one valid from address.");
   }
 
   @Test
-  void enabledNonProductionMailShouldRejectMissingOrInvalidOverrides() {
+  void nonProductionMailShouldRejectAnInvalidConfiguredOverride() {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
-                    true,
                     true,
                     "sender@example.com",
                     "admin@gov.bc.ca;invalid",
@@ -99,15 +118,14 @@ class MailNotificationConfigurationValidatorTest {
                     "",
                     ""))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessage("Enabled non-production mail requires valid override recipients.");
+        .hasMessage("Non-production mail override recipients must be valid when configured.");
   }
 
   @Test
-  void enabledMailShouldRejectMissingRegionalAndFallbackRecipients() {
+  void productionMailShouldRejectMissingRegionalAndFallbackRecipients() {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
-                    true,
                     false,
                     "sender@example.com",
                     "",
@@ -117,16 +135,15 @@ class MailNotificationConfigurationValidatorTest {
                     ""))
         .isInstanceOf(IllegalStateException.class)
         .hasMessage(
-            "Enabled mail requires all regional recipient lists or fallback permit-review recipients.");
+            "Production mail requires all regional recipient lists or fallback permit-review recipients.");
   }
 
   @Test
-  void enabledMailShouldRejectBlankEntriesInRecipientLists() {
+  void mailShouldRejectBlankEntriesInConfiguredRecipientLists() {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
                     true,
-                    false,
                     "sender@example.com",
                     "",
                     "review.one@gov.bc.ca,,review.two@gov.bc.ca",
@@ -134,15 +151,14 @@ class MailNotificationConfigurationValidatorTest {
                     "",
                     ""))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessage("Enabled mail requires valid fallback permit-review recipients.");
+        .hasMessage("Mail requires valid fallback permit-review recipients when configured.");
   }
 
   @Test
-  void enabledMailShouldAllowRegionalMigrationThroughFallback() {
+  void productionMailShouldAllowRegionalMigrationThroughFallback() {
     assertThatCode(
             () ->
                 new MailNotificationConfigurationValidator(
-                    true,
                     false,
                     "sender@example.com",
                     "",
@@ -154,19 +170,18 @@ class MailNotificationConfigurationValidatorTest {
   }
 
   @Test
-  void enabledMailShouldRejectAnInvalidConfiguredRegion() {
+  void mailShouldRejectAnInvalidConfiguredRegion() {
     assertThatThrownBy(
             () ->
                 new MailNotificationConfigurationValidator(
                     true,
-                    false,
                     "sender@example.com",
                     "",
-                    "reviewers@gov.bc.ca",
+                    "",
                     "invalid",
                     "",
                     ""))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessage("Enabled mail requires valid RCO recipients.");
+        .hasMessage("Mail requires valid RCO recipients when configured.");
   }
 }

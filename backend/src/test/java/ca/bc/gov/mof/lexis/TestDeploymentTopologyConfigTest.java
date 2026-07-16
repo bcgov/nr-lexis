@@ -248,7 +248,6 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_EXPIRY_ENABLED",
             "LEXIS_PERMIT_INVOICE_MODE",
             "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS",
-            "LEXIS_MAIL_ENABLED",
             "LEXIS_MAIL_NON_PRODUCTION",
             "LEXIS_MAIL_FROM",
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS",
@@ -282,7 +281,6 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_EXPIRY_ENABLED",
             "LEXIS_PERMIT_INVOICE_MODE",
             "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS",
-            "LEXIS_MAIL_ENABLED",
             "LEXIS_MAIL_NON_PRODUCTION",
             "LEXIS_MAIL_FROM",
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS",
@@ -304,7 +302,6 @@ class TestDeploymentTopologyConfigTest {
         .contains(
             "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}")
-        .contains("LEXIS_MAIL_ENABLED: ${{ vars.LEXIS_MAIL_ENABLED || 'false' }}")
         .contains(
             "LEXIS_MAIL_NON_PRODUCTION:"
                 + " ${{ inputs.environment == 'prod' && 'false' || 'true' }}")

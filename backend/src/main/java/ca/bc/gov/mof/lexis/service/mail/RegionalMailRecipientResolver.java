@@ -42,7 +42,7 @@ public class RegionalMailRecipientResolver {
       return regionalGroup;
     }
     return fallbackRecipients.isEmpty()
-        ? RecipientGroup.empty()
+        ? regionalGroup
         : new RecipientGroup(PERMIT_REQUEST, fallbackRecipients);
   }
 

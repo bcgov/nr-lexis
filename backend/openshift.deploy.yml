@@ -75,14 +75,11 @@ parameters:
   - name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS
     description: Requested timeout for each isolated GBMS transaction
     value: "60"
-  - name: LEXIS_MAIL_ENABLED
-    description: Enable outbound LEXIS workflow email
-    value: "false"
   - name: LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED
     description: Capture authenticated Business BCeID email after the Oracle contact package is deployed
     value: "false"
   - name: LEXIS_MAIL_NON_PRODUCTION
-    description: Route all messages to override recipients when true
+    description: Allow TEST/DEV interception when override recipients are configured
     value: "true"
   - name: LEXIS_MAIL_ENVIRONMENT
     description: Non-secret deployment environment label used on intercepted messages
@@ -283,8 +280,6 @@ objects:
                   value: ${LEXIS_PERMIT_INVOICE_MODE}
                 - name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS
                   value: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS}
-                - name: LEXIS_MAIL_ENABLED
-                  value: ${LEXIS_MAIL_ENABLED}
                 - name: LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED
                   value: ${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED}
                 - name: LEXIS_MAIL_NON_PRODUCTION

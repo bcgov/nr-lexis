@@ -88,7 +88,6 @@ lexis:
   features:
     prod-rtm-only: ${LEXIS_PROD_RTM_ONLY:false}
   mail:
-    enabled: ${LEXIS_MAIL_ENABLED:false}
     applicant-email-capture-enabled: ${LEXIS_MAIL_APPLICANT_EMAIL_CAPTURE_ENABLED:false}
     non-production: ${LEXIS_MAIL_NON_PRODUCTION:true}
     environment: ${LEXIS_MAIL_ENVIRONMENT:non-prod}

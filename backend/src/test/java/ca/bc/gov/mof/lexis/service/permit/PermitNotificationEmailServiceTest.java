@@ -20,7 +20,9 @@ class PermitNotificationEmailServiceTest {
         new PermitNotificationEmailService(
             notificationService,
             new RegionalMailRecipientResolver(
-                "review.one@gov.bc.ca; review.two@gov.bc.ca", "", "", ""));
+                "review.one@gov.bc.ca; review.two@gov.bc.ca", "", "", ""),
+            false,
+            "");
 
     assertThat(service.sendRequest(123L, 1835L)).isTrue();
     verify(notificationService)
@@ -39,7 +41,9 @@ class PermitNotificationEmailServiceTest {
     PermitNotificationEmailService service =
         new PermitNotificationEmailService(
             notificationService,
-            new RegionalMailRecipientResolver("", "", "", "fallback@gov.bc.ca"));
+            new RegionalMailRecipientResolver("", "", "", "fallback@gov.bc.ca"),
+            false,
+            "");
 
     assertThat(service.sendRequest(123L, 9999L)).isTrue();
     verify(notificationService)
@@ -57,7 +61,10 @@ class PermitNotificationEmailServiceTest {
         org.mockito.Mockito.mock(EmailNotificationService.class);
     PermitNotificationEmailService service =
         new PermitNotificationEmailService(
-            notificationService, new RegionalMailRecipientResolver("", "", "", ""));
+            notificationService,
+            new RegionalMailRecipientResolver("", "", "", ""),
+            false,
+            "");
 
     assertThat(
             service.sendApproval(
@@ -73,12 +80,66 @@ class PermitNotificationEmailServiceTest {
   }
 
   @Test
-  void shouldNotAttemptReviewEmailWithoutConfiguredRecipients() {
+  void shouldPublishKnownRegionalRouteWithoutConfiguredRecipients() {
     EmailNotificationService notificationService =
         org.mockito.Mockito.mock(EmailNotificationService.class);
     PermitNotificationEmailService service =
         new PermitNotificationEmailService(
-            notificationService, new RegionalMailRecipientResolver("", "", "", ""));
+            notificationService,
+            new RegionalMailRecipientResolver("", "", "", ""),
+            true,
+            "test.admin@gov.bc.ca");
+
+    assertThat(service.sendRequest(123L, 1835L)).isTrue();
+
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PermitReview(
+                123L, List.of(), List.of(), "REGION_RCO"));
+  }
+
+  @Test
+  void shouldNotAttemptReviewEmailForUnknownRouteWithoutConfiguredRecipients() {
+    EmailNotificationService notificationService =
+        org.mockito.Mockito.mock(EmailNotificationService.class);
+    PermitNotificationEmailService service =
+        new PermitNotificationEmailService(
+            notificationService,
+            new RegionalMailRecipientResolver("", "", "", ""),
+            true,
+            "test.admin@gov.bc.ca");
+
+    assertThat(service.sendRequest(123L, 9999L)).isFalse();
+
+    verify(notificationService, never()).publish(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void shouldNotPublishKnownRegionalRouteWithoutRecipientsOrOverride() {
+    EmailNotificationService notificationService =
+        org.mockito.Mockito.mock(EmailNotificationService.class);
+    PermitNotificationEmailService service =
+        new PermitNotificationEmailService(
+            notificationService,
+            new RegionalMailRecipientResolver("", "", "", ""),
+            true,
+            "");
+
+    assertThat(service.sendRequest(123L, 1835L)).isFalse();
+
+    verify(notificationService, never()).publish(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void shouldNotPublishRouteOnlyRequestInProductionEvenWithOverrideConfigured() {
+    EmailNotificationService notificationService =
+        org.mockito.Mockito.mock(EmailNotificationService.class);
+    PermitNotificationEmailService service =
+        new PermitNotificationEmailService(
+            notificationService,
+            new RegionalMailRecipientResolver("", "", "", ""),
+            false,
+            "test.admin@gov.bc.ca");
 
     assertThat(service.sendRequest(123L, 1835L)).isFalse();
 

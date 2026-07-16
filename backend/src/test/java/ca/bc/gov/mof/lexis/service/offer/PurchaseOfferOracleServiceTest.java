@@ -491,6 +491,39 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void addOfferShouldRetainRegionalRouteForNonProductionInterception() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null, 1835L)));
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenReturn(Optional.of("client@example.com"));
+    when(regionalRecipientResolver.resolveGroup(1835L))
+        .thenReturn(new RegionalMailRecipientResolver.RecipientGroup("REGION_RCO", List.of()));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.warnings())
+        .containsExactly(
+            "Offer saved and applicant email queued, but no ministry regional recipient was configured.");
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.NEW,
+                "client@example.com",
+                List.of(),
+                "REGION_RCO"));
+  }
+
+  @Test
   void addOfferShouldResolveAgentRecipientForAgentApplications() {
     stubProvincialApplication(1000456L);
     when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))

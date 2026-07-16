@@ -63,15 +63,14 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_VIRUS_SCAN_HOST` | ClamAV service hostname | localhost |
 | `LEXIS_VIRUS_SCAN_PORT` | ClamAV INSTREAM port | 3310 |
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | End-to-end deadline for one ClamAV scan | 10s |
-| `LEXIS_MAIL_ENABLED` | Enables outbound workflow email | false |
-| `LEXIS_MAIL_NON_PRODUCTION` | Replaces original recipients with override recipients and marks the message as non-production | true outside PROD |
+| `LEXIS_MAIL_NON_PRODUCTION` | Marks DEV/TEST messages and redirects them when override recipients are configured | true outside PROD |
 | `LEXIS_MAIL_ENVIRONMENT` | Non-secret environment label shown on intercepted DEV/TEST messages | non-prod locally; derived from deployment environment |
-| `LEXIS_MAIL_FROM` | Approved sender mailbox for LEXIS workflow messages | Required when mail is enabled |
-| `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Comma/semicolon-separated recipients receiving all DEV/TEST messages | Required when non-production mail is enabled; must be unset in PROD |
-| `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | RCO distribution list recipient(s) | Required in PROD |
-| `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | RNI distribution list recipient(s) | Required in PROD |
-| `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | RSI distribution list recipient(s) | Required in PROD |
-| `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Migration fallback when a regional list cannot be resolved | Optional after all regional lists are configured |
+| `LEXIS_MAIL_FROM` | Approved sender mailbox for LEXIS workflow messages | Required in every environment |
+| `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Optional comma/semicolon-separated recipients receiving all DEV/TEST messages instead of the intended recipients | Optional in DEV/TEST; must be unset in PROD |
+| `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | RCO distribution list recipient(s) | Optional in DEV/TEST; required in PROD unless the fallback is configured |
+| `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | RNI distribution list recipient(s) | Optional in DEV/TEST; required in PROD unless the fallback is configured |
+| `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | RSI distribution list recipient(s) | Optional in DEV/TEST; required in PROD unless the fallback is configured |
+| `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Migration fallback when a regional list cannot be resolved | Optional; may provide PROD coverage instead of all three regional lists |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
 | `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
 
@@ -98,7 +97,6 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_VIRUS_SCAN_HOST` | Generated ClamAV service name |
 | `LEXIS_VIRUS_SCAN_PORT` | OpenShift template value `3310` |
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | OpenShift template default `10s` |
-| `LEXIS_MAIL_ENABLED` | Variable `LEXIS_MAIL_ENABLED` |
 | `LEXIS_MAIL_NON_PRODUCTION` | Derived from the deployment environment |
 | `LEXIS_MAIL_ENVIRONMENT` | Workflow input `environment` |
 | `LEXIS_MAIL_FROM` | Variable `LEXIS_MAIL_FROM` |

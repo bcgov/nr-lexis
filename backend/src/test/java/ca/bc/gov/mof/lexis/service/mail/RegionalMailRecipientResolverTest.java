@@ -59,11 +59,25 @@ class RegionalMailRecipientResolverTest {
   }
 
   @Test
-  void shouldReturnEmptyWhenNeitherRegionalNorFallbackRecipientsAreConfigured() {
+  void shouldRetainKnownRegionWhenNeitherRegionalNorFallbackRecipientsAreConfigured() {
     RegionalMailRecipientResolver resolver =
         new RegionalMailRecipientResolver("", "", "", "");
 
-    assertThat(resolver.resolveGroup(1835L).recipients()).isEmpty();
+    RegionalMailRecipientResolver.RecipientGroup group = resolver.resolveGroup(1835L);
+
+    assertThat(group.label()).isEqualTo("REGION_RCO");
+    assertThat(group.recipients()).isEmpty();
+  }
+
+  @Test
+  void shouldRemainUnroutableForUnknownOrgUnitWithoutFallbackRecipients() {
+    RegionalMailRecipientResolver resolver =
+        new RegionalMailRecipientResolver("", "", "", "");
+
+    RegionalMailRecipientResolver.RecipientGroup group = resolver.resolveGroup(9999L);
+
+    assertThat(group.label()).isNull();
+    assertThat(group.recipients()).isEmpty();
   }
 
   private static RegionalMailRecipientResolver resolver(String rco, String rni, String rsi) {

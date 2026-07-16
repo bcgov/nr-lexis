@@ -6,16 +6,17 @@ import jakarta.mail.internet.AddressException;
 import jakarta.mail.internet.InternetAddress;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /** Fails startup when mail configuration could discard or misroute a notification. */
 @Component
+@Profile("oracle")
 public class MailNotificationConfigurationValidator {
 
   private static final Pattern RECIPIENT_SEPARATOR = Pattern.compile("[,;]");
 
   public MailNotificationConfigurationValidator(
-      @Value("${lexis.mail.enabled:false}") boolean enabled,
       @Value("${lexis.mail.non-production:true}") boolean nonProduction,
       @Value("${lexis.mail.from:}") String fromAddress,
       @Value("${lexis.mail.override-recipients:}") String overrideRecipients,
@@ -27,33 +28,30 @@ public class MailNotificationConfigurationValidator {
       throw new IllegalStateException(
           "Production mail must not configure override recipients.");
     }
-    if (!enabled) {
-      return;
-    }
 
-    requireSingleAddress(fromAddress, "Enabled mail requires one valid from address.");
+    requireSingleAddress(fromAddress, "Mail requires one valid from address.");
     if (nonProduction) {
-      requireAddressList(
+      validateOptionalAddressList(
           overrideRecipients,
-          "Enabled non-production mail requires valid override recipients.");
+          "Non-production mail override recipients must be valid when configured.");
     }
     boolean hasFallback =
         validateOptionalAddressList(
             permitRequestRecipients,
-            "Enabled mail requires valid fallback permit-review recipients.");
+            "Mail requires valid fallback permit-review recipients when configured.");
     boolean hasRco =
         validateOptionalAddressList(
-            rcoRecipients, "Enabled mail requires valid RCO recipients.");
+            rcoRecipients, "Mail requires valid RCO recipients when configured.");
     boolean hasRni =
         validateOptionalAddressList(
-            rniRecipients, "Enabled mail requires valid RNI recipients.");
+            rniRecipients, "Mail requires valid RNI recipients when configured.");
     boolean hasRsi =
         validateOptionalAddressList(
-            rsiRecipients, "Enabled mail requires valid RSI recipients.");
+            rsiRecipients, "Mail requires valid RSI recipients when configured.");
 
-    if (!hasFallback && !(hasRco && hasRni && hasRsi)) {
+    if (!nonProduction && !hasFallback && !(hasRco && hasRni && hasRsi)) {
       throw new IllegalStateException(
-          "Enabled mail requires all regional recipient lists or fallback permit-review recipients.");
+          "Production mail requires all regional recipient lists or fallback permit-review recipients.");
     }
   }
 
