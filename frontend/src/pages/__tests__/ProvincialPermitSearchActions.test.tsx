@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -282,7 +282,7 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
-  it('shows selected permit search region names instead of only the selected count', async () => {
+  it('shows selected permit search regions as removable pills', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitOptions.mockResolvedValueOnce({
       permitStatuses: [{ value: 'Issued', label: 'Issued' }],
@@ -292,26 +292,12 @@ describe('Provincial Permit Search Actions', () => {
       ],
     })
 
-    renderPage()
+    renderPage('/provincial/permit?region=1903,1908')
     await screen.findByText('7001')
 
-    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
-    )
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'Skeena' } })
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Skeena Natural Resource Region' }),
-    )
-
-    expect(
-      await screen.findByText(
-        'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region',
-      ),
-    ).toBeInTheDocument()
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
+    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
   })
 
   it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {

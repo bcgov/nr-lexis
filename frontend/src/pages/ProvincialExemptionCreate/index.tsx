@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  Button,
-  Checkbox,
-  Column,
-  FilterableMultiSelect,
-  Grid,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Checkbox, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { AppNotification } from '../../components/AppNotification'
 import SearchableSelect from '../../components/SearchableSelect'
+import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
@@ -802,19 +794,16 @@ const ProvincialExemptionCreatePage = () => {
                 }}
               />
               {blanketOic && (
-                <FilterableMultiSelect
+                <RegionMultiSelect
                   id="exemptionRegions"
                   titleText="Regions"
                   items={regionOptions}
                   selectedItems={selectedRegions}
-                  itemToString={(item) => (item ? item.text : '')}
                   invalid={!!fieldError('regionNumbers')}
                   invalidText={fieldError('regionNumbers')}
                   disabled={!optionsLoaded || optionsUnavailable}
-                  onChange={({ selectedItems }) => {
-                    const regionNumbers = ((selectedItems ?? []) as IdTextOption[]).map(
-                      (item) => item.id,
-                    )
+                  onChange={(selectedItems) => {
+                    const regionNumbers = selectedItems.map((item) => item.id)
                     if (formValuesEqual(regionNumbers, form.regionNumbers)) {
                       return
                     }

@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  FilterableMultiSelect,
   Pagination,
   Table,
   TableBody,
@@ -20,6 +19,7 @@ import EmptyState from '@/components/EmptyState'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
+import RegionMultiSelect from '@/components/RegionMultiSelect'
 import StatusTag from '@/components/StatusTag'
 import type {
   ProvincialPermitSearchFilters,
@@ -204,10 +204,6 @@ const ProvincialPermitPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const selectedRegionHelperText =
-    selectedRegions.length > 0
-      ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
-      : undefined
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(filters.issuedFromDate, filters.issuedToDate)
@@ -415,17 +411,14 @@ const ProvincialPermitPage = () => {
                 value={filters.invoiceNumber}
                 onChange={(event) => updateFilter('invoiceNumber', event.target.value)}
               />
-              <FilterableMultiSelect
+              <RegionMultiSelect
                 id="region"
                 titleText="Region"
                 items={regionOptions}
-                itemToString={(item) => (item ? item.text : '')}
                 placeholder="Select region(s)"
-                helperText={selectedRegionHelperText}
                 selectedItems={selectedRegions}
                 disabled={optionsLoading || optionsUnavailable}
-                onChange={(event) => {
-                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
+                onChange={(nextSelected) => {
                   updateFilter(
                     'region',
                     nextSelected.map((item) => item.id),

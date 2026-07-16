@@ -3,7 +3,6 @@ import {
   Button,
   Checkbox,
   Column,
-  FilterableMultiSelect,
   Grid,
   InlineLoading,
   Modal,
@@ -59,6 +58,7 @@ import { createPermitFromExemption } from '@/service/provincial-permit-documents
 import { triggerBrowserDownload } from '@/utils/download'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
+import RegionMultiSelect from '@/components/RegionMultiSelect'
 import {
   mapSelectedOptionsById,
   mapValueLabelOptionsToIdTextOptions,
@@ -1405,25 +1405,22 @@ const ProvincialExemptionDetailsPage = () => {
                               />
                             </div>
                             {currentTypeCode === 'B' && (
-                              <FilterableMultiSelect
+                              <RegionMultiSelect
                                 id="exemptionDetailRegions"
                                 titleText="Regions"
                                 items={regionOptions}
                                 selectedItems={selectedRegions}
-                                itemToString={(item) => (item ? item.text : '')}
                                 disabled={
                                   optionsAvailability !== 'available' ||
                                   !canEditSummaryFields ||
                                   regionOptions.length === 0
                                 }
-                                onChange={({ selectedItems }) =>
+                                onChange={(selectedItems) =>
                                   setEditForm((current) =>
                                     current
                                       ? {
                                           ...current,
-                                          regionNumbers: (
-                                            (selectedItems ?? []) as IdTextOption[]
-                                          ).map((item) => item.id),
+                                          regionNumbers: selectedItems.map((item) => item.id),
                                         }
                                       : current,
                                   )

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -446,7 +446,7 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('shows selected application search region names instead of only the selected count', async () => {
+  it('shows selected application search regions as removable pills', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
       exemptionReasons: [],
@@ -460,26 +460,17 @@ describe('Provincial Application Search Actions', () => {
       currentSchedules: [],
     })
 
-    renderPage()
+    renderPage('/provincial/application?region=1903,1908')
     await screen.findByText('321')
 
-    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
-    )
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'Skeena' } })
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Skeena Natural Resource Region' }),
-    )
-
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
+    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
     expect(
-      await screen.findByText(
-        'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region',
-      ),
-    ).toBeInTheDocument()
+      within(selectedRegions).getByRole('button', {
+        name: 'Remove Cariboo Natural Resource Region',
+      }),
+    ).toBeEnabled()
   })
 
   it('ignores stale search responses that resolve after a newer search', async () => {

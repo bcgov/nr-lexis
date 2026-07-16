@@ -1,18 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import {
-  Button,
-  Column,
-  Grid,
-  FilterableMultiSelect,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
 import PageHeader from '@/components/PageHeader'
 import SearchableSelect from '../../components/SearchableSelect'
+import RegionMultiSelect from '@/components/RegionMultiSelect'
 import { setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { ReportRequestError, runReport } from '@/service/report-service'
@@ -1419,30 +1412,27 @@ const ReportsPage = () => {
                         .map((value) => value.trim())
                         .filter(Boolean),
                     )
-                    const selectedItems = dynamicOptions.filter((option) =>
-                      selectedValues.has(option.value),
+                    const regionItems = dynamicOptions.map((option) => ({
+                      id: option.value,
+                      text: option.label,
+                    }))
+                    const selectedItems = regionItems.filter((option) =>
+                      selectedValues.has(option.id),
                     )
-                    const selectedItemsHelperText =
-                      selectedItems.length > 0
-                        ? `Selected: ${selectedItems.map((option) => option.label).join(', ')}`
-                        : undefined
 
                     return (
-                      <FilterableMultiSelect
+                      <RegionMultiSelect
                         key={field.key}
                         id={`${selectedReport.id}-${field.key}`}
                         titleText={field.label}
-                        items={dynamicOptions}
-                        itemToString={(item) => (item ? item.label : '')}
+                        items={regionItems}
                         placeholder={optionPlaceholder ?? 'Select region(s)'}
-                        helperText={selectedItemsHelperText}
                         selectedItems={selectedItems}
                         disabled={optionControlDisabled}
-                        onChange={(event) => {
-                          const nextSelected = (event.selectedItems ?? []) as SearchOption[]
+                        onChange={(nextSelected) => {
                           onUpdateField(
                             field.key,
-                            nextSelected.map((option) => option.value).join(','),
+                            nextSelected.map((option) => option.id).join(','),
                           )
                         }}
                       />

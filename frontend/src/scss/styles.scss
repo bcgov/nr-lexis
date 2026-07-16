@@ -1527,6 +1527,28 @@ legend.cds--label {
   margin-top: 1.5rem;
 }
 
+.region-multi-select .cds--multi-select--filterable > .cds--list-box__field > .cds--tag--filter {
+  display: none;
+}
+
+.region-multi-select .cds--multi-select--filterable.cds--multi-select--selected .cds--text-input {
+  padding-inline-start: 1rem;
+}
+
+.region-multi-select__tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.region-multi-select__tags > li {
+  display: flex;
+}
+
 .application-species-actions {
   display: flex;
   align-items: center;

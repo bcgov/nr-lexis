@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  FilterableMultiSelect,
   Pagination,
   Table,
   TableBody,
@@ -19,6 +18,7 @@ import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
 import type {
   ProvincialOfferSearchFilters,
@@ -201,10 +201,6 @@ const ProvincialOffersPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const selectedRegionHelperText =
-    selectedRegions.length > 0
-      ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
-      : undefined
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(
@@ -471,17 +467,14 @@ const ProvincialOffersPage = () => {
                 invalidText="Date must be YYYY-MM-DD"
                 onChange={(value) => updateFilter('listingToDate', value)}
               />
-              <FilterableMultiSelect
+              <RegionMultiSelect
                 id="region"
                 titleText="Region"
                 items={regionOptions}
-                itemToString={(item) => (item ? item.text : '')}
                 placeholder="Select region(s)"
-                helperText={selectedRegionHelperText}
                 selectedItems={selectedRegions}
                 disabled={!isOptionsLoaded || offerOptionsUnavailable}
-                onChange={(event) => {
-                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
+                onChange={(nextSelected) => {
                   updateFilter(
                     'region',
                     nextSelected.map((item) => item.id),
