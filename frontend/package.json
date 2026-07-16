@@ -15,7 +15,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,scss}\" \"e2e/*smoke.spec.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "vitest --mode test",
-    "test:cov": "vitest run --mode test --coverage",
+    "test:cov": "vitest run --mode test --coverage --maxWorkers=2",
     "build": "vite build",
     "pree2e": "playwright install chromium",
     "e2e": "playwright test --project=chromium",
