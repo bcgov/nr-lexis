@@ -6,6 +6,8 @@ export type ProvincialApplicationSearchFilters = {
   applicationStatus: string
   productTypeCode: string
   region: string[]
+  receivedFromDate: string
+  receivedToDate: string
   listingFromDate: string
   listingToDate: string
   applicantClientNumber: string
@@ -14,11 +16,9 @@ export type ProvincialApplicationSearchFilters = {
 
 export type ProvincialApplicationSearchSortField =
   | 'applicationNumber'
-  | 'status'
   | 'applicantClientNumber'
-  | 'ownerClientNumber'
-  | 'region'
-  | 'applicationVolume'
+  | 'displayOwnerClientNumber'
+  | 'regionCode'
   | 'exemptionNumber'
   | 'listingDate'
 

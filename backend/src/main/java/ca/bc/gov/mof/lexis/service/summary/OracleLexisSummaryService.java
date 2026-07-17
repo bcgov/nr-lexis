@@ -181,6 +181,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             regions,
+            true,
             normalizedPage,
             normalizedSize);
 
@@ -363,12 +364,12 @@ public class OracleLexisSummaryService implements LexisSummaryService {
         result.exemptionNumber(),
         detail.map(ExemptionDetailDto::exemptionTypeDescription).orElse(result.exemptionType()),
         detail.map(ExemptionDetailDto::ownerClientNumber).orElse(result.ownerClientNumber()),
-        detail.map(ExemptionDetailDto::agentClientNumber).orElse(null),
+        detail.map(ExemptionDetailDto::agentClientNumber).orElse(result.applicantClientNumber()),
         detail.map(ExemptionDetailDto::exemptionStatusDescription).orElse(result.status()),
         detail.map(ExemptionDetailDto::approvedVolume).orElse(result.approvedVolume()),
-        detail.map(ExemptionDetailDto::remainingVolume).orElse(0.0d),
+        detail.map(ExemptionDetailDto::remainingVolume).orElse(result.balanceRemaining()),
         detail.map(ExemptionDetailDto::approvalDate).orElse(result.approvalDate()),
-        detail.map(ExemptionDetailDto::expiryDate).orElse(null));
+        detail.map(ExemptionDetailDto::expiryDate).orElse(result.expiryDate()));
   }
 
   private SummaryPermitItemDto toSummaryPermit(PermitSearchResultDto result) {

@@ -17,6 +17,7 @@ on:
 env:
   DOMAIN: apps.gold.devops.gov.bc.ca
   PREFIX: ${{ github.event.repository.name }}-${{ inputs.slot || inputs.target }}
+  BACKEND_PREFIX: ${{ github.event.repository.name }}-api-${{ inputs.slot || inputs.target }}
 
 permissions: {}
 
@@ -52,6 +53,46 @@ jobs:
         env:
           E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
         run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL" 17 5 '<div id="root"' 30
+
+      - name: Verify live backend readiness and frontend proxy
+        env:
+          BACKEND_BASE_URL: https://${{ env.BACKEND_PREFIX }}.${{ env.DOMAIN }}
+          E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
+        run: |
+          set -euo pipefail
+
+          readiness_status=""
+          for attempt in $(seq 1 24); do
+            readiness_status="$(curl --silent --show-error \
+              --output "${RUNNER_TEMP}/lexis-readiness.json" \
+              --write-out '%{http_code}' \
+              --connect-timeout 5 \
+              --max-time 15 \
+              "${BACKEND_BASE_URL}/actuator/health/readiness" || true)"
+            if [ "${readiness_status}" = "200" ]; then
+              break
+            fi
+            echo "Backend readiness is not available yet (attempt ${attempt}/24, status ${readiness_status:-none})."
+            if [ "${attempt}" -lt 24 ]; then
+              sleep 5
+            fi
+          done
+
+          if [ "${readiness_status}" != "200" ]; then
+            echo "Expected backend readiness HTTP 200; received ${readiness_status:-none}."
+            exit 1
+          fi
+
+          capabilities_status="$(curl --silent --show-error \
+            --output "${RUNNER_TEMP}/lexis-capabilities.json" \
+            --write-out '%{http_code}' \
+            --connect-timeout 5 \
+            --max-time 30 \
+            "${E2E_BASE_URL}/api/lexis/session/capabilities" || true)"
+          if [ "${capabilities_status}" != "401" ]; then
+            echo "Expected unauthenticated frontend-proxied capabilities HTTP 401; received ${capabilities_status:-none}."
+            exit 1
+          fi
 
       - name: Run basic Playwright smoke suite
         env:

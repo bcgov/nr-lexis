@@ -31,7 +31,40 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
+        FIND_CLIENT_LOCATION,
+        cs -> {
+          cs.setString(1, normalizedClientNumber);
+          cs.setString(2, normalizedLocationCode);
+        },
+        3,
+        rs ->
+            new ClientLocationRow(
+                getString(rs, "CLIENT_NUMBER"),
+                getString(rs, "CLIENT_LOCN_CODE"),
+                getString(rs, "CLIENT_LOCN_NAME"),
+                getString(rs, "COMPANY_NAME"),
+                getString(rs, "ADDRESS_1"),
+                getString(rs, "ADDRESS_2"),
+                getString(rs, "ADDRESS_3"),
+                getString(rs, "CITY"),
+                getString(rs, "PROVINCE"),
+                getString(rs, "POSTAL_CODE"),
+                getString(rs, "COUNTRY"),
+                getString(rs, "BUSINESS_PHONE"),
+                getString(rs, "FAX_NUMBER"),
+                getString(rs, "EMAIL_ADDRESS")));
+  }
+
+  public Optional<ClientLocationRow> findLocationByClientNumberCodeRequired(
+      String clientNumber, String locationCode) {
+    String normalizedClientNumber = trim(clientNumber);
+    String normalizedLocationCode = trim(locationCode);
+    if (normalizedClientNumber == null || normalizedLocationCode == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingleRequired(
         FIND_CLIENT_LOCATION,
         cs -> {
           cs.setString(1, normalizedClientNumber);
@@ -62,7 +95,7 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_CLIENT_LOCATIONS,
         cs -> cs.setString(1, normalizedClientNumber),
         2,
@@ -92,7 +125,7 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_CONTACTS_BY_LOCATION,
         cs -> {
           cs.setString(1, normalizedClientNumber);

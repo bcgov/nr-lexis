@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Locked } from '@carbon/icons-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
+  Checkbox,
   Column,
   Grid,
   Pagination,
@@ -14,20 +16,26 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { AppNotification } from '../../components/AppNotification'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import EmptyState from '@/components/EmptyState'
+import PageHeader from '@/components/PageHeader'
+import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
+import StatusTag from '@/components/StatusTag'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import type {
   FederalApplicationSearchFilters,
+  FederalApplicationSearchItem,
   FederalApplicationSearchRequest,
   FederalApplicationSearchResponse,
-  FederalApplicationSearchSortField,
 } from '@/interfaces/FederalApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
+  getPageDataCacheGeneration,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
@@ -43,11 +51,8 @@ import {
   appendSearchParamsToPath,
   createEmptyPagedSearchResponse,
   createSearchParams,
-  getNextSortDirection,
-  parseEnumParam,
   parsePageSizeParam,
   parsePositiveIntParam,
-  parseSortDirectionParam,
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -60,6 +65,16 @@ import {
   searchFederalApplications,
 } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
+
+type ExemptionSelectionStatus = {
+  kind: 'error'
+  message: string
+}
+
+type FederalExemptionCreatePrefillState = {
+  selectedApplicationNumbers: string[]
+  applicationSource: 'federal'
+}
 
 const INITIAL_FILTERS: FederalApplicationSearchFilters = {
   applicationNumber: '',
@@ -74,8 +89,8 @@ const INITIAL_FILTERS: FederalApplicationSearchFilters = {
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<FederalApplicationSearchResponse>()
 
-const SORT_COLUMNS: {
-  id: FederalApplicationSearchSortField
+const RESULT_COLUMNS: {
+  id: string
   label: string
 }[] = [
   { id: 'federalApplicationNumber', label: 'Application' },
@@ -85,16 +100,9 @@ const SORT_COLUMNS: {
   { id: 'receivedDate', label: 'Received date' },
   { id: 'listingDate', label: 'Listing date' },
 ]
-const DEFAULT_SORT_FIELD: FederalApplicationSearchSortField = 'federalApplicationNumber'
-const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
-const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
-  (column) => column.id,
-) as FederalApplicationSearchSortField[]
 
 const buildSearchParams = (
   filters: FederalApplicationSearchFilters,
-  sortField: FederalApplicationSearchSortField,
-  sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
 ): URLSearchParams =>
@@ -107,20 +115,30 @@ const buildSearchParams = (
     ['receivedToDate', filters.receivedToDate],
     ['listingFromDate', filters.listingFromDate],
     ['listingToDate', filters.listingToDate],
-    ['sortField', sortField],
-    ['sortDirection', sortDirection],
     ['page', page],
     ['pageSize', pageSize],
   ])
 
 const FederalPage = () => {
-  const { capabilities, isLoading } = useAuth()
+  const navigate = useNavigate()
+  const { capabilities, canPerform, isLoading } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
+  const [optionsLoading, setOptionsLoading] = useState(true)
+  const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [selectedRowsById, setSelectedRowsById] = useState<
+    Record<string, FederalApplicationSearchItem>
+  >({})
+  const [exemptionSelectionStatus, setExemptionSelectionStatus] =
+    useState<ExemptionSelectionStatus | null>(null)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
+  const canFilterFederalByClient = canPerform('/createExemption')
+  const canCreateFederalExemption =
+    canPerform('/createExemption') && canPerform('viewFederalApplication')
+  const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -140,15 +158,6 @@ const FederalPage = () => {
 
     return {
       filters: urlFilters,
-      sortField: parseEnumParam(
-        searchParams.get('sortField'),
-        SORT_FIELD_OPTIONS,
-        DEFAULT_SORT_FIELD,
-      ),
-      sortDirection: parseSortDirectionParam(
-        searchParams.get('sortDirection'),
-        DEFAULT_SORT_DIRECTION,
-      ),
       page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_SEARCH_PAGE),
       pageSize: parsePageSizeParam(
         searchParams.get('pageSize'),
@@ -159,18 +168,20 @@ const FederalPage = () => {
   }, [searchParams])
   const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
-  const sortField = urlState.sortField
-  const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const clearSelection = useCallback(() => {
+    setSelectedRowsById({})
+    setExemptionSelectionStatus(null)
+  }, [])
   const updateFilter = useCallback(
     (key: keyof FederalApplicationSearchFilters, value: string) => {
       const nextFilters = { ...filters, [key]: value }
-      setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
-        { replace: true },
-      )
+      clearSelection()
+      setSearchParams(buildSearchParams(nextFilters, DEFAULT_SEARCH_PAGE, pageSize), {
+        replace: true,
+      })
     },
-    [filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, filters, pageSize, setSearchParams],
   )
 
   const hasDateValidationError = useMemo(() => {
@@ -194,6 +205,7 @@ const FederalPage = () => {
 
   const runSearch = useCallback(
     async (request: FederalApplicationSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
       const pageCacheKey = buildPageDataCacheKey(
         'federal-application-search',
         capabilities?.principal,
@@ -239,14 +251,21 @@ const FederalPage = () => {
       setErrorMessage('')
       try {
         const totalCacheKey = buildSearchTotalCacheKey(request.filters)
-        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const cachedTotal = options.force
+          ? undefined
+          : getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
         const commitSearchResponse = (
           response: FederalApplicationSearchResponse,
           totalIsExact: boolean,
         ) => {
+          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
+            return
+          }
           if (totalIsExact) {
+            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
+              return
+            }
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            setPageDataCache(pageCacheKey, response)
             prefetchAdjacentSearchPages({
               pageId: 'federal-application-search',
               principal: capabilities?.principal,
@@ -257,7 +276,7 @@ const FederalPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest()) {
+            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
               commitResults(response)
             }
           })
@@ -296,8 +315,6 @@ const FederalPage = () => {
 
     void runSearch({
       filters: debouncedUrlState.filters,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
       page: debouncedUrlState.page - 1,
       pageSize: debouncedUrlState.pageSize,
     })
@@ -309,8 +326,6 @@ const FederalPage = () => {
       setSearchParams(
         buildSearchParams(
           { ...INITIAL_FILTERS, applicationStatus: 'APP' },
-          DEFAULT_SORT_FIELD,
-          DEFAULT_SORT_DIRECTION,
           DEFAULT_SEARCH_PAGE,
           DEFAULT_SEARCH_PAGE_SIZE,
         ),
@@ -321,43 +336,133 @@ const FederalPage = () => {
 
   useEffect(() => {
     const loadOptions = async () => {
-      const options = await fetchFederalApplicationOptions()
-      setApplicationStatusOptions(options.applicationStatuses)
+      try {
+        const options = await fetchFederalApplicationOptions()
+        setApplicationStatusOptions(options.applicationStatuses)
+        setOptionsUnavailable(false)
+      } catch {
+        setOptionsUnavailable(true)
+      } finally {
+        setOptionsLoading(false)
+      }
     }
 
     void loadOptions()
   }, [])
 
   const onSearch = () => {
-    setSearchParams(
-      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
-    )
+    clearSelection()
+    setSearchParams(buildSearchParams(filters, DEFAULT_SEARCH_PAGE, pageSize))
   }
 
   const onClearFilters = () => {
+    clearSelection()
     setSearchParams(
-      buildSearchParams(
-        INITIAL_FILTERS,
-        DEFAULT_SORT_FIELD,
-        DEFAULT_SORT_DIRECTION,
-        DEFAULT_SEARCH_PAGE,
-        DEFAULT_SEARCH_PAGE_SIZE,
-      ),
+      buildSearchParams(INITIAL_FILTERS, DEFAULT_SEARCH_PAGE, DEFAULT_SEARCH_PAGE_SIZE),
     )
   }
 
-  const onHeaderClick = (column: FederalApplicationSearchSortField) => {
-    const nextDirection = getNextSortDirection(sortField, sortDirection, column)
-    setSearchParams(
-      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+  const selectableRows = useMemo(() => {
+    if (!canCreateFederalExemption) {
+      return []
+    }
+    return results.content.filter((item) => item.allowCreateExemption)
+  }, [canCreateFederalExemption, results.content])
+
+  const allSelectableRowsAreSelected = useMemo(() => {
+    if (selectableRows.length === 0) {
+      return false
+    }
+    return selectableRows.every((item) => Boolean(selectedRowsById[item.applicationNumber]))
+  }, [selectableRows, selectedRowsById])
+
+  const toggleRowSelection = (row: FederalApplicationSearchItem, checked: boolean) => {
+    if (!canCreateFederalExemption || !row.allowCreateExemption) {
+      return
+    }
+    setExemptionSelectionStatus(null)
+    setSelectedRowsById((current) => {
+      const next = { ...current }
+      if (checked) {
+        next[row.applicationNumber] = row
+      } else {
+        delete next[row.applicationNumber]
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAllRowsOnPage = (checked: boolean) => {
+    if (!canCreateFederalExemption) {
+      return
+    }
+    setExemptionSelectionStatus(null)
+    setSelectedRowsById((current) => {
+      const next = { ...current }
+      selectableRows.forEach((row) => {
+        if (checked) {
+          next[row.applicationNumber] = row
+        } else {
+          delete next[row.applicationNumber]
+        }
+      })
+      return next
+    })
+  }
+
+  const onCreateExemptionClick = () => {
+    if (!canCreateFederalExemption) {
+      setExemptionSelectionStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to create exemptions from federal applications.',
+      })
+      return
+    }
+
+    const selectedRows = Object.values(selectedRowsById)
+    if (selectedRows.length === 0) {
+      setExemptionSelectionStatus({
+        kind: 'error',
+        message: 'Select at least one eligible federal application before creating an exemption.',
+      })
+      return
+    }
+
+    const firstClientNumber = selectedRows[0].clientNumber.trim()
+    const allRowsMatchClientNumber = selectedRows.every(
+      (row) => row.clientNumber.trim() === firstClientNumber,
     )
+    if (!allRowsMatchClientNumber) {
+      setExemptionSelectionStatus({
+        kind: 'error',
+        message:
+          'Selected federal applications do not share the same client number. Multi-application exemptions require matching clients.',
+      })
+      return
+    }
+
+    const selectedApplicationNumbers = selectedRows.map((row) => row.applicationNumber)
+    const query = new URLSearchParams({
+      applications: selectedApplicationNumbers.join(','),
+      source: 'federal',
+    })
+    const prefillState: FederalExemptionCreatePrefillState = {
+      selectedApplicationNumbers,
+      applicationSource: 'federal',
+    }
+    navigate(`/provincial/exemption/create?${query.toString()}`, { state: prefillState })
   }
 
   return (
     <Grid fullWidth className="default-grid federal-application-search-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Federal application search</h1>
+        <PageHeader
+          title="Federal application search"
+          subtitle="Find federal applications and open application details."
+        />
       </Column>
+
+      {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters federal-application-search-filters">
@@ -381,14 +486,17 @@ const FederalPage = () => {
                 value={filters.applicationStatus}
                 placeholder="All statuses"
                 options={applicationStatusOptions}
+                disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('applicationStatus', value)}
               />
-              <TextInput
-                id="clientNumber"
-                labelText="Client number"
-                value={filters.clientNumber}
-                onChange={(event) => updateFilter('clientNumber', event.target.value)}
-              />
+              {canFilterFederalByClient && (
+                <TextInput
+                  id="clientNumber"
+                  labelText="Client number"
+                  value={filters.clientNumber}
+                  onChange={(event) => updateFilter('clientNumber', event.target.value)}
+                />
+              )}
               <IsoDatePicker
                 id="receivedFromDate"
                 labelText="Received from date"
@@ -434,90 +542,154 @@ const FederalPage = () => {
               <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
                 Clear Filters
               </Button>
+              {canCreateFederalExemption && (
+                <Button
+                  kind="secondary"
+                  size="md"
+                  onClick={onCreateExemptionClick}
+                  disabled={selectedRowsCount === 0}
+                >
+                  Create exemption for Selected Applications
+                </Button>
+              )}
             </div>
+            {exemptionSelectionStatus && (
+              <AppNotification
+                className="legacy-inline-notification"
+                kind={exemptionSelectionStatus.kind}
+                title="Validation failed"
+                subtitle={exemptionSelectionStatus.message}
+                onCloseButtonClick={() => setExemptionSelectionStatus(null)}
+              />
+            )}
           </Tile>
         </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search results</h2>
-          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+        <section
+          className="legacy-search-section legacy-search-section--results"
+          aria-label="Search results"
+        >
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading federal application search results..."
-            totalItems={results.page.totalElements}
+            totalItems={
+              errorMessage || (loading && results.content.length === 0)
+                ? undefined
+                : results.page.totalElements
+            }
           >
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                  <TableHeader>Exemption type</TableHeader>
-                  <TableHeader>Exemption number</TableHeader>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => (
-                  <TableRow key={row.applicationNumber}>
-                    <TableCell>
-                      <Link
-                        className="cds--link"
-                        to={withCurrentSearch(`/federal/application/${row.applicationNumber}`)}
-                      >
-                        {row.federalApplicationNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell>{row.clientNumber}</TableCell>
-                    <TableCell>{row.reason}</TableCell>
-                    <TableCell>{row.receivedDate}</TableCell>
-                    <TableCell>{row.listingDate}</TableCell>
-                    <TableCell>{row.exemptionType || '-'}</TableCell>
-                    <TableCell>
-                      {row.exemptionNumber ? (
+            {errorMessage ? (
+              <EmptyState
+                role="alert"
+                title="Federal application search unavailable"
+                description={errorMessage}
+              />
+            ) : results.content.length > 0 ? (
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    {canCreateFederalExemption && (
+                      <TableHeader>
+                        <Checkbox
+                          id="selectAllCurrentPageFederalRows"
+                          hideLabel
+                          labelText="Select all eligible federal applications on this page"
+                          checked={allSelectableRowsAreSelected}
+                          disabled={selectableRows.length === 0}
+                          onChange={(_, payload) =>
+                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                          }
+                        />
+                      </TableHeader>
+                    )}
+                    {RESULT_COLUMNS.map((column) => (
+                      <TableHeader key={column.id}>{column.label}</TableHeader>
+                    ))}
+                    <TableHeader>Exemption type</TableHeader>
+                    <TableHeader>Exemption number</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {results.content.map((row) => (
+                    <TableRow key={row.applicationNumber}>
+                      {canCreateFederalExemption && (
+                        <TableCell>
+                          {row.eligibleForExemption && row.locked ? (
+                            <span
+                              className="federal-application-lock"
+                              role="status"
+                              aria-label={`Federal application ${row.federalApplicationNumber} is locked`}
+                              title="This application is currently locked"
+                            >
+                              <Locked size={16} aria-hidden="true" />
+                              Locked
+                            </span>
+                          ) : (
+                            <Checkbox
+                              id={`selectFederalRow-${row.applicationNumber}`}
+                              hideLabel
+                              labelText={`Select federal application ${row.federalApplicationNumber}`}
+                              checked={Boolean(selectedRowsById[row.applicationNumber])}
+                              disabled={!row.allowCreateExemption}
+                              onChange={(_, payload) =>
+                                toggleRowSelection(row, Boolean(payload.checked))
+                              }
+                            />
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell>
                         <Link
                           className="cds--link"
-                          to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                          to={withCurrentSearch(`/federal/application/${row.applicationNumber}`)}
                         >
-                          {row.exemptionNumber}
+                          {row.federalApplicationNumber}
                         </Link>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {results.content.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8}>
-                      No federal applications found for the selected criteria.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
+                      </TableCell>
+                      <TableCell>
+                        <StatusTag status={row.status} />
+                      </TableCell>
+                      <TableCell>{row.clientNumber}</TableCell>
+                      <TableCell>{row.reason}</TableCell>
+                      <TableCell>{row.receivedDate}</TableCell>
+                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell>{row.exemptionType || '-'}</TableCell>
+                      <TableCell>
+                        {row.exemptionNumber ? (
+                          <Link
+                            className="cds--link"
+                            to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                          >
+                            {row.exemptionNumber}
+                          </Link>
+                        ) : (
+                          '-'
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : !loading ? (
+              <EmptyState
+                title="No federal applications found"
+                description="No federal applications found for the selected criteria."
+              />
+            ) : null}
+            {!errorMessage && (!loading || results.content.length > 0) && (
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  clearSelection()
+                  setSearchParams(buildSearchParams(filters, page, nextPageSize))
+                }}
+              />
+            )}
           </SearchResultsTableFrame>
         </section>
       </Column>

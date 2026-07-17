@@ -1,0 +1,54 @@
+.lexis-unsaved-changes-modal .cds--modal-container {
+  border-radius: 0.5rem;
+}
+
+.lexis-unsaved-changes-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
+.lexis-unsaved-changes-modal--saving .cds--modal-close {
+  display: none;
+}
+
+.lexis-unsaved-changes-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  color: var(--cds-text-primary, #161616);
+}
+
+.lexis-unsaved-changes-modal__description {
+  margin: 0;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.lexis-unsaved-changes-modal__acknowledgement {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lexis-unsaved-changes-modal__acknowledgement p {
+  margin: 0;
+}
+
+.lexis-unsaved-changes-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-block-start: 1.5rem;
+}
+
+.lexis-unsaved-changes-modal__actions .cds--btn {
+  min-inline-size: 8.5rem;
+}
+
+@media (max-width: 671px) {
+  .lexis-unsaved-changes-modal__actions .cds--btn {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
+}

@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.security.LexisApiAuthorizationCustomizer;
 import ca.bc.gov.mof.lexis.security.Oauth2SecurityCustomizer;
 import ca.bc.gov.mof.lexis.security.CsrfCookieFilter;
 import ca.bc.gov.mof.lexis.security.CsrfSecurityCustomizer;
+import ca.bc.gov.mof.lexis.service.coordination.OptimisticLockHeaders;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,6 +61,7 @@ public class SecurityConfiguration {
     configuration.setAllowedOrigins(origins);
     configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
     configuration.setAllowedHeaders(List.of("*"));
+    configuration.setExposedHeaders(List.of(OptimisticLockHeaders.RECORD_VERSION, "ETag"));
     configuration.setAllowCredentials(true);
     configuration.setMaxAge(3600L);
 

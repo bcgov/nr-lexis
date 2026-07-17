@@ -68,6 +68,11 @@ public class ExemptionOracleService implements ExemptionService {
     return repository.findByExemptionNumber(exemptionNumber);
   }
 
+  @Override
+  public List<Long> findOrgUnitNumbers(String exemptionNumber) {
+    return repository.findOrgUnitNumbers(exemptionNumber);
+  }
+
   private ExemptionSearchCriteria normalizeCriteria(ExemptionSearchCriteria input) {
     if (input == null) {
       return new ExemptionSearchCriteria(
@@ -83,6 +88,7 @@ public class ExemptionOracleService implements ExemptionService {
           null,
           null,
           List.of(),
+          false,
           0,
           25);
     }
@@ -99,7 +105,9 @@ public class ExemptionOracleService implements ExemptionService {
     int size = Math.max(1, input.size());
 
     // Legacy parity: searching by applicant/owner implies ministerial exemptions.
-    if (exemptionType == null && (applicantClientNumber != null || ownerClientNumber != null)) {
+    if (exemptionType == null
+        && !input.includeBlanketOic()
+        && (applicantClientNumber != null || ownerClientNumber != null)) {
       exemptionType = EXEMPTION_TYPE_MINISTERIAL;
     }
 
@@ -116,6 +124,9 @@ public class ExemptionOracleService implements ExemptionService {
         input.listingFromDate(),
         input.listingToDate(),
         regionNumbers,
+        input.includeBlanketOic(),
+        input.excludeBlanketOic(),
+        trimToNull(input.sortField()),
         page,
         size);
   }

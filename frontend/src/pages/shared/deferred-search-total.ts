@@ -1,6 +1,7 @@
 import {
   buildPageDataCacheKey,
   getPageDataCache,
+  getPageDataCacheGeneration,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 
@@ -168,10 +169,15 @@ const prefetchSearchPage = <
     return
   }
 
+  const pageCacheGeneration = getPageDataCacheGeneration()
   pendingPagePrefetches.add(targetPageCacheKey)
   void search(targetRequest, { knownTotal: response.page.totalElements })
     .then((targetResponse) => {
-      setPageDataCache(targetPageCacheKey, withTotal(targetResponse, response.page.totalElements))
+      setPageDataCache(
+        targetPageCacheKey,
+        withTotal(targetResponse, response.page.totalElements),
+        pageCacheGeneration,
+      )
     })
     .catch((error) => onError?.(error))
     .finally(() => {

@@ -4,6 +4,13 @@ import type {
 } from '@/service/application-client-lookup-service'
 import type { ApplicationCodeOption } from '@/service/provincial-application-items-service'
 import type { SearchOption } from '@/service/search-options-service'
+import {
+  atMostOneDecimalFieldError,
+  firstValidationError,
+  maxNumericValueFieldError,
+  numericFieldError,
+  requiredFieldError,
+} from '@/pages/shared/create-form-utils'
 
 export const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
@@ -55,7 +62,24 @@ export const resolveClientContactName = (
 }
 
 export const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
-  productTypeCode === 'H' || productTypeCode === 'S'
+  ['H', 'S'].includes(productTypeCode.trim().toUpperCase())
+
+export const productTypeRequiresLogDetails = (productTypeCode: string): boolean =>
+  productTypeCode.trim().toUpperCase() === 'H'
+
+export const averageLogVolumeFieldError = (value: string): string | undefined =>
+  firstValidationError(
+    () => requiredFieldError(value, 'Average log volume'),
+    () => {
+      const parsed = Number(value.trim())
+      return value.trim() && Number.isFinite(parsed) && parsed < 0
+        ? 'Average log volume must be greater than or equal to 0.'
+        : null
+    },
+    () => numericFieldError(value, 'Average log volume'),
+    () => maxNumericValueFieldError(value, 99.9, 'Average log volume'),
+    () => atMostOneDecimalFieldError(value, 'Average log volume'),
+  )
 
 export const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
 

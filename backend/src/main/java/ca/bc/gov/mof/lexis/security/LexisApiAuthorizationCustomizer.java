@@ -20,6 +20,9 @@ public class LexisApiAuthorizationCustomizer
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry> {
 
   private static final String ACTION_LEXIS_AGENT_ADMIN = "/lexisAgentAdmin";
+  private static final String[] HEALTH_PROBE_PATTERNS = {
+    "/actuator/health/liveness", "/actuator/health/readiness"
+  };
   private static final String[] PROD_RTM_ONLY_SESSION_PATTERNS = {
     "/api/lexis/session/**",
     "/api/lexis/showWelcome",
@@ -67,6 +70,7 @@ public class LexisApiAuthorizationCustomizer
             authorize.requestMatchers(rule.patternsArray()).hasAuthority("LEXIS_ADMIN");
         case KNOWN_ROLE -> authorizeKnownRoles(authorize, rule);
         case ACTION -> authorizeAction(authorize, rule);
+        case ANY_ACTION -> authorizeAnyAction(authorize, rule);
       }
     }
 
@@ -77,6 +81,7 @@ public class LexisApiAuthorizationCustomizer
       AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
           authorize) {
     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
+    authorize.requestMatchers(HttpMethod.GET, HEALTH_PROBE_PATTERNS).permitAll();
     authorizeKnownRoles(authorize, PROD_RTM_ONLY_SESSION_PATTERNS);
     authorizeFixedAction(
         authorize, HttpMethod.GET, ACTION_LEXIS_AGENT_ADMIN, PROD_RTM_ONLY_GET_PATTERNS);
@@ -116,6 +121,23 @@ public class LexisApiAuthorizationCustomizer
                     authorizationService.canPerformAction(
                         getAuthorities(authentication.get()),
                         rule.requiredAction(context.getRequest().getParameter("actionMapping")))));
+  }
+
+  private void authorizeAnyAction(
+      AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+          authorize,
+      Rule rule) {
+    authorize
+        .requestMatchers(rule.method(), rule.patternsArray())
+        .access(
+            (authentication, context) -> {
+              List<String> authorities = getAuthorities(authentication.get());
+              return new AuthorizationDecision(
+                  rule.alternativeActions().stream()
+                      .anyMatch(
+                          action ->
+                              authorizationService.canPerformAction(authorities, action)));
+            });
   }
 
   private void authorizeFixedAction(

@@ -8,13 +8,7 @@ export type ApplicationReviewSearchFilters = {
   listingToDate: string
 }
 
-export type ApplicationReviewSearchSortField =
-  | 'applicationNumber'
-  | 'volume'
-  | 'speciesEndUse'
-  | 'listingDate'
-  | 'status'
-  | 'region'
+export type ApplicationReviewSearchSortField = 'applicationNumber' | 'listingDate' | 'regionCode'
 
 export type ApplicationReviewSearchItem = {
   applicationNumber: string

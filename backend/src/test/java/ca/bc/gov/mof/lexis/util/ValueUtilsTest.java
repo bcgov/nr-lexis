@@ -87,5 +87,8 @@ class ValueUtilsTest {
     assertThat(ValueUtils.parseDouble(null)).isNull();
     assertThat(ValueUtils.parseDouble(" ")).isNull();
     assertThat(ValueUtils.parseDouble("abc")).isNull();
+    assertThat(ValueUtils.parseDouble("NaN")).isNull();
+    assertThat(ValueUtils.parseDouble("Infinity")).isNull();
+    assertThat(ValueUtils.parseDouble("-Infinity")).isNull();
   }
 }

@@ -15,6 +15,9 @@ import {
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
+import EmptyState from '@/components/EmptyState'
+import PageHeader from '@/components/PageHeader'
+import TableFrame from '@/components/TableFrame'
 import { useAuth } from '@/context/auth/useAuth'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { countApplicationReviews } from '@/service/application-review-search-service'
@@ -180,6 +183,8 @@ const ProvincialPage = () => {
               applicationStatus: '',
               productTypeCode: '',
               region: [],
+              receivedFromDate: '',
+              receivedToDate: '',
               listingFromDate: '',
               listingToDate: '',
               applicantClientNumber: '',
@@ -198,6 +203,8 @@ const ProvincialPage = () => {
               packageNumber: '',
               exemptionNumber: '',
               region: [],
+              approvalFromDate: '',
+              approvalToDate: '',
               listFromDate: '',
               listToDate: '',
               exemptionTypeCode: '',
@@ -239,6 +246,7 @@ const ProvincialPage = () => {
               issuedToDate: '',
               permitStatus: '',
               permitNumber: '',
+              invoiceNumber: '',
               ownerClientNumber: '',
               applicantClientNumber: '',
             },
@@ -322,7 +330,10 @@ const ProvincialPage = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial</h1>
+        <PageHeader
+          title="Provincial workflows"
+          subtitle="Open provincial applications, exemptions, offers, permits, and review work."
+        />
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -384,49 +395,51 @@ const ProvincialPage = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Area</TableHeader>
-                <TableHeader>Description</TableHeader>
-                <TableHeader>Route</TableHeader>
-                <TableHeader>Total</TableHeader>
-                <TableHeader>Open</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visibleWorkflows.map((workflow) => {
-                const workflowTotal = workflow.metricKey ? totals[workflow.metricKey] : null
-
-                return (
-                  <TableRow key={workflow.id}>
-                    <TableCell>{workflow.title}</TableCell>
-                    <TableCell>{workflow.description}</TableCell>
-                    <TableCell>
-                      <code>{workflow.path}</code>
-                    </TableCell>
-                    <TableCell>
-                      {workflowTotal === null || !totalsLoaded
-                        ? '-'
-                        : workflowTotal.toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Button kind="primary" size="sm" onClick={() => navigate(workflow.path)}>
-                        Open
-                      </Button>
-                    </TableCell>
+          {visibleWorkflows.length > 0 ? (
+            <TableFrame ariaLabel="Provincial workflows table">
+              <Table useZebraStyles className="dashboard-data-table">
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Area</TableHeader>
+                    <TableHeader>Description</TableHeader>
+                    <TableHeader>Route</TableHeader>
+                    <TableHeader>Total</TableHeader>
+                    <TableHeader>Open</TableHeader>
                   </TableRow>
-                )
-              })}
-              {visibleWorkflows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5}>
-                    No provincial areas matched the current filters.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                </TableHead>
+                <TableBody>
+                  {visibleWorkflows.map((workflow) => {
+                    const workflowTotal = workflow.metricKey ? totals[workflow.metricKey] : null
+
+                    return (
+                      <TableRow key={workflow.id}>
+                        <TableCell>{workflow.title}</TableCell>
+                        <TableCell>{workflow.description}</TableCell>
+                        <TableCell>
+                          <code>{workflow.path}</code>
+                        </TableCell>
+                        <TableCell>
+                          {workflowTotal === null || !totalsLoaded
+                            ? '—'
+                            : workflowTotal.toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Button kind="primary" size="sm" onClick={() => navigate(workflow.path)}>
+                            Open
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </TableFrame>
+          ) : (
+            <EmptyState
+              title="No provincial workflows found"
+              description="No provincial areas matched the current filters."
+            />
+          )}
         </Tile>
       </Column>
     </Grid>

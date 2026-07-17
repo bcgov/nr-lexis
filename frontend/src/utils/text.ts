@@ -14,6 +14,24 @@ export const displayValue = (value: string | number | null | undefined): string 
   return String(value)
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export const displayAuditIdentity = (value: string | null | undefined): string => {
+  const normalized = value?.trim()
+  if (!normalized) {
+    return 'Not provided'
+  }
+
+  const separatorIndex = normalized.lastIndexOf('\\')
+  const identity = separatorIndex >= 0 ? normalized.slice(separatorIndex + 1) : normalized
+  if (!UUID_PATTERN.test(identity)) {
+    return normalized
+  }
+
+  const provider = separatorIndex >= 0 ? normalized.slice(0, separatorIndex).trim() : ''
+  return provider ? `${provider} user` : 'Not available'
+}
+
 export const ownerClientLabel = (clientNumber: string | null | undefined): string =>
   clientNumber ? `Owner ${clientNumber}` : ''
 

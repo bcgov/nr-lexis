@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  displayAuditIdentity,
   displayValue,
   isValidEmail,
   joinNonBlankText,
@@ -37,6 +38,13 @@ describe('text utilities', () => {
     expect(displayValue('')).toBe('Not provided')
     expect(displayValue(0)).toBe('0')
     expect(displayValue('DAR')).toBe('DAR')
+  })
+
+  it('does not expose opaque audit identifiers as authors', () => {
+    expect(displayAuditIdentity('IDIR\\JSMITH')).toBe('IDIR\\JSMITH')
+    expect(displayAuditIdentity('00000000-0000-4000-8000-000000000001')).toBe('Not available')
+    expect(displayAuditIdentity('BCSC\\00000000-0000-4000-8000-000000000002')).toBe('BCSC user')
+    expect(displayAuditIdentity(null)).toBe('Not provided')
   })
 
   it('formats optional owner client and region labels', () => {

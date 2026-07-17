@@ -64,13 +64,7 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
   },
   {
     path: '/admin/uploads',
-    requiredActions: [
-      '/lexisAgentAdmin',
-      '/fileApplicationUpload',
-      '/fileExemptionUpload',
-      '/filePermitUpload',
-      '/fileInvoiceUpload',
-    ],
+    requiredActions: ['/lexisAgentAdmin'],
     requiredActionsMatch: 'any',
   },
 ]
@@ -110,7 +104,7 @@ describe('Protected route access matrix', () => {
     expect(routePaths.some((path) => path.includes('advertising'))).toBe(false)
   })
 
-  it('does not expose retired provincial summary route', () => {
+  it('does not expose the replaced provincial summary route', () => {
     const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
       route.path.toLowerCase(),
     )

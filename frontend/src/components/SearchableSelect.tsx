@@ -52,7 +52,12 @@ export default function SearchableSelect({
       invalid={invalid}
       invalidText={invalidText}
       onBlur={onBlur}
-      onChange={({ selectedItem }) => onChange(selectedItem?.value ?? '')}
+      onChange={({ selectedItem }) => {
+        const nextValue = selectedItem?.value ?? ''
+        if (nextValue !== value) {
+          onChange(nextValue)
+        }
+      }}
     />
   )
 }

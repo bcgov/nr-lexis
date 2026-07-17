@@ -1,5 +1,13 @@
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type {
@@ -12,7 +20,7 @@ import {
   fetchProvincialApplicationDetail,
   fetchProvincialExemptionDetail,
 } from '@/service/lexis-detail-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -107,6 +115,11 @@ const applicationDetail: ProvincialApplicationDetail = {
   industryUser: false,
   readOnly: false,
   exemptionApprover: false,
+  canEditApplicationDetails: true,
+  canEditPackages: true,
+  canAddPackages: true,
+  canAddScales: true,
+  canUpdatePackageNumber: true,
   locked: false,
   packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
   remarks: [{ remarkId: 88, title: 'Note', remark: 'ok' }],
@@ -142,29 +155,134 @@ const exemptionDetail: ProvincialExemptionDetail = {
   remarks: [{ title: 'Remark', remark: 'ok' }],
 }
 
+const LocationProbe = () => {
+  const location = useLocation()
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
+}
+
+const renderApplicationDetail = () =>
+  render(
+    <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <Routes>
+        <Route
+          path="/provincial/application/:applicationNumber"
+          element={<ProvincialApplicationDetailsPage />}
+        />
+        <Route path="/provincial/offers/create" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+const openOffersTab = async () => {
+  await userEvent.click(await screen.findByRole('tab', { name: 'Offers' }))
+}
+
 describe('Detail Quick Action Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: defaultCanPerform }))
   })
 
-  it('does not expose the retired Create Offer shortcut on application detail', async () => {
+  it('creates an offer from an eligible application with application and package prefill', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        ...applicationDetail.packages,
+        { packageNumber: 'PKG-2', volume: 50, pieceCount: 3 },
+      ],
+    })
+
+    renderApplicationDetail()
+
+    await openOffersTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Create offer' }))
+
+    const target = await screen.findByTestId('location')
+    const [, query = ''] = target.textContent?.split('?') ?? []
+    const params = new URLSearchParams(query)
+    expect(target).toHaveTextContent('/provincial/offers/create?')
+    expect(params.get('applicationNumber')).toBe('321')
+    expect(params.get('packageNumber')).toBe('PKG-1')
+    expect(params.get('packageNumbers')).toBe('PKG-1,PKG-2')
+    expect(params.get('offeringClientNumber')).toBeNull()
+    expect(params.get('companyName')).toBeNull()
+    expect(params.get('contactName')).toBeNull()
+    expect(params.get('region')).toBeNull()
+    expect(params.get('pickupLocation')).toBeNull()
+  })
+
+  it('hides Create offer without the createOffer action', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => defaultCanPerform(action) && action !== 'createOffer',
+      }),
+    )
     mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
 
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
+    renderApplicationDetail()
+    await openOffersTab()
+
+    expect(screen.queryByRole('button', { name: 'Create offer' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['an industry user', { ...applicationDetail, industryUser: true }, ['ADMIN']],
+    ['a Provincial Submitter', applicationDetail, ['PROVINCIAL_SUBMITTER_00011122']],
+    [
+      'an application without eligible packages',
+      {
+        ...applicationDetail,
+        packages: [{ packageNumber: '   ', volume: 100, pieceCount: 5 }],
+      },
+      ['ADMIN'],
+    ],
+    [
+      'an application whose workflow disallows offers',
+      { ...applicationDetail, canCreateOffers: false },
+      ['ADMIN'],
+    ],
+  ])('hides Create offer for %s', async (_, detail, roles) => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles }),
+        canPerform: defaultCanPerform,
+      }),
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(detail)
+
+    renderApplicationDetail()
+    await openOffersTab()
+
+    expect(screen.queryByRole('button', { name: 'Create offer' })).not.toBeInTheDocument()
+  })
+
+  it('routes Create offer through the unsaved-changes guard', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          defaultCanPerform(action) || action === '/applicationRemarks',
+      }),
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: <ProvincialApplicationDetailsPage />,
+        },
+        { path: '/provincial/offers/create', element: <LocationProbe /> },
+      ],
+      { initialEntries: ['/provincial/application/321'] },
     )
 
-    expect(await screen.findByRole('tab', { name: 'Documents' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Create offer/i })).not.toBeInTheDocument()
+    render(<RouterProvider router={router} />)
+    await userEvent.click(await screen.findByRole('tab', { name: 'Remarks' }))
+    await userEvent.type(screen.getByLabelText('New Remark'), 'Unsaved draft')
+    await openOffersTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Create offer' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/provincial/application/321')
   })
 
   it('does not expose the retired Create Permit action on exemption detail', async () => {

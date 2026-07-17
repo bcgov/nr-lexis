@@ -7,6 +7,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseNonNegativeLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
@@ -14,11 +15,17 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
+import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -36,12 +43,15 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -50,6 +60,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/lexis")
@@ -93,11 +105,14 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_DELETE_SCALE_BY_ID = "deleteScaleById";
   private static final String ACTION_DELETE_PACKAGE_BY_ID = "deletePackageById";
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String LEGACY_ACTION_APPLICATION_DETAILS = "/applicationDetails";
+  private static final String LEGACY_ACTION_CHANGE_APPLICANT_TYPE = "/changeApplicantType";
   private static final String LEGACY_ACTION_APPLICATION_REMARKS = "/applicationRemarks";
   private static final String LEGACY_ACTION_APPLICATIONS_REVIEW = "/applicationsReview";
-  private static final String LEGACY_ACTION_FILE_APPLICATION_UPLOAD = "/fileApplicationUpload";
+  private static final String LEGACY_ACTION_PERMIT_DETAILS = "/permitDetails";
   private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
   private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
+  private static final String APPLICATION_APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final Set<String> APPLICATION_DOCUMENT_DELETE_ROLES =
@@ -113,6 +128,10 @@ public class ApplicationDetailsRpcController {
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
   private final ApplicationEditLockService editLockService;
+  private final ProvincialAuthorizationService provincialAuthorizationService;
+  private final ApplicationEditPolicyService applicationEditPolicyService;
+  private final ApplicationPermitOperationCoordinator operationCoordinator;
+  private LexisPrincipalService principalService;
 
   public ApplicationDetailsRpcController(
       ObjectProvider<ApplicationDetailsRpcService> serviceProvider,
@@ -120,13 +139,24 @@ public class ApplicationDetailsRpcController {
       ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider,
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService,
-      ApplicationEditLockService editLockService) {
+      ApplicationEditLockService editLockService,
+      ProvincialAuthorizationService provincialAuthorizationService,
+      ApplicationEditPolicyService applicationEditPolicyService,
+      ApplicationPermitOperationCoordinator operationCoordinator) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
     this.applicationReviewServiceProvider = applicationReviewServiceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
     this.editLockService = editLockService;
+    this.provincialAuthorizationService = provincialAuthorizationService;
+    this.applicationEditPolicyService = applicationEditPolicyService;
+    this.operationCoordinator = operationCoordinator;
+  }
+
+  @Autowired
+  void setLexisPrincipalService(LexisPrincipalService principalService) {
+    this.principalService = principalService;
   }
 
   @GetMapping("/rpc/application-details/document-details")
@@ -137,13 +167,25 @@ public class ApplicationDetailsRpcController {
       LOGGER.warn("Application details RPC service unavailable - returning no content for document details");
       return ResponseEntity.noContent().build();
     }
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    Authentication authentication = currentAuthentication();
+    requireApplicationAccess(parsedApplicationNumber, authentication);
 
     List<DocumentDetailsResponseDto> response =
-        service.getDocumentDetails(parsePositiveLong(applicationNumber)).stream()
+        service.getDocumentDetails(parsedApplicationNumber).stream()
+            .filter(
+                item ->
+                    canAccessApplicationDocument(
+                        item, parsedApplicationNumber, authentication))
             .map(
                 item ->
                     new DocumentDetailsResponseDto(
-                        item.name(), item.description(), item.type(), item.id()))
+                        item.name(),
+                        item.description(),
+                        item.type(),
+                        item.id(),
+                        item.source(),
+                        item.deletable()))
             .toList();
     return ResponseEntity.ok(response);
   }
@@ -155,17 +197,34 @@ public class ApplicationDetailsRpcController {
   }
 
   @GetMapping("/rpc/application-details/document")
-  public ResponseEntity<byte[]> getDocument(
+  public ResponseEntity<StreamingResponseBody> streamDocument(
       @RequestParam(name = "fileId", required = false) String fileId,
-      @RequestParam(name = "fileName", required = false) String fileName) {
+      @RequestParam(name = "fileName", required = false) String fileName,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for get document");
       return ResponseEntity.noContent().build();
     }
 
+    Long parsedFileId = parsePositiveLong(fileId);
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    Authentication authentication = currentAuthentication();
+    requireApplicationAccess(parsedApplicationNumber, authentication);
+    ApplicationDetailsRpcService.DocumentItem document =
+        service
+            .findDocumentForApplication(parsedFileId, parsedApplicationNumber)
+            .filter(
+                item ->
+                    canAccessApplicationDocument(
+                        item, parsedApplicationNumber, authentication))
+            .orElseThrow(
+                () ->
+                    new AccessDeniedException(
+                        "Document does not belong to an accessible source for the supplied application."));
+
     return service
-        .getDocument(parsePositiveLong(fileId))
+        .streamDocument(document.id())
         .map(
             content -> {
               HttpHeaders headers = new HttpHeaders();
@@ -177,16 +236,19 @@ public class ApplicationDetailsRpcController {
                         .build());
               }
               headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-              return ResponseEntity.ok().headers(headers).body(content.bytes());
+              StreamingResponseBody body =
+                  TemporaryDocumentStreamingBody.stream(content::writeTo);
+              return ResponseEntity.ok().headers(headers).body(body);
             })
         .orElseGet(() -> ResponseEntity.noContent().build());
   }
 
   @GetMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_DOCUMENT)
-  public ResponseEntity<byte[]> getDocumentLegacy(
+  public ResponseEntity<StreamingResponseBody> getDocumentLegacy(
       @RequestParam(name = "fileID", required = false) String fileId,
-      @RequestParam(name = "fileName", required = false) String fileName) {
-    return getDocument(fileId, fileName);
+      @RequestParam(name = "fileName", required = false) String fileName,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    return streamDocument(fileId, fileName, applicationNumber);
   }
 
   @DeleteMapping("/rpc/application-details/document")
@@ -195,28 +257,52 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
-    if (!canPerform(roles, LEGACY_ACTION_FILE_APPLICATION_UPLOAD)) {
+    if (!hasApplicationDocumentDeleteRole(roles)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
-
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
-      LOGGER.warn("Application details RPC service unavailable - returning no content for remove document");
-      return ResponseEntity.noContent().build();
+      LOGGER.warn("Application details RPC service unavailable - rejecting remove document");
+      return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
     }
     Long parsedDocumentId = parsePositiveLong(documentId);
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
-    if (!canRemoveApplicationDocument(service, parsedDocumentId, parsedApplicationNumber, roles)) {
+    requireApplicationAccess(parsedApplicationNumber, authentication);
+    if (!applicationDocumentCanBeRemovedFromApplication(
+        service, parsedDocumentId, parsedApplicationNumber)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
-    ApplicationEditLockDto lock =
-        editLockService.snapshot(parsedApplicationNumber, userId(authentication), false);
+    ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
     if (lock.locked()) {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(new RemoveDocumentResponseDto("false"));
     }
+    if (!canRemoveApplicationDocumentWithCurrentStatus(
+        service, parsedApplicationNumber, roles)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
-    boolean removed = service.removeDocument(parsedDocumentId);
-    return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));
+    return operationCoordinator.executeApplicationLocalMutation(
+        parsedApplicationNumber,
+        () -> {
+          requireApplicationAccess(parsedApplicationNumber, authentication);
+          if (!applicationDocumentCanBeRemovedFromApplication(
+              service, parsedDocumentId, parsedApplicationNumber)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+          }
+          ApplicationEditLockDto currentLock =
+              requireEditable(parsedApplicationNumber, authentication);
+          if (currentLock.locked()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new RemoveDocumentResponseDto("false"));
+          }
+          if (!canRemoveApplicationDocumentWithCurrentStatus(
+              service, parsedApplicationNumber, roles)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+          }
+          boolean removed = service.removeDocument(parsedDocumentId);
+          return ResponseEntity.ok(
+              new RemoveDocumentResponseDto(Boolean.toString(removed)));
+        });
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_REMOVE_DOCUMENT)
@@ -229,12 +315,18 @@ public class ApplicationDetailsRpcController {
 
   @GetMapping("/rpc/application-details/remark")
   public ResponseEntity<GetRemarkResponseDto> getRemark(
-      @RequestParam(name = "remarkId", required = false) String remarkId) {
+      @RequestParam(name = "remarkId", required = false) String remarkId,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPLICATION_REMARKS)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for get remark");
       return ResponseEntity.noContent().build();
     }
+
+    requireRemarkAccess(service, parsePositiveLong(remarkId), null, authentication);
 
     return service
         .getRemark(parsePositiveLong(remarkId))
@@ -244,8 +336,9 @@ public class ApplicationDetailsRpcController {
 
   @GetMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_REMARK)
   public ResponseEntity<GetRemarkResponseDto> getRemarkLegacy(
-      @RequestParam(name = "remarkId", required = false) String remarkId) {
-    return getRemark(remarkId);
+      @RequestParam(name = "remarkId", required = false) String remarkId,
+      Authentication authentication) {
+    return getRemark(remarkId, authentication);
   }
 
   @PostMapping("/rpc/application-details/remark")
@@ -265,29 +358,57 @@ public class ApplicationDetailsRpcController {
     }
 
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    requireApplicationAccess(parsedApplicationNumber, authentication);
+    Long parsedRemarkId = parsePositiveLong(remarkId);
+    if (parsedRemarkId != null) {
+      requireRemarkAccess(service, parsedRemarkId, parsedApplicationNumber, authentication);
+    }
     ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
     if (lock.locked()) {
       return ResponseEntity.status(HttpStatus.CONFLICT)
           .body(new PersistRemarkResponseDto("locked", null, null, lock.message(), lock.message(), null));
     }
 
-    String userId = authentication == null ? null : authentication.getName();
-    return service
-        .persistRemark(remarkId, parsedApplicationNumber, remarkBody, userId)
-        .map(
-            persisted ->
-                ResponseEntity.ok(
+    String userId = userId(authentication);
+    return operationCoordinator.executeApplicationLocalMutation(
+        parsedApplicationNumber,
+        () -> {
+          requireApplicationAccess(parsedApplicationNumber, authentication);
+          if (parsedRemarkId != null) {
+            requireRemarkAccess(
+                service, parsedRemarkId, parsedApplicationNumber, authentication);
+          }
+          ApplicationEditLockDto currentLock =
+              requireEditable(parsedApplicationNumber, authentication);
+          if (currentLock.locked()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(
                     new PersistRemarkResponseDto(
-                        "ok",
-                        persisted.date(),
-                        persisted.user(),
-                        persisted.displayRemark(),
-                        persisted.remark(),
-                        persisted.remarkId())))
-        .orElseGet(
-            () ->
-                ResponseEntity.ok(
-                    new PersistRemarkResponseDto("error", null, null, null, null, null)));
+                        "locked",
+                        null,
+                        null,
+                        currentLock.message(),
+                        currentLock.message(),
+                        null));
+          }
+          return service
+              .persistRemark(remarkId, parsedApplicationNumber, remarkBody, userId)
+              .map(
+                  persisted ->
+                      ResponseEntity.ok(
+                          new PersistRemarkResponseDto(
+                              "ok",
+                              persisted.date(),
+                              persisted.user(),
+                              persisted.displayRemark(),
+                              persisted.remark(),
+                              persisted.remarkId())))
+              .orElseGet(
+                  () ->
+                      ResponseEntity.ok(
+                          new PersistRemarkResponseDto(
+                              "error", null, null, null, null, null)));
+        });
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_PERSIST_REMARK)
@@ -309,6 +430,7 @@ public class ApplicationDetailsRpcController {
     }
 
     Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    requireApplicationAccess(applicationNumber);
     boolean applicationChanged =
         service
             .getApplicationSummarySnapshot(applicationNumber)
@@ -332,7 +454,9 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.ok(new CheckUnusedVolumeResponseDto(true));
     }
 
-    boolean volumeUsedInd = service.isApplicationVolumeUsed(parsePositiveLong(applicationNumber));
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    requireApplicationAccess(parsedApplicationNumber);
+    boolean volumeUsedInd = service.isApplicationVolumeUsed(parsedApplicationNumber);
     return ResponseEntity.ok(new CheckUnusedVolumeResponseDto(volumeUsedInd));
   }
 
@@ -347,7 +471,9 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       HttpServletRequest request,
       Authentication authentication) {
-    editLockService.release(parsePositiveLong(applicationNumber), userId(authentication));
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    requireApplicationAccess(parsedApplicationNumber, authentication);
+    editLockService.release(parsedApplicationNumber, userId(authentication));
     if (request != null) {
       var session = request.getSession(false);
       if (session != null) {
@@ -398,15 +524,93 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
+    String requestedApplicantType =
+        trimToNull(first(parameters, "ownerApplicantType", "applicantType"));
+    if (!canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)
+        && requestedApplicantType != null
+        && !APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(requestedApplicantType)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for add application");
       return ResponseEntity.noContent().build();
     }
 
-    String userId = authentication == null ? null : authentication.getName();
+    String userId = userId(authentication);
+    ApplicationDetailsRpcService.CreateApplicationRequest createRequest =
+        withScopedSubmitterOwnerIdentity(
+            toCreateApplicationRequest(parameters), authentication);
+    provincialAuthorizationService.requireOrgUnit(
+        authentication, createRequest.orgUnitNumber(), OrgUnitSurface.APPLICATION_WRITE);
+    String exemptionNumber = createRequest.exemptionNumber();
+    if (exemptionNumber != null) {
+      provincialAuthorizationService.requireExemption(authentication, exemptionNumber);
+    }
+    if (!provincialAuthorizationService.canCreateForClient(
+        authentication, createRequest.ownerClientNumber(), createRequest.agentClientNumber())) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    if (exemptionNumber == null) {
+      return persistNewApplication(service, createRequest, userId);
+    }
+
+    return operationCoordinator.executeRootCreateKnownAggregate(
+        List.of(exemptionNumber),
+        List.of(),
+        List.of(),
+        () -> {
+          if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+          }
+          provincialAuthorizationService.requireOrgUnit(
+              authentication,
+              createRequest.orgUnitNumber(),
+              OrgUnitSurface.APPLICATION_WRITE);
+          provincialAuthorizationService.requireExemption(
+              authentication, exemptionNumber);
+          if (!provincialAuthorizationService.canCreateForClient(
+              authentication,
+              createRequest.ownerClientNumber(),
+              createRequest.agentClientNumber())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+          }
+          boolean releaseExemptionLock =
+              acquireExemptionLockForMutation(exemptionNumber, authentication);
+          try {
+            return persistNewApplication(service, createRequest, userId);
+          } finally {
+            if (releaseExemptionLock) {
+              editLockService.releaseExemption(exemptionNumber, userId);
+            }
+          }
+        });
+  }
+
+  private boolean acquireExemptionLockForMutation(
+      String exemptionNumber, Authentication authentication) {
+    String currentUser = userId(authentication);
+    ApplicationEditLockDto previous =
+        editLockService.snapshotExemption(exemptionNumber, currentUser, false);
+    ApplicationEditLockDto acquired =
+        editLockService.acquireExemption(
+            exemptionNumber, currentUser, currentUser, false);
+    if (acquired == null || acquired.locked()) {
+      throw new EditLockConflictException(
+          acquired == null
+              ? "The exemption edit lock could not be acquired."
+              : acquired.message());
+    }
+    return previous == null || !previous.heldByCurrentUser();
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> persistNewApplication(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.CreateApplicationRequest createRequest,
+      String userId) {
     ApplicationDetailsRpcService.CreateApplicationResult result =
-        service.addApplication(toCreateApplicationRequest(parameters), userId);
+        service.addApplication(createRequest, userId);
     return ResponseEntity.ok(
         new ApplicationPersistenceResponseDto(
             result.valid(),
@@ -437,28 +641,64 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
+    ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
+        toApplicationSummaryUpdateRequest(parameters);
+    if (trimToNull(request.applicantTypeCode()) != null
+        && !canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for update application");
       return ResponseEntity.noContent().build();
     }
 
-    String userId = authentication == null ? null : authentication.getName();
-    ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
-        toApplicationSummaryUpdateRequest(parameters);
+    String userId = userId(authentication);
+    provincialAuthorizationService.requireOrgUnit(
+        authentication, request.orgUnitNumber(), OrgUnitSurface.APPLICATION_WRITE);
+    requireApplicationAccess(request.applicationNumber(), authentication);
+    if (!provincialAuthorizationService.canCreateForClient(
+        authentication, request.ownerClientNumber(), request.agentClientNumber())) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    applicationEditPolicyService.requireSummaryEdit(
+        authentication, service, request.applicationNumber());
     ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
     if (lock.locked()) {
       return applicationPersistenceLockConflict(lock, request.applicationNumber());
     }
-    ApplicationDetailsRpcService.CreateApplicationResult result =
-        service.updateApplicationSummary(request, userId);
-    return ResponseEntity.ok(
-        new ApplicationPersistenceResponseDto(
-            result.valid(),
-            result.message(),
-            result.applicationNumber(),
-            result.errors(),
-            result.warnings()));
+    return operationCoordinator.executeApplicationMutation(
+        request.applicationNumber(),
+        () -> service.getPermitNumbersForApplicationMutation(request.applicationNumber()),
+        () -> {
+          provincialAuthorizationService.requireOrgUnit(
+              authentication, request.orgUnitNumber(), OrgUnitSurface.APPLICATION_WRITE);
+          requireApplicationAccess(request.applicationNumber(), authentication);
+          if (!provincialAuthorizationService.canCreateForClient(
+              authentication,
+              request.ownerClientNumber(),
+              request.agentClientNumber())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+          }
+          applicationEditPolicyService.requireSummaryEdit(
+              authentication, service, request.applicationNumber());
+          ApplicationEditLockDto currentLock =
+              requireEditable(request.applicationNumber(), authentication);
+          if (currentLock.locked()) {
+            return applicationPersistenceLockConflict(
+                currentLock, request.applicationNumber());
+          }
+          ApplicationDetailsRpcService.CreateApplicationResult result =
+              service.updateApplicationSummary(request, userId);
+          return ResponseEntity.ok(
+              new ApplicationPersistenceResponseDto(
+                  result.valid(),
+                  result.message(),
+                  result.applicationNumber(),
+                  result.errors(),
+                  result.warnings()));
+        });
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_UPDATE_APPLICATION)
@@ -472,7 +712,7 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<ApplicationSummaryResponseDto> getApplicationSummary(
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPLICATION_DETAILS)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -481,6 +721,8 @@ public class ApplicationDetailsRpcController {
       LOGGER.warn("Application details RPC service unavailable - returning no content for application summary");
       return ResponseEntity.noContent().build();
     }
+
+    requireApplicationAccess(parsePositiveLong(applicationNumber), authentication);
 
     return service
         .getApplicationSummarySnapshot(parsePositiveLong(applicationNumber))
@@ -492,6 +734,7 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<ApplicationClientDataResponseDto> getClientData(
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
       @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    requireClientAccess(clientNumber);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application client data");
@@ -520,6 +763,7 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "applicantType", required = false) String applicantType) {
+    requireClientAccess(clientNumber);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application client locations");
@@ -527,8 +771,12 @@ public class ApplicationDetailsRpcController {
     }
 
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     ApplicationDetailsRpcService.ApplicationClientSnapshot snapshot =
-        service == null ? null : service.getApplicationClientSnapshot(parsePositiveLong(applicationNumber)).orElse(null);
+        service == null ? null : service.getApplicationClientSnapshot(parsedApplicationNumber).orElse(null);
+    if (parsedApplicationNumber != null) {
+      requireApplicationAccess(parsedApplicationNumber, currentAuthentication());
+    }
     List<ApplicationClientLocationResponseDto> response =
         clientLookupService.getClientLocations(clientNumber).stream()
             .map(
@@ -555,6 +803,7 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "applicantType", required = false) String applicantType) {
+    requireClientAccess(clientNumber);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application contacts");
@@ -562,8 +811,12 @@ public class ApplicationDetailsRpcController {
     }
 
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     ApplicationDetailsRpcService.ApplicationClientSnapshot snapshot =
-        service == null ? null : service.getApplicationClientSnapshot(parsePositiveLong(applicationNumber)).orElse(null);
+        service == null ? null : service.getApplicationClientSnapshot(parsedApplicationNumber).orElse(null);
+    if (parsedApplicationNumber != null) {
+      requireApplicationAccess(parsedApplicationNumber, currentAuthentication());
+    }
     List<ClientLookupService.ClientContact> contacts =
         resolveApplicationContacts(clientLookupService, clientNumber, clientLocationCode, applicantType, snapshot);
     ClientLookupService.ClientData data =
@@ -719,6 +972,8 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    requireApplicationAccess(parsePositiveLong(applicationNumber));
+
     return service
         .getSelectedEndUse(parsePositiveLong(applicationNumber))
         .map(value -> ResponseEntity.ok(new SelectedEndUseResponseDto(true, value)))
@@ -739,6 +994,8 @@ public class ApplicationDetailsRpcController {
       LOGGER.warn("Application details RPC service unavailable - returning no content for package selected end use");
       return ResponseEntity.noContent().build();
     }
+
+    requirePackageAccess(service, packageNumber, null);
 
     return service
         .getPackageSelectedEndUse(packageNumber)
@@ -761,6 +1018,8 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    requireApplicationAccess(parsePositiveLong(applicationNumber));
+
     return ResponseEntity.ok(
         service.getSpeciesForApplication(parsePositiveLong(applicationNumber)).stream()
             .map(this::toApplicationSpeciesEndUseResponse)
@@ -781,6 +1040,8 @@ public class ApplicationDetailsRpcController {
       LOGGER.warn("Application details RPC service unavailable - returning no content for package species");
       return ResponseEntity.noContent().build();
     }
+
+    requirePackageAccess(service, packageNumber, null);
 
     return ResponseEntity.ok(
         service.getSpeciesForPackage(packageNumber).stream()
@@ -803,6 +1064,8 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    requireApplicationAccess(parsePositiveLong(applicationNumber));
+
     return ResponseEntity.ok(
         service.getUniqueScalesForApplication(parsePositiveLong(applicationNumber)).stream()
             .map(item -> new ApplicationScaleResponseDto(item.timberMark()))
@@ -819,23 +1082,35 @@ public class ApplicationDetailsRpcController {
 
   @GetMapping("/rpc/application-details/permits")
   public ResponseEntity<List<ApplicationPermitResponseDto>> findPermits(
-      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      Authentication authentication) {
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for application permits");
       return ResponseEntity.noContent().build();
     }
 
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    requireApplicationAccess(parsedApplicationNumber, authentication);
+    boolean canViewPermitDetails =
+        canPerform(authentication, LEGACY_ACTION_PERMIT_DETAILS);
+
     return ResponseEntity.ok(
-        service.findPermits(parsePositiveLong(applicationNumber)).stream()
+        service.findPermits(parsedApplicationNumber).stream()
+            .filter(
+                item ->
+                    canViewPermitDetails
+                        && provincialAuthorizationService.canAccessPermit(
+                            authentication, item.permitNumber()))
             .map(item -> new ApplicationPermitResponseDto(item.permitNumber(), item.permitStatusDescription()))
             .toList());
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_FIND_PERMIT)
   public ResponseEntity<List<ApplicationPermitResponseDto>> findPermitLegacy(
-      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
-    return findPermits(applicationNumber);
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      Authentication authentication) {
+    return findPermits(applicationNumber, authentication);
   }
 
   @GetMapping("/rpc/application-details/package-scales")
@@ -846,6 +1121,8 @@ public class ApplicationDetailsRpcController {
       LOGGER.warn("Application details RPC service unavailable - returning no content for package scales");
       return ResponseEntity.noContent().build();
     }
+
+    requirePackageAccess(service, packageNumber, null);
 
     return ResponseEntity.ok(
         service.getScalesForPackage(packageNumber).stream()
@@ -868,6 +1145,8 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    requirePackageAccess(service, packageNumber, null);
+
     return ResponseEntity.ok(toPackageDetailsResponse(service.getPackageDetails(packageNumber)));
   }
 
@@ -887,8 +1166,11 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    String resolvedScaleId = firstTrimmedNonBlank(scaleDetailId, scaleId);
+    requireScaleAccess(service, resolvedScaleId, null);
+
     return ResponseEntity.ok(
-        toScaleDetailResponse(service.getScaleById(firstTrimmedNonBlank(scaleDetailId, scaleId))));
+        toScaleDetailResponse(service.getScaleById(resolvedScaleId)));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SCALE_BY_ID)
@@ -907,7 +1189,11 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    return ResponseEntity.ok(toPackageValidityResponse(service.isPackageValid(packageNumber)));
+    ApplicationDetailsRpcService.PackageValidityItem validity = service.isPackageValid(packageNumber);
+    if (!validity.valid()) {
+      requirePackageAccess(service, packageNumber, null);
+    }
+    return ResponseEntity.ok(toPackageValidityResponse(validity));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_IS_PACKAGE_VALID)
@@ -931,13 +1217,30 @@ public class ApplicationDetailsRpcController {
     }
 
     ApplicationDetailsRpcService.PackageMutationRequest request = toPackageMutationRequest(parameters);
+    requireApplicationAccess(request.applicationNumber(), authentication);
+    applicationEditPolicyService.requirePackageAddOrDelete(
+        authentication, service, request.applicationNumber());
     ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
     if (lock.locked()) {
       return packagePersistenceLockConflict(lock);
     }
 
-    return ResponseEntity.ok(
-        toPackagePersistenceResponse(service.addPackage(request, userId(authentication))));
+    return operationCoordinator.executeApplicationMutation(
+        request.applicationNumber(),
+        () -> service.getPermitNumbersForApplicationMutation(request.applicationNumber()),
+        () -> {
+          requireApplicationAccess(request.applicationNumber(), authentication);
+          applicationEditPolicyService.requirePackageAddOrDelete(
+              authentication, service, request.applicationNumber());
+          ApplicationEditLockDto currentLock =
+              requireEditable(request.applicationNumber(), authentication);
+          if (currentLock.locked()) {
+            return packagePersistenceLockConflict(currentLock);
+          }
+          return ResponseEntity.ok(
+              toPackagePersistenceResponse(
+                  service.addPackage(request, userId(authentication))));
+        });
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_ADD_PACKAGE_TO_APPLICATION)
@@ -962,13 +1265,41 @@ public class ApplicationDetailsRpcController {
     }
 
     ApplicationDetailsRpcService.PackageMutationRequest request = toPackageMutationRequest(parameters);
+    requireApplicationAccess(request.applicationNumber(), authentication);
+    requirePackageAccess(service, request.packageNumber(), request.applicationNumber());
+    applicationEditPolicyService.requirePackageEdit(
+        authentication, service, request.applicationNumber());
+    if (isPackageNumberChange(request.packageNumber(), request.newPackageNumber())) {
+      applicationEditPolicyService.requirePackageNumberUpdate(
+          authentication, service, request.applicationNumber());
+    }
     ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
     if (lock.locked()) {
       return packagePersistenceLockConflict(lock);
     }
 
-    return ResponseEntity.ok(
-        toPackagePersistenceResponse(service.updatePackage(request, userId(authentication))));
+    return operationCoordinator.executeApplicationMutation(
+        request.applicationNumber(),
+        () -> service.getPermitNumbersForApplicationMutation(request.applicationNumber()),
+        () -> {
+          requireApplicationAccess(request.applicationNumber(), authentication);
+          requirePackageAccess(
+              service, request.packageNumber(), request.applicationNumber());
+          applicationEditPolicyService.requirePackageEdit(
+              authentication, service, request.applicationNumber());
+          if (isPackageNumberChange(request.packageNumber(), request.newPackageNumber())) {
+            applicationEditPolicyService.requirePackageNumberUpdate(
+                authentication, service, request.applicationNumber());
+          }
+          ApplicationEditLockDto currentLock =
+              requireEditable(request.applicationNumber(), authentication);
+          if (currentLock.locked()) {
+            return packagePersistenceLockConflict(currentLock);
+          }
+          return ResponseEntity.ok(
+              toPackagePersistenceResponse(
+                  service.updatePackage(request, userId(authentication))));
+        });
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_UPDATE_PACKAGE)
@@ -993,13 +1324,33 @@ public class ApplicationDetailsRpcController {
     }
 
     ApplicationDetailsRpcService.ScaleMutationRequest request = toScaleMutationRequest(parameters);
+    requireApplicationAccess(request.applicationNumber(), authentication);
+    requirePackageAccess(service, request.packageNumber(), request.applicationNumber());
+    applicationEditPolicyService.requireScaleAddOrDelete(
+        authentication, service, request.applicationNumber());
     ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
     if (lock.locked()) {
       return scalePersistenceLockConflict(lock);
     }
 
-    return ResponseEntity.ok(
-        toScalePersistenceResponse(service.addScaleToPackage(request, userId(authentication))));
+    return operationCoordinator.executeApplicationMutation(
+        request.applicationNumber(),
+        () -> service.getPermitNumbersForApplicationMutation(request.applicationNumber()),
+        () -> {
+          requireApplicationAccess(request.applicationNumber(), authentication);
+          requirePackageAccess(
+              service, request.packageNumber(), request.applicationNumber());
+          applicationEditPolicyService.requireScaleAddOrDelete(
+              authentication, service, request.applicationNumber());
+          ApplicationEditLockDto currentLock =
+              requireEditable(request.applicationNumber(), authentication);
+          if (currentLock.locked()) {
+            return scalePersistenceLockConflict(currentLock);
+          }
+          return ResponseEntity.ok(
+              toScalePersistenceResponse(
+                  service.addScaleToPackage(request, userId(authentication))));
+        });
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_ADD_SCALE_TO_PACKAGE)
@@ -1024,13 +1375,34 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    ApplicationEditLockDto lock = requireEditable(parsePositiveLong(applicationNumber), authentication);
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    requireApplicationAccess(parsedApplicationNumber, authentication);
+    requireScaleAccess(service, scaleId, parsedApplicationNumber);
+    applicationEditPolicyService.requireScaleAddOrDelete(
+        authentication, service, parsedApplicationNumber);
+    ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
     if (lock.locked()) {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(new DeleteResponseDto(false));
     }
 
-    return ResponseEntity.ok(
-        new DeleteResponseDto(service.deleteScaleById(scaleId, userId(authentication))));
+    return operationCoordinator.executeApplicationMutation(
+        parsedApplicationNumber,
+        () -> service.getPermitNumbersForApplicationMutation(parsedApplicationNumber),
+        () -> {
+          requireApplicationAccess(parsedApplicationNumber, authentication);
+          requireScaleAccess(service, scaleId, parsedApplicationNumber);
+          applicationEditPolicyService.requireScaleAddOrDelete(
+              authentication, service, parsedApplicationNumber);
+          ApplicationEditLockDto currentLock =
+              requireEditable(parsedApplicationNumber, authentication);
+          if (currentLock.locked()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new DeleteResponseDto(false));
+          }
+          return ResponseEntity.ok(
+              new DeleteResponseDto(
+                  service.deleteScaleById(scaleId, userId(authentication))));
+        });
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_DELETE_SCALE_BY_ID)
@@ -1056,13 +1428,34 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    ApplicationEditLockDto lock = requireEditable(parsePositiveLong(applicationNumber), authentication);
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    requireApplicationAccess(parsedApplicationNumber, authentication);
+    requirePackageAccess(service, packageNumber, parsedApplicationNumber);
+    applicationEditPolicyService.requirePackageAddOrDelete(
+        authentication, service, parsedApplicationNumber);
+    ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
     if (lock.locked()) {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(new DeleteResponseDto(false));
     }
 
-    return ResponseEntity.ok(
-        new DeleteResponseDto(service.deletePackageById(packageNumber, userId(authentication))));
+    return operationCoordinator.executeApplicationMutation(
+        parsedApplicationNumber,
+        () -> service.getPermitNumbersForApplicationMutation(parsedApplicationNumber),
+        () -> {
+          requireApplicationAccess(parsedApplicationNumber, authentication);
+          requirePackageAccess(service, packageNumber, parsedApplicationNumber);
+          applicationEditPolicyService.requirePackageAddOrDelete(
+              authentication, service, parsedApplicationNumber);
+          ApplicationEditLockDto currentLock =
+              requireEditable(parsedApplicationNumber, authentication);
+          if (currentLock.locked()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new DeleteResponseDto(false));
+          }
+          return ResponseEntity.ok(
+              new DeleteResponseDto(
+                  service.deletePackageById(packageNumber, userId(authentication))));
+        });
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_DELETE_PACKAGE_BY_ID)
@@ -1082,8 +1475,79 @@ public class ApplicationDetailsRpcController {
     return authorizationService.canPerformAction(roles, action);
   }
 
+  private boolean isPackageNumberChange(String packageNumber, String newPackageNumber) {
+    String current = trimToNull(packageNumber);
+    String requested = trimToNull(newPackageNumber);
+    return requested != null && !requested.equals(current);
+  }
+
   private ApplicationEditLockDto requireEditable(Long applicationNumber, Authentication authentication) {
+    provincialAuthorizationService.requireApplication(authentication, applicationNumber);
     return editLockService.requireEditable(applicationNumber, userId(authentication), userId(authentication));
+  }
+
+  private Authentication currentAuthentication() {
+    return SecurityContextHolder.getContext().getAuthentication();
+  }
+
+  private void requireApplicationAccess(Long applicationNumber) {
+    provincialAuthorizationService.requireApplication(currentAuthentication(), applicationNumber);
+  }
+
+  private void requireApplicationAccess(Long applicationNumber, Authentication authentication) {
+    provincialAuthorizationService.requireApplication(authentication, applicationNumber);
+  }
+
+  private void requirePermitAccess(Long permitNumber, Authentication authentication) {
+    provincialAuthorizationService.requirePermit(authentication, permitNumber);
+  }
+
+  private void requireClientAccess(String clientNumber) {
+    if (!provincialAuthorizationService.canCreateForClient(
+        currentAuthentication(), clientNumber, null)) {
+      throw new AccessDeniedException("Client is outside the authenticated client scope.");
+    }
+  }
+
+  private void requirePackageAccess(
+      ApplicationDetailsRpcService service, String packageNumber, Long expectedApplicationNumber) {
+    Authentication authentication = currentAuthentication();
+    Long actualApplicationNumber =
+        service
+            .findApplicationNumberForPackage(packageNumber)
+            .orElseThrow(() -> new AccessDeniedException("Package parent application is unavailable."));
+    if (expectedApplicationNumber != null && !expectedApplicationNumber.equals(actualApplicationNumber)) {
+      throw new AccessDeniedException("Package does not belong to the supplied application.");
+    }
+    provincialAuthorizationService.requireApplication(authentication, actualApplicationNumber);
+  }
+
+  private void requireScaleAccess(
+      ApplicationDetailsRpcService service, String scaleId, Long expectedApplicationNumber) {
+    Authentication authentication = currentAuthentication();
+    Long actualApplicationNumber =
+        service
+            .findApplicationNumberForScale(scaleId)
+            .orElseThrow(() -> new AccessDeniedException("Scale parent application is unavailable."));
+    if (expectedApplicationNumber != null && !expectedApplicationNumber.equals(actualApplicationNumber)) {
+      throw new AccessDeniedException("Scale does not belong to the supplied application.");
+    }
+    provincialAuthorizationService.requireApplication(authentication, actualApplicationNumber);
+  }
+
+  private void requireRemarkAccess(
+      ApplicationDetailsRpcService service,
+      Long remarkId,
+      Long expectedApplicationNumber,
+      Authentication authentication) {
+    Long applicationNumber =
+        service
+            .findApplicationNumberForRemark(remarkId)
+            .orElseThrow(() -> new AccessDeniedException("Remark parent application is unavailable."));
+    if (expectedApplicationNumber != null && !expectedApplicationNumber.equals(applicationNumber)) {
+      throw new AccessDeniedException("Remark does not belong to the supplied application.");
+    }
+    provincialAuthorizationService.requireApplication(authentication, applicationNumber);
   }
 
   private ResponseEntity<ApplicationPersistenceResponseDto> applicationPersistenceLockConflict(
@@ -1111,21 +1575,55 @@ public class ApplicationDetailsRpcController {
         .body(new ScalePersistenceResponseDto(false, null, List.of(message), List.of()));
   }
 
-  private boolean canRemoveApplicationDocument(
+  private boolean applicationDocumentCanBeRemovedFromApplication(
       ApplicationDetailsRpcService service,
       Long documentId,
-      Long applicationNumber,
-      List<String> roles) {
+      Long applicationNumber) {
     if (documentId == null || documentId < 1 || applicationNumber == null || applicationNumber < 1) {
       return false;
     }
-
-    boolean documentBelongsToApplication =
-        service.getDocumentDetails(applicationNumber).stream().anyMatch(item -> item.id() == documentId);
-    if (!documentBelongsToApplication) {
+    List<ApplicationDetailsRpcService.DocumentItem> matches =
+        service.getDocumentDetails(applicationNumber).stream()
+            .filter(item -> documentId.equals(item.id()))
+            .limit(2)
+            .toList();
+    if (matches.size() != 1) {
       return false;
     }
+    ApplicationDetailsRpcService.DocumentItem item = matches.getFirst();
+    return item.deletable()
+        && "application".equals(item.source())
+        && applicationNumber.equals(item.sourceApplicationNumber())
+        && item.sourcePermitNumber() == null;
+  }
 
+  private boolean canAccessApplicationDocument(
+      ApplicationDetailsRpcService.DocumentItem item,
+      Long applicationNumber,
+      Authentication authentication) {
+    if (item == null || applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+    if ("permit".equals(item.source())
+        && item.sourcePermitNumber() != null
+        && item.sourceApplicationNumber() == null) {
+      if (!canPerform(authentication, LEGACY_ACTION_PERMIT_DETAILS)) {
+        return false;
+      }
+      try {
+        requirePermitAccess(item.sourcePermitNumber(), authentication);
+        return true;
+      } catch (AccessDeniedException ex) {
+        return false;
+      }
+    }
+    return "application".equals(item.source())
+        && applicationNumber.equals(item.sourceApplicationNumber())
+        && item.sourcePermitNumber() == null;
+  }
+
+  private boolean canRemoveApplicationDocumentWithCurrentStatus(
+      ApplicationDetailsRpcService service, Long applicationNumber, List<String> roles) {
     return service
         .getApplicationSummarySnapshot(applicationNumber)
         .map(snapshot -> canRemoveApplicationDocumentWithStatus(snapshot.applicationStatusCode(), roles))
@@ -1138,8 +1636,7 @@ public class ApplicationDetailsRpcController {
       return false;
     }
 
-    List<String> normalizedRoles =
-        roles.stream().map(role -> role.trim().toUpperCase(Locale.ROOT)).toList();
+    List<String> normalizedRoles = normalizedRoles(roles);
     if (normalizedRoles.stream().anyMatch(APPLICATION_DOCUMENT_DELETE_ROLES::contains)) {
       return !APPLICATION_STATUS_EXPIRED.equals(status);
     }
@@ -1154,8 +1651,34 @@ public class ApplicationDetailsRpcController {
         && (APPLICATION_STATUS_PERMITTED.equals(status) || APPLICATION_STATUS_EXPIRED.equals(status));
   }
 
+  private boolean hasApplicationDocumentDeleteRole(List<String> roles) {
+    List<String> normalizedRoles = normalizedRoles(roles);
+    return normalizedRoles.stream().anyMatch(APPLICATION_DOCUMENT_DELETE_ROLES::contains)
+        || normalizedRoles.stream()
+            .anyMatch(
+                role ->
+                    APPLICATION_DOCUMENT_INDUSTRY_ROLES.contains(role)
+                        || role.startsWith("LEXIS_PROVINCIAL_SUBMITTER_"));
+  }
+
+  private List<String> normalizedRoles(List<String> roles) {
+    if (roles == null || roles.isEmpty()) {
+      return List.of();
+    }
+    return roles.stream()
+        .filter(role -> role != null)
+        .map(role -> role.trim().toUpperCase(Locale.ROOT))
+        .toList();
+  }
+
   private ApplicationDetailsRpcService.CreateApplicationRequest toCreateApplicationRequest(
       MultiValueMap<String, String> parameters) {
+    String applicantTypeCode =
+        firstTrimmedNonBlank(
+            first(parameters, "ownerApplicantType", "applicantType"),
+            APPLICATION_APPLICANT_TYPE_OWNER);
+    boolean ownerApplicant =
+        APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(applicantTypeCode);
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
         parsePositiveLong(first(parameters, "federalApplicationNumber", "fedApplicationNumber")),
         parseDate(first(parameters, "applicationDate")),
@@ -1165,24 +1688,91 @@ public class ApplicationDetailsRpcController {
         parseDouble(first(parameters, "averageLogVolume")),
         first(parameters, "logLocation", "productLocation"),
         parsePositiveLong(first(parameters, "exportScheduleId", "legacyExportScheduleId")),
-        first(parameters, "agentClientNumber", "applicantClientNumber"),
-        first(parameters, "agentClientLocation", "agentClientLocationCode", "applicantClientLocationCode"),
+        ownerApplicant ? null : first(parameters, "agentClientNumber", "applicantClientNumber"),
+        ownerApplicant
+            ? null
+            : first(
+                parameters,
+                "agentClientLocation",
+                "agentClientLocationCode",
+                "applicantClientLocationCode"),
         first(parameters, "ownerClientNumber"),
         first(parameters, "ownerClientLocation", "ownerClientLocationCode"),
-        first(parameters, "exemptionNumber"),
+        canonicalExemptionNumber(first(parameters, "exemptionNumber")),
         first(parameters, "exemptionReason", "exemptionType", "exemptionTypeCode"),
-        first(parameters, "ownerApplicantType", "applicantType"),
+        applicantTypeCode,
         parsePositiveLong(first(parameters, "region", "orgUnitNumber")),
         first(parameters, "productType", "productTypeCode"),
         first(parameters, "exportJurisdictionCode", "jurisdictionCode"),
         first(parameters, "ageClass", "growthTypeCode"),
-        first(parameters, "agentContactName"),
+        ownerApplicant ? null : first(parameters, "agentContactName"),
         first(parameters, "ownerContactName"),
         first(parameters, "oicIndicator"),
         first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
         parseSpeciesSelection(parameters),
         first(parameters, "additionalRemarks", "comments", "remarkBody", "remark"),
-        !"false".equalsIgnoreCase(first(parameters, "validation")));
+        true);
+  }
+
+  private ApplicationDetailsRpcService.CreateApplicationRequest withScopedSubmitterOwnerIdentity(
+      ApplicationDetailsRpcService.CreateApplicationRequest request,
+      Authentication authentication) {
+    String scopedClientNumber =
+        normalizeClientNumber(
+            provincialAuthorizationService.scopedForestClientNumber(authentication));
+    if (scopedClientNumber == null) {
+      return request;
+    }
+    String ownerClientLocationCode =
+        firstTrimmedNonBlank(request.ownerClientLocationCode(), "00").toUpperCase(Locale.ROOT);
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE, "Client location verification is unavailable.");
+    }
+    clientLookupService
+        .getClientDataRequired(scopedClientNumber, ownerClientLocationCode)
+        .filter(
+            client ->
+                scopedClientNumber.equals(normalizeClientNumber(client.clientNumber())))
+        .orElseThrow(
+            () ->
+                new AccessDeniedException(
+                    "The selected owner location is not valid for the authenticated client."));
+
+    return new ApplicationDetailsRpcService.CreateApplicationRequest(
+        request.federalApplicationNumber(),
+        request.applicationDate(),
+        request.termDays(),
+        request.receivedDate(),
+        request.applicationVolume(),
+        request.averageLogVolume(),
+        request.productLocation(),
+        request.exportScheduleId(),
+        request.agentClientNumber(),
+        request.agentClientLocationCode(),
+        scopedClientNumber,
+        ownerClientLocationCode,
+        request.exemptionNumber(),
+        request.exemptionReasonCode(),
+        request.applicationStatusCode(),
+        request.applicantTypeCode(),
+        request.orgUnitNumber(),
+        request.productTypeCode(),
+        request.jurisdictionCode(),
+        request.growthTypeCode(),
+        request.agentContactName(),
+        request.ownerContactName(),
+        request.oicIndicator(),
+        request.endUseCode(),
+        request.speciesCodes(),
+        request.remarkBody(),
+        request.validationEnabled());
+  }
+
+  private String canonicalExemptionNumber(String exemptionNumber) {
+    String normalized = trimToNull(exemptionNumber);
+    return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
   }
 
   private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest toApplicationSummaryUpdateRequest(
@@ -1212,7 +1802,7 @@ public class ApplicationDetailsRpcController {
         first(parameters, "oicIndicator"),
         first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
         parseSpeciesSelection(parameters),
-        !"false".equalsIgnoreCase(first(parameters, "validation")));
+        true);
   }
 
   private ApplicationDetailsRpcService.PackageMutationRequest toPackageMutationRequest(
@@ -1407,7 +1997,9 @@ public class ApplicationDetailsRpcController {
           .filter(value -> value != null)
           .toList();
     } catch (JsonProcessingException ex) {
-      LOGGER.warn("Unable to parse legacy speciesJSON [{}]", speciesJson);
+      LOGGER.warn(
+          "event=lexis_application_details operation=parse_species outcome=invalid failureType={}",
+          exceptionType(ex));
       return List.of();
     }
   }
@@ -1564,6 +2156,9 @@ public class ApplicationDetailsRpcController {
   }
 
   private String userId(Authentication authentication) {
+    if (principalService != null) {
+      return principalService.resolvePrincipalName(authentication);
+    }
     return authentication == null ? null : authentication.getName();
   }
 
@@ -1580,6 +2175,9 @@ public class ApplicationDetailsRpcController {
     }
 
     Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    if (applicationNumber != null) {
+      requireApplicationAccess(applicationNumber, authentication);
+    }
     ApplicationReviewStatusEmailResultDto result =
         applicationNumber == null
             ? new ApplicationReviewStatusEmailResultDto(
@@ -1589,12 +2187,21 @@ public class ApplicationDetailsRpcController {
                 new ApplicationReviewStatusEmailRequestDto(
                     statusCode,
                     first(parameters, "toEmailAddress", "clientEmailAddress"),
-                    first(parameters, "additionalRemarks", "remark", "remarkBody")));
+                    first(
+                        parameters,
+                        "additionalRemarks",
+                        "remark",
+                        "remarkBody")));
     return ResponseEntity.ok(new ApplicationStatusEmailResponseDto(result.success(), result.message()));
   }
 
   public record DocumentDetailsResponseDto(
-      String name, String description, String type, long id) {}
+      String name,
+      String description,
+      String type,
+      long id,
+      String source,
+      boolean deletable) {}
 
   public record RemoveDocumentResponseDto(String success) {}
 

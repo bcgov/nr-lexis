@@ -5,7 +5,7 @@ import {
   Checkbox,
   Column,
   Grid,
-  FilterableMultiSelect,
+  Modal,
   Pagination,
   Table,
   TableBody,
@@ -13,12 +13,21 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tag,
   TextInput,
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
+import EmptyState from '@/components/EmptyState'
+import ExemptionApprovalEmailModal, {
+  type ExemptionApprovalRecipient,
+} from '@/components/ExemptionApprovalEmailModal'
+import PageHeader from '@/components/PageHeader'
+import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
+import RegionMultiSelect from '@/components/RegionMultiSelect'
+import StatusTag from '@/components/StatusTag'
 import type {
   ProvincialExemptionSearchFilters,
   ProvincialExemptionSearchItem,
@@ -27,10 +36,12 @@ import type {
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
+  getPageDataCacheGeneration,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
@@ -71,17 +82,39 @@ import {
   type SearchOption,
 } from '@/service/search-options-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import {
+  approveExemptions,
+  sendExemptionApprovalEmails,
+} from '@/service/provincial-exemption-detail-service'
+import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-service'
+import { formatLocalIsoDate } from '@/utils/date'
 
 type ApprovalStatus = {
-  kind: 'error' | 'success'
+  kind: 'error' | 'success' | 'warning'
   message: string
 }
+
+type ApprovalEmailContext = {
+  approvedCount: number
+  partialFailure: string
+}
+
+const normalizeApprovalMessage = (message: string): string =>
+  message
+    .replace(/<\/?br\s*\/?\s*>/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const approvedExemptionMessage = (count: number): string =>
+  `Approved ${count} ${count === 1 ? 'exemption' : 'exemptions'}.`
 
 const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
   exemptionNumber: '',
   region: [],
+  approvalFromDate: '',
+  approvalToDate: '',
   listFromDate: '',
   listToDate: '',
   exemptionTypeCode: '',
@@ -109,7 +142,7 @@ const SORT_COLUMNS: {
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialExemptionSearchSortField = 'exemptionNumber'
-const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialExemptionSearchSortField[]
@@ -126,6 +159,8 @@ const buildSearchParams = (
     ['packageNumber', filters.packageNumber],
     ['exemptionNumber', filters.exemptionNumber],
     ['region', filters.region],
+    ['approvalFromDate', filters.approvalFromDate],
+    ['approvalToDate', filters.approvalToDate],
     ['listFromDate', filters.listFromDate],
     ['listToDate', filters.listToDate],
     ['exemptionTypeCode', filters.exemptionTypeCode],
@@ -144,6 +179,8 @@ const ProvincialExemptionPage = () => {
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
+  const [optionsLoading, setOptionsLoading] = useState(true)
+  const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [results, setResults] = useState<ProvincialExemptionSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -151,14 +188,27 @@ const ProvincialExemptionPage = () => {
     Record<string, ProvincialExemptionSearchItem>
   >({})
   const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus | null>(null)
+  const [approvalConfirmationOpen, setApprovalConfirmationOpen] = useState(false)
+  const [approvalCertified, setApprovalCertified] = useState(false)
+  const [approvalDate, setApprovalDate] = useState('')
+  const [approving, setApproving] = useState(false)
+  const [approvalEmailRecipients, setApprovalEmailRecipients] = useState<
+    ExemptionApprovalRecipient[]
+  >([])
+  const [approvalEmailContext, setApprovalEmailContext] = useState<ApprovalEmailContext | null>(
+    null,
+  )
+  const [sendingApprovalEmail, setSendingApprovalEmail] = useState(false)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canApproveExemption = canPerform('approveExemption')
+  const isIndustryUser = hasProvincialSubmitterRole(capabilities.roles)
   const shouldDefaultApprovalFilters =
     capabilities?.roles.includes('EXEMPTION_APPROVER') ||
     capabilities?.roles.includes('LEXIS_EXEMPTION_APPROVER') ||
     false
   const selectedRowsCount = Object.keys(selectedRowsById).length
+  const selectedExemptionNumbers = Object.keys(selectedRowsById)
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -170,6 +220,8 @@ const ProvincialExemptionPage = () => {
       packageNumber: searchParams.get('packageNumber') ?? '',
       exemptionNumber: searchParams.get('exemptionNumber') ?? '',
       region: parseCsvParam(searchParams.get('region')),
+      approvalFromDate: searchParams.get('approvalFromDate') ?? '',
+      approvalToDate: searchParams.get('approvalToDate') ?? '',
       listFromDate: searchParams.get('listFromDate') ?? '',
       listToDate: searchParams.get('listToDate') ?? '',
       exemptionTypeCode: searchParams.get('exemptionTypeCode') ?? '',
@@ -228,14 +280,15 @@ const ProvincialExemptionPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const selectedRegionHelperText =
-    selectedRegions.length > 0
-      ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
-      : undefined
 
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(filters.listFromDate, filters.listToDate)
-  }, [filters.listFromDate, filters.listToDate])
+    return hasInvalidIsoDateValue(
+      filters.approvalFromDate,
+      filters.approvalToDate,
+      filters.listFromDate,
+      filters.listToDate,
+    )
+  }, [filters.approvalFromDate, filters.approvalToDate, filters.listFromDate, filters.listToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback((nextResults: ProvincialExemptionSearchResponse) => {
@@ -244,6 +297,7 @@ const ProvincialExemptionPage = () => {
 
   const runSearch = useCallback(
     async (request: ProvincialExemptionSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
       const pageCacheKey = buildPageDataCacheKey(
         'provincial-exemption-search',
         capabilities?.principal,
@@ -273,7 +327,14 @@ const ProvincialExemptionPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateValue(request.filters.listFromDate, request.filters.listToDate)) {
+      if (
+        hasInvalidIsoDateValue(
+          request.filters.approvalFromDate,
+          request.filters.approvalToDate,
+          request.filters.listFromDate,
+          request.filters.listToDate,
+        )
+      ) {
         setLoading(false)
         return
       }
@@ -282,14 +343,21 @@ const ProvincialExemptionPage = () => {
       setErrorMessage('')
       try {
         const totalCacheKey = buildSearchTotalCacheKey(request.filters)
-        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const cachedTotal = options.force
+          ? undefined
+          : getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
         const commitSearchResponse = (
           response: ProvincialExemptionSearchResponse,
           totalIsExact: boolean,
         ) => {
+          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
+            return
+          }
           if (totalIsExact) {
+            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
+              return
+            }
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            setPageDataCache(pageCacheKey, response)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-exemption-search',
               principal: capabilities?.principal,
@@ -300,7 +368,7 @@ const ProvincialExemptionPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest()) {
+            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
               commitResults(response)
             }
           })
@@ -368,11 +436,18 @@ const ProvincialExemptionPage = () => {
 
   useEffect(() => {
     const loadOptions = async () => {
-      const options = await fetchProvincialExemptionOptions()
+      try {
+        const options = await fetchProvincialExemptionOptions()
 
-      setExemptionTypeOptions(options.exemptionTypes)
-      setExemptionStatusOptions(options.exemptionStatuses)
-      setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setExemptionTypeOptions(options.exemptionTypes)
+        setExemptionStatusOptions(options.exemptionStatuses)
+        setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setOptionsUnavailable(false)
+      } catch {
+        setOptionsUnavailable(true)
+      } finally {
+        setOptionsLoading(false)
+      }
     }
 
     void loadOptions()
@@ -466,17 +541,182 @@ const ProvincialExemptionPage = () => {
       return
     }
 
-    setApprovalStatus({
-      kind: 'success',
-      message: `Ready to approve ${selectedRows.length} selected exemption(s).`,
-    })
+    setApprovalCertified(false)
+    setApprovalDate(formatLocalIsoDate(new Date()))
+    setApprovalConfirmationOpen(true)
+  }
+
+  const closeApprovalConfirmation = () => {
+    if (approving) return
+    setApprovalConfirmationOpen(false)
+    setApprovalCertified(false)
+    setApprovalDate('')
+  }
+
+  const closeApprovalEmail = () => {
+    if (sendingApprovalEmail) return
+    const approvedCount = approvalEmailContext?.approvedCount ?? approvalEmailRecipients.length
+    const messages = [
+      approvedExemptionMessage(approvedCount),
+      approvedCount === 1
+        ? 'Approval notification was skipped.'
+        : 'Approval notifications were skipped.',
+    ]
+    if (approvalEmailContext?.partialFailure) {
+      messages.push(approvalEmailContext.partialFailure)
+    }
+    setApprovalStatus({ kind: 'warning', message: messages.join(' ') })
+    setApprovalEmailRecipients([])
+    setApprovalEmailContext(null)
+  }
+
+  const onSendApprovalEmails = async (recipients: ExemptionApprovalRecipient[]) => {
+    if (sendingApprovalEmail) return
+    const approvedCount = approvalEmailContext?.approvedCount ?? recipients.length
+    const partialFailure = approvalEmailContext?.partialFailure ?? ''
+    setSendingApprovalEmail(true)
+    try {
+      const email = await sendExemptionApprovalEmails(recipients)
+      const messages = [approvedExemptionMessage(approvedCount)]
+      messages.push(
+        email.success
+          ? email.message || 'Approval notifications queued.'
+          : email.message || 'Approval notifications could not be queued.',
+      )
+      if (partialFailure) {
+        messages.push(partialFailure)
+      }
+      setApprovalStatus({
+        kind: email.success && !partialFailure ? 'success' : 'warning',
+        message: messages.join(' '),
+      })
+    } catch (error) {
+      console.error(error)
+      const messages = [
+        approvedExemptionMessage(approvedCount),
+        'Approval notifications could not be queued.',
+      ]
+      if (partialFailure) {
+        messages.push(partialFailure)
+      }
+      setApprovalStatus({ kind: 'warning', message: messages.join(' ') })
+    } finally {
+      setSendingApprovalEmail(false)
+      setApprovalEmailRecipients([])
+      setApprovalEmailContext(null)
+    }
+  }
+
+  const onConfirmApproval = async () => {
+    const selectedNumbers = Object.keys(selectedRowsById)
+    if (approving || !approvalCertified) {
+      return
+    }
+    if (selectedNumbers.length === 0) {
+      setApprovalConfirmationOpen(false)
+      setApprovalCertified(false)
+      setApprovalDate('')
+      return
+    }
+
+    setApproving(true)
+    setApprovalStatus(null)
+    try {
+      const approvals = []
+      let failureCount = 0
+      for (const exemptionNumber of selectedNumbers) {
+        try {
+          const recordVersion = await fetchCurrentExemptionRecordVersion(exemptionNumber)
+          const approval = await approveExemptions([exemptionNumber], recordVersion)
+          if (approval.success && approval.valid) {
+            approvals.push(approval)
+          } else {
+            failureCount += 1
+          }
+        } catch (error) {
+          console.warn(`Unable to approve exemption ${exemptionNumber}.`, error)
+          failureCount += 1
+        }
+      }
+
+      if (approvals.length === 0) {
+        setApprovalStatus({ kind: 'error', message: 'No selected exemptions could be approved.' })
+        return
+      }
+
+      const partialMessages = approvals
+        .map((approval) => normalizeApprovalMessage(approval.errorMessage))
+        .filter(Boolean)
+      if (failureCount > 0) {
+        partialMessages.push(
+          `${failureCount} selected ${failureCount === 1 ? 'exemption' : 'exemptions'} failed to approve.`,
+        )
+      }
+      const partialFailure = [...new Set(partialMessages)].join(' ')
+      const recipients = approvals.flatMap((approval) =>
+        approval.sendGrid.map(([number, email]): ExemptionApprovalRecipient => [number, email]),
+      )
+      const approvedCount = approvals.length
+      const messages = [approvedExemptionMessage(approvedCount)]
+      messages.push(
+        recipients.length > 0
+          ? 'Review the applicant recipients before sending notifications.'
+          : 'No applicant notification recipients were returned.',
+      )
+      if (partialFailure) {
+        messages.push(partialFailure)
+      }
+
+      setApprovalStatus({
+        kind: recipients.length > 0 && !partialFailure ? 'success' : 'warning',
+        message: messages.join(' '),
+      })
+      setApprovalConfirmationOpen(false)
+      setApprovalEmailContext(recipients.length > 0 ? { approvedCount, partialFailure } : null)
+      setApprovalEmailRecipients(recipients)
+      setSelectedRowsById({})
+      try {
+        await runSearch(
+          {
+            filters: urlState.filters,
+            page: urlState.page - 1,
+            pageSize: urlState.pageSize,
+            sortField: urlState.sortField,
+            sortDirection: urlState.sortDirection,
+          },
+          { force: true },
+        )
+      } catch (refreshError) {
+        console.error(refreshError)
+        setApprovalStatus((current) => ({
+          kind: 'warning',
+          message: `${current?.message || approvedExemptionMessage(approvedCount)} Refresh the page to see the latest status.`,
+        }))
+      }
+    } catch (error) {
+      console.error(error)
+      setApprovalStatus({
+        kind: 'error',
+        message: 'Unable to approve the selected exemptions.',
+      })
+    } finally {
+      setApproving(false)
+      setApprovalConfirmationOpen(false)
+      setApprovalCertified(false)
+      setApprovalDate('')
+    }
   }
 
   return (
     <Grid fullWidth className="default-grid provincial-exemption-search-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial exemption search</h1>
+        <PageHeader
+          title="Provincial exemption search"
+          subtitle="Find, review, and manage provincial exemptions."
+        />
       </Column>
+
+      {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-exemption-search-filters">
@@ -494,6 +734,7 @@ const ProvincialExemptionPage = () => {
                 value={filters.exemptionStatusCode}
                 placeholder="All statuses"
                 options={exemptionStatusOptions}
+                disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('exemptionStatusCode', value)}
               />
               <TextInput
@@ -508,6 +749,7 @@ const ProvincialExemptionPage = () => {
                 value={filters.exemptionTypeCode}
                 placeholder="All types"
                 options={exemptionTypeOptions}
+                disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('exemptionTypeCode', value)}
               />
               <TextInput
@@ -516,16 +758,14 @@ const ProvincialExemptionPage = () => {
                 value={filters.exemptionNumber}
                 onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
               />
-              <FilterableMultiSelect
+              <RegionMultiSelect
                 id="region"
                 titleText="Region"
                 items={regionOptions}
-                itemToString={(item) => (item ? item.text : '')}
                 placeholder="Select region(s)"
-                helperText={selectedRegionHelperText}
                 selectedItems={selectedRegions}
-                onChange={(event) => {
-                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
+                disabled={optionsLoading || optionsUnavailable}
+                onChange={(nextSelected) => {
                   updateFilter(
                     'region',
                     nextSelected.map((item) => item.id),
@@ -543,6 +783,22 @@ const ProvincialExemptionPage = () => {
                 labelText="Owner client number"
                 value={filters.ownerClientNumber}
                 onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="approvalFromDate"
+                labelText="Approval from date"
+                value={filters.approvalFromDate}
+                invalid={!isValidIsoDate(filters.approvalFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('approvalFromDate', value)}
+              />
+              <IsoDatePicker
+                id="approvalToDate"
+                labelText="Approval to date"
+                value={filters.approvalToDate}
+                invalid={!isValidIsoDate(filters.approvalToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('approvalToDate', value)}
               />
               <IsoDatePicker
                 id="listFromDate"
@@ -573,14 +829,16 @@ const ProvincialExemptionPage = () => {
               <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
                 Clear Filters
               </Button>
-              <Button
-                kind="secondary"
-                size="md"
-                onClick={onApproveSelectedClick}
-                disabled={selectedRowsCount === 0 || !canApproveExemption}
-              >
-                Approve Selected Exemption
-              </Button>
+              {canApproveExemption && (
+                <Button
+                  kind="secondary"
+                  size="md"
+                  onClick={onApproveSelectedClick}
+                  disabled={selectedRowsCount === 0 || approving}
+                >
+                  {approving ? 'Approving...' : 'Approve Selected Exemption'}
+                </Button>
+              )}
               {canCreateExemption && (
                 <Link className="cds--link" to="/provincial/exemption/create">
                   Add Exemption
@@ -591,7 +849,13 @@ const ProvincialExemptionPage = () => {
               <AppNotification
                 className="legacy-inline-notification"
                 kind={approvalStatus.kind}
-                title={approvalStatus.kind === 'error' ? 'Validation failed' : 'Selection ready'}
+                title={
+                  approvalStatus.kind === 'error'
+                    ? 'Approval failed'
+                    : approvalStatus.kind === 'warning'
+                      ? 'Approval completed with warnings'
+                      : 'Approval completed'
+                }
                 subtitle={approvalStatus.message}
                 autoDismissMs={approvalStatus.kind === 'success' ? 8000 : undefined}
                 onCloseButtonClick={() => setApprovalStatus(null)}
@@ -602,110 +866,185 @@ const ProvincialExemptionPage = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search results</h2>
-          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+        <section
+          className="legacy-search-section legacy-search-section--results"
+          aria-label="Search results"
+        >
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading exemption search results..."
-            totalItems={results.page.totalElements}
+            totalItems={
+              errorMessage || (loading && results.content.length === 0)
+                ? undefined
+                : results.page.totalElements
+            }
           >
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>
-                    <Checkbox
-                      id="selectAllCurrentPageRows"
-                      hideLabel
-                      labelText="Select all rows on this page"
-                      checked={allSelectableRowsAreSelected}
-                      disabled={selectableRows.length === 0}
-                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
-                    />
-                  </TableHeader>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => {
-                  const canSelectRow =
-                    canApproveExemption &&
-                    row.canApprove &&
-                    row.statusCode === 'NEW' &&
-                    !row.isLocked
-                  return (
-                    <TableRow key={row.exemptionNumber}>
-                      <TableCell>
+            {errorMessage ? (
+              <EmptyState
+                role="alert"
+                title="Exemption search unavailable"
+                description={errorMessage}
+              />
+            ) : results.content.length > 0 ? (
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    {canApproveExemption && (
+                      <TableHeader>
                         <Checkbox
-                          id={`selectRow-${row.exemptionNumber}`}
+                          id="selectAllCurrentPageRows"
                           hideLabel
-                          labelText={`Select ${row.exemptionNumber}`}
-                          checked={Boolean(selectedRowsById[row.exemptionNumber])}
-                          disabled={!canSelectRow}
+                          labelText="Select all rows on this page"
+                          checked={allSelectableRowsAreSelected}
+                          disabled={selectableRows.length === 0}
                           onChange={(_, payload) =>
-                            toggleRowSelection(row, Boolean(payload.checked))
+                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
                           }
                         />
-                      </TableCell>
-                      <TableCell>
-                        {row.canViewExemption ? (
-                          <Link
-                            className="cds--link"
-                            to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
-                          >
-                            {row.exemptionNumber}
-                          </Link>
-                        ) : (
-                          row.exemptionNumber
-                        )}
-                      </TableCell>
-                      <TableCell>{row.type}</TableCell>
-                      <TableCell>{row.status}</TableCell>
-                      <TableCell>{row.applicantClientNumber || '-'}</TableCell>
-                      <TableCell>{row.ownerClientNumber}</TableCell>
-                      <TableCell>{row.approvedVolume}</TableCell>
-                      <TableCell>{row.balanceRemaining}</TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
-                      <TableCell>{row.expiryDate}</TableCell>
-                      <TableCell>{row.region}</TableCell>
-                    </TableRow>
-                  )
-                })}
-                {results.content.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={11}>
-                      No exemptions found for the selected criteria.
-                    </TableCell>
+                      </TableHeader>
+                    )}
+                    {SORT_COLUMNS.map((column) => (
+                      <TableHeader key={column.id}>
+                        <button
+                          type="button"
+                          className="legacy-sort-button"
+                          onClick={() => onHeaderClick(column.id)}
+                        >
+                          {column.label}
+                          {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                        </button>
+                      </TableHeader>
+                    ))}
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                clearSelection()
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
+                </TableHead>
+                <TableBody>
+                  {results.content.map((row) => {
+                    const canSelectRow =
+                      canApproveExemption &&
+                      row.canApprove &&
+                      row.statusCode === 'NEW' &&
+                      !row.isLocked
+                    const canViewExemption =
+                      row.canViewExemption && !(isIndustryUser && row.statusCode === 'NEW')
+                    return (
+                      <TableRow key={row.exemptionNumber}>
+                        {canApproveExemption && (
+                          <TableCell>
+                            <div className="provincial-exemption-search-row-action">
+                              <Checkbox
+                                id={`selectRow-${row.exemptionNumber}`}
+                                hideLabel
+                                labelText={`Select ${row.exemptionNumber}`}
+                                checked={Boolean(selectedRowsById[row.exemptionNumber])}
+                                disabled={!canSelectRow}
+                                onChange={(_, payload) =>
+                                  toggleRowSelection(row, Boolean(payload.checked))
+                                }
+                              />
+                              {row.isLocked && <Tag type="gray">Locked</Tag>}
+                            </div>
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          {canViewExemption ? (
+                            <Link
+                              className="cds--link"
+                              to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                            >
+                              {row.exemptionNumber}
+                            </Link>
+                          ) : (
+                            row.exemptionNumber
+                          )}
+                        </TableCell>
+                        <TableCell>{row.type}</TableCell>
+                        <TableCell>
+                          <StatusTag status={row.status} />
+                        </TableCell>
+                        <TableCell>{row.applicantClientNumber || '-'}</TableCell>
+                        <TableCell>{row.ownerClientNumber}</TableCell>
+                        <TableCell>{row.approvedVolume}</TableCell>
+                        <TableCell>{row.balanceRemaining}</TableCell>
+                        <TableCell>{row.listingDate}</TableCell>
+                        <TableCell>{row.expiryDate}</TableCell>
+                        <TableCell>{row.region}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            ) : !loading ? (
+              <EmptyState
+                title="No exemptions found"
+                description="No exemptions found for the selected criteria."
+              />
+            ) : null}
+            {!errorMessage && (!loading || results.content.length > 0) && (
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  clearSelection()
+                  setSearchParams(
+                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                  )
+                }}
+              />
+            )}
           </SearchResultsTableFrame>
         </section>
       </Column>
+
+      {approvalConfirmationOpen && (
+        <Modal
+          open
+          danger
+          modalHeading="Approve selected exemptions"
+          primaryButtonText={approving ? 'Approving...' : 'Approve exemptions'}
+          secondaryButtonText="Cancel"
+          primaryButtonDisabled={approving || !approvalCertified}
+          onRequestClose={closeApprovalConfirmation}
+          onSecondarySubmit={closeApprovalConfirmation}
+          onRequestSubmit={() => void onConfirmApproval()}
+        >
+          <p>
+            You are about to approve the following{' '}
+            {selectedRowsCount === 1 ? 'exemption' : 'exemptions'}:
+          </p>
+          <ul>
+            {selectedExemptionNumbers.map((number) => (
+              <li key={number}>{number}</li>
+            ))}
+          </ul>
+          <p>
+            By checking the box below you certify that{' '}
+            {selectedRowsCount === 1 ? 'this exemption has' : 'these exemptions have'} been
+            approved.
+            {selectedRowsCount === 1 ? ' This exemption' : ' These exemptions'} will be marked with
+            an approval date of {approvalDate}.
+          </p>
+          <Checkbox
+            id="approveSelectedExemptionsCertification"
+            labelText={`I certify that ${
+              selectedRowsCount === 1 ? 'this exemption has' : 'these exemptions have'
+            } been approved.`}
+            checked={approvalCertified}
+            disabled={approving}
+            onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
+          />
+        </Modal>
+      )}
+      {approvalEmailRecipients.length > 0 && (
+        <ExemptionApprovalEmailModal
+          recipients={approvalEmailRecipients}
+          sending={sendingApprovalEmail}
+          onRecipientsChange={setApprovalEmailRecipients}
+          onSend={(recipients) => void onSendApprovalEmails(recipients)}
+          onSkip={closeApprovalEmail}
+        />
+      )}
     </Grid>
   )
 }

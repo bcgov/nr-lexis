@@ -3,6 +3,8 @@ export type ProvincialExemptionSearchFilters = {
   packageNumber: string
   exemptionNumber: string
   region: string[]
+  approvalFromDate: string
+  approvalToDate: string
   listFromDate: string
   listToDate: string
   exemptionTypeCode: string
@@ -24,8 +26,6 @@ export type ProvincialExemptionSearchSortField =
   | 'region'
 
 export type ProvincialExemptionSearchItem = {
-  applicationNumber: string
-  packageNumber: string
   exemptionNumber: string
   type: string
   typeCode: string

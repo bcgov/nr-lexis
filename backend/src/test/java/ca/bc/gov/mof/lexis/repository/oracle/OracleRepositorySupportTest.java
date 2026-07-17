@@ -1,17 +1,34 @@
 package ca.bc.gov.mof.lexis.repository.oracle;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.configuration.OracleLegacyDynamicFetchExecutorConfiguration;
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import java.sql.CallableStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Slice;
+import org.springframework.jdbc.core.CallableStatementCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 @DisplayName("Unit Test | OracleRepositorySupport")
 class OracleRepositorySupportTest {
@@ -346,69 +363,259 @@ class OracleRepositorySupportTest {
   @Test
   void auditUserOrDefaultShouldNeverReturnBlankUser() {
     TestRepository repository = new TestRepository(List.of());
+    String firstLongIdentity = "SERVICE\\shared-machine-client-prefix-one";
+    String secondLongIdentity = "SERVICE\\shared-machine-client-prefix-two";
 
     assertThat(repository.auditUser(null)).isEqualTo("system");
     assertThat(repository.auditUser("  ")).isEqualTo("system");
     assertThat(repository.auditUser(" idir\\jsmith ")).isEqualTo("idir\\jsmith");
-    assertThat(repository.auditUser("12345678-1234-1234-1234-123456789012"))
-        .isEqualTo("12345678-1234-1234-1234-123456");
+    assertThat(repository.auditUser(firstLongIdentity))
+        .startsWith("SERVICE\\shared-ma~")
+        .isNotEqualTo(repository.auditUser(secondLongIdentity));
   }
 
   @Test
-  void loadOrgUnitOptionsShouldFallbackWhenCodePackageReturnsEmpty() {
-    TestRepository repository = new TestRepository(List.of());
+  void requiredCursorQueryShouldPropagateDependencyFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    doThrow(failure)
+        .when(jdbcTemplate)
+        .execute(anyString(), any(CallableStatementCallback.class));
+    RequiredRepository repository = new RequiredRepository(jdbcTemplate);
 
-    List<CodeNameDto> options = repository.loadRegions();
-
-    assertThat(options)
-        .containsExactly(
-            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
-            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
-            new CodeNameDto("1905", "Northeast Natural Resource Region"),
-            new CodeNameDto("1906", "Omineca Natural Resource Region"),
-            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
-            new CodeNameDto("1908", "Skeena Natural Resource Region"),
-            new CodeNameDto("1909", "South Coast Natural Resource Region"),
-            new CodeNameDto("1910", "West Coast Natural Resource Region"));
+    assertThat(repository.loadOptional()).isEmpty();
+    assertThatThrownBy(repository::loadFailClosed).isSameAs(failure);
+    assertThatThrownBy(repository::loadRequired).isSameAs(failure);
+    assertThatThrownBy(repository::mutateRequired).isSameAs(failure);
   }
 
   @Test
-  void loadOrgUnitOptionsShouldFallbackWhenCodePackageReturnsNoNaturalResourceRegions() {
-    TestRepository repository =
-        new TestRepository(
-            List.of(),
-            List.of(
-                new CodeNameDto("12", "Coast"),
-                new CodeNameDto("24", "Skeena")));
+  void requiredCursorQueryShouldRejectMissingRefCursorWhileOptionalQueryStaysSoft() {
+    CallableStatement statement = mock(CallableStatement.class);
+    RequiredRepository repository =
+        new RequiredRepository(jdbcTemplateExecuting(statement));
 
-    List<CodeNameDto> options = repository.loadRegions();
+    assertThatThrownBy(repository::loadRequired)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("returned no cursor");
+    assertThatThrownBy(repository::loadFailClosed)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("returned no cursor");
+    assertThat(repository.loadOptional()).isEmpty();
+  }
 
-    assertThat(options)
-        .containsExactly(
-            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
-            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
-            new CodeNameDto("1905", "Northeast Natural Resource Region"),
-            new CodeNameDto("1906", "Omineca Natural Resource Region"),
-            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
-            new CodeNameDto("1908", "Skeena Natural Resource Region"),
-            new CodeNameDto("1909", "South Coast Natural Resource Region"),
-            new CodeNameDto("1910", "West Coast Natural Resource Region"));
+  @Test
+  void requiredCursorQueryShouldKeepAnEmptyRefCursorAsAValidEmptyResult() throws Exception {
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(statement.getObject(1)).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(false);
+    RequiredRepository repository =
+        new RequiredRepository(jdbcTemplateExecuting(statement));
+
+    assertThat(repository.loadRequired()).isEmpty();
+    assertThat(repository.loadFailClosed()).isEmpty();
+  }
+
+  @Test
+  void requiredCursorQueryShouldRejectMissingColumnsWhileOptionalQueryStaysSoft()
+      throws Exception {
+    CallableStatement requiredStatement = mock(CallableStatement.class);
+    ResultSet requiredResultSet = mock(ResultSet.class);
+    when(requiredStatement.getObject(1)).thenReturn(requiredResultSet);
+    when(requiredResultSet.next()).thenReturn(true, false);
+    when(requiredResultSet.getString("REQUIRED_VALUE"))
+        .thenThrow(new SQLException("Invalid column name"));
+    RequiredRepository requiredRepository =
+        new RequiredRepository(jdbcTemplateExecuting(requiredStatement));
+
+    assertThatThrownBy(requiredRepository::loadRequiredColumn)
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("REQUIRED_VALUE");
+
+    CallableStatement optionalStatement = mock(CallableStatement.class);
+    ResultSet optionalResultSet = mock(ResultSet.class);
+    when(optionalStatement.getObject(1)).thenReturn(optionalResultSet);
+    when(optionalResultSet.next()).thenReturn(true, false);
+    when(optionalResultSet.getString("REQUIRED_VALUE"))
+        .thenThrow(new SQLException("Invalid column name"));
+    RequiredRepository optionalRepository =
+        new RequiredRepository(jdbcTemplateExecuting(optionalStatement));
+
+    assertThat(optionalRepository.loadOptionalColumn()).containsExactly((String) null);
+
+    CallableStatement failClosedStatement = mock(CallableStatement.class);
+    ResultSet failClosedResultSet = mock(ResultSet.class);
+    when(failClosedStatement.getObject(1)).thenReturn(failClosedResultSet);
+    when(failClosedResultSet.next()).thenReturn(true, false);
+    when(failClosedResultSet.getString("REQUIRED_VALUE"))
+        .thenThrow(new SQLException("Invalid column name"));
+    RequiredRepository failClosedRepository =
+        new RequiredRepository(jdbcTemplateExecuting(failClosedStatement));
+
+    assertThat(failClosedRepository.loadFailClosedColumn()).containsExactly((String) null);
+  }
+
+  @Test
+  void dynamicPageAndCountShouldPropagateDependencyFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    doThrow(failure)
+        .when(jdbcTemplate)
+        .execute(anyString(), any(CallableStatementCallback.class));
+    DynamicRepository repository = new DynamicRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadDynamicPage).isSameAs(failure);
+    assertThatThrownBy(repository::loadDynamicCount).isSameAs(failure);
+  }
+
+  @Test
+  void dynamicPageShouldRejectMissingCursor() {
+    CallableStatement statement = mock(CallableStatement.class);
+    JdbcTemplate jdbcTemplate = jdbcTemplateExecuting(statement);
+    DynamicRepository repository = new DynamicRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadDynamicPage)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("page cursor");
+  }
+
+  @Test
+  void dynamicPageShouldRejectMissingJdbcResult() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.execute(anyString(), any(CallableStatementCallback.class))).thenReturn(null);
+    DynamicRepository repository = new DynamicRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadDynamicPage)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("page result");
+  }
+
+  @Test
+  void dynamicPageShouldKeepEmptyCursorAsLegitimateZeroResults() throws Exception {
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(statement.getObject(5)).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(false);
+    DynamicRepository repository = new DynamicRepository(jdbcTemplateExecuting(statement));
+
+    assertThat(repository.loadDynamicPage()).isEmpty();
+  }
+
+  @Test
+  void dynamicCountShouldRejectMissingCursorRowAndValue() throws Exception {
+    CallableStatement missingCursorStatement = mock(CallableStatement.class);
+    DynamicRepository missingCursorRepository =
+        new DynamicRepository(jdbcTemplateExecuting(missingCursorStatement));
+
+    assertThatThrownBy(missingCursorRepository::loadDynamicCount)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("count cursor");
+
+    CallableStatement missingRowStatement = mock(CallableStatement.class);
+    ResultSet emptyResultSet = mock(ResultSet.class);
+    when(missingRowStatement.getObject(4)).thenReturn(emptyResultSet);
+    when(emptyResultSet.next()).thenReturn(false);
+    DynamicRepository missingRowRepository =
+        new DynamicRepository(jdbcTemplateExecuting(missingRowStatement));
+
+    assertThatThrownBy(missingRowRepository::loadDynamicCount)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("count row");
+
+    CallableStatement nullValueStatement = mock(CallableStatement.class);
+    ResultSet nullValueResultSet = mock(ResultSet.class);
+    when(nullValueStatement.getObject(4)).thenReturn(nullValueResultSet);
+    when(nullValueResultSet.next()).thenReturn(true);
+    when(nullValueResultSet.getLong("RESULTS_COUNT")).thenReturn(0L);
+    when(nullValueResultSet.wasNull()).thenReturn(true);
+    DynamicRepository nullValueRepository =
+        new DynamicRepository(jdbcTemplateExecuting(nullValueStatement));
+
+    assertThatThrownBy(nullValueRepository::loadDynamicCount)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("count value");
+  }
+
+  @Test
+  void dynamicCountShouldRejectMissingJdbcResult() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.execute(anyString(), any(CallableStatementCallback.class))).thenReturn(null);
+    DynamicRepository repository = new DynamicRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadDynamicCount)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("count result");
+  }
+
+  @Test
+  void dynamicCountShouldKeepDatabaseZeroAsLegitimateZeroResults() throws Exception {
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(statement.getObject(4)).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(true);
+    when(resultSet.getLong("RESULTS_COUNT")).thenReturn(0L);
+    when(resultSet.wasNull()).thenReturn(false);
+    DynamicRepository repository = new DynamicRepository(jdbcTemplateExecuting(statement));
+
+    assertThat(repository.loadDynamicCount()).isZero();
+  }
+
+  @Test
+  void parallelDynamicPageFailureShouldPropagateInsteadOfReturningPartialPage() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle page unavailable");
+    ParallelFailureRepository repository = new ParallelFailureRepository(failure);
+
+    assertThatThrownBy(repository::loadPage).isSameAs(failure);
+  }
+
+  @Test
+  void saturatedDynamicPageExecutorShouldFailFastWithoutUsingCallerThread() throws Exception {
+    ThreadPoolTaskExecutor executor =
+        new OracleLegacyDynamicFetchExecutorConfiguration().oracleLegacyDynamicFetchExecutor();
+    executor.initialize();
+    CountDownLatch workersStarted = new CountDownLatch(4);
+    CountDownLatch releaseWorkers = new CountDownLatch(1);
+
+    try {
+      Runnable blockingTask =
+          () -> {
+            workersStarted.countDown();
+            await(releaseWorkers);
+          };
+      for (int task = 0; task < 4; task++) {
+        executor.execute(blockingTask);
+      }
+      assertThat(workersStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      for (int task = 0; task < 16; task++) {
+        executor.execute(() -> await(releaseWorkers));
+      }
+      assertThat(executor.getQueueSize()).isEqualTo(16);
+
+      TestRepository repository =
+          new TestRepository(List.of(Collections.nCopies(10, "row")));
+      repository.setLegacyDynamicFetchExecutor(executor);
+
+      assertThatThrownBy(() -> repository.loadPageWithTotal(0, 50, 50))
+          .isInstanceOf(TaskRejectedException.class);
+      assertThat(repository.pageCalls()).isZero();
+    } finally {
+      releaseWorkers.countDown();
+      executor.shutdown();
+    }
   }
 
   private static final class TestRepository extends OracleRepositorySupport {
     private final List<List<String>> pages;
-    private final List<CodeNameDto> orgUnitOptions;
     private final List<Integer> requestedPages = Collections.synchronizedList(new java.util.ArrayList<>());
     private final AtomicInteger pageCalls = new AtomicInteger();
 
     TestRepository(List<List<String>> pages) {
-      this(pages, List.of());
-    }
-
-    TestRepository(List<List<String>> pages, List<CodeNameDto> orgUnitOptions) {
       super(null);
       this.pages = pages;
-      this.orgUnitOptions = orgUnitOptions;
     }
 
     Page<String> loadPage(int page, int size) {
@@ -432,10 +639,6 @@ class OracleRepositorySupportTest {
 
     List<CodeNameDto> loadApplicationStatuses() {
       return loadCodeNameOptions(LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)");
-    }
-
-    List<CodeNameDto> loadRegions() {
-      return loadOrgUnitOptions(false);
     }
 
     List<CodeNameDto> loadExemptionReasons() {
@@ -481,15 +684,11 @@ class OracleRepositorySupportTest {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     protected <T> List<T> queryCursorProcedure(
         String procedureSignature,
         SqlConsumer<CallableStatement> binder,
         int cursorOutIndex,
         SqlRowMapper<T> rowMapper) {
-      if ((LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)").equals(procedureSignature)) {
-        return (List<T>) orgUnitOptions;
-      }
       return List.of();
     }
 
@@ -510,7 +709,122 @@ class OracleRepositorySupportTest {
     }
   }
 
+  private static final class RequiredRepository extends OracleRepositorySupport {
+
+    RequiredRepository(JdbcTemplate jdbcTemplate) {
+      super(jdbcTemplate);
+    }
+
+    List<String> loadOptional() {
+      return queryCursorProcedure("LEXIS_GROUP_5.FIND_TEST(?)", null, 1, rs -> "row");
+    }
+
+    List<String> loadRequired() {
+      return queryCursorProcedureRequired(
+          "LEXIS_GROUP_5.FIND_TEST(?)", null, 1, rs -> "row");
+    }
+
+    List<String> loadFailClosed() {
+      return queryCursorProcedureFailClosed(
+          "LEXIS_GROUP_5.FIND_TEST(?)", null, 1, rs -> "row");
+    }
+
+    List<String> loadOptionalColumn() {
+      return queryCursorProcedure(
+          "LEXIS_GROUP_5.FIND_TEST(?)", null, 1, rs -> getString(rs, "REQUIRED_VALUE"));
+    }
+
+    List<String> loadRequiredColumn() {
+      return queryCursorProcedureRequired(
+          "LEXIS_GROUP_5.FIND_TEST(?)", null, 1, rs -> getString(rs, "REQUIRED_VALUE"));
+    }
+
+    List<String> loadFailClosedColumn() {
+      return queryCursorProcedureFailClosed(
+          "LEXIS_GROUP_5.FIND_TEST(?)", null, 1, rs -> getString(rs, "REQUIRED_VALUE"));
+    }
+
+    void mutateRequired() {
+      executeProcedureRequired("LEXIS_GROUP_9.UPDATE_TEST(?)", null);
+    }
+  }
+
+  private static final class DynamicRepository extends OracleRepositorySupport {
+
+    DynamicRepository(JdbcTemplate jdbcTemplate) {
+      super(jdbcTemplate);
+    }
+
+    List<String> loadDynamicPage() {
+      return queryLegacyDynamicPagedProcedure(
+          "LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)",
+          " WHERE 1=1",
+          List.of(),
+          0,
+          rs -> "row");
+    }
+
+    int loadDynamicCount() {
+      return queryLegacyDynamicCountProcedure(
+          "LEXIS_GROUP_5.COUNT_TEST(?,?,?,?)", " WHERE 1=1", List.of());
+    }
+  }
+
+  private static final class ParallelFailureRepository extends OracleRepositorySupport {
+    private final DataAccessResourceFailureException failure;
+
+    ParallelFailureRepository(DataAccessResourceFailureException failure) {
+      super(null);
+      this.failure = failure;
+    }
+
+    Page<String> loadPage() {
+      return queryLegacyDynamicPage(
+          "LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)",
+          " WHERE 1=1",
+          List.of(),
+          0,
+          50,
+          50,
+          rs -> "row");
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues,
+        int page,
+        SqlRowMapper<T> rowMapper) {
+      if (page == 2) {
+        throw failure;
+      }
+      return (List<T>) Collections.nCopies(10, "row-" + page);
+    }
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static JdbcTemplate jdbcTemplateExecuting(CallableStatement statement) {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.execute(anyString(), any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation -> {
+              CallableStatementCallback callback = invocation.getArgument(1);
+              return callback.doInCallableStatement(statement);
+            });
+    return jdbcTemplate;
+  }
+
   private static List<String> concat(List<String> first, List<String> second) {
     return java.util.stream.Stream.concat(first.stream(), second.stream()).toList();
+  }
+
+  private static void await(CountDownLatch latch) {
+    try {
+      latch.await();
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+    }
   }
 }

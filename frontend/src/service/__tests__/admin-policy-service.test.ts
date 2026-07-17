@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  deleteFeePolicy,
+  deleteFilPolicy,
   fetchFeePolicies,
   fetchFeePolicyPage,
   fetchFilPolicies,
   fetchFilPolicyPage,
   upsertFeePolicy,
+  upsertFilPolicy,
 } from '@/service/admin-policy-service'
 
 const { deleteMock, getCachedResponseMock, getMock, postMock, putMock } = vi.hoisted(() => ({
@@ -38,9 +41,10 @@ describe('admin-policy-service', () => {
         {
           policyId: 'fee-1',
           policyEffectiveDate: '2026-02-01',
-          regionCode: 'co',
-          regionName: 'Coast',
-          feeIncreasePercentage: '3.5',
+          orgUnitNo: 1904,
+          orgUnitCode: 'rco',
+          orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+          feeIncreasePercentage: '4',
           entryUser: 'idir\\admin',
           entryDateTime: '2026-02-01T00:00:00.000Z',
           updateUser: 'idir\\admin',
@@ -57,10 +61,12 @@ describe('admin-policy-service', () => {
         params: {
           page: 0,
           size: 100,
+          sortField: 'effective_date',
+          sortDirection: 'desc',
         },
       },
       {
-        cacheKey: 'admin-policies:fee:0:100',
+        cacheKey: 'admin-policies:fee:effective_date:desc:0:100',
         ttlMs: 30_000,
       },
     )
@@ -69,9 +75,10 @@ describe('admin-policy-service', () => {
       expect.objectContaining({
         id: 'fee-1',
         effectiveDate: '2026-02-01',
-        orgUnitCode: 'CO',
-        orgUnitName: 'Coast',
-        policyPercentage: '3.5',
+        orgUnitNo: '1904',
+        orgUnitCode: 'RCO',
+        orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+        policyPercentage: '4',
       }),
     ])
   })
@@ -83,8 +90,9 @@ describe('admin-policy-service', () => {
           {
             policyId: 'fee-1',
             policyEffectiveDate: '2026-02-01',
+            orgUnitNo: 1904,
             regionCode: 'co',
-            feeIncreasePercentage: '3.5',
+            feeIncreasePercentage: '4',
           },
         ],
         total: 42,
@@ -101,10 +109,12 @@ describe('admin-policy-service', () => {
         params: {
           page: 1,
           size: 20,
+          sortField: 'effective_date',
+          sortDirection: 'desc',
         },
       },
       {
-        cacheKey: 'admin-policies:fee:1:20',
+        cacheKey: 'admin-policies:fee:effective_date:desc:1:20',
         ttlMs: 30_000,
       },
     )
@@ -112,6 +122,7 @@ describe('admin-policy-service', () => {
       rows: [
         expect.objectContaining({
           id: 'fee-1',
+          orgUnitNo: '1904',
           orgUnitCode: 'CO',
         }),
       ],
@@ -143,7 +154,8 @@ describe('admin-policy-service', () => {
     expect(result).toEqual([
       expect.objectContaining({
         id: '15',
-        orgUnitCode: '1904',
+        orgUnitNo: '1904',
+        orgUnitCode: '',
         orgUnitName: 'Kootenay-Boundary Natural Resource Region',
         policyPercentage: '4',
       }),
@@ -205,10 +217,12 @@ describe('admin-policy-service', () => {
         params: {
           page: 2,
           size: 10,
+          sortField: 'effective_date',
+          sortDirection: 'desc',
         },
       },
       {
-        cacheKey: 'admin-policies:fil:2:10',
+        cacheKey: 'admin-policies:fil:effective_date:desc:2:10',
         ttlMs: 30_000,
       },
     )
@@ -231,11 +245,125 @@ describe('admin-policy-service', () => {
     })
   })
 
+  it('passes fee policy sorting to the backend and preserves its row order', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          { policyId: 'fee-1904', effectiveDate: '2026-01-01', orgUnitNo: 1904 },
+          { policyId: 'fee-1905', effectiveDate: '2026-02-01', orgUnitNo: 1905 },
+        ],
+        total: 2,
+        page: 0,
+        size: 20,
+      },
+    })
+
+    const result = await fetchFeePolicyPage(0, 20, 'org_unit_no', 'asc')
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/admin/policies/fee',
+      {
+        params: {
+          page: 0,
+          size: 20,
+          sortField: 'org_unit_no',
+          sortDirection: 'asc',
+        },
+      },
+      {
+        cacheKey: 'admin-policies:fee:org_unit_no:asc:0:20',
+        ttlMs: 30_000,
+      },
+    )
+    expect(result.rows.map((row) => row.id)).toEqual(['fee-1904', 'fee-1905'])
+  })
+
+  it('passes fee-in-lieu sorting to the backend', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: { results: [], total: 0, page: 1, size: 50 },
+    })
+
+    await fetchFilPolicyPage(1, 50, 'fil_percent', 'asc')
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/admin/policies/fil',
+      {
+        params: {
+          page: 1,
+          size: 50,
+          sortField: 'fil_percent',
+          sortDirection: 'asc',
+        },
+      },
+      {
+        cacheKey: 'admin-policies:fil:fil_percent:asc:1:50',
+        ttlMs: 30_000,
+      },
+    )
+  })
+
   it('throws API errors when fee policy API request fails', async () => {
     const apiError = { response: { status: 500 } }
     getCachedResponseMock.mockRejectedValue(apiError)
 
     await expect(fetchFeePolicies()).rejects.toBe(apiError)
+  })
+
+  it('submits the numeric organization unit without conflating its display code', async () => {
+    postMock.mockResolvedValue({ data: { success: true } })
+    getCachedResponseMock.mockResolvedValue({ data: [] })
+
+    await upsertFeePolicy({
+      effectiveDate: '2026-08-01',
+      orgUnitNo: ' 1904 ',
+      policyPercentage: ' 5 ',
+    })
+
+    expect(postMock).toHaveBeenCalledWith('/lexis/admin/policies/fee', {
+      effectiveDate: '2026-08-01',
+      orgUnitNo: '1904',
+      policyPercentage: '5',
+    })
+    expect(getCachedResponseMock).not.toHaveBeenCalled()
+  })
+
+  it('preserves the numeric organization unit for fee policy edits', async () => {
+    putMock.mockResolvedValue({ data: { success: true } })
+    getCachedResponseMock.mockResolvedValue({ data: [] })
+
+    await upsertFeePolicy({
+      id: '15',
+      effectiveDate: '2026-08-01',
+      orgUnitNo: '1904',
+      policyPercentage: '6',
+    })
+
+    expect(putMock).toHaveBeenCalledWith('/lexis/admin/policies/fee/15', {
+      effectiveDate: '2026-08-01',
+      orgUnitNo: '1904',
+      policyPercentage: '6',
+    })
+    expect(getCachedResponseMock).not.toHaveBeenCalled()
+  })
+
+  it('leaves fee-in-lieu and delete page reloads to the current table view', async () => {
+    postMock.mockResolvedValue({ data: { success: true } })
+    deleteMock.mockResolvedValue({ data: { success: true } })
+
+    await upsertFilPolicy({
+      effectiveDate: '2026-08-01',
+      filPercentage: '12',
+    })
+    await deleteFeePolicy('15')
+    await deleteFilPolicy('21')
+
+    expect(postMock).toHaveBeenCalledWith('/lexis/admin/policies/fil', {
+      effectiveDate: '2026-08-01',
+      filPercentage: '12',
+    })
+    expect(deleteMock).toHaveBeenCalledWith('/lexis/admin/policies/fee/15')
+    expect(deleteMock).toHaveBeenCalledWith('/lexis/admin/policies/fil/21')
+    expect(getCachedResponseMock).not.toHaveBeenCalled()
   })
 
   it('throws API errors when fee policy upsert fails', async () => {
@@ -244,9 +372,8 @@ describe('admin-policy-service', () => {
     await expect(
       upsertFeePolicy({
         effectiveDate: '2026-04-01',
-        orgUnitCode: ' 12 ',
-        orgUnitName: ' Coast ',
-        policyPercentage: ' 5.0 ',
+        orgUnitNo: ' 1904 ',
+        policyPercentage: ' 5 ',
       }),
     ).rejects.toEqual({ response: { status: 404 } })
   })

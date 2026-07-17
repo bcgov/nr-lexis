@@ -8,6 +8,16 @@ import { searchFederalApplications } from '@/service/federal-application-search-
 import { fetchFederalApplicationOptions } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
+const mockNavigate = vi.fn()
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return {
+    ...(actual as object),
+    useNavigate: () => mockNavigate,
+  }
+})
+
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
@@ -39,7 +49,7 @@ const defaultRows = [
   {
     applicationNumber: '1001',
     federalApplicationNumber: 'FED-1001',
-    status: 'NEW',
+    status: 'APPROVED',
     clientNumber: '11111111',
     reason: 'Economic',
     exemptionType: 'Section 1',
@@ -47,6 +57,8 @@ const defaultRows = [
     receivedDate: '2026-01-10',
     listingDate: '2026-01-12',
     packageNumber: 'PKG-1',
+    eligibleForExemption: true,
+    locked: false,
     allowCreateExemption: true,
   },
   {
@@ -60,6 +72,8 @@ const defaultRows = [
     receivedDate: '2026-01-11',
     listingDate: '2026-01-13',
     packageNumber: 'PKG-2',
+    eligibleForExemption: false,
+    locked: false,
     allowCreateExemption: false,
   },
 ]
@@ -85,19 +99,192 @@ describe('Federal Search Actions', () => {
     })
   })
 
-  it('does not expose provincial bulk exemption controls', async () => {
+  it('only allows eligible federal applications to be selected for exemption creation', async () => {
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    const createButton = screen.getByRole('button', {
+      name: 'Create exemption for Selected Applications',
+    })
+    expect(createButton).toBeDisabled()
+    expect(
+      screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('checkbox', { name: 'Select federal application FED-1002' }),
+    ).toBeDisabled()
+
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
+    )
+    expect(createButton).toBeEnabled()
+    await userEvent.click(createButton)
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/provincial/exemption/create?applications=1001&source=federal',
+      {
+        state: {
+          selectedApplicationNumbers: ['1001'],
+          applicationSource: 'federal',
+        },
+      },
+    )
+  })
+
+  it('renders every federal result header as plain text without sort state', async () => {
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    for (const header of [
+      'Application',
+      'Status',
+      'Client',
+      'Reason',
+      'Received date',
+      'Listing date',
+    ]) {
+      expect(screen.queryByRole('button', { name: header })).not.toBeInTheDocument()
+    }
+    expect(mockedSearchFederalApplications).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        sortField: expect.anything(),
+        sortDirection: expect.anything(),
+      }),
+      expect.any(Object),
+    )
+  })
+
+  it('select-all includes every eligible row and excludes ineligible rows', async () => {
+    mockedSearchFederalApplications.mockResolvedValue({
+      content: [
+        defaultRows[0],
+        {
+          ...defaultRows[1],
+          exemptionNumber: '',
+          eligibleForExemption: true,
+          allowCreateExemption: true,
+        },
+        {
+          ...defaultRows[1],
+          applicationNumber: '1003',
+          federalApplicationNumber: 'FED-1003',
+          allowCreateExemption: false,
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 3,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    await userEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Select all eligible federal applications on this page',
+      }),
+    )
+    expect(
+      screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
+    ).toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: 'Select federal application FED-1002' }),
+    ).toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: 'Select federal application FED-1003' }),
+    ).not.toBeChecked()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    )
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/provincial/exemption/create?applications=1001%2C1002&source=federal',
+      {
+        state: {
+          selectedApplicationNumbers: ['1001', '1002'],
+          applicationSource: 'federal',
+        },
+      },
+    )
+  })
+
+  it('shows a lock marker instead of a checkbox for an otherwise eligible locked row', async () => {
+    mockedSearchFederalApplications.mockResolvedValue({
+      content: [
+        {
+          ...defaultRows[0],
+          locked: true,
+          allowCreateExemption: false,
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
     renderPage()
     await screen.findByText('FED-1001')
 
     expect(
-      screen.queryByRole('button', {
-        name: 'Create exemption for Selected Applications',
-      }),
+      screen.getByRole('status', { name: 'Federal application FED-1001 is locked' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Select federal application FED-1001' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
+      screen.getByRole('checkbox', {
+        name: 'Select all eligible federal applications on this page',
+      }),
+    ).toBeDisabled()
+  })
+
+  it('does not expose federal exemption selection without both required actions', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === 'viewFederalApplication',
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    expect(
+      screen.queryByRole('button', { name: 'Create exemption for Selected Applications' }),
     ).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: 'Select 1001' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: /Select federal application/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
+  })
+
+  it('keeps repeated federal numbers linked to their distinct internal applications', async () => {
+    mockedSearchFederalApplications.mockResolvedValue({
+      content: defaultRows.map((row) => ({
+        ...row,
+        federalApplicationNumber: '700123',
+      })),
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 2,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+
+    const applicationLinks = await screen.findAllByRole('link', { name: '700123' })
+    expect(applicationLinks).toHaveLength(2)
+    expect(applicationLinks.map((link) => link.getAttribute('href')?.split('?')[0])).toEqual([
+      '/federal/application/1001',
+      '/federal/application/1002',
+    ])
   })
 
   it('disables search button for invalid ISO date filters', async () => {
@@ -123,5 +310,21 @@ describe('Federal Search Actions', () => {
     expect(screen.getByLabelText('Listing from date')).toBeInTheDocument()
     expect(screen.getByLabelText('Listing to date')).toBeInTheDocument()
     expect(screen.queryByLabelText('Received from date (YYYY-MM-DD)')).not.toBeInTheDocument()
+  })
+
+  it('shows a request failure instead of a no-results state', async () => {
+    mockedSearchFederalApplications.mockRejectedValue(new Error('Oracle unavailable'))
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Federal application search unavailable' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Unable to retrieve federal application search results.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'No federal applications found' }),
+    ).not.toBeInTheDocument()
   })
 })

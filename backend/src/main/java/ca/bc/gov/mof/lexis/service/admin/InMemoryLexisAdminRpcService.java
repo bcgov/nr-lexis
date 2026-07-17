@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile("!oracle")
+@Profile("stub-services & !oracle")
 public class InMemoryLexisAdminRpcService implements LexisAdminRpcService {
 
   @Override

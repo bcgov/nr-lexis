@@ -133,13 +133,47 @@ class LexisSessionControllerTest {
                 "readOnly",
                 "/provincial/application",
                 List.of("/applicationSearch", "/applicationDetails"),
+                null,
                 "76"));
 
     verify(sessionService).parseRolesFromPrincipal(authentication);
     verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
     verify(authorizationService).resolveGrantedActions(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
+    verify(sessionService).resolveForestClientNumber(authentication);
     verify(principalService).resolveOrgUnitNo(authentication);
     assertThat(output.getAll()).doesNotContain("Resolved LEXIS session capabilities");
+  }
+
+  @Test
+  void capabilitiesShouldExposeAuthenticatedForestClientScope() {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "bceid\\buyer", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00077881");
+    request.setUserPrincipal(authentication);
+
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("bceid\\buyer");
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    LexisSessionWelcomeDto welcome =
+        new LexisSessionWelcomeDto(
+            true,
+            "bceid\\buyer",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"),
+            "provincialSubmitter",
+            "/provincial/application");
+    when(sessionService.resolveWelcomeRoute(
+            "bceid\\buyer", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+        .thenReturn(welcome);
+    when(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+        .thenReturn(List.of("createOffer"));
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+
+    ResponseEntity<LexisSessionCapabilitiesDto> response = controller.capabilities(request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().forestClientNumber()).isEqualTo("00077881");
   }
 
   @Test

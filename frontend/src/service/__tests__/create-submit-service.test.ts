@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchProvincialExemptionCreatePreview,
   submitProvincialApplicationCreate,
   submitProvincialExemptionCreate,
   submitProvincialOfferCreate,
+  submitProvincialOfferUpdate,
 } from '@/service/create-submit-service'
 
 const postMock = vi.fn()
+const getMock = vi.fn()
 
 vi.mock('@/service/api-service', () => ({
   default: {
     getAxiosInstance: () => ({
+      get: getMock,
       post: postMock,
     }),
   },
@@ -19,6 +23,71 @@ describe('create-submit-service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
+  })
+
+  it('loads a strict exemption create preview for every selected application', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        valid: true,
+        exemptionTypeCode: 'M',
+        exemptionStatusCode: 'NEW',
+        approvedVolume: '300.6',
+        expiryDate: '2026-10-10',
+        applicationNumbers: [123, 124],
+        errors: [],
+      },
+    })
+
+    const result = await fetchProvincialExemptionCreatePreview(['123', '124'])
+
+    expect(result).toEqual({
+      exemptionTypeCode: 'M',
+      exemptionStatusCode: 'NEW',
+      approvedVolume: '300.6',
+      expiryDate: '2026-10-10',
+      applicationNumbers: ['123', '124'],
+    })
+    expect(getMock).toHaveBeenCalledTimes(1)
+    const [path, config] = getMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/exemption-details/create-preview')
+    expect(config.params).toBeInstanceOf(URLSearchParams)
+    expect(config.params.getAll('applicationNumbers')).toEqual(['123', '124'])
+  })
+
+  it('fails closed when an exemption create preview omits a selected application', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        valid: true,
+        exemptionTypeCode: 'M',
+        exemptionStatusCode: 'NEW',
+        approvedVolume: '100.0',
+        expiryDate: '2026-10-10',
+        applicationNumbers: [123],
+        errors: [],
+      },
+    })
+
+    await expect(fetchProvincialExemptionCreatePreview(['123', '124'])).rejects.toThrow(
+      'LEXIS returned an invalid exemption preview.',
+    )
+  })
+
+  it('rejects a non-ministerial selected-application preview', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        valid: true,
+        exemptionTypeCode: 'B',
+        exemptionStatusCode: 'ACT',
+        approvedVolume: '9999999.9',
+        expiryDate: '2026-10-10',
+        applicationNumbers: [123],
+        errors: [],
+      },
+    })
+
+    await expect(fetchProvincialExemptionCreatePreview(['123'])).rejects.toThrow(
+      'LEXIS returned an invalid exemption preview.',
+    )
   })
 
   it('posts provincial application create payload as url-encoded form', async () => {
@@ -114,13 +183,9 @@ describe('create-submit-service', () => {
       packageNumber: 'PKG-9',
       offeringClientNumber: '00012345',
       companyName: 'Example Lumber',
-      contactName: 'Alex Example',
-      region: '11',
+      contactName: 'Sample Contact',
       offerVolume: '99.9',
       purchaseOfferAmount: '25000',
-      purchaseOfferDate: '2026-01-10',
-      offerWithdrawalDate: '2026-01-20',
-      withdrawReason: 'Withdrawn by buyer',
       teacReviewDate: '2026-01-15',
       fairOfferIndicator: 'Y',
       validOfferIndicator: 'Y',
@@ -133,10 +198,12 @@ describe('create-submit-service', () => {
     expect(result.createdId).toBe('OP-900')
     const [, body] = postMock.mock.calls[0]
     expect(body.get('companyName')).toBe('Example Lumber')
-    expect(body.get('contactName')).toBe('Alex Example')
+    expect(body.get('contactName')).toBe('Sample Contact')
     expect(body.get('offerVolume')).toBe('99.9')
-    expect(body.get('offerWithdrawalDate')).toBe('2026-01-20')
-    expect(body.get('withdrawReason')).toBe('Withdrawn by buyer')
+    expect(body.get('region')).toBeNull()
+    expect(body.get('purchaseOfferDate')).toBeNull()
+    expect(body.get('offerWithdrawalDate')).toBeNull()
+    expect(body.get('withdrawReason')).toBeNull()
     expect(body.get('teacReviewDate')).toBe('2026-01-15')
     expect(body.get('fairOfferIndicator')).toBe('Y')
     expect(body.get('validOfferIndicator')).toBe('Y')
@@ -144,6 +211,119 @@ describe('create-submit-service', () => {
     expect(body.get('offerRemark')).toBe('Needs review')
     expect(body.get('offerNumber')).toBeNull()
     expect(body.get('exportPurchaseOfferNumber')).toBeNull()
+  })
+
+  it('keeps offer conditions separate from an empty approver remark', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        exportPurchaseOfferNumber: 'OP-901',
+      },
+    })
+
+    await submitProvincialOfferCreate({
+      applicationNumber: '200',
+      packageNumber: 'PKG-9',
+      offeringClientNumber: '00012345',
+      companyName: 'Example Lumber',
+      contactName: 'Sample Contact',
+      offerVolume: '99.9',
+      purchaseOfferAmount: '25000',
+      teacReviewDate: '',
+      fairOfferIndicator: 'N',
+      validOfferIndicator: 'Y',
+      approvalIndicator: 'N',
+      offerRemark: '',
+      pickupLocation: 'yard',
+      offerCondition: 'No partial loads',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('offerCondition')).toBe('No partial loads')
+    expect(body.get('offerRemark')).toBeNull()
+  })
+
+  it('keeps explicitly cleared fields present in an offer update snapshot', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        exportPurchaseOfferNumber: '81001',
+      },
+    })
+
+    await submitProvincialOfferUpdate({
+      offerNumber: '81001',
+      applicationNumber: '200',
+      packageNumber: 'PKG-9',
+      offeringClientNumber: '00012345',
+      companyName: 'Example Lumber',
+      contactName: 'Sample Contact',
+      region: '11',
+      offerVolume: '99.9',
+      purchaseOfferAmount: '25000',
+      purchaseOfferDate: '2026-01-10',
+      offerWithdrawalDate: '',
+      withdrawReason: '',
+      teacReviewDate: '',
+      fairOfferIndicator: 'N',
+      validOfferIndicator: 'Y',
+      approvalIndicator: 'N',
+      offerRemark: '',
+      pickupLocation: '',
+      offerCondition: '',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body).toBeInstanceOf(URLSearchParams)
+    for (const key of [
+      'offerWithdrawalDate',
+      'withdrawReason',
+      'teacReviewDate',
+      'offerRemark',
+      'pickupLocation',
+      'offerCondition',
+    ]) {
+      expect(body.has(key)).toBe(true)
+      expect(body.get(key)).toBe('')
+    }
+    expect(body.has('region')).toBe(false)
+  })
+
+  it('returns actionable guidance when an offer update loses its edit lock', async () => {
+    postMock.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: {} },
+    })
+
+    const result = await submitProvincialOfferUpdate({
+      offerNumber: '81001',
+      applicationNumber: '200',
+      packageNumber: 'PKG-9',
+      offeringClientNumber: '00012345',
+      companyName: 'Example Lumber',
+      contactName: 'Sample Contact',
+      region: '11',
+      offerVolume: '99.9',
+      purchaseOfferAmount: '25000',
+      purchaseOfferDate: '2026-01-10',
+      offerWithdrawalDate: '',
+      withdrawReason: '',
+      teacReviewDate: '',
+      fairOfferIndicator: 'N',
+      validOfferIndicator: 'Y',
+      approvalIndicator: 'N',
+      offerRemark: '',
+      pickupLocation: 'yard',
+      offerCondition: 'none',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('edit lock has expired or is held by another user')
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('region')).toBeNull()
+    expect(body.get('purchaseOfferDate')).toBe('2026-01-10')
+    expect(body.get('offerWithdrawalDate')).toBe('')
+    expect(body.get('withdrawReason')).toBe('')
   })
 
   it('posts provincial application agent applicant fields when applicant type is agent', async () => {
@@ -196,14 +376,16 @@ describe('create-submit-service', () => {
 
     const result = await submitProvincialExemptionCreate({
       applicationNumber: '123',
-      linkedApplicationNumbers: ['123'],
+      linkedApplicationNumbers: ['123', '124'],
+      exemptionNumber: '',
       exemptionTypeCode: 'M',
       exemptionStatusCode: 'NEW',
-      ownerClientNumber: '123',
-      applicantClientNumber: '123',
       approvalDate: '2026-04-04',
       expiryDate: '2027-04-04',
       approvedVolume: '333333',
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
       otherConditions: '',
     })
 
@@ -211,7 +393,76 @@ describe('create-submit-service', () => {
     expect(result.message).toBe('')
     expect(result.errors).toEqual(['Application 123 is already assigned to exemption 1234.'])
     const [, body] = postMock.mock.calls[0]
+    expect(body.get('applicationNumber')).toBe('123')
+    expect(body.get('applications')).toBe('123,124')
     expect(body.get('exemptionNumber')).toBeNull()
+    expect(body.get('enableRateOverride')).toBeNull()
+    expect(body.get('feeRate')).toBeNull()
+    expect(body.get('region')).toBeNull()
+    expect(body.get('ownerClientNumber')).toBeNull()
+    expect(body.get('applicantClientNumber')).toBeNull()
+    expect(body.get('agentClientNumber')).toBeNull()
+  })
+
+  it('submits a standalone ministerial exemption without application or OIC fields', async () => {
+    postMock.mockResolvedValue({
+      data: { success: true, exemptionNumber: 'EX-900', message: 'saved' },
+    })
+
+    const result = await submitProvincialExemptionCreate({
+      applicationNumber: '',
+      linkedApplicationNumbers: [],
+      exemptionNumber: '',
+      exemptionTypeCode: 'M',
+      exemptionStatusCode: 'NEW',
+      approvalDate: '',
+      expiryDate: '',
+      approvedVolume: '250.5',
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
+      otherConditions: '',
+    })
+
+    expect(result.success).toBe(true)
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('applicationNumber')).toBeNull()
+    expect(body.get('applications')).toBeNull()
+    expect(body.get('exemptionNumber')).toBeNull()
+    expect(body.get('enableRateOverride')).toBeNull()
+    expect(body.get('feeRate')).toBeNull()
+    expect(body.get('region')).toBeNull()
+  })
+
+  it('serializes standalone Blanket OIC regions and fee override fields', async () => {
+    postMock.mockResolvedValue({
+      data: { success: true, exemptionNumber: 'BOIC-1', message: 'saved' },
+    })
+
+    await submitProvincialExemptionCreate({
+      applicationNumber: '',
+      linkedApplicationNumbers: [],
+      exemptionNumber: 'BOIC-1',
+      exemptionTypeCode: 'B',
+      exemptionStatusCode: 'ACT',
+      approvalDate: '2026-07-01',
+      expiryDate: '2027-07-01',
+      approvedVolume: '9999999.9',
+      enableRateOverride: true,
+      feeRate: '18.25',
+      regionNumbers: ['1903', '1904'],
+      otherConditions: '',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('applicationNumber')).toBeNull()
+    expect(body.get('applications')).toBeNull()
+    expect(body.get('exemptionNumber')).toBe('BOIC-1')
+    expect(body.get('exemptionTypeCode')).toBe('B')
+    expect(body.get('exemptionStatusCode')).toBe('ACT')
+    expect(body.get('enableRateOverride')).toBe('true')
+    expect(body.get('feeRate')).toBe('18.25')
+    expect(body.get('region')).toBe('1903,1904')
   })
 
   it('uses configured create endpoint overrides when provided', async () => {

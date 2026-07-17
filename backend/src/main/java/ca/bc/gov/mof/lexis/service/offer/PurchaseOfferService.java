@@ -27,7 +27,31 @@ public interface PurchaseOfferService {
 
   CreateOfferResult updateOffer(CreateOfferRequest request, String userId);
 
+  CreateOfferResult updateOfferSnapshot(UpdateOfferRequest request, String userId);
+
   record CreateOfferRequest(
+      Long applicationNumber,
+      Long exportPurchaseOfferNumber,
+      String packageNumber,
+      String companyName,
+      String contactName,
+      Double purchaseOfferAmount,
+      LocalDate purchaseOfferDate,
+      LocalDate offerWithdrawalDate,
+      LocalDate teacReviewDate,
+      String fairOfferIndicator,
+      String validOfferIndicator,
+      String offerRemark,
+      String approvalIndicator,
+      String withdrawReason,
+      String exportJurisdictionCode,
+      String manufacturingFacilityInfo,
+      String offeringClientNumber,
+      String pickupLocation,
+      String offerCondition,
+      Double offerVolume) {}
+
+  record UpdateOfferRequest(
       Long applicationNumber,
       Long exportPurchaseOfferNumber,
       String packageNumber,

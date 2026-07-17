@@ -1,11 +1,22 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
@@ -35,12 +46,23 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
+import ca.bc.gov.mof.lexis.service.permit.PermitService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
+import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,10 +72,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | PermitDetailsRpcController")
@@ -63,17 +87,48 @@ class PermitDetailsRpcControllerTest {
   @Mock private PermitDetailsRpcService service;
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
+  @Mock private ProvincialAuthorizationService provincialAuthorizationService;
+  @Mock private ApplicationEditLockService editLockService;
+  @Mock private PermitService permitService;
   @Mock private HttpServletRequest request;
   @Mock private HttpSession session;
 
   private PermitDetailsRpcController controller;
+  private PermitOperationMutex operationMutex;
 
   @BeforeEach
   void setup() {
     when(sessionService.getConfiguredIndustryRoles())
         .thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    operationMutex = new PermitOperationMutex();
     controller =
-        new PermitDetailsRpcController(serviceProvider, sessionService, authorizationService);
+        new PermitDetailsRpcController(
+            serviceProvider,
+            sessionService,
+            authorizationService,
+            operationMutex,
+            new ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator(
+                operationMutex));
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    controller.setPermitService(permitService);
+    lenient()
+        .when(permitService.findByPermitNumber(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    lenient()
+        .when(provincialAuthorizationService.canCreateForClient(any(), any(), any()))
+        .thenReturn(true);
+    lenient()
+        .when(service.getExemptionNumberForPermitMutation(any()))
+        .thenReturn("EX-700");
+    lenient()
+        .when(service.getApplicationNumbersForExemptionMutation(any()))
+        .thenReturn(List.of());
+    lenient()
+        .when(editLockService.snapshotExemption(any(), any(), eq(false)))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+    lenient()
+        .when(editLockService.acquireExemption(any(), any(), any(), eq(false)))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
   }
 
   @Test
@@ -88,11 +143,146 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void requestEmailShouldAllowProvincialSubmitterWithoutSavePermitGrant() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "bceid\\submitter",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00077881")));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(service.sendRequestPermitEmail(7000123L, null, "bceid\\submitter"))
+        .thenReturn(
+            new PermitDetailsRpcService.PermitEmailResult(
+                true, "queued", "2026-07-10"));
+
+    ResponseEntity<PermitDetailsRpcService.PermitEmailResult> response =
+        controller.sendRequestPermitEmail(7000123L, null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().permitRequestDate()).isEqualTo("2026-07-10");
+    verify(service).sendRequestPermitEmail(7000123L, null, "bceid\\submitter");
+  }
+
+  @Test
+  void requestEmailShouldRejectMinistryUsers() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\approver",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER")));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+
+    ResponseEntity<PermitDetailsRpcService.PermitEmailResult> response =
+        controller.sendRequestPermitEmail(7000123L, null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void requestEmailShouldFailWhenPermitIsLockedByAnotherEditor() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "bceid\\submitter",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00077881")));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(editLockService.acquirePermit(
+            7000123L, "bceid\\submitter", "bceid\\submitter", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true, false, null, "This permit is currently locked.", null));
+    controller.setApplicationEditLockService(editLockService);
+
+    assertThatThrownBy(
+            () -> controller.sendRequestPermitEmail(7000123L, null, authentication))
+        .isInstanceOf(EditLockConflictException.class)
+        .hasMessage("This permit is currently locked.");
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void approvalEmailDefaultShouldReturnResolvedApplicantForAuthorizedApprover() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApprovalPermitEmailDefault(7000123L))
+        .thenReturn(Optional.of("applicant@example.test"));
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().clientEmailAddress()).isEqualTo("applicant@example.test");
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+    verify(service).getApprovalPermitEmailDefault(7000123L);
+  }
+
+  @Test
+  void approvalEmailDefaultShouldReturnBlankWhenNoApplicantAddressExists() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApprovalPermitEmailDefault(7000123L)).thenReturn(Optional.empty());
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().clientEmailAddress()).isEmpty();
+  }
+
+  @Test
+  void approvalEmailDefaultShouldRejectUsersWithoutSavePermitAuthority() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(serviceProvider, service);
+  }
+
+  @Test
+  void approvalEmailDefaultShouldReturnNoContentWhenServiceIsUnavailable() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void approvalEmailDefaultShouldEnforcePermitObjectAccessBeforeLookup() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requirePermit(authentication, 7000123L);
+
+    assertThatThrownBy(
+            () -> controller.getApprovalPermitEmailDefault(7000123L, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("denied");
+    verify(service, never()).getApprovalPermitEmailDefault(any());
+  }
+
+  @Test
   void permitSummaryShouldForwardRequestAndResolveIndustryUserFlag() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitSummaryRpcResponseDto dto =
         new PermitSummaryRpcResponseDto("10.0", 12L, "$10.00", List.of(), "$10.00", "");
     when(service.getPermitSummary(7000123L, "US", "2026-01-15", "PKG-903", false)).thenReturn(dto);
+    when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
@@ -126,6 +316,7 @@ class PermitDetailsRpcControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitScaleFeesRpcResponseDto dto = new PermitScaleFeesRpcResponseDto("$7.60", List.of(), "Standing");
     when(service.getScaleFeesForPackage("PKG-903", 7000123L, true)).thenReturn(dto);
+    when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
@@ -149,9 +340,10 @@ class PermitDetailsRpcControllerTest {
                 new PermitScaleItemRpcResponseDto(
                     "TM1", 11L, "Hemlock", "Grade J", "7.6", "7000123", "101", "W", "RCO")));
     when(service.getScalesForPackage("PKG-903")).thenReturn(dto);
+    when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 
     ResponseEntity<PermitScalesForPackageRpcResponseDto> response =
-        controller.getScalesForPackage("PKG-903");
+        controller.getScalesForPackage("PKG-903", 7000123L);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -178,6 +370,7 @@ class PermitDetailsRpcControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitPackageVolumeSumRpcResponseDto dto = new PermitPackageVolumeSumRpcResponseDto("12.4");
     when(service.getPackageVolumeSum(7000123L, "PKG-903")).thenReturn(dto);
+    when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 
     ResponseEntity<PermitPackageVolumeSumRpcResponseDto> response =
         controller.getPackageVolumeSum(7000123L, "PKG-903");
@@ -185,6 +378,33 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getPackageVolumeSum(7000123L, "PKG-903");
+  }
+
+  @Test
+  void packageDerivedEndpointsShouldRejectPackagesFromAnotherPermit() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(service.packageBelongsToPermit("OTHER-PKG", 7000123L)).thenReturn(false);
+
+    assertThatThrownBy(
+            () ->
+                controller.getPermitSummary(
+                    7000123L, "US", "2026-01-15", "OTHER-PKG", authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () ->
+                controller.getScaleFeesForPackage(
+                    "OTHER-PKG", 7000123L, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.getPackageVolumeSum(7000123L, "OTHER-PKG"))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+
+    verify(service, never())
+        .getPermitSummary(7000123L, "US", "2026-01-15", "OTHER-PKG", false);
+    verify(service, never()).getScaleFeesForPackage("OTHER-PKG", 7000123L, false);
+    verify(service, never()).getPackageVolumeSum(7000123L, "OTHER-PKG");
   }
 
   @Test
@@ -237,9 +457,10 @@ class PermitDetailsRpcControllerTest {
     PermitPackageInfoRpcResponseDto dto =
         new PermitPackageInfoRpcResponseDto("Coast", "HE/UT", "Standing", "10.3", "5.5", "30.0", "Unmanufactured");
     when(service.getPackageInfo("PKG-903")).thenReturn(dto);
+    when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 
     ResponseEntity<PermitPackageInfoRpcResponseDto> response =
-        controller.getPackageInfo("PKG-903");
+        controller.getPackageInfo("PKG-903", 7000123L);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -263,9 +484,10 @@ class PermitDetailsRpcControllerTest {
             "N",
             "Standing");
     when(service.getPackageDetails("PKG-903")).thenReturn(dto);
+    when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 
     ResponseEntity<PermitPackageDetailsRpcResponseDto> response =
-        controller.getPackageDetails("PKG-903");
+        controller.getPackageDetails("PKG-903", 7000123L);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -289,46 +511,121 @@ class PermitDetailsRpcControllerTest {
   @Test
   void applicationListShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/applicationDetails"))
+        .thenReturn(true);
     PermitApplicationListRpcResponseDto dto =
         new PermitApplicationListRpcResponseDto(List.of("1000456", "1000457"));
-    when(service.getApplicationList(7000123L)).thenReturn(dto);
+    when(service.getApplicationList(eq(7000123L), any())).thenReturn(dto);
 
     ResponseEntity<PermitApplicationListRpcResponseDto> response =
-        controller.getApplicationList(7000123L);
+        controller.getApplicationList(7000123L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getApplicationList(7000123L);
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<Predicate<Long>> accessCaptor =
+        org.mockito.ArgumentCaptor.forClass(Predicate.class);
+    verify(service).getApplicationList(eq(7000123L), accessCaptor.capture());
+    when(provincialAuthorizationService.canAccessApplication(authentication, 1000456L))
+        .thenReturn(true);
+    assertThat(accessCaptor.getValue().test(1000456L)).isTrue();
+  }
+
+  @Test
+  void childApplicationPredicateShouldFailWithoutApplicationDetailCapability() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\exemption-approver", "n/a");
+    List<String> roles = List.of("LEXIS_EXEMPTION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/applicationDetails"))
+        .thenReturn(false);
+    when(service.getApplicationList(eq(7000123L), any()))
+        .thenReturn(new PermitApplicationListRpcResponseDto(List.of()));
+
+    controller.getApplicationList(7000123L, authentication);
+
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<Predicate<Long>> accessCaptor =
+        org.mockito.ArgumentCaptor.forClass(Predicate.class);
+    verify(service).getApplicationList(eq(7000123L), accessCaptor.capture());
+    assertThat(accessCaptor.getValue().test(1000456L)).isFalse();
+    verify(provincialAuthorizationService, never())
+        .canAccessApplication(authentication, 1000456L);
   }
 
   @Test
   void availableApplicationListShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
     PermitAvailableApplicationListRpcResponseDto dto =
         new PermitAvailableApplicationListRpcResponseDto(List.of("1000456"), null);
-    when(service.getAvailableApplicationList("EX-700", "1000458")).thenReturn(dto);
+    when(service.getAvailableApplicationList(eq("EX-700"), eq("1000458"), any()))
+        .thenReturn(dto);
 
     ResponseEntity<PermitAvailableApplicationListRpcResponseDto> response =
-        controller.getAvailableApplicationList("EX-700", "1000458");
+        controller.getAvailableApplicationList("EX-700", "1000458", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getAvailableApplicationList("EX-700", "1000458");
+    verify(service).getAvailableApplicationList(eq("EX-700"), eq("1000458"), any());
   }
 
   @Test
   void availablePackageListShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
     PermitAvailablePackageListRpcResponseDto dto =
         new PermitAvailablePackageListRpcResponseDto(List.of("PKG-900"), null);
-    when(service.getAvailablePackageList("EX-700", "PKG-901")).thenReturn(dto);
+    when(service.getAvailablePackageList(eq("EX-700"), eq("PKG-901"), any()))
+        .thenReturn(dto);
 
     ResponseEntity<PermitAvailablePackageListRpcResponseDto> response =
-        controller.getAvailablePackageList("EX-700", "PKG-901");
+        controller.getAvailablePackageList("EX-700", "PKG-901", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getAvailablePackageList("EX-700", "PKG-901");
+    verify(service).getAvailablePackageList(eq("EX-700"), eq("PKG-901"), any());
+  }
+
+  @Test
+  void availableApplicationListShouldPropagateOracleFailure() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle packages unavailable");
+    when(service.getAvailableApplicationList(eq("EX-700"), eq(""), any()))
+        .thenThrow(failure);
+
+    assertThatThrownBy(
+            () ->
+                controller.getAvailableApplicationList(
+                    "EX-700", "", authentication))
+        .isSameAs(failure);
+  }
+
+  @Test
+  void availablePackageListShouldPreserveLegitimatelyEmptyResponse() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    PermitAvailablePackageListRpcResponseDto dto =
+        new PermitAvailablePackageListRpcResponseDto(
+            List.of(), "No applications are currently available.");
+    when(service.getAvailablePackageList(eq("EX-700"), eq(""), any())).thenReturn(dto);
+
+    ResponseEntity<PermitAvailablePackageListRpcResponseDto> response =
+        controller.getAvailablePackageList("EX-700", "", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
   }
 
   @Test
@@ -462,20 +759,182 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void addPermitShouldForwardRequestToService() {
+  void permitUpdateShouldSerializeAConcurrentInvoiceMutationForTheSamePermit()
+      throws Exception {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
             Map.of(
                 "permitNumber", new String[] {"7000123"},
-                "permitStatus", new String[] {"ACT"},
-                "permitSubmitDate", new String[] {"2026-05-27"},
-                "permitIssueDate", new String[] {"2026-05-27"},
-                "permitExpiryDate", new String[] {"2026-06-27"},
-                "exemptionNumber", new String[] {"EX-700"},
-                "region", new String[] {"1835"},
-                "permitTotalVolume", new String[] {"100.0"},
-                "permitTotalPieces", new String[] {"25"}));
+                "permitStatus", new String[] {"ACT"}));
+    when(service.getApplicationNumbersForPermitMutation(7000123L)).thenReturn(List.of());
+
+    CountDownLatch updateEntered = new CountDownLatch(1);
+    CountDownLatch releaseUpdate = new CountDownLatch(1);
+    CountDownLatch invoiceAttempted = new CountDownLatch(1);
+    CountDownLatch invoiceEntered = new CountDownLatch(1);
+    PermitMutationRpcResponseDto updateResult =
+        new PermitMutationRpcResponseDto(
+            true,
+            "updated",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
+    PermitPersistenceRpcResponseDto invoiceResult =
+        new PermitPersistenceRpcResponseDto(
+            true, "invoiced", List.of(), List.of(), 7000123L);
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            ignored -> {
+              updateEntered.countDown();
+              if (!releaseUpdate.await(2, SECONDS)) {
+                throw new IllegalStateException("Timed out waiting to release permit update.");
+              }
+              return updateResult;
+            });
+    when(service.addInvoice(
+            7000123L,
+            "INV-100",
+            new java.math.BigDecimal("100.00"),
+            new java.math.BigDecimal("1.25"),
+            new java.math.BigDecimal("12.00"),
+            "idir\\jsmith"))
+        .thenAnswer(
+            ignored -> {
+              invoiceEntered.countDown();
+              return invoiceResult;
+            });
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    try {
+      Future<ResponseEntity<PermitMutationRpcResponseDto>> update =
+          executor.submit(() -> controller.updatePermit(request, authentication));
+      assertThat(updateEntered.await(2, SECONDS)).isTrue();
+
+      Future<ResponseEntity<PermitPersistenceRpcResponseDto>> invoice =
+          executor.submit(
+              () -> {
+                invoiceAttempted.countDown();
+                return controller.addInvoice(
+                    7000123L,
+                    "INV-100",
+                    "100.00",
+                    "1.25",
+                    "12.00",
+                    authentication);
+              });
+      assertThat(invoiceAttempted.await(2, SECONDS)).isTrue();
+      assertThat(invoiceEntered.await(150, MILLISECONDS)).isFalse();
+
+      releaseUpdate.countDown();
+      assertThat(update.get(2, SECONDS).getBody()).isEqualTo(updateResult);
+      assertThat(invoice.get(2, SECONDS).getBody()).isEqualTo(invoiceResult);
+      assertThat(invoiceEntered.getCount()).isZero();
+    } finally {
+      releaseUpdate.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void waitingPermitMutationShouldReauthorizeInsideTheCriticalSection()
+      throws Exception {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    CountDownLatch holderEntered = new CountDownLatch(1);
+    CountDownLatch releaseHolder = new CountDownLatch(1);
+    CountDownLatch initialAuthorizationPassed = new CountDownLatch(1);
+    java.util.concurrent.atomic.AtomicInteger authorizationChecks =
+        new java.util.concurrent.atomic.AtomicInteger();
+    doAnswer(
+            ignored -> {
+              if (authorizationChecks.incrementAndGet() == 1) {
+                initialAuthorizationPassed.countDown();
+                return null;
+              }
+              throw new org.springframework.security.access.AccessDeniedException(
+                  "Permit ownership changed while waiting.");
+            })
+        .when(provincialAuthorizationService)
+        .requirePermit(authentication, 7000123L);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    try {
+      Future<String> holder =
+          executor.submit(
+              () ->
+                  operationMutex.execute(
+                      7000123L,
+                      () -> {
+                        holderEntered.countDown();
+                        try {
+                          if (!releaseHolder.await(2, SECONDS)) {
+                            throw new IllegalStateException(
+                                "Timed out waiting to release permit lock.");
+                          }
+                        } catch (InterruptedException exception) {
+                          Thread.currentThread().interrupt();
+                          throw new IllegalStateException(exception);
+                        }
+                        return "released";
+                      }));
+      assertThat(holderEntered.await(2, SECONDS)).isTrue();
+
+      Future<ResponseEntity<PermitPersistenceRpcResponseDto>> waitingMutation =
+          executor.submit(
+              () ->
+                  controller.addInvoice(
+                      7000123L,
+                      "INV-100",
+                      "100.00",
+                      "1.25",
+                      "12.00",
+                      authentication));
+      assertThat(initialAuthorizationPassed.await(2, SECONDS)).isTrue();
+      assertThat(authorizationChecks).hasValue(1);
+
+      releaseHolder.countDown();
+      assertThat(holder.get(2, SECONDS)).isEqualTo("released");
+      assertThatThrownBy(() -> waitingMutation.get(2, SECONDS))
+          .hasCauseInstanceOf(
+              org.springframework.security.access.AccessDeniedException.class);
+      verify(service, never()).addInvoice(any(), any(), any(), any(), any(), any());
+    } finally {
+      releaseHolder.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void addPermitShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.ofEntries(
+                Map.entry("permitNumber", new String[] {"7000123"}),
+                Map.entry("permitStatus", new String[] {"ACT"}),
+                Map.entry("permitSubmitDate", new String[] {"2026-05-27"}),
+                Map.entry("permitIssueDate", new String[] {"2026-05-27"}),
+                Map.entry("permitExpiryDate", new String[] {"2026-06-27"}),
+                Map.entry("exemptionNumber", new String[] {"EX-700"}),
+                Map.entry("region", new String[] {"1835"}),
+                Map.entry("permitTotalVolume", new String[] {"100.0"}),
+                Map.entry("permitTotalPieces", new String[] {"25"}),
+                Map.entry("destinationCompanyName", new String[] {"Acme Lumber"}),
+                Map.entry("destinationCountry", new String[] {"US"}),
+                Map.entry("transportType", new String[] {"TRUCK"}),
+                Map.entry("transportName", new String[] {"Hauler 1"}),
+                Map.entry("estimatedShippingDate", new String[] {"2026-06-01"}),
+                Map.entry("portOfExport", new String[] {"OT"}),
+                Map.entry("otherPortOfExport", new String[] {"Blaine"}),
+                Map.entry("ownerClientNumber", new String[] {"00070001"}),
+                Map.entry("ownerClientLocation", new String[] {"01"})));
 
     PermitMutationRpcResponseDto dto =
         new PermitMutationRpcResponseDto(
@@ -514,6 +973,291 @@ class PermitDetailsRpcControllerTest {
     assertThat(requestCaptor.getValue().orgUnitNumber()).isEqualTo("1835");
     assertThat(requestCaptor.getValue().permitTotalVolume()).isEqualTo("100.0");
     assertThat(requestCaptor.getValue().permitNumberOfPieces()).isEqualTo("25");
+    assertThat(requestCaptor.getValue().destinationCompanyName()).isEqualTo("Acme Lumber");
+    assertThat(requestCaptor.getValue().destinationCountry()).isEqualTo("US");
+    assertThat(requestCaptor.getValue().transportType()).isEqualTo("TRUCK");
+    assertThat(requestCaptor.getValue().transportName()).isEqualTo("Hauler 1");
+    assertThat(requestCaptor.getValue().estimatedShippingDate()).isEqualTo("2026-06-01");
+    assertThat(requestCaptor.getValue().portOfExport()).isEqualTo("OT");
+    assertThat(requestCaptor.getValue().otherPortOfExport()).isEqualTo("Blaine");
+    assertThat(requestCaptor.getValue().ownerClientNumber()).isEqualTo("00070001");
+    assertThat(requestCaptor.getValue().ownerClientLocation()).isEqualTo("01");
+    verify(provincialAuthorizationService, times(2))
+        .requireExemption(authentication, "EX-700");
+  }
+
+  @Test
+  void createPermitFromExemptionShouldAllowApplicationApproverAndReauthorizeTheExemption() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was created successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
+    when(service.createPermitFromExemption("EX-700", "idir\\jsmith")).thenReturn(dto);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.createPermitFromExemption(" EX-700 ", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(provincialAuthorizationService, times(2))
+        .requireExemption(authentication, "EX-700");
+    verify(service, times(2)).getApplicationNumbersForExemptionMutation("EX-700");
+    verify(service).createPermitFromExemption("EX-700", "idir\\jsmith");
+  }
+
+  @Test
+  void createPermitFromExemptionShouldAllowAdmin() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was created successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_ADMIN"), "createPermit"))
+        .thenReturn(true);
+    when(service.createPermitFromExemption("EX-700", "idir\\admin")).thenReturn(dto);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.createPermitFromExemption("EX-700", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).createPermitFromExemption("EX-700", "idir\\admin");
+  }
+
+  @Test
+  void createPermitFromExemptionShouldRejectProvincialSubmitterEvenIfActionIsGranted() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "bceid\\submitter", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createPermit"))
+        .thenReturn(true);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.createPermitFromExemption("EX-700", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(serviceProvider, never()).getIfAvailable();
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void createPermitFromExemptionShouldReauthorizeAfterWaitingForSerialization()
+      throws Exception {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    CountDownLatch holderEntered = new CountDownLatch(1);
+    CountDownLatch releaseHolder = new CountDownLatch(1);
+    CountDownLatch initialAuthorizationPassed = new CountDownLatch(1);
+    java.util.concurrent.atomic.AtomicInteger authorizationChecks =
+        new java.util.concurrent.atomic.AtomicInteger();
+    doAnswer(
+            ignored -> {
+              if (authorizationChecks.incrementAndGet() == 1) {
+                initialAuthorizationPassed.countDown();
+                return null;
+              }
+              throw new org.springframework.security.access.AccessDeniedException(
+                  "Exemption ownership changed while waiting.");
+            })
+        .when(provincialAuthorizationService)
+        .requireExemption(authentication, "EX-700");
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    try {
+      Future<String> holder =
+          executor.submit(
+              () ->
+                  operationMutex.executeExemptions(
+                      List.of("EX-700"),
+                      () -> {
+                        holderEntered.countDown();
+                        try {
+                          if (!releaseHolder.await(2, SECONDS)) {
+                            throw new IllegalStateException(
+                                "Timed out waiting to release exemption lock.");
+                          }
+                        } catch (InterruptedException exception) {
+                          Thread.currentThread().interrupt();
+                          throw new IllegalStateException(exception);
+                        }
+                        return "released";
+                      }));
+      assertThat(holderEntered.await(2, SECONDS)).isTrue();
+
+      Future<ResponseEntity<PermitMutationRpcResponseDto>> waitingMutation =
+          executor.submit(
+              () -> controller.createPermitFromExemption("EX-700", authentication));
+      assertThat(initialAuthorizationPassed.await(2, SECONDS)).isTrue();
+      assertThat(authorizationChecks).hasValue(1);
+      assertThat(waitingMutation.isDone()).isFalse();
+
+      releaseHolder.countDown();
+      assertThat(holder.get(2, SECONDS)).isEqualTo("released");
+      assertThatThrownBy(() -> waitingMutation.get(2, SECONDS))
+          .hasCauseInstanceOf(
+              org.springframework.security.access.AccessDeniedException.class);
+      assertThat(authorizationChecks).hasValue(2);
+      verify(service, never()).createPermitFromExemption(any(), any());
+    } finally {
+      releaseHolder.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void addPermitShouldRequireSavePermitEvenWhenCreatePermitIsGranted() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "idir\\approver", List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "savePermit"))
+        .thenReturn(false);
+    lenient()
+        .when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "createPermit"))
+        .thenReturn(true);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(serviceProvider, never()).getIfAvailable();
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void addPermitShouldRejectAnExemptionOutsideTheAuthenticatedScope() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of("exemptionNumber", new String[] {"EX-OTHER"}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requireExemption(authentication, "EX-OTHER");
+
+    assertThatThrownBy(() -> controller.addPermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+
+    verify(service, never()).addPermit(any(), any());
+  }
+
+  @Test
+  void addPermitShouldReleaseAnExemptionLockAcquiredOnlyForTheMutation() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of("exemptionNumber", new String[] {"EX-700"}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(editLockService.snapshotExemption("EX-700", "idir\\jsmith", false))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+    when(editLockService.acquireExemption(
+            "EX-700", "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    when(service.addPermit(any(PermitMutationRequestDto.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    controller.setApplicationEditLockService(editLockService);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(editLockService).releaseExemption("EX-700", "idir\\jsmith");
+  }
+
+  @Test
+  void addPermitShouldPreserveAPreExistingSameUserExemptionLock() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of("exemptionNumber", new String[] {"EX-700"}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(editLockService.snapshotExemption("EX-700", "idir\\jsmith", false))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    when(editLockService.acquireExemption(
+            "EX-700", "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    when(service.addPermit(any(PermitMutationRequestDto.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    controller.setApplicationEditLockService(editLockService);
+
+    controller.addPermit(request, authentication);
+
+    verify(editLockService, never()).releaseExemption(any(), any());
+  }
+
+  @Test
+  void addPermitShouldSerializeExemptionApplicationsAndAuthorizeRequestedOicApplication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "exemptionNumber", new String[] {"EX-700"},
+                "oicApplicationNumber", new String[] {"1000999"}));
+    when(service.getApplicationNumbersForExemptionMutation("EX-700"))
+        .thenReturn(List.of(1000456L));
+    when(service.addPermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    controller.setApplicationEditLockService(editLockService);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(provincialAuthorizationService, never())
+        .requireApplication(authentication, 1000456L);
+    verify(provincialAuthorizationService, times(2))
+        .requireApplication(authentication, 1000999L);
+    verify(editLockService)
+        .acquireExemption("EX-700", "idir\\jsmith", "idir\\jsmith", false);
+    verify(editLockService).releaseExemption("EX-700", "idir\\jsmith");
+  }
+
+  @Test
+  void addPermitShouldFailClosedForMalformedRequestedOicApplication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "exemptionNumber", new String[] {"EX-700"},
+                "oicApplicationNumber", new String[] {"invalid"}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThatThrownBy(() -> controller.addPermit(request, authentication))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessageContaining("requested OIC application relationship is invalid");
+
+    verify(service, never()).addPermit(any(), any());
   }
 
   @Test
@@ -523,7 +1267,11 @@ class PermitDetailsRpcControllerTest {
         .thenReturn(
             Map.of(
                 "permitNumber", new String[] {"7000123"},
-                "permitStatus", new String[] {"PPD"}));
+                "permitStatus", new String[] {"PPD"},
+                "permitReceiptNo", new String[] {""},
+                "permitRemarks", new String[] {""},
+                "otherPortOfExport", new String[] {""},
+                "agentClientNumber", new String[] {""}));
 
     PermitMutationRpcResponseDto dto =
         new PermitMutationRpcResponseDto(
@@ -539,6 +1287,9 @@ class PermitDetailsRpcControllerTest {
             null);
     when(service.updatePermit(org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(dto);
+    when(service.getApplicationNumbersForPermitMutation(7000123L))
+        .thenReturn(List.of(1000456L));
+    allowApplicationMutationLocks(1000456L);
 
     TestingAuthenticationToken authentication = authorizedSavePermit();
 
@@ -555,6 +1306,270 @@ class PermitDetailsRpcControllerTest {
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     assertThat(requestCaptor.getValue().permitNumber()).isEqualTo("7000123");
     assertThat(requestCaptor.getValue().permitStatus()).isEqualTo("PPD");
+    assertThat(requestCaptor.getValue().permitReceiptNo()).isEmpty();
+    assertThat(requestCaptor.getValue().permitRemarks()).isEmpty();
+    assertThat(requestCaptor.getValue().otherPortOfExport()).isEmpty();
+    assertThat(requestCaptor.getValue().agentClientNumber()).isEmpty();
+    verify(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    verify(editLockService).acquire(1000456L, "idir\\jsmith", "idir\\jsmith", false);
+    verify(editLockService).release(1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void updatePermitShouldForwardExplicitNumericOrgUnitNumber() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "orgUnitNo", new String[] {"1908"}));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    allowApplicationMutationLocks();
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).updatePermit(requestCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().orgUnitNumber()).isEqualTo("1908");
+  }
+
+  @Test
+  void updatePermitShouldLockTheAuthoritativeExemptionWhenRequestOmitsIt() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of("permitNumber", new String[] {"7000123"}));
+    when(service.getExemptionNumberForPermitMutation(7000123L))
+        .thenReturn("EX-CURRENT");
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    allowApplicationMutationLocks();
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(provincialAuthorizationService)
+        .requireExemption(authentication, "EX-CURRENT");
+    verify(editLockService)
+        .acquireExemption("EX-CURRENT", "idir\\jsmith", "idir\\jsmith", false);
+    verify(editLockService).releaseExemption("EX-CURRENT", "idir\\jsmith");
+  }
+
+  @Test
+  void updatePermitShouldLockCurrentAndRequestedParentsAndApplicationRelationships() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "exemptionNumber", new String[] {"EX-TARGET"},
+                "oicApplicationNumber", new String[] {"1000999"}));
+    when(service.getExemptionNumberForPermitMutation(7000123L))
+        .thenReturn("EX-CURRENT");
+    when(service.getApplicationNumbersForPermitMutation(7000123L))
+        .thenReturn(List.of(1000456L));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    allowApplicationMutationLocks(1000456L, 1000999L);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(editLockService)
+        .acquireExemption("EX-CURRENT", "idir\\jsmith", "idir\\jsmith", false);
+    verify(editLockService)
+        .acquireExemption("EX-TARGET", "idir\\jsmith", "idir\\jsmith", false);
+    verify(editLockService).releaseExemption("EX-CURRENT", "idir\\jsmith");
+    verify(editLockService).releaseExemption("EX-TARGET", "idir\\jsmith");
+    verify(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    verify(provincialAuthorizationService)
+        .requireApplication(authentication, 1000999L);
+  }
+
+  @Test
+  void updatePermitShouldRequirePermitReviewAuthorityForFeeOverrides() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "overrideInd", new String[] {"true"},
+                "overrideFee", new String[] {"25.00"},
+                "overrideComment", new String[] {"Reviewed"}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(authorizationService)
+        .canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "/permitsReview");
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldForwardAuthorizedFeeOverrideFieldsToTheServiceBoundary() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitStatus", new String[] {"PPD"},
+                "overrideInd", new String[] {"true"},
+                "overrideFee", new String[] {"25.00"},
+                "overrideComment", new String[] {"Reviewed calculation"}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "/permitsReview"))
+        .thenReturn(true);
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                false,
+                "",
+                List.of("Fee overrides cannot be changed after permit invoicing."),
+                List.of(),
+                7000123L,
+                null,
+                null,
+                false,
+                false,
+                null));
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).updatePermit(requestCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().permitStatus()).isEqualTo("PPD");
+    assertThat(requestCaptor.getValue().overrideInd()).isEqualTo("true");
+    assertThat(requestCaptor.getValue().overrideFee()).isEqualTo("25.00");
+    assertThat(requestCaptor.getValue().overrideComment()).isEqualTo("Reviewed calculation");
+  }
+
+  @Test
+  void updatePermitShouldRejectExpiredCanonicalPermitBeforeLocksOrRpcMutation() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitStatus", new String[] {"ACT"},
+                "permitRemarks", new String[] {"forged resurrection"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("EXP")));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("Expired permits are read-only.");
+
+    verifyNoInteractions(editLockService);
+    verify(service, never()).getApplicationNumbersForPermitMutation(any());
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldLockTheRequestedHiddenOicApplication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "oicApplicationNumber", new String[] {"1000999"}));
+    when(service.getApplicationNumbersForPermitMutation(7000123L))
+        .thenReturn(List.of(1000456L));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    allowApplicationMutationLocks(1000456L);
+    allowApplicationMutationLocks(1000999L);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    verify(provincialAuthorizationService)
+        .requireApplication(authentication, 1000999L);
+    verify(editLockService).acquire(1000456L, "idir\\jsmith", "idir\\jsmith", false);
+    verify(editLockService).acquire(1000999L, "idir\\jsmith", "idir\\jsmith", false);
+    verify(editLockService).release(1000456L, "idir\\jsmith");
+    verify(editLockService).release(1000999L, "idir\\jsmith");
+  }
+
+  @Test
+  void updatePermitShouldAuthorizeARequestedReplacementExemption() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "exemptionNumber", new String[] {"EX-OTHER"}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requireExemption(authentication, "EX-OTHER");
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldReleaseReplacementExemptionLockWhenPermitLockConflicts() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "exemptionNumber", new String[] {"EX-OTHER"}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(editLockService.snapshotExemption("EX-OTHER", "idir\\jsmith", false))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+    when(editLockService.acquireExemption(
+            "EX-OTHER", "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    when(editLockService.acquirePermit(
+            7000123L, "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true, false, null, "This permit is currently locked.", null));
+    controller.setApplicationEditLockService(editLockService);
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(EditLockConflictException.class)
+        .hasMessage("This permit is currently locked.");
+
+    verify(editLockService).releaseExemption("EX-700", "idir\\jsmith");
+    verify(editLockService).releaseExemption("EX-OTHER", "idir\\jsmith");
+    verify(service, never()).updatePermit(any(), any());
   }
 
   @Test
@@ -599,12 +1614,35 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void updateShippingShouldRejectExpiredCanonicalPermitBeforeRpcMutation() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "estimatedShippingDate", new String[] {"2026-06-10"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("EXP")));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThatThrownBy(() -> controller.updateShipping(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("Expired permits are read-only.");
+
+    verifyNoInteractions(editLockService);
+    verify(service, never()).updateShipping(any(), any());
+  }
+
+  @Test
   void updateScaleAttachmentShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitPersistenceRpcResponseDto dto =
         new PermitPersistenceRpcResponseDto(
             true, "Scale detail was added to the permit.", List.of(), List.of(), 7000123L);
     when(service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith")).thenReturn(dto);
+    when(service.getApplicationNumberForScaleMutation("101"))
+        .thenReturn(Optional.of(1000456L));
+    allowApplicationMutationLocks(1000456L);
 
     TestingAuthenticationToken authentication = authorizedSavePermit();
 
@@ -614,6 +1652,9 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
+    verify(provincialAuthorizationService, times(2))
+        .requireApplication(authentication, 1000456L);
+    verify(editLockService).release(1000456L, "idir\\jsmith");
   }
 
   @Test
@@ -624,6 +1665,7 @@ class PermitDetailsRpcControllerTest {
             true, "Application scale rows were added to the permit.", List.of(), List.of(), 7000123L);
     when(service.addApplicationsToPermit(7000123L, "1000456,1000457", "idir\\jsmith"))
         .thenReturn(dto);
+    allowApplicationMutationLocks(1000456L, 1000457L);
 
     TestingAuthenticationToken authentication = authorizedSavePermit();
 
@@ -633,6 +1675,12 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).addApplicationsToPermit(7000123L, "1000456,1000457", "idir\\jsmith");
+    verify(provincialAuthorizationService, times(2))
+        .requireApplication(authentication, 1000456L);
+    verify(provincialAuthorizationService, times(2))
+        .requireApplication(authentication, 1000457L);
+    verify(editLockService).release(1000456L, "idir\\jsmith");
+    verify(editLockService).release(1000457L, "idir\\jsmith");
   }
 
   @Test
@@ -642,6 +1690,7 @@ class PermitDetailsRpcControllerTest {
         new PermitPersistenceRpcResponseDto(
             true, "Application scale rows were removed from the permit.", List.of(), List.of(), 7000123L);
     when(service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith")).thenReturn(dto);
+    allowApplicationMutationLocks(1000456L);
 
     TestingAuthenticationToken authentication = authorizedSavePermit();
 
@@ -651,6 +1700,9 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
+    verify(provincialAuthorizationService, times(2))
+        .requireApplication(authentication, 1000456L);
+    verify(editLockService).release(1000456L, "idir\\jsmith");
   }
 
   @Test
@@ -725,7 +1777,17 @@ class PermitDetailsRpcControllerTest {
   void documentDetailsShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     List<PermitDocumentItemRpcResponseDto> dto =
-        List.of(new PermitDocumentItemRpcResponseDto("file.pdf", "", "Invoice", "INV", 77L));
+        List.of(
+            new PermitDocumentItemRpcResponseDto(
+                "file.pdf",
+                "",
+                "Invoice",
+                "INV",
+                77L,
+                "invoice",
+                null,
+                7000123L,
+                true));
     when(service.getDocumentDetails(7000123L)).thenReturn(dto);
 
     ResponseEntity<List<PermitDocumentItemRpcResponseDto>> response =
@@ -737,24 +1799,145 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void documentShouldReturnNoContentWhenMissing() {
+  void documentDetailsShouldHideApplicationDocumentsWithoutApplicationDetailAuthority() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\exemption-approver",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER")));
+    List<String> roles = List.of("LEXIS_EXEMPTION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/applicationDetails"))
+        .thenReturn(false);
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.getDocument(77L)).thenReturn(Optional.empty());
+    when(service.getDocumentDetails(7000123L))
+        .thenReturn(
+            List.of(
+                new PermitDocumentItemRpcResponseDto(
+                    "application.pdf",
+                    "",
+                    "Application",
+                    "INS",
+                    77L,
+                    "application",
+                    1000456L,
+                    null,
+                    false)));
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+    try {
+      ResponseEntity<List<PermitDocumentItemRpcResponseDto>> response =
+          controller.getDocumentDetails("7000123");
 
-    ResponseEntity<byte[]> response = controller.getDocument("77", "file.pdf");
+      assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(response.getBody()).isEmpty();
+      verify(provincialAuthorizationService, never())
+          .requireApplication(authentication, 1000456L);
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+  }
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-    verify(service).getDocument(77L);
+  @Test
+  void streamDocumentShouldRejectApplicationDocumentWithoutApplicationDetailAuthority() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\exemption-approver",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER")));
+    List<String> roles = List.of("LEXIS_EXEMPTION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/applicationDetails"))
+        .thenReturn(false);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(77L, "application");
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+    try {
+      assertThatThrownBy(
+              () -> controller.streamDocument("77", "application.pdf", "7000123"))
+          .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+          .hasMessage(
+              "Document does not belong to an accessible source for the supplied permit.");
+      verify(service, never()).streamDocument(77L);
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+  }
+
+  @Test
+  void streamDocumentShouldRejectApplicationDocumentWithoutApplicationObjectAccess() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\application-approver",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER")));
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/applicationDetails"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(77L, "application");
+    doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+    try {
+      assertThatThrownBy(
+              () -> controller.streamDocument("77", "application.pdf", "7000123"))
+          .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+          .hasMessage(
+              "Document does not belong to an accessible source for the supplied permit.");
+      verify(service, never()).streamDocument(77L);
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+  }
+
+  @Test
+  void streamInvoiceDocumentShouldReturnAttachmentPayload() throws Exception {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\application-approver",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER")));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(77L, "invoice");
+    when(service.streamDocument(77L))
+        .thenReturn(Optional.of(output -> output.write("invoice-content".getBytes())));
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+    try {
+      ResponseEntity<StreamingResponseBody> response =
+          controller.streamDocument("77", "../unsafe/invoice.pdf", "7000123");
+
+      assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(response.getHeaders().getContentDisposition().isAttachment()).isTrue();
+      assertThat(response.getHeaders().getContentDisposition().getFilename())
+          .isEqualTo("invoice.pdf");
+      assertThat(response.getBody()).isNotNull();
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      response.getBody().writeTo(output);
+      assertThat(output.toByteArray()).containsExactly("invoice-content".getBytes());
+      verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+      verify(service).streamDocument(77L);
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
   }
 
   @Test
   void removePermitDocumentShouldReturnSuccessFlag() {
     TestingAuthenticationToken authentication = authorizedSavePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
     when(service.removePermitDocument(33L)).thenReturn(true);
 
     ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removePermitDocument("33", authentication);
+        controller.removePermitDocument("33", 7000123L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -763,33 +1946,78 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void removeApplicationDocumentShouldReturnSuccessFlag() {
+  void removePermitDocumentShouldRejectInvoiceSource() {
     TestingAuthenticationToken authentication = authorizedSavePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.removeApplicationDocument(44L)).thenReturn(true);
+    stubPermitDocument(33L, "invoice");
+
+    assertThatThrownBy(
+            () -> controller.removePermitDocument("33", 7000123L, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("Document is not a permit attachment for the supplied permit.");
+    verify(service, never()).removePermitDocument(33L);
+  }
+
+  @Test
+  void removeApplicationDocumentShouldRejectReadOnlyAggregateChild() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
 
     ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeApplicationDocument("44", authentication);
+        controller.removeApplicationDocument("44", 7000123L, authentication);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().success()).isEqualTo("true");
-    verify(service).removeApplicationDocument(44L);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    assertThat(response.getBody()).isNull();
+    verifyNoInteractions(service);
   }
 
   @Test
   void removeInvoiceDocumentShouldReturnSuccessFlag() {
     TestingAuthenticationToken authentication = authorizedSavePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(55L, "invoice");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
     when(service.removeInvoiceDocument(55L)).thenReturn(true);
 
     ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeInvoiceDocument("55", authentication);
+        controller.removeInvoiceDocument("55", 7000123L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isEqualTo("true");
     verify(service).removeInvoiceDocument(55L);
+  }
+
+  @Test
+  void removePermitDocumentShouldFailClosedWhenRpcServiceIsUnavailable() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void removePermitDocumentShouldPreserveThePermitEditLock() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(editLockService.acquirePermit(
+            7000123L, "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true, false, null, "This permit is currently locked.", null));
+    controller.setApplicationEditLockService(editLockService);
+
+    assertThatThrownBy(
+            () -> controller.removePermitDocument("33", 7000123L, authentication))
+        .isInstanceOf(EditLockConflictException.class)
+        .hasMessage("This permit is currently locked.");
+    verify(permitService).findByPermitNumber(7000123L);
+    verify(service, never()).removePermitDocument(33L);
   }
 
   @Test
@@ -860,14 +2088,115 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void removePermitDocumentShouldRejectWithoutSavePermitAction() {
+  void removePermitDocumentShouldRejectReadOnlyUser() {
     TestingAuthenticationToken authentication = unauthorizedSavePermit();
 
     ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removePermitDocument("33", authentication);
+        controller.removePermitDocument("33", 7000123L, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
+  }
+
+  @Test
+  void removePermitDocumentShouldAllowAdminOutsideActiveExceptExpired() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+    when(service.removePermitDocument(33L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removePermitDocument(33L);
+  }
+
+  @Test
+  void removePermitDocumentShouldAllowScopedSubmitterForActivePermit() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    when(service.removePermitDocument(33L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removePermitDocument(33L);
+  }
+
+  @Test
+  void removePermitDocumentShouldRejectAdminForExpiredPermit() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("EXP")));
+
+    assertThatThrownBy(
+            () -> controller.removePermitDocument("33", 7000123L, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("Expired permits are read-only.");
+    verify(service, never()).removePermitDocument(33L);
+  }
+
+  @Test
+  void removeInvoiceDocumentShouldRejectAdminOutsideActiveStatus() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(55L, "invoice");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeInvoiceDocument("55", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).removeInvoiceDocument(55L);
+  }
+
+  @Test
+  void removeInvoiceDocumentShouldLetAdminOverrideReadOnlyRoleForActivePermit() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "idir\\admin", List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(55L, "invoice");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    when(service.removeInvoiceDocument(55L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeInvoiceDocument("55", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removeInvoiceDocument(55L);
+  }
+
+  @Test
+  void removePermitDocumentShouldFailClosedWhenCanonicalPermitIsUnavailable() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(permitService.findByPermitNumber(7000123L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () -> controller.removePermitDocument("33", 7000123L, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("Permit status is unavailable for mutation.");
+    verify(service, never()).removePermitDocument(33L);
   }
 
   @Test
@@ -909,13 +2238,54 @@ class PermitDetailsRpcControllerTest {
     verify(session).removeAttribute("PERMIT_LOCK");
   }
 
+  private void allowApplicationMutationLocks(Long... applicationNumbers) {
+    controller.setApplicationEditLockService(editLockService);
+    lenient()
+        .when(editLockService.acquirePermit(
+            7000123L, "idir\\jsmith", "idir\\jsmith", false))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    for (Long applicationNumber : applicationNumbers) {
+      when(editLockService.snapshot(applicationNumber, "idir\\jsmith", false))
+          .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+      when(editLockService.acquire(
+              applicationNumber, "idir\\jsmith", "idir\\jsmith", false))
+          .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    }
+  }
+
+  private void stubPermitDocument(long documentId, String source) {
+    Long sourceApplicationNumber = "application".equals(source) ? 1000456L : null;
+    Long sourcePermitNumber = sourceApplicationNumber == null ? 7000123L : null;
+    when(service.findDocumentForPermit(documentId, 7000123L))
+        .thenReturn(
+            Optional.of(
+                new PermitDocumentItemRpcResponseDto(
+                    "file.pdf",
+                    "",
+                    source,
+                    switch (source) {
+                      case "application" -> "INS";
+                      case "invoice" -> "INV";
+                      default -> "PMT";
+                    },
+                    documentId,
+                    source,
+                    sourceApplicationNumber,
+                    sourcePermitNumber,
+                    !"application".equals(source))));
+  }
+
   private TestingAuthenticationToken authorizedSavePermit() {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
             "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER")));
     List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
-    when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(true);
+    lenient().when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(true);
+    lenient().when(authorizationService.canPerformAction(roles, "createPermit")).thenReturn(true);
+    lenient()
+        .when(authorizationService.canPerformAction(roles, "/applicationDetails"))
+        .thenReturn(true);
     return authentication;
   }
 
@@ -925,7 +2295,51 @@ class PermitDetailsRpcControllerTest {
             "idir\\readonly", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
     List<String> roles = List.of("LEXIS_READ_ONLY");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
-    when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(false);
+    lenient().when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(false);
+    lenient().when(authorizationService.canPerformAction(roles, "createPermit")).thenReturn(false);
     return authentication;
+  }
+
+  private TestingAuthenticationToken authenticationWithRoles(
+      String principal, List<String> roles) {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            principal,
+            "n/a",
+            roles.stream().map(SimpleGrantedAuthority::new).toList());
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    return authentication;
+  }
+
+  private PermitDetailDto permitDetail(String status) {
+    return new PermitDetailDto(
+        7000123L,
+        1000456L,
+        "PKG-1",
+        "EX-205",
+        status,
+        status,
+        "00077881",
+        "01",
+        "00077881",
+        "01",
+        "Destination",
+        "US",
+        "TRK",
+        "Truck",
+        "VAN",
+        null,
+        null,
+        null,
+        null,
+        null,
+        100d,
+        10L,
+        "R-1",
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 }

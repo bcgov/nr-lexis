@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -143,6 +143,22 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it('keeps authoritative filters disabled with a persistent warning when options fail', async () => {
+    mockedFetchProvincialApplicationOptions.mockRejectedValueOnce(new Error('private failure'))
+
+    renderPage()
+
+    expect(await screen.findByText('Options unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Application status' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Product type' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: /^Region/ })).toBeDisabled()
+    expect(screen.getByLabelText('Application number')).toBeEnabled()
+    expect(
+      screen.getByText('Options unavailable').closest('[role="status"]')?.querySelector('button'),
+    ).toBeNull()
+  })
+
   it('renders application search filters in the legacy order', async () => {
     renderPage()
     await screen.findByText('321')
@@ -166,9 +182,127 @@ describe('Provincial Application Search Actions', () => {
       'Region',
       'Applicant client number',
       'Owner client number',
+      'Received from date',
+      'Received to date',
       'Listing from date',
       'Listing to date',
     ])
+  })
+
+  it('restores received date filters from the URL and clears them', async () => {
+    renderPage('/provincial/application?receivedFromDate=2026-01-01&receivedToDate=2026-01-31')
+    await screen.findByText('321')
+
+    expect(screen.getByLabelText('Received from date')).toHaveValue('2026-01-01')
+    expect(screen.getByLabelText('Received to date')).toHaveValue('2026-01-31')
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          receivedFromDate: '2026-01-01',
+          receivedToDate: '2026-01-31',
+        }),
+      }),
+      expect.any(Object),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+
+    expect(screen.getByLabelText('Received from date')).toHaveValue('')
+    expect(screen.getByLabelText('Received to date')).toHaveValue('')
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            receivedFromDate: '',
+            receivedToDate: '',
+          }),
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('disables search for an invalid received date', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    const searchButton = screen.getByRole('button', { name: 'Search' })
+    expect(searchButton).toBeEnabled()
+
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-13-01')
+
+    await waitFor(() => {
+      expect(searchButton).toBeDisabled()
+    })
+  })
+
+  it('hides exemption-only filters, selection, action, and applicant column without permission', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+
+    renderPage()
+    await screen.findByText('321')
+
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Owner client number')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Select 321' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByText('11111111')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Owner client number' })).toBeInTheDocument()
+  })
+
+  it('renders legacy non-sortable application result headers as plain text', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    expect(screen.queryByRole('button', { name: 'Status' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Application volume (m³)' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Applicant client number', 'applicantClientNumber'],
+    ['Owner client number', 'displayOwnerClientNumber'],
+    ['Region', 'regionCode'],
+    ['Exemption number', 'exemptionNumber'],
+    ['Listing date', 'listingDate'],
+  ] as const)('dispatches the legacy %s sort key', async (header, expectedSortField) => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockClear()
+
+    await userEvent.click(screen.getByRole('button', { name: header }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialApplications.mock.calls.some(
+          ([request]) => request.sortField === expectedSortField && request.sortDirection === 'asc',
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it('toggles the default application sort to ascending', async () => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockClear()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Application (DESC)' }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialApplications.mock.calls.some(
+          ([request]) =>
+            request.sortField === 'applicationNumber' && request.sortDirection === 'asc',
+        ),
+      ).toBe(true)
+    })
   })
 
   it('shows validation when selected rows do not share client numbers', async () => {
@@ -312,7 +446,7 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('shows selected application search region names instead of only the selected count', async () => {
+  it('shows selected application search regions as removable pills', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
       exemptionReasons: [],
@@ -326,26 +460,17 @@ describe('Provincial Application Search Actions', () => {
       currentSchedules: [],
     })
 
-    renderPage()
+    renderPage('/provincial/application?region=1903,1908')
     await screen.findByText('321')
 
-    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
-    )
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'Skeena' } })
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Skeena Natural Resource Region' }),
-    )
-
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
+    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
     expect(
-      await screen.findByText(
-        'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region',
-      ),
-    ).toBeInTheDocument()
+      within(selectedRegions).getByRole('button', {
+        name: 'Remove Cariboo Natural Resource Region',
+      }),
+    ).toBeEnabled()
   })
 
   it('ignores stale search responses that resolve after a newer search', async () => {
@@ -417,5 +542,17 @@ describe('Provincial Application Search Actions', () => {
       expect(screen.queryByText('111')).not.toBeInTheDocument()
       expect(screen.getByText('222')).toBeInTheDocument()
     })
+  })
+
+  it('shows a request failure instead of a no-results state', async () => {
+    mockedSearchProvincialApplications.mockRejectedValue(new Error('Oracle unavailable'))
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Application search unavailable' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Unable to retrieve application search results.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No applications found' })).not.toBeInTheDocument()
   })
 })

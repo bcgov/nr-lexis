@@ -6,6 +6,7 @@ import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewPreviewResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchOptionsDto;
@@ -14,7 +15,15 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
+import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
+import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -24,10 +33,13 @@ import java.security.Principal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,9 +58,31 @@ public class ApplicationReviewController {
   private static final Logger LOGGER = LoggerFactory.getLogger(ApplicationReviewController.class);
 
   private final ObjectProvider<ApplicationReviewService> serviceProvider;
+  private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
+  private final ProvincialAuthorizationService provincialAuthorizationService;
+  private final ApplicationPermitOperationCoordinator operationCoordinator;
+  private LexisPrincipalService principalService;
+  private ApplicationEditLockService editLockService;
 
-  public ApplicationReviewController(ObjectProvider<ApplicationReviewService> serviceProvider) {
+  public ApplicationReviewController(
+      ObjectProvider<ApplicationReviewService> serviceProvider,
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
+      ProvincialAuthorizationService provincialAuthorizationService,
+      ApplicationPermitOperationCoordinator operationCoordinator) {
     this.serviceProvider = serviceProvider;
+    this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
+    this.provincialAuthorizationService = provincialAuthorizationService;
+    this.operationCoordinator = operationCoordinator;
+  }
+
+  @Autowired
+  void setLexisPrincipalService(LexisPrincipalService principalService) {
+    this.principalService = principalService;
+  }
+
+  @Autowired
+  void setApplicationEditLockService(ApplicationEditLockService editLockService) {
+    this.editLockService = editLockService;
   }
 
   @GetMapping("/search/options")
@@ -73,13 +107,20 @@ public class ApplicationReviewController {
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
-      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal) {
+      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal,
+      Authentication authentication) {
     ApplicationReviewService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for search");
       return ResponseEntity.noContent().build();
     }
 
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.APPLICATION_REVIEW);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new ApplicationReviewSearchResponseDto(List.of(), 0, page, size));
+    }
     ApplicationReviewSearchCriteria criteria =
         buildCriteria(
             applicationNumber,
@@ -88,7 +129,7 @@ public class ApplicationReviewController {
             receivedToDate,
             listingFromDate,
             listingToDate,
-            regionNumbers,
+            orgUnits.orgUnitNumbers(),
             sortField,
             page,
             size);
@@ -99,6 +140,33 @@ public class ApplicationReviewController {
     return ResponseEntity.ok(service.search(criteria));
   }
 
+  ResponseEntity<ApplicationReviewSearchResponseDto> search(
+      String applicationNumber,
+      String productTypeCode,
+      String receivedFromDate,
+      String receivedToDate,
+      String listingFromDate,
+      String listingToDate,
+      List<Long> regionNumbers,
+      String sortField,
+      Integer page,
+      Integer size,
+      Integer knownTotal) {
+    return search(
+        applicationNumber,
+        productTypeCode,
+        receivedFromDate,
+        receivedToDate,
+        listingFromDate,
+        listingToDate,
+        regionNumbers,
+        sortField,
+        page,
+        size,
+        knownTotal,
+        null);
+  }
+
   @GetMapping("/search/count")
   public ResponseEntity<SearchCountResponseDto> count(
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
@@ -107,13 +175,20 @@ public class ApplicationReviewController {
       @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
       @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
       @RequestParam(name = "listingToDate", required = false) String listingToDate,
-      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers,
+      Authentication authentication) {
     ApplicationReviewService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for count");
       return ResponseEntity.noContent().build();
     }
 
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.APPLICATION_REVIEW);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new SearchCountResponseDto(0));
+    }
     ApplicationReviewSearchCriteria criteria =
         buildCriteria(
             applicationNumber,
@@ -122,7 +197,7 @@ public class ApplicationReviewController {
             receivedToDate,
             listingFromDate,
             listingToDate,
-            regionNumbers,
+            orgUnits.orgUnitNumbers(),
             null,
             0,
             1);
@@ -140,13 +215,20 @@ public class ApplicationReviewController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "5") @Min(1) @Max(50) Integer size) {
+      @RequestParam(name = "size", defaultValue = "5") @Min(1) @Max(50) Integer size,
+      Authentication authentication) {
     ApplicationReviewService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for preview");
       return ResponseEntity.noContent().build();
     }
 
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.APPLICATION_REVIEW);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new ApplicationReviewPreviewResponseDto(List.of(), false, page, size));
+    }
     ApplicationReviewSearchCriteria criteria =
         buildCriteria(
             applicationNumber,
@@ -155,7 +237,7 @@ public class ApplicationReviewController {
             receivedToDate,
             listingFromDate,
             listingToDate,
-            regionNumbers,
+            orgUnits.orgUnitNumbers(),
             sortField,
             page,
             size);
@@ -165,42 +247,82 @@ public class ApplicationReviewController {
   @PostMapping("/{applicationNumber}/approve")
   public ResponseEntity<ApplicationReviewStatusUpdateResultDto> approve(
       @PathVariable("applicationNumber") @Positive Long applicationNumber,
-      HttpServletRequest request) {
+      HttpServletRequest request,
+      Authentication authentication) {
     ApplicationReviewService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for approve");
       return ResponseEntity.noContent().build();
     }
 
-    return ResponseEntity.ok(service.approve(applicationNumber, resolvePrincipalName(request)));
+    provincialAuthorizationService.requireApplicationReview(authentication, applicationNumber);
+    String userId = resolvePrincipalName(request);
+    return ResponseEntity.ok(
+        withApplicationAggregateLock(
+            applicationNumber,
+            authentication,
+            () ->
+                withApplicationEditLock(
+                    applicationNumber,
+                    userId,
+                    () -> service.approve(applicationNumber, userId))));
+  }
+
+  ResponseEntity<ApplicationReviewStatusUpdateResultDto> approve(
+      Long applicationNumber, HttpServletRequest request) {
+    return approve(applicationNumber, request, null);
   }
 
   @PostMapping("/{applicationNumber}/status")
   public ResponseEntity<ApplicationReviewStatusUpdateResultDto> updateStatus(
       @PathVariable("applicationNumber") @Positive Long applicationNumber,
       @RequestBody(required = false) ApplicationReviewStatusUpdateRequestDto requestBody,
-      HttpServletRequest request) {
+      HttpServletRequest request,
+      Authentication authentication) {
     ApplicationReviewService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for status update");
       return ResponseEntity.noContent().build();
     }
 
+    provincialAuthorizationService.requireApplicationReview(authentication, applicationNumber);
+    String userId = resolvePrincipalName(request);
     return ResponseEntity.ok(
-        service.updateStatus(applicationNumber, requestBody, resolvePrincipalName(request)));
+        withApplicationAggregateLock(
+            applicationNumber,
+            authentication,
+            () ->
+                withApplicationEditLock(
+                    applicationNumber,
+                    userId,
+                    () -> service.updateStatus(applicationNumber, requestBody, userId))));
+  }
+
+  ResponseEntity<ApplicationReviewStatusUpdateResultDto> updateStatus(
+      Long applicationNumber,
+      ApplicationReviewStatusUpdateRequestDto requestBody,
+      HttpServletRequest request) {
+    return updateStatus(applicationNumber, requestBody, request, null);
   }
 
   @PostMapping("/{applicationNumber}/status-email")
   public ResponseEntity<ApplicationReviewStatusEmailResultDto> sendStatusEmail(
       @PathVariable("applicationNumber") @Positive Long applicationNumber,
-      @RequestBody(required = false) ApplicationReviewStatusEmailRequestDto requestBody) {
+      @RequestBody(required = false) ApplicationReviewStatusEmailRequestDto requestBody,
+      Authentication authentication) {
     ApplicationReviewService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for status email");
       return ResponseEntity.noContent().build();
     }
 
+    provincialAuthorizationService.requireApplicationReview(authentication, applicationNumber);
     return ResponseEntity.ok(service.sendStatusEmail(applicationNumber, requestBody));
+  }
+
+  ResponseEntity<ApplicationReviewStatusEmailResultDto> sendStatusEmail(
+      Long applicationNumber, ApplicationReviewStatusEmailRequestDto requestBody) {
+    return sendStatusEmail(applicationNumber, requestBody, null);
   }
 
   public ResponseEntity<Map<String, Object>> approveLegacy(
@@ -212,10 +334,22 @@ public class ApplicationReviewController {
     }
 
     Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    Authentication authentication = requestAuthentication(request);
+    if (applicationNumber != null) {
+      provincialAuthorizationService.requireApplicationReview(authentication, applicationNumber);
+    }
+    String userId = resolvePrincipalName(request);
     ApplicationReviewStatusUpdateResultDto result =
         applicationNumber == null
             ? invalidStatusUpdate("Application number must be a positive value.")
-            : service.approve(applicationNumber, resolvePrincipalName(request));
+            : withApplicationAggregateLock(
+                applicationNumber,
+                authentication,
+                () ->
+                    withApplicationEditLock(
+                        applicationNumber,
+                        userId,
+                        () -> service.approve(applicationNumber, userId)));
 
     return ResponseEntity.ok(legacyStatusUpdatePayload(result));
   }
@@ -229,16 +363,30 @@ public class ApplicationReviewController {
     }
 
     Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    Authentication authentication = requestAuthentication(request);
+    if (applicationNumber != null) {
+      provincialAuthorizationService.requireApplicationReview(authentication, applicationNumber);
+    }
     String statusCode = first(parameters, "applicationReviewStatus", "appStatus", "statusCode");
     String remark = first(parameters, "remarkBody", "remark");
     String clientEmail = first(parameters, "clientEmailAddress");
+    String userId = resolvePrincipalName(request);
     ApplicationReviewStatusUpdateResultDto result =
         applicationNumber == null
             ? invalidStatusUpdate("Application number must be a positive value.")
-            : service.updateStatus(
+            : withApplicationAggregateLock(
                 applicationNumber,
-                new ApplicationReviewStatusUpdateRequestDto(statusCode, remark, clientEmail),
-                resolvePrincipalName(request));
+                authentication,
+                () ->
+                    withApplicationEditLock(
+                        applicationNumber,
+                        userId,
+                        () ->
+                            service.updateStatus(
+                                applicationNumber,
+                                new ApplicationReviewStatusUpdateRequestDto(
+                                    statusCode, remark, clientEmail),
+                                userId)));
 
     Map<String, Object> payload = legacyStatusUpdatePayload(result);
     payload.put("clientEmail", legacyClientEmail(result.clientEmail()));
@@ -248,6 +396,11 @@ public class ApplicationReviewController {
 
   public ResponseEntity<Map<String, Object>> sendStatusEmailLegacy(
       MultiValueMap<String, String> parameters) {
+    return sendStatusEmailLegacy(parameters, null);
+  }
+
+  public ResponseEntity<Map<String, Object>> sendStatusEmailLegacy(
+      MultiValueMap<String, String> parameters, Authentication authentication) {
     ApplicationReviewService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for legacy status email");
@@ -255,6 +408,9 @@ public class ApplicationReviewController {
     }
 
     Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    if (applicationNumber != null) {
+      provincialAuthorizationService.requireApplicationReview(authentication, applicationNumber);
+    }
     ApplicationReviewStatusEmailResultDto result =
         applicationNumber == null
             ? new ApplicationReviewStatusEmailResultDto(
@@ -262,7 +418,11 @@ public class ApplicationReviewController {
             : service.sendStatusEmail(
                 applicationNumber,
                 new ApplicationReviewStatusEmailRequestDto(
-                    first(parameters, "appStatus", "statusCode", "applicationReviewStatus"),
+                    first(
+                        parameters,
+                        "appStatus",
+                        "statusCode",
+                        "applicationReviewStatus"),
                     first(parameters, "clientEmailAddress"),
                     first(parameters, "remark", "remarkBody")));
 
@@ -274,7 +434,65 @@ public class ApplicationReviewController {
 
   private String resolvePrincipalName(HttpServletRequest request) {
     Principal principal = request.getUserPrincipal();
+    if (principalService != null) {
+      return principalService.resolvePrincipalName(principal);
+    }
     return principal == null ? null : principal.getName();
+  }
+
+  private <T> T withApplicationEditLock(
+      Long applicationNumber, String userId, Supplier<T> mutation) {
+    if (editLockService == null) {
+      return mutation.get();
+    }
+
+    ApplicationEditLockDto existing =
+        editLockService.snapshot(applicationNumber, userId, false);
+    ApplicationEditLockDto acquired =
+        editLockService.acquire(applicationNumber, userId, userId, false);
+    if (acquired == null || acquired.locked()) {
+      throw new EditLockConflictException(
+          acquired == null ? "The application edit lock could not be acquired." : acquired.message());
+    }
+
+    boolean releaseAfterMutation = existing == null || !existing.heldByCurrentUser();
+    try {
+      return mutation.get();
+    } finally {
+      if (releaseAfterMutation) {
+        editLockService.release(applicationNumber, userId);
+      }
+    }
+  }
+
+  private <T> T withApplicationAggregateLock(
+      Long applicationNumber,
+      Authentication authentication,
+      Supplier<T> mutation) {
+    ApplicationDetailsRpcService applicationDetailsService =
+        applicationDetailsServiceProvider.getIfAvailable();
+    if (applicationDetailsService == null) {
+      throw new org.springframework.dao.DataRetrievalFailureException(
+          "Application permit relationships are unavailable for status mutation.");
+    }
+    return operationCoordinator.executeApplicationMutation(
+        applicationNumber,
+        () ->
+            applicationDetailsService.getPermitNumbersForApplicationMutation(
+                applicationNumber),
+        () -> {
+          provincialAuthorizationService.requireApplicationReview(
+              authentication, applicationNumber);
+          return mutation.get();
+        });
+  }
+
+  private Authentication requestAuthentication(HttpServletRequest request) {
+    if (request != null && request.getUserPrincipal() instanceof Authentication authentication) {
+      return authentication;
+    }
+    return org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .getAuthentication();
   }
 
   private ApplicationReviewStatusUpdateResultDto invalidStatusUpdate(String message) {

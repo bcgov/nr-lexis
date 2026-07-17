@@ -25,6 +25,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Scal
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.SubmissionImportValidationResult;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -46,6 +47,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationSubmissionImportService")
@@ -56,6 +58,7 @@ class ApplicationSubmissionImportServiceTest {
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private VirusScanService virusScanService;
   @Mock private LexisReportScheduleRepository scheduleRepository;
+  @Mock private MultipartFile oversizedFile;
 
   @BeforeEach
   void setUpDefaultPackageValidity() {
@@ -192,7 +195,8 @@ class ApplicationSubmissionImportServiceTest {
   @Test
   void shouldImportFederalRawEsfXmlSubmissionDataForLegacyIngress() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addFederalImportedApplication(
+            any(CreateApplicationRequest.class), eq("jsmith")))
         .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
     when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
         .thenReturn(
@@ -219,7 +223,8 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
-    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("jsmith"));
+    verify(applicationDetailsService)
+        .addFederalImportedApplication(applicationCaptor.capture(), eq("jsmith"));
     CreateApplicationRequest application = applicationCaptor.getValue();
     assertThat(application.jurisdictionCode()).isEqualTo("F");
     assertThat(application.federalApplicationNumber()).isEqualTo(700123L);
@@ -366,6 +371,8 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             List.of(
                 new ExportScheduleRowDto(
+                    1016L, LocalDate.of(2026, 1, 9), null, null, null, null, null),
+                new ExportScheduleRowDto(
                     1018L, LocalDate.of(2026, 1, 30), null, null, null, null, null),
                 new ExportScheduleRowDto(
                     1017L, LocalDate.of(2026, 1, 23), null, null, null, null, null)));
@@ -382,6 +389,33 @@ class ApplicationSubmissionImportServiceTest {
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
     verify(applicationDetailsService).validateApplication(requestCaptor.capture());
     assertThat(requestCaptor.getValue().exportScheduleId()).isEqualTo(1017L);
+  }
+
+  @Test
+  void shouldRejectFederalSubmissionWhenUpcomingSchedulesPrecedeBiweeklyDate() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(scheduleRepository.findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16)))
+        .thenReturn(Optional.empty());
+    when(scheduleRepository.findUpcomingExportSchedules())
+        .thenReturn(
+            List.of(
+                new ExportScheduleRowDto(
+                    1015L, LocalDate.of(2026, 1, 2), null, null, null, null, null),
+                new ExportScheduleRowDto(
+                    1016L, LocalDate.of(2026, 1, 9), null, null, null, null, null)));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                federalSampleXmlText().getBytes(StandardCharsets.UTF_8),
+                "federal-past-schedules.xml",
+                "FED-REF-PAST-SCHEDULES");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("No export schedule is available for federal LEXIS submission.");
+    verify(applicationDetailsService, never())
+        .validateApplication(any(CreateApplicationRequest.class));
   }
 
   @Test
@@ -551,7 +585,8 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.submissionSummary().packageNumber()).isEqualTo("FED26-700123");
     verify(applicationDetailsService).isPackageValid("FED26-700123");
     verify(applicationDetailsService, never()).validateApplication(any(CreateApplicationRequest.class));
-    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), anyString());
+    verify(applicationDetailsService, never())
+        .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
   }
 
   @Test
@@ -574,7 +609,8 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
     assertThat(result.submissionSummary().packageNumber()).isEqualTo("FED26-700123");
     verify(applicationDetailsService).isPackageValid("FED26-700123");
-    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), anyString());
+    verify(applicationDetailsService, never())
+        .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
     verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
   }
@@ -582,7 +618,8 @@ class ApplicationSubmissionImportServiceTest {
   @Test
   void shouldImportDedicatedFederalXmlAsApplicationPackageAndScales() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("federal-user")))
+    when(applicationDetailsService.addFederalImportedApplication(
+            any(CreateApplicationRequest.class), eq("federal-user")))
         .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
     when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("federal-user")))
         .thenReturn(
@@ -613,7 +650,8 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
-    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("federal-user"));
+    verify(applicationDetailsService)
+        .addFederalImportedApplication(applicationCaptor.capture(), eq("federal-user"));
     CreateApplicationRequest application = applicationCaptor.getValue();
     assertThat(application.jurisdictionCode()).isEqualTo("F");
     assertThat(application.federalApplicationNumber()).isEqualTo(700123L);
@@ -670,7 +708,8 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(new PackageValidityItem(true, null));
     when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
         .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("federal-user")))
+    when(applicationDetailsService.addFederalImportedApplication(
+            any(CreateApplicationRequest.class), eq("federal-user")))
         .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
     when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("federal-user")))
         .thenReturn(
@@ -707,7 +746,8 @@ class ApplicationSubmissionImportServiceTest {
 
     verify(applicationDetailsService, times(2)).isPackageValid("FED26-700123");
     verify(applicationDetailsService).validateApplication(any(CreateApplicationRequest.class));
-    verify(applicationDetailsService).addApplication(any(CreateApplicationRequest.class), eq("federal-user"));
+    verify(applicationDetailsService)
+        .addFederalImportedApplication(any(CreateApplicationRequest.class), eq("federal-user"));
     verify(applicationDetailsService).addPackage(any(PackageMutationRequest.class), eq("federal-user"));
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"));
   }
@@ -716,7 +756,8 @@ class ApplicationSubmissionImportServiceTest {
   @Test
   void shouldImportDedicatedBareFederalXmlAsApplicationPackageAndScales() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("federal-user")))
+    when(applicationDetailsService.addFederalImportedApplication(
+            any(CreateApplicationRequest.class), eq("federal-user")))
         .thenReturn(new CreateApplicationResult(true, "saved", 9002L, List.of(), List.of()));
     when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("federal-user")))
         .thenReturn(
@@ -743,7 +784,8 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
-    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("federal-user"));
+    verify(applicationDetailsService)
+        .addFederalImportedApplication(applicationCaptor.capture(), eq("federal-user"));
     CreateApplicationRequest application = applicationCaptor.getValue();
     assertThat(application.jurisdictionCode()).isEqualTo("F");
     assertThat(application.federalApplicationNumber()).isEqualTo(700123L);
@@ -767,17 +809,7 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
-  void shouldImportFederalLexisXmlWithFederalApplicationNumber() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
-        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
-    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
-        .thenReturn(
-            new PackagePersistenceResult(
-                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
-        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
-
+  void shouldRejectFederalApplicationAtProvincialImportIngress() {
     String xml = federalSampleXmlText();
 
     ApplicationSubmissionImportResultDto result =
@@ -787,18 +819,33 @@ class ApplicationSubmissionImportServiceTest {
                     "formFile", "federal-submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
                 "jsmith");
 
-    assertThat(result.status()).isEqualTo("accepted");
-    assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("Federal applications must use the dedicated federal submission endpoint.");
     assertThat(result.submissionSummary()).isNotNull();
     assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
     assertThat(result.submissionSummary().federalApplicationNumber()).isEqualTo(700123L);
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
 
-    ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
-        ArgumentCaptor.forClass(CreateApplicationRequest.class);
-    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("jsmith"));
-    CreateApplicationRequest application = applicationCaptor.getValue();
-    assertThat(application.jurisdictionCode()).isEqualTo("F");
-    assertThat(application.federalApplicationNumber()).isEqualTo(700123L);
+  @Test
+  void shouldRejectFederalApplicationAtProvincialValidationIngress() {
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile(
+                    "formFile",
+                    "federal-submission.xml",
+                    "application/xml",
+                    federalSampleXmlText().getBytes(StandardCharsets.UTF_8)),
+                "FED-REF-1");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("Federal applications must use the dedicated federal submission endpoint.");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -972,6 +1019,164 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldValidateSubmissionWhenAuthenticatedScopeMatchesOwner() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(sampleXml(), "CLIENT-REF-1", "1074");
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("00001074");
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService).validateApplication(any(CreateApplicationRequest.class));
+  }
+
+  @Test
+  void shouldValidateSubmissionWhenAuthenticatedScopeMatchesAgent() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    String xml =
+        SAMPLE_XML
+            .replace(
+                "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>",
+                "<lexis:applicantTypeCode>A</lexis:applicantTypeCode>")
+            .replace(
+                "</lexis:applicant>",
+                "</lexis:applicant>\n"
+                    + "        <lexis:owner>\n"
+                    + "          <lexis:ownerDetails>\n"
+                    + "            <lexis:clientNumber>2000</lexis:clientNumber>\n"
+                    + "            <lexis:clientLocnCode>1</lexis:clientLocnCode>\n"
+                    + "            <lexis:name>Owner Company Ltd.</lexis:name>\n"
+                    + "          </lexis:ownerDetails>\n"
+                    + "          <lexis:ownerContact>\n"
+                    + "            <lexis:contactSurname>OWNER</lexis:contactSurname>\n"
+                    + "            <lexis:contactFirstname>OLIVIA</lexis:contactFirstname>\n"
+                    + "          </lexis:ownerContact>\n"
+                    + "        </lexis:owner>\n");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                xmlFile("agent-submission.xml", xml), "CLIENT-REF-1", "1074");
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("00002000");
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
+    assertThat(validationCaptor.getValue().agentClientNumber()).isEqualTo("00001074");
+  }
+
+  @Test
+  void shouldValidateSubmissionWhenOrganizationUnitScopeMatches() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                sampleXml(),
+                "CLIENT-REF-1",
+                null,
+                new OrgUnitConstraint(true, List.of(1909L)));
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService).validateApplication(any(CreateApplicationRequest.class));
+  }
+
+  @Test
+  void shouldRejectValidationOutsideOrganizationUnitScopeBeforeDownstreamLookups() {
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                sampleXml(),
+                "CLIENT-REF-1",
+                null,
+                new OrgUnitConstraint(true, List.of(1908L)));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "Submission forest region is outside the authenticated organization-unit scope.");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+    verify(scheduleRepositoryProvider, never()).getIfAvailable();
+    verify(applicationDetailsService, never()).isPackageValid(anyString());
+  }
+
+  @Test
+  void shouldRejectImportOutsideOrganizationUnitScopeBeforePersistence() {
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .importApplicationSubmission(
+                sampleXml(),
+                "jsmith",
+                "CLIENT-REF-1",
+                null,
+                new OrgUnitConstraint(true, List.of(1908L)));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "Submission forest region is outside the authenticated organization-unit scope.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+    verify(scheduleRepositoryProvider, never()).getIfAvailable();
+    verify(applicationDetailsService, never())
+        .addApplication(any(CreateApplicationRequest.class), any());
+    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
+    verify(applicationDetailsService, never())
+        .addScaleToPackage(any(ScaleMutationRequest.class), any());
+  }
+
+  @Test
+  void shouldRejectSubmissionOutsideAuthenticatedScopeBeforeDownstreamLookups() {
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(sampleXml(), "CLIENT-REF-1", "99999999");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "Submission owner or agent must match the authenticated forest-client scope.");
+    assertThat(result.submissionSummary()).isNotNull();
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+    verify(scheduleRepositoryProvider, never()).getIfAvailable();
+    verify(applicationDetailsService, never()).isPackageValid(anyString());
+    verify(applicationDetailsService, never())
+        .validateApplication(any(CreateApplicationRequest.class));
+    verify(applicationDetailsService, never())
+        .validateApplicationSubmissionImport(
+            any(CreateApplicationRequest.class),
+            any(PackageMutationRequest.class),
+            any());
+  }
+
+  @Test
+  void shouldPreservePrivilegedValidationWhenForestClientScopeIsAbsent() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(sampleXml(), "CLIENT-REF-1", null);
+
+    assertThat(result.status()).isEqualTo("validated");
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService).validateApplication(any(CreateApplicationRequest.class));
+  }
+
+  @Test
   void shouldValidateDeclaredSpeciesEndUseSortInsteadOfScaleSpecies() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
@@ -1100,7 +1305,8 @@ class ApplicationSubmissionImportServiceTest {
             any(CreateApplicationRequest.class),
             any(PackageMutationRequest.class),
             any());
-    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), anyString());
+    verify(applicationDetailsService, never())
+        .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
     verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
   }
@@ -1111,6 +1317,22 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors()).containsExactly("User reference must be 50 characters or fewer.");
+  }
+
+  @Test
+  void shouldRejectOversizedSubmissionBeforeVirusScan() {
+    when(oversizedFile.getOriginalFilename()).thenReturn("oversized.xml");
+    when(oversizedFile.getSize())
+        .thenReturn(ApplicationSubmissionImportService.MAX_IMPORT_BYTES + 1L);
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(oversizedFile);
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("The LEXIS application submission file must be 20 MiB or smaller.");
+    verify(virusScanService, never()).assertClean(oversizedFile);
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -1165,7 +1387,9 @@ class ApplicationSubmissionImportServiceTest {
     }
 
     ApplicationSubmissionImportResultDto federal =
-        service().validateApplicationSubmission(sampleResourceXml("pass-federal-application.xml"));
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                sampleResourceXml("pass-federal-application.xml"), "FED-MANUAL-VALIDATION");
     assertThat(federal.status()).isEqualTo("validated");
     assertThat(federal.packageNumber()).isEqualTo("FED26-700123");
     assertThat(federal.submissionSummary()).isNotNull();
@@ -1424,6 +1648,30 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.errors())
         .contains(
             "The ZIP file must contain exactly one LEXIS XML or GeoJSON application submission file.");
+  }
+
+  @Test
+  void shouldRejectZipFilesWithTooManyEntries() throws Exception {
+    List<String> entryNames =
+        java.util.stream.IntStream.range(0, 65)
+            .mapToObj(index -> "entry-" + index + ".xml")
+            .toList();
+
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(zippedFile(entryNames), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The ZIP file contains too many entries.");
+  }
+
+  @Test
+  void shouldRejectUnsafeZipEntryPaths() throws Exception {
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .importApplicationSubmission(zippedFile("../outside.xml", SAMPLE_XML), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The ZIP file contains an unsafe entry path.");
   }
 
   @Test

@@ -3,6 +3,7 @@ import { Button, Column, ComboBox, Grid, TextArea, TextInput } from '@carbon/rea
 import { ArrowRight } from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
+import PageHeader from '@/components/PageHeader'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import { shouldFilterSearchableDropdownItem } from '../../components/dropdown-filtering'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -13,6 +14,8 @@ import { buildLexisXmlPreviewMessage } from '@/components/uploads/lexisXmlPrevie
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
+  DOCUMENT_UPLOAD_ACCEPT,
+  DOCUMENT_UPLOAD_GUIDANCE,
   DOCUMENT_UPLOAD_READY_MESSAGE,
   extractUploadErrorDetails,
   formatUploadFileSize,
@@ -20,6 +23,9 @@ import {
   GENERIC_SUBMISSION_FAILURE_MESSAGE,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   getFileExtension,
+  validateDocumentUploadDescription,
+  validateDocumentUploadFile,
+  validateUploadFileSize,
   uploadQueueFileKey,
   uploadQueueStatusLabel,
 } from '@/components/uploads/uploadQueueHelpers'
@@ -315,17 +321,16 @@ const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): strin
     return 'File is empty.'
   }
 
-  const extension = getFileExtension(file.name)
+  const sizeError = validateUploadFileSize(file)
+  if (sizeError) {
+    return sizeError
+  }
 
   if (workflowType === 'applicationSubmission') {
     return ''
   }
 
-  if (!extension) {
-    return 'Document uploads need a file extension so LEXIS can resolve the file type.'
-  }
-
-  return ''
+  return validateDocumentUploadFile(file)
 }
 
 const workflowDescription = (workflowType: UploadWorkflowType): string => {
@@ -553,11 +558,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const uploadAccept =
     selectedWorkflowType === 'applicationSubmission'
       ? '.xml,.zip,.geojson,.json,application/xml,text/xml,application/zip,application/json,application/geo+json'
-      : undefined
+      : DOCUMENT_UPLOAD_ACCEPT
   const uploadFormatText =
     selectedWorkflowType === 'applicationSubmission'
       ? 'Supported application submission formats: .xml, .zip, .geojson, and .json'
-      : 'Supported files: any document with a file extension'
+      : DOCUMENT_UPLOAD_GUIDANCE
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
   const resolvedPageTitle =
     pageTitle ??
@@ -648,6 +653,10 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           ? (requiredPositiveNumericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu') ??
             undefined)
           : undefined,
+      fileDescription:
+        selectedWorkflowType === 'applicationSubmission'
+          ? undefined
+          : validateDocumentUploadDescription(formState.fileDescription) || undefined,
     }),
     [formState, invalidUploadCount, uploadQueue.length, selectedWorkflowType],
   )
@@ -1422,6 +1431,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             id="fileDescription"
             labelText="Document description"
             value={formState.fileDescription}
+            helperText="Optional; US-ASCII and 250 bytes or fewer."
+            invalid={!!fieldError('fileDescription')}
+            invalidText={fieldError('fileDescription')}
+            maxCount={250}
+            onBlur={() => markFieldTouched('fileDescription')}
             onChange={(event) =>
               setFormState((current) => ({
                 ...current,
@@ -1461,8 +1475,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   return (
     <Grid fullWidth className="default-grid admin-upload-fspts-page">
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header">
-        <h1>{resolvedPageTitle}</h1>
-        <p>{pageSubtitle}</p>
+        <PageHeader
+          title={resolvedPageTitle}
+          subtitle={pageSubtitle}
+          style={{ marginBlockEnd: '1.5rem' }}
+        />
         <UploadWorkflowProgress
           steps={activeUploadSteps}
           currentStepId={activeUploadStep}

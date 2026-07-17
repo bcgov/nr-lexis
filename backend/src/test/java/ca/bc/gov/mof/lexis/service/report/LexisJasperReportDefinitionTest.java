@@ -2,7 +2,7 @@ package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDate;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import org.junit.jupiter.api.Test;
 
 class LexisJasperReportDefinitionTest {
@@ -47,12 +47,23 @@ class LexisJasperReportDefinitionTest {
     String filename =
         LexisJasperReportDefinition.BIWEEKLY_LISTING.resolveFilename(LexisReportFormat.PDF);
 
-    assertThat(filename).isEqualTo("biweeklyListing.pdf");
+    assertThat(filename).isEqualTo("advertising-list.pdf");
+  }
+
+  @Test
+  void resolveFilenameShouldKeepXlsAndXlsxDistinct() {
+    assertThat(LexisJasperReportDefinition.OFFER_REPORT.resolveFilename(LexisReportFormat.XLS))
+        .isEqualTo("offer-report.xls");
+    assertThat(LexisJasperReportDefinition.OFFER_REPORT.resolveFilename(LexisReportFormat.XLSX))
+        .isEqualTo("offer-report.xlsx");
+    assertThat(LexisReportFormat.XLS.mediaType()).isEqualTo("application/vnd.ms-excel");
+    assertThat(LexisReportFormat.XLSX.mediaType())
+        .isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   }
 
   @Test
   void resolveFilenameShouldUseLegacyCsvNamesWithCurrentDate() {
-    String today = LocalDate.now().toString();
+    String today = LexisBusinessTime.today().toString();
 
     assertThat(LexisJasperReportDefinition.APPLICATION_REPORT.resolveFilename(LexisReportFormat.CSV))
         .isEqualTo("applicationLedger" + today + ".csv");

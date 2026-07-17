@@ -6,6 +6,7 @@ export type LexisSessionCapabilities = {
   legacyPath: string | null
   grantedActions: string[]
   orgUnitNo?: string | null
+  forestClientNumber: string | null
 }
 
 export type LexisSessionLogoutResponse = {

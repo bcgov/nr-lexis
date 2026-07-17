@@ -28,8 +28,9 @@ export const fetchFederalApplicationDocuments = (
 export const openFederalApplicationDocument = (
   fileId: string,
   fileName: string,
+  applicationNumber: string,
 ): Promise<OpenFederalApplicationDocumentResult> => {
-  return openApplicationDocument(fileId, fileName)
+  return openApplicationDocument(fileId, fileName, applicationNumber)
 }
 
 export const removeFederalApplicationDocument = (

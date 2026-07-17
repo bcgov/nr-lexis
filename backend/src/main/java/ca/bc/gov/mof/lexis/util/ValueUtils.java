@@ -54,7 +54,8 @@ public final class ValueUtils {
       return null;
     }
     try {
-      return Double.parseDouble(normalized);
+      double parsed = Double.parseDouble(normalized);
+      return Double.isFinite(parsed) ? parsed : null;
     } catch (NumberFormatException ex) {
       return null;
     }

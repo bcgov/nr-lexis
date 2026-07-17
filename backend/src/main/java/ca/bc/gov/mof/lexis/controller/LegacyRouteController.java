@@ -11,6 +11,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -33,6 +34,8 @@ public class LegacyRouteController {
   private static final String ACTION_APPROVE = "approve";
   private static final String ACTION_DISAPPROVE = "disapprove";
   private static final String ACTION_SEND_STATUS_EMAIL = "sendStatusEmail";
+  private static final String ACTION_SEARCH = "search";
+  private static final String ACTION_UPDATE_PAGING = "updatePaging";
   private static final String ACTION_VERIFY_APPLICATION_CLIENTS = "verifyApplicationClients";
   private static final String ACTION_HAS_VALID_OFFER = "hasValidOffer";
   private static final String ACTION_GET_APPLICATIONS = "getApplications";
@@ -95,13 +98,55 @@ public class LegacyRouteController {
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
   private static final String LEGACY_ACTION_CREATE_EXEMPTION = "/createExemption";
   private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
+  private static final Set<String> APPLICATION_REVIEW_SAFE_GET_ACTIONS =
+      Set.of(ACTION_VIEW, ACTION_SEARCH, ACTION_UPDATE_PAGING);
+  private static final Set<String> OFFER_DETAILS_SAFE_GET_ACTIONS =
+      Set.of(
+          ACTION_VIEW,
+          ACTION_VALIDATE_APPLICATION_NUMBER,
+          ACTION_GET_APPLICATION_DETAILS,
+          ACTION_GET_PACKAGE_LIST,
+          ACTION_GET_PACKAGE_VOLUME,
+          ACTION_GET_APPLICATION_VOLUME,
+          ACTION_GET_CLIENT_DATA,
+          ACTION_GET_CLIENT_LOCATIONS);
+  private static final Set<String> PERMIT_DETAILS_SAFE_GET_ACTIONS =
+      Set.of(
+          ACTION_VIEW,
+          ACTION_GET_PERMIT_SUMMARY,
+          ACTION_GET_TOTAL_FEES_FOR_PERMIT,
+          ACTION_GET_SCALE_FEES_FOR_PACKAGE,
+          ACTION_GET_PERMIT_DATA_AFTER_SCALE_UPDATE,
+          ACTION_GET_PACKAGE_VOLUME_SUM,
+          ACTION_GET_PACKAGE_LIST,
+          ACTION_GET_PACKAGE_INFO,
+          ACTION_GET_PACKAGE_DETAILS,
+          ACTION_GET_OIC_PACKAGE_LIST,
+          ACTION_GET_SCALES_FOR_PACKAGE,
+          ACTION_CHECK_PERMIT_NUMBER,
+          ACTION_GET_APPLICATION_LIST,
+          ACTION_GET_AVAILABLE_APPLICATION_LIST,
+          ACTION_GET_AVAILABLE_PACKAGE_LIST,
+          ACTION_GET_APPROVED_EXEMPTION_VOLUME,
+          ACTION_GET_EXEMPTION_VOLUME_REMAINING,
+          ACTION_GET_PERMIT_HAS_APPLICATIONS,
+          ACTION_GET_INVOICES_FOR_PERMIT,
+          ACTION_GET_INVOICE_DETAILS,
+          ACTION_GET_GBMS_INVOICE_HISTORY,
+          ACTION_GET_CONVERSION_RATE,
+          ACTION_GET_COUNTRY_LIST,
+          ACTION_GET_FILE_TYPES,
+          ACTION_CHECK_FORM_CHANGES,
+          ACTION_GET_DOCUMENT,
+          ACTION_GET_DOCUMENT_DETAILS);
+  private static final Set<String> POLICY_SAFE_GET_ACTIONS =
+      Set.of(ACTION_VIEW, "viewPolicies", ACTION_UPDATE_PAGING, ACTION_CHECK_FORM_CHANGES);
 
   private final LexisApplicationController applicationController;
   private final ExemptionController exemptionController;
   private final PurchaseOfferController purchaseOfferController;
   private final PermitController permitController;
   private final ApplicationReviewController applicationReviewController;
-  private final FeeDetailsController feeDetailsController;
   private final LexisAdminController adminController;
   private final LexisSummaryController summaryController;
   private final OfferDetailsRpcController offerDetailsRpcController;
@@ -115,7 +160,6 @@ public class LegacyRouteController {
       PurchaseOfferController purchaseOfferController,
       PermitController permitController,
       ApplicationReviewController applicationReviewController,
-      FeeDetailsController feeDetailsController,
       LexisAdminController adminController,
       LexisSummaryController summaryController,
       OfferDetailsRpcController offerDetailsRpcController,
@@ -127,7 +171,6 @@ public class LegacyRouteController {
     this.purchaseOfferController = purchaseOfferController;
     this.permitController = permitController;
     this.applicationReviewController = applicationReviewController;
-    this.feeDetailsController = feeDetailsController;
     this.adminController = adminController;
     this.summaryController = summaryController;
     this.offerDetailsRpcController = offerDetailsRpcController;
@@ -161,10 +204,10 @@ public class LegacyRouteController {
       return applicationController.searchOptions();
     }
     if (ACTION_VERIFY_APPLICATION_CLIENTS.equalsIgnoreCase(actionMapping)) {
-      return applicationController.verifyClients(applications);
+      return applicationController.verifyClients(applications, authentication);
     }
     if (ACTION_HAS_VALID_OFFER.equalsIgnoreCase(actionMapping)) {
-      return applicationController.hasValidOffer(applications);
+      return applicationController.hasValidOffer(applications, authentication);
     }
     return applicationController.search(
         applicationNumber,
@@ -217,7 +260,11 @@ public class LegacyRouteController {
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
       @RequestParam MultiValueMap<String, String> requestParameters,
-      HttpServletRequest request) {
+      HttpServletRequest request,
+      Authentication authentication) {
+    if (isUnsafeLegacyGet(request, actionMapping, APPLICATION_REVIEW_SAFE_GET_ACTIONS)) {
+      return legacyMutationRequiresPost();
+    }
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
       return applicationReviewController.searchOptions();
     }
@@ -228,7 +275,7 @@ public class LegacyRouteController {
       return applicationReviewController.disapproveLegacy(requestParameters, request);
     }
     if (ACTION_SEND_STATUS_EMAIL.equalsIgnoreCase(actionMapping)) {
-      return applicationReviewController.sendStatusEmailLegacy(requestParameters);
+      return applicationReviewController.sendStatusEmailLegacy(requestParameters, authentication);
     }
     return applicationReviewController.search(
         applicationNumber,
@@ -241,7 +288,8 @@ public class LegacyRouteController {
         sortField,
         page,
         size,
-        null);
+        null,
+        authentication);
   }
 
   @GetMapping({"/exemptionSearch", "/exemptionSearch.do"})
@@ -263,11 +311,12 @@ public class LegacyRouteController {
       @RequestParam(name = "applicantClientNumber", required = false) String applicantClientNumber,
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
+      @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
       Authentication authentication) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
-      return exemptionController.searchOptions();
+      return exemptionController.searchOptions(authentication);
     }
     return exemptionController.search(
         applicationNumber,
@@ -286,6 +335,7 @@ public class LegacyRouteController {
         applicantClientNumber,
         ownerClientNumber,
         regionNumbers,
+        sortField,
         page,
         size,
         null,
@@ -350,6 +400,7 @@ public class LegacyRouteController {
       @RequestParam(name = "offerNumber", required = false) @Positive Long offerNumber,
       Authentication authentication) {
     if (isLegacyAddOrCreateAction(actionMapping)) {
+      ScopedClientRequestSupport.currentForestClientNumber(sessionService, authentication);
       return authorizeLegacyAction(authentication, LEGACY_ACTION_CREATE_OFFER);
     }
     if (offerNumber == null) {
@@ -410,15 +461,6 @@ public class LegacyRouteController {
     return permitController.getByPermitNumber(permitNumber, authentication);
   }
 
-  @GetMapping({"/feeDetails", "/feeDetails.do"})
-  public ResponseEntity<?> feeDetails(
-      @RequestParam(name = "permitNumber", required = false) @Positive Long permitNumber) {
-    if (permitNumber == null) {
-      return ResponseEntity.noContent().build();
-    }
-    return feeDetailsController.permitSummary(permitNumber);
-  }
-
   @GetMapping({"/lexisAgentAdmin", "/lexisAgentAdmin.do"})
   public ResponseEntity<?> lexisAgentAdmin(
       @RequestParam(name = "actionMapping", required = false) String actionMapping) {
@@ -441,7 +483,14 @@ public class LegacyRouteController {
       path = {"/lexisPolicyAdminRPC", "/lexisPolicyAdminRPC.do"},
       method = {RequestMethod.GET, RequestMethod.POST})
   public ResponseEntity<?> lexisPolicyAdminRpc(
-      @RequestParam(required = false) Map<String, String> requestParameters) {
+      @RequestParam(required = false) Map<String, String> requestParameters,
+      HttpServletRequest request) {
+    if (isUnsafeLegacyGet(
+        request,
+        requestParameters == null ? null : requestParameters.get("actionMapping"),
+        POLICY_SAFE_GET_ACTIONS)) {
+      return legacyMutationRequiresPost();
+    }
     return adminController.feePolicyRpcForm(requestParameters);
   }
 
@@ -458,7 +507,14 @@ public class LegacyRouteController {
       path = {"/lexisFILAdminRPC", "/lexisFILAdminRPC.do"},
       method = {RequestMethod.GET, RequestMethod.POST})
   public ResponseEntity<?> lexisFilAdminRpc(
-      @RequestParam(required = false) Map<String, String> requestParameters) {
+      @RequestParam(required = false) Map<String, String> requestParameters,
+      HttpServletRequest request) {
+    if (isUnsafeLegacyGet(
+        request,
+        requestParameters == null ? null : requestParameters.get("actionMapping"),
+        POLICY_SAFE_GET_ACTIONS)) {
+      return legacyMutationRequiresPost();
+    }
     return adminController.filPolicyRpcForm(requestParameters);
   }
 
@@ -469,6 +525,9 @@ public class LegacyRouteController {
       @RequestParam(name = "actionMapping", required = false) String actionMapping,
       HttpServletRequest request,
       Authentication authentication) {
+    if (isUnsafeLegacyGet(request, actionMapping, OFFER_DETAILS_SAFE_GET_ACTIONS)) {
+      return legacyMutationRequiresPost();
+    }
     MultiValueMap<String, String> requestParameters = fromRequest(request);
     String applicationNumber = first(requestParameters, "applicationNumber");
     String packageNumber = first(requestParameters, "packageNumber");
@@ -485,7 +544,7 @@ public class LegacyRouteController {
       return offerDetailsRpcController.getPackageList(applicationNumber);
     }
     if (ACTION_GET_PACKAGE_VOLUME.equalsIgnoreCase(actionMapping)) {
-      return offerDetailsRpcController.getPackageVolume(packageNumber);
+      return offerDetailsRpcController.getPackageVolume(packageNumber, authentication);
     }
     if (ACTION_GET_APPLICATION_VOLUME.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.getApplicationVolume(applicationNumber);
@@ -528,6 +587,9 @@ public class LegacyRouteController {
       @RequestParam(name = "documentId", required = false) String documentId,
       HttpServletRequest request,
       Authentication authentication) {
+    if (isUnsafeLegacyGet(request, actionMapping, PERMIT_DETAILS_SAFE_GET_ACTIONS)) {
+      return legacyMutationRequiresPost();
+    }
     if (requiresSavePermitAuthorization(actionMapping)
         && !authorizationService.canPerformAction(
             sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_SAVE_PERMIT)) {
@@ -559,13 +621,13 @@ public class LegacyRouteController {
       return permitDetailsRpcController.getOicPackageList(permitNumber);
     }
     if (ACTION_GET_PACKAGE_INFO.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getPackageInfo(packageNumber);
+      return permitDetailsRpcController.getPackageInfo(packageNumber, permitNumber);
     }
     if (ACTION_GET_PACKAGE_DETAILS.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getPackageDetails(packageNumber);
+      return permitDetailsRpcController.getPackageDetails(packageNumber, permitNumber);
     }
     if (ACTION_GET_SCALES_FOR_PACKAGE.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getScalesForPackage(packageNumber);
+      return permitDetailsRpcController.getScalesForPackage(packageNumber, permitNumber);
     }
     if (ACTION_CHECK_PERMIT_NUMBER.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.checkPermitNumber(permitNumber);
@@ -588,14 +650,15 @@ public class LegacyRouteController {
           permitNumber, permitApplicationNumber, authentication);
     }
     if (ACTION_GET_APPLICATION_LIST.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getApplicationList(permitNumber);
+      return permitDetailsRpcController.getApplicationList(permitNumber, authentication);
     }
     if (ACTION_GET_AVAILABLE_APPLICATION_LIST.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getAvailableApplicationList(
-          exemptionNumber, selectedApplications);
+          exemptionNumber, selectedApplications, authentication);
     }
     if (ACTION_GET_AVAILABLE_PACKAGE_LIST.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getAvailablePackageList(exemptionNumber, selectedPackages);
+      return permitDetailsRpcController.getAvailablePackageList(
+          exemptionNumber, selectedPackages, authentication);
     }
     if (ACTION_GET_APPROVED_EXEMPTION_VOLUME.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getApprovedExemptionVolume(exemptionNumber);
@@ -641,20 +704,24 @@ public class LegacyRouteController {
       return permitDetailsRpcController.getFileTypes();
     }
     if (ACTION_GET_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getDocument(fileId, fileName);
+      return permitDetailsRpcController.streamDocument(
+          fileId, fileName, permitNumber == null ? null : permitNumber.toString());
     }
     if (ACTION_GET_DOCUMENT_DETAILS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getDocumentDetails(
           permitNumber == null ? null : permitNumber.toString());
     }
     if (ACTION_REMOVE_PERMIT_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removePermitDocument(documentId, authentication);
+      return permitDetailsRpcController.removePermitDocument(
+          documentId, permitNumber, authentication);
     }
     if (ACTION_REMOVE_APPLICATION_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removeApplicationDocument(documentId, authentication);
+      return permitDetailsRpcController.removeApplicationDocument(
+          documentId, permitNumber, authentication);
     }
     if (ACTION_REMOVE_INVOICE_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removeInvoiceDocument(documentId, authentication);
+      return permitDetailsRpcController.removeInvoiceDocument(
+          documentId, permitNumber, authentication);
     }
     return ResponseEntity.noContent().build();
   }
@@ -735,6 +802,22 @@ public class LegacyRouteController {
       return false;
     }
     return ACTION_ADD.equalsIgnoreCase(actionMapping) || ACTION_CREATE.equalsIgnoreCase(actionMapping);
+  }
+
+  private boolean isUnsafeLegacyGet(
+      HttpServletRequest request, String actionMapping, Set<String> safeGetActions) {
+    if (request == null || !RequestMethod.GET.name().equalsIgnoreCase(request.getMethod())) {
+      return false;
+    }
+    if (actionMapping == null || actionMapping.isBlank()) {
+      return false;
+    }
+    String normalizedAction = actionMapping.trim();
+    return safeGetActions.stream().noneMatch(action -> action.equalsIgnoreCase(normalizedAction));
+  }
+
+  private ResponseEntity<?> legacyMutationRequiresPost() {
+    return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).build();
   }
 
   private ResponseEntity<?> authorizeLegacyAction(Authentication authentication, String action) {

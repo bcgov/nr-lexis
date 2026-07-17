@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.federal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -125,6 +127,85 @@ class FederalPermitDetailRepositoryTest {
     verifyNoInteractions(jdbcTemplate);
   }
 
+  @Test
+  void findFederalPermitDetailByIdRequiredShouldUseExactLegacyIdLookup() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_3.FIND_F_PERM_DET_BY_ID(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    stubFederalPermitRow();
+
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThat(repository.findFederalPermitDetailByIdRequired(7000123L))
+        .isPresent()
+        .get()
+        .extracting(
+            FederalPermitDetailRow::permitNumber,
+            FederalPermitDetailRow::applicationDate,
+            FederalPermitDetailRow::orgUnitNumber,
+            FederalPermitDetailRow::clientLocationCode,
+            FederalPermitDetailRow::clientNumber)
+        .containsExactly(
+            7000123L, LocalDate.of(2026, 5, 20), 1909L, "01", "00012345");
+    verify(callableStatement).setLong(1, 7000123L);
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void findFederalPermitDetailByIdRequiredShouldRejectMultipleRows() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_3.FIND_F_PERM_DET_BY_ID(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, true, false);
+    stubFederalPermitRow();
+
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findFederalPermitDetailByIdRequired(7000123L))
+        .isInstanceOf(org.springframework.dao.IncorrectResultSizeDataAccessException.class);
+  }
+
+  @Test
+  void permitCodeLookupsShouldUseLegacyProceduresAndBindCodes() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }", 2);
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_PORT_CODE(?,?) }", 2);
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_TRANSPORT_TYPE_CODE(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false, true, false, true, false);
+    when(resultSet.getString("CODE")).thenReturn("US", "VAN", "TRK");
+
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThat(repository.countryCodeExistsRequired(" US ")).isTrue();
+    assertThat(repository.portOfExportCodeExistsRequired(" VAN ")).isTrue();
+    assertThat(repository.transportTypeCodeExistsRequired(" TRK ")).isTrue();
+
+    verify(callableStatement).setString(1, "US");
+    verify(callableStatement).setString(1, "VAN");
+    verify(callableStatement).setString(1, "TRK");
+  }
+
+  @Test
+  void permitCodeLookupShouldReturnFalseWhenOracleHasNoMatchingCode() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }", 2);
+    when(resultSet.next()).thenReturn(false);
+
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThat(repository.countryCodeExistsRequired("XX")).isFalse();
+    verify(callableStatement).setString(1, "XX");
+  }
+
+  @Test
+  void permitCodeLookupShouldPropagateOracleDependencyFailure() {
+    when(jdbcTemplate.execute(
+            eq("{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }"),
+            any(CallableStatementCallback.class)))
+        .thenThrow(new DataRetrievalFailureException("Oracle lookup failed"));
+
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.countryCodeExistsRequired("US"))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessage("Oracle lookup failed");
+  }
+
   @SuppressWarnings({"rawtypes", "unchecked"})
   private void stubCursorProcedure(String call, int cursorIndex) throws Exception {
     when(jdbcTemplate.execute(eq(call), any(CallableStatementCallback.class)))
@@ -134,5 +215,24 @@ class FederalPermitDetailRepositoryTest {
               return callback.doInCallableStatement(callableStatement);
             });
     when(callableStatement.getObject(cursorIndex)).thenReturn(resultSet);
+  }
+
+  private void stubFederalPermitRow() throws Exception {
+    when(resultSet.getLong("EXPORT_FED_PERMIT_DETAIL_ID")).thenReturn(7000123L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getTimestamp("EXPORT_PERMIT_ISSUE_DATE"))
+        .thenReturn(Timestamp.valueOf("2026-06-01 00:00:00"));
+    when(resultSet.getTimestamp("ESTIMATED_SHIPPING_DATE"))
+        .thenReturn(Timestamp.valueOf("2026-06-07 00:00:00"));
+    when(resultSet.getTimestamp("APPLICATION_DATE"))
+        .thenReturn(Timestamp.valueOf("2026-05-20 00:00:00"));
+    when(resultSet.getString("EXPORT_COUNTRY_CODE")).thenReturn("US");
+    when(resultSet.getString("EXPORT_TRANSPORT_TYPE_CODE")).thenReturn("VSL");
+    when(resultSet.getString("TRANSPORT_NAME")).thenReturn("MV FEDERAL");
+    when(resultSet.getString("EXPORT_PORT_OF_EXPORT_CODE")).thenReturn("VAN");
+    when(resultSet.getString("OTHER_PORT_OF_EXPORT")).thenReturn("ALT");
+    when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1909L);
+    when(resultSet.getString("CLIENT_LOCN_CODE")).thenReturn("01");
+    when(resultSet.getString("CLIENT_NUMBER")).thenReturn("00012345");
   }
 }

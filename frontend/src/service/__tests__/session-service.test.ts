@@ -30,6 +30,7 @@ describe('session-service', () => {
       welcomeTarget: 'readOnly',
       legacyPath: null,
       grantedActions: ['/applicationSearch'],
+      forestClientNumber: '00012345',
     }
     getCachedResponseMock.mockResolvedValue({ data: payload })
 

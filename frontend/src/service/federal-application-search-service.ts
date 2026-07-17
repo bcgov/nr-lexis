@@ -1,5 +1,5 @@
 import {
-  createSortedPagedSearchParams,
+  createPagedSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
   requireParsedSearchResponse,
@@ -19,6 +19,7 @@ type BackendFederalApplicationSearchResult = {
   reason: string
   exemptionType?: string | null
   exemptionNumber?: string | null
+  selectable?: boolean | null
   showCheckbox?: boolean | null
   locked?: boolean | null
   receivedDate: string
@@ -31,7 +32,7 @@ type FederalApplicationSearchOptions = {
 
 const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearchParams => {
   const { filters } = request
-  return createSortedPagedSearchParams(request, [
+  return createPagedSearchParams(request, [
     ['applicationNumber', filters.applicationNumber],
     ['packageNumber', filters.packageNumber],
     ['applicationStatus', filters.applicationStatus],
@@ -39,9 +40,8 @@ const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearch
     ['receivedToDate', filters.receivedToDate],
     ['listingFromDate', filters.listingFromDate],
     ['listingToDate', filters.listingToDate],
-    // The single client filter fans out to both backend owner and agent fields.
+    // The backend owner filter implements the legacy owner-or-agent match.
     ['ownerClientNumber', filters.clientNumber],
-    ['agentClientNumber', filters.clientNumber],
   ])
 }
 
@@ -52,6 +52,10 @@ const parseBackendResponse = (payload: unknown): FederalApplicationSearchRespons
   >(payload, (row) => {
     const hasExemptionNumber =
       typeof row.exemptionNumber === 'string' && row.exemptionNumber.trim().length > 0
+    const eligibleForExemption =
+      Boolean(row.selectable ?? row.showCheckbox ?? false) && !hasExemptionNumber
+    // Only an explicit false from the authoritative backend snapshot means unlocked.
+    const locked = row.locked !== false
 
     return {
       applicationNumber: String(row.applicationNumber ?? ''),
@@ -64,8 +68,9 @@ const parseBackendResponse = (payload: unknown): FederalApplicationSearchRespons
       receivedDate: row.receivedDate ?? '',
       listingDate: row.listingDate ?? '',
       packageNumber: '',
-      allowCreateExemption:
-        Boolean(row.showCheckbox ?? !hasExemptionNumber) && !Boolean(row.locked),
+      eligibleForExemption,
+      locked,
+      allowCreateExemption: eligibleForExemption && !locked,
     }
   })
 }

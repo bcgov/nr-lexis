@@ -5,7 +5,7 @@ import java.util.Locale;
 public enum LexisReportFormat {
   PDF("pdf", "application/pdf"),
   CSV("csv", "application/vnd.ms-excel"),
-  XLS("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+  XLS("xls", "application/vnd.ms-excel"),
   XLSX("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
   DOC("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
   DOCX("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
@@ -33,10 +33,21 @@ public enum LexisReportFormat {
     }
 
     String normalized = format.trim().toUpperCase(Locale.ROOT);
+    LexisReportFormat parsed;
     try {
-      return valueOf(normalized);
+      parsed = valueOf(normalized);
     } catch (IllegalArgumentException ex) {
-      return PDF;
+      throw unsupportedFormat();
     }
+
+    if (parsed == DOC || parsed == DOCX || parsed == RTF) {
+      throw unsupportedFormat();
+    }
+    return parsed;
+  }
+
+  private static LexisReportValidationException unsupportedFormat() {
+    return new LexisReportValidationException(
+        "Report format must be PDF, CSV, XLS, or XLSX.");
   }
 }

@@ -1,0 +1,1 @@
+Please be advised that Offer to Purchase #{{offerNumber}} on Application #{{applicationNumber}} has been withdrawn. Details can be found in LEXIS.

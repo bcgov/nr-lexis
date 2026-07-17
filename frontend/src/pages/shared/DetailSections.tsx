@@ -18,11 +18,16 @@ export type DetailFieldTileProps = {
 
 export function DetailFieldTile({ title, fields }: DetailFieldTileProps) {
   return (
-    <Tile>
-      <h2 className="detail-tile-title">{title}</h2>
+    <Tile className="detail-section-card">
+      <div className="detail-section-card__header">
+        <h2 className="detail-tile-title">{title}</h2>
+      </div>
       <dl className="detail-field-grid">
         {fields.map((field) => (
-          <div key={field.label} className="detail-field-item">
+          <div
+            key={field.label}
+            className={`detail-field-item${fields.length === 1 ? ' detail-field-item--full' : ''}`}
+          >
             <dt className="detail-field-label">{field.label}</dt>
             <dd className="detail-field-value">{field.value}</dd>
           </div>

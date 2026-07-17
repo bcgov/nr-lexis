@@ -20,21 +20,13 @@ export type FederalApplicationSearchItem = {
   receivedDate: string
   listingDate: string
   packageNumber: string
+  eligibleForExemption: boolean
+  locked: boolean
   allowCreateExemption: boolean
 }
 
-export type FederalApplicationSearchSortField =
-  | 'federalApplicationNumber'
-  | 'status'
-  | 'clientNumber'
-  | 'reason'
-  | 'receivedDate'
-  | 'listingDate'
-
 export type FederalApplicationSearchRequest = {
   filters: FederalApplicationSearchFilters
-  sortField: FederalApplicationSearchSortField
-  sortDirection: 'asc' | 'desc'
   page: number
   pageSize: number
 }

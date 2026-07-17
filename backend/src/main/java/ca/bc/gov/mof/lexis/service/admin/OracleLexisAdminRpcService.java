@@ -6,6 +6,8 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
 import ca.bc.gov.mof.lexis.repository.admin.LexisAdminPolicyRepository;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -16,11 +18,19 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.IntFunction;
+import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 @Profile("oracle")
@@ -31,15 +41,45 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   private static final int LEGACY_RESULTS_PER_PAGE = 10;
   private static final int DEFAULT_MODERN_PAGE_SIZE = 100;
   private static final int MAX_MODERN_PAGE_SIZE = 200;
+  private static final String FEE_POLICY_KEY_EXISTS_MESSAGE =
+      "Effective Date and region combination already exists.";
+  private static final String FIL_POLICY_KEY_EXISTS_MESSAGE = "Effective Date already exists.";
 
   private static final Set<String> FEE_SORT_COLUMNS =
       Set.of("effective_date", "org_unit_no", "percent_increase");
   private static final Set<String> FIL_SORT_COLUMNS = Set.of("effective_date", "fil_percent");
 
   private final LexisAdminPolicyRepository repository;
+  private final LexisPrincipalService principalService;
+  private final TransactionOperations transactionOperations;
+
+  /* Serializes same-pod policy writes; Oracle constraints remain the cross-pod boundary. */
+  private final ReentrantLock policyMutationGuard = new ReentrantLock(true);
 
   public OracleLexisAdminRpcService(LexisAdminPolicyRepository repository) {
+    this(repository, null, TransactionOperations.withoutTransaction());
+  }
+
+  public OracleLexisAdminRpcService(
+      LexisAdminPolicyRepository repository, LexisPrincipalService principalService) {
+    this(repository, principalService, TransactionOperations.withoutTransaction());
+  }
+
+  @Autowired
+  public OracleLexisAdminRpcService(
+      LexisAdminPolicyRepository repository,
+      LexisPrincipalService principalService,
+      PlatformTransactionManager transactionManager) {
+    this(repository, principalService, policyTransactionOperations(transactionManager));
+  }
+
+  OracleLexisAdminRpcService(
+      LexisAdminPolicyRepository repository,
+      LexisPrincipalService principalService,
+      TransactionOperations transactionOperations) {
     this.repository = repository;
+    this.principalService = principalService;
+    this.transactionOperations = transactionOperations;
   }
 
   @Override
@@ -115,9 +155,9 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
               "paginationHTML",
               renderPaginationHtml(
                   repository.countFeePolicies(), parsePage(parameters.get("page"), 0), "fee policy", "fee policies"));
-      case "addpolicy", "add" -> addFeePolicy(parameters);
-      case "updatepolicy", "update" -> updateFeePolicy(parameters);
-      case "deletepolicy", "delete" -> deleteFeePolicy(parameters);
+      case "addpolicy", "add" -> guardedPolicyMutation(() -> addFeePolicy(parameters));
+      case "updatepolicy", "update" -> guardedPolicyMutation(() -> updateFeePolicy(parameters));
+      case "deletepolicy", "delete" -> guardedPolicyMutation(() -> deleteFeePolicy(parameters));
       case "checkformchanges" -> Map.of("policyChanged", false);
       case "releaselock" -> Map.of("releaseLock", "ok");
       default -> viewFeePolicies(parameters);
@@ -135,9 +175,9 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
               "paginationHTML",
               renderPaginationHtml(
                   repository.countFilPolicies(), parsePage(parameters.get("page"), 0), "fil policy", "fil policies"));
-      case "addfilpolicy", "add" -> addFilPolicy(parameters);
-      case "updatefilpolicy", "update" -> updateFilPolicy(parameters);
-      case "deletefilpolicy", "delete" -> deleteFilPolicy(parameters);
+      case "addfilpolicy", "add" -> guardedPolicyMutation(() -> addFilPolicy(parameters));
+      case "updatefilpolicy", "update" -> guardedPolicyMutation(() -> updateFilPolicy(parameters));
+      case "deletefilpolicy", "delete" -> guardedPolicyMutation(() -> deleteFilPolicy(parameters));
       case "checkformchanges" -> Map.of("filPolicyChanged", false);
       case "releaselock" -> Map.of("releaseLock", "ok");
       default -> viewFilPolicies(parameters);
@@ -176,17 +216,25 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     if (effectiveDate != null
         && orgUnitNo != null
         && repository.findFeePolicy(effectiveDate, orgUnitNo).isPresent()) {
-      errors.add("Effective Date and region combination already exists.");
+      errors.add(FEE_POLICY_KEY_EXISTS_MESSAGE);
     }
 
     if (!errors.isEmpty()) {
       return failureResponse(errors);
     }
 
-    return repository
-        .insertFeePolicy(effectiveDate, orgUnitNo, percentIncrease, resolveUserId(parameters))
-        .<Map<String, Object>>map(this::successFeePolicyResponse)
-        .orElseGet(() -> failureResponse(List.of("Unable to save fee policy.")));
+    try {
+      return repository
+          .insertFeePolicy(effectiveDate, orgUnitNo, percentIncrease, resolveUserId())
+          .filter(
+              row ->
+                  matchesFeePolicy(
+                      row, null, effectiveDate, orgUnitNo, percentIncrease))
+          .<Map<String, Object>>map(this::successFeePolicyResponse)
+          .orElseGet(() -> failureResponse(List.of("Unable to save fee policy.")));
+    } catch (DuplicateKeyException ex) {
+      return failureResponse(List.of(FEE_POLICY_KEY_EXISTS_MESSAGE));
+    }
   }
 
   private Map<String, Object> updateFeePolicy(Map<String, String> parameters) {
@@ -210,23 +258,33 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
       return failureResponse(errors);
     }
 
-    boolean updated =
-        repository.updateFeePolicy(
-            feePolicyId, effectiveDate, orgUnitNo, percentIncrease, resolveUserId(parameters));
+    Optional<LexisAdminPolicyRepository.FeePolicyRow> matchingPolicy =
+        repository.findFeePolicy(effectiveDate, orgUnitNo);
+    if (matchingPolicy.isPresent()
+        && !feePolicyId.equals(matchingPolicy.get().feePolicyId())) {
+      return failureResponse(List.of(FEE_POLICY_KEY_EXISTS_MESSAGE));
+    }
+
+    boolean updated;
+    try {
+      updated =
+          repository.updateFeePolicy(
+              feePolicyId, effectiveDate, orgUnitNo, percentIncrease, resolveUserId());
+    } catch (DuplicateKeyException ex) {
+      return failureResponse(List.of(FEE_POLICY_KEY_EXISTS_MESSAGE));
+    }
     if (!updated) {
       return failureResponse(List.of("Unable to update fee policy."));
     }
 
     return repository
         .findFeePolicyById(feePolicyId)
+        .filter(
+            row ->
+                matchesFeePolicy(
+                    row, feePolicyId, effectiveDate, orgUnitNo, percentIncrease))
         .<Map<String, Object>>map(this::successFeePolicyResponse)
-        .orElseGet(
-            () -> {
-              LinkedHashMap<String, Object> response = new LinkedHashMap<>();
-              response.put("success", true);
-              response.put("lexisFeePolicyId", feePolicyId);
-              return Map.copyOf(response);
-            });
+        .orElseGet(() -> failureResponse(List.of("Unable to verify the updated fee policy.")));
   }
 
   private Map<String, Object> deleteFeePolicy(Map<String, String> parameters) {
@@ -236,10 +294,16 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     if (!errors.isEmpty()) {
       return failureResponse(errors);
     }
+    if (repository.findFeePolicyById(feePolicyId).isEmpty()) {
+      return failureResponse(List.of("Fee policy does not exist."));
+    }
 
     boolean deleted = repository.deleteFeePolicy(feePolicyId);
     if (!deleted) {
       return failureResponse(List.of("Unable to delete fee policy."));
+    }
+    if (repository.findFeePolicyById(feePolicyId).isPresent()) {
+      return failureResponse(List.of("Unable to verify the deleted fee policy."));
     }
 
     return Map.of("success", true);
@@ -261,17 +325,22 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     }
 
     if (effectiveDate != null && repository.findFilPolicy(effectiveDate).isPresent()) {
-      errors.add("Effective Date and region combination already exists.");
+      errors.add(FIL_POLICY_KEY_EXISTS_MESSAGE);
     }
 
     if (!errors.isEmpty()) {
       return failureResponse(errors);
     }
 
-    return repository
-        .insertFilPolicy(effectiveDate, filPercent, resolveUserId(parameters))
-        .<Map<String, Object>>map(this::successFilPolicyResponse)
-        .orElseGet(() -> failureResponse(List.of("Unable to save fee in lieu policy.")));
+    try {
+      return repository
+          .insertFilPolicy(effectiveDate, filPercent, resolveUserId())
+          .filter(row -> matchesFilPolicy(row, null, effectiveDate, filPercent))
+          .<Map<String, Object>>map(this::successFilPolicyResponse)
+          .orElseGet(() -> failureResponse(List.of("Unable to save fee in lieu policy.")));
+    } catch (DuplicateKeyException ex) {
+      return failureResponse(List.of(FIL_POLICY_KEY_EXISTS_MESSAGE));
+    }
   }
 
   private Map<String, Object> updateFilPolicy(Map<String, String> parameters) {
@@ -295,22 +364,23 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
       return failureResponse(errors);
     }
 
-    boolean updated =
-        repository.updateFilPolicy(filPolicyId, effectiveDate, filPercent, resolveUserId(parameters));
+    boolean updated;
+    try {
+      updated =
+          repository.updateFilPolicy(filPolicyId, effectiveDate, filPercent, resolveUserId());
+    } catch (DuplicateKeyException ex) {
+      return failureResponse(List.of(FIL_POLICY_KEY_EXISTS_MESSAGE));
+    }
     if (!updated) {
       return failureResponse(List.of("Unable to update fee in lieu policy."));
     }
 
     return repository
         .findFilPolicyById(filPolicyId)
+        .filter(row -> matchesFilPolicy(row, filPolicyId, effectiveDate, filPercent))
         .<Map<String, Object>>map(this::successFilPolicyResponse)
         .orElseGet(
-            () -> {
-              LinkedHashMap<String, Object> response = new LinkedHashMap<>();
-              response.put("success", true);
-              response.put("lexisFILPolicyId", filPolicyId);
-              return Map.copyOf(response);
-            });
+            () -> failureResponse(List.of("Unable to verify the updated fee in lieu policy.")));
   }
 
   private Map<String, Object> deleteFilPolicy(Map<String, String> parameters) {
@@ -320,10 +390,16 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     if (!errors.isEmpty()) {
       return failureResponse(errors);
     }
+    if (repository.findFilPolicyById(filPolicyId).isEmpty()) {
+      return failureResponse(List.of("Fee in lieu policy does not exist."));
+    }
 
     boolean deleted = repository.deleteFilPolicy(filPolicyId);
     if (!deleted) {
       return failureResponse(List.of("Unable to delete fee in lieu policy."));
+    }
+    if (repository.findFilPolicyById(filPolicyId).isPresent()) {
+      return failureResponse(List.of("Unable to verify the deleted fee in lieu policy."));
     }
 
     return Map.of("success", true);
@@ -384,6 +460,64 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     payload.put("updateUserId", row.updateUserId());
     payload.put("updateTimestamp", formatDate(row.updateTimestamp()));
     return Map.copyOf(payload);
+  }
+
+  private boolean matchesFeePolicy(
+      LexisAdminPolicyRepository.FeePolicyRow row,
+      Long expectedPolicyId,
+      LocalDate effectiveDate,
+      Long orgUnitNo,
+      Integer percentIncrease) {
+    return row != null
+        && row.feePolicyId() > 0
+        && (expectedPolicyId == null || row.feePolicyId() == expectedPolicyId)
+        && java.util.Objects.equals(row.effectiveDate(), effectiveDate)
+        && orgUnitNo != null
+        && row.orgUnitNo() == orgUnitNo
+        && percentIncrease != null
+        && row.percentIncrease() == percentIncrease;
+  }
+
+  private boolean matchesFilPolicy(
+      LexisAdminPolicyRepository.FilPolicyRow row,
+      Long expectedPolicyId,
+      LocalDate effectiveDate,
+      Integer filPercent) {
+    return row != null
+        && row.filPolicyId() > 0
+        && (expectedPolicyId == null || row.filPolicyId() == expectedPolicyId)
+        && java.util.Objects.equals(row.effectiveDate(), effectiveDate)
+        && filPercent != null
+        && row.filPercent() == filPercent;
+  }
+
+  private Map<String, Object> guardedPolicyMutation(
+      Supplier<Map<String, Object>> mutation) {
+    policyMutationGuard.lock();
+    try {
+      Map<String, Object> result =
+          transactionOperations.execute(
+              status -> {
+                Map<String, Object> response = mutation.get();
+                if (!Boolean.TRUE.equals(response.get("success"))) {
+                  status.setRollbackOnly();
+                }
+                return response;
+              });
+      if (result == null) {
+        throw new IllegalStateException("Policy transaction returned no result.");
+      }
+      return result;
+    } finally {
+      policyMutationGuard.unlock();
+    }
+  }
+
+  private static TransactionOperations policyTransactionOperations(
+      PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    return transactionTemplate;
   }
 
   private String normalizeAction(LexisAdminRpcRequestDto request) {
@@ -504,7 +638,7 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
       return null;
     }
 
-    if (!parsed.isAfter(LocalDate.now())) {
+    if (!parsed.isAfter(LexisBusinessTime.today())) {
       errors.add("Effective Date must be greater than the current date.");
     }
 
@@ -558,15 +692,13 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     return Map.copyOf(payload);
   }
 
-  private String resolveUserId(Map<String, String> parameters) {
-    String explicit = trimToNull(parameters.get("currentUserId"));
-    if (explicit != null) {
-      return explicit;
-    }
-
+  private String resolveUserId() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
     if (authentication == null) {
       return null;
+    }
+    if (principalService != null) {
+      return trimToNull(principalService.resolvePrincipalName(authentication));
     }
     return trimToNull(authentication.getName());
   }

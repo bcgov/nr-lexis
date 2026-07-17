@@ -15,10 +15,9 @@ KSV030
 KSV104
 
 # KSV0013: "Image tag ':latest' used" false-positive on templated image refs.
-# backend/openshift/deployment.yaml uses env-substituted image refs and
-# backend/openshift.deploy.yml enforces REGISTRY:IMAGE_TAG. The deployment
-# pipeline sets IMAGE_TAG per build (PR number/test/prod), so runtime images
-# are always tagged explicitly.
+# The canonical parameterized templates enforce REGISTRY:IMAGE_TAG. The
+# deployment pipeline sets IMAGE_TAG per build (PR number/test/prod), so
+# runtime images are always tagged explicitly.
 KSV0013
 KSV-0013
 

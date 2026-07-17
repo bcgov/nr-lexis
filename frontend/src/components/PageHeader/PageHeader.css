@@ -1,0 +1,69 @@
+.lexis-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-inline-size: 0;
+}
+
+.lexis-page-header__top,
+.lexis-page-header__title-group,
+.lexis-page-header__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.lexis-page-header__top {
+  gap: 0.75rem 1rem;
+}
+
+.lexis-page-header__title-group {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  gap: 0.75rem;
+}
+
+.lexis-page-header__title {
+  margin: 0;
+  color: var(--cds-text-primary, #161616);
+  font-family: inherit;
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 2.5rem;
+  overflow-wrap: anywhere;
+}
+
+.lexis-page-header__status {
+  display: inline-flex;
+  align-items: center;
+}
+
+.lexis-page-header__status--end {
+  margin-inline-start: auto;
+}
+
+.lexis-page-header__actions {
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+}
+
+.lexis-page-header__subtitle {
+  margin: 0;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+@media (max-width: 671px) {
+  .lexis-page-header__actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-inline-start: 0;
+  }
+
+  .lexis-page-header__status--end {
+    flex-basis: 100%;
+    margin-inline-start: 0;
+  }
+}

@@ -109,14 +109,24 @@ export default function ApplicationNumberSelect({
       onBlur={onBlur}
       onInputChange={(inputValue) => {
         setInputText(inputValue)
-        onChange(leadingDigits(inputValue))
+        const nextValue = leadingDigits(inputValue)
+        if (nextValue !== value) {
+          onChange(nextValue)
+        }
       }}
       onChange={({ selectedItem, inputValue }) => {
-        if (typeof selectedItem === 'string') {
-          onChange(leadingDigits(selectedItem))
+        const nextValue =
+          typeof selectedItem === 'string'
+            ? leadingDigits(selectedItem)
+            : (selectedItem?.value ?? leadingDigits(inputValue ?? ''))
+        if (nextValue === value) {
           return
         }
-        onChange(selectedItem?.value ?? leadingDigits(inputValue ?? ''))
+        if (typeof selectedItem === 'string') {
+          onChange(nextValue)
+          return
+        }
+        onChange(nextValue)
       }}
     />
   )

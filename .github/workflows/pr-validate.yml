@@ -24,7 +24,9 @@ jobs:
 
   validate:
     name: Validate PR
-    if: (! github.event.pull_request.draft)
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
     needs: [vars]
     permissions:
       pull-requests: write
@@ -40,4 +42,6 @@ jobs:
     needs: [validate]
     runs-on: ubuntu-slim
     steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: echo "PR validation failed or was cancelled." && exit 1
       - run: echo "Success!"

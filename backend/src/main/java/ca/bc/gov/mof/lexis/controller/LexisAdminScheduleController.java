@@ -27,7 +27,8 @@ public class LexisAdminScheduleController {
 
   private final ObjectProvider<LexisAdminScheduleService> scheduleServiceProvider;
 
-  public LexisAdminScheduleController(ObjectProvider<LexisAdminScheduleService> scheduleServiceProvider) {
+  public LexisAdminScheduleController(
+      ObjectProvider<LexisAdminScheduleService> scheduleServiceProvider) {
     this.scheduleServiceProvider = scheduleServiceProvider;
   }
 

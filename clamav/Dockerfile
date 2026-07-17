@@ -18,11 +18,13 @@ RUN dnf -y update \
 COPY config/clamd.conf /usr/local/etc/clamd.conf
 COPY config/freshclam.conf /usr/local/etc/freshclam.conf
 COPY clamdcheck.sh /opt/app-root/clamdcheck.sh
+COPY start-clamav.sh /opt/app-root/start-clamav.sh
 
 RUN mkdir -p /opt/app-root/src /var/log/clamav /tmp/clamav \
     && touch /var/log/clamav/clamav.log /var/log/clamav/freshclam.log \
     && chown -R 1001:0 /opt/app-root /var/log/clamav /tmp/clamav \
-    && chmod -R ug+rwx /opt/app-root /var/log/clamav /tmp/clamav
+    && chmod -R ug+rwx /opt/app-root /var/log/clamav /tmp/clamav \
+    && chmod ug+x /opt/app-root/start-clamav.sh
 
 USER 1001
 
@@ -31,4 +33,4 @@ EXPOSE 3310
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \
   CMD /opt/app-root/clamdcheck.sh || exit 1
 
-CMD ["sh", "-c", "freshclam && exec clamd"]
+CMD ["/opt/app-root/start-clamav.sh"]

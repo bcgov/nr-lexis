@@ -63,15 +63,20 @@ public class LexisSessionController {
 
     LexisSessionWelcomeDto welcome = sessionService.resolveWelcomeRoute(principalName, roles);
     List<String> grantedActions = authorizationService.resolveGrantedActions(welcome.roles());
+    String forestClientNumber =
+        principal instanceof Authentication authentication
+            ? sessionService.resolveForestClientNumber(authentication)
+            : null;
     String orgUnitNo = principalService.resolveOrgUnitNo(principal);
 
     LOGGER.debug(
-        "Resolved LEXIS session capabilities: authenticated={}, principalPresent={}, roles={}, welcomeTarget={}, grantedActionCount={}, orgUnitNo={}",
+        "Resolved LEXIS session capabilities: authenticated={}, principalPresent={}, roles={}, welcomeTarget={}, grantedActionCount={}, forestClientScoped={}, orgUnitNo={}",
         welcome.authenticated(),
         welcome.principal() != null && !welcome.principal().isBlank(),
         welcome.roles(),
         welcome.welcomeTarget(),
         grantedActions.size(),
+        forestClientNumber != null,
         orgUnitNo);
 
     return ResponseEntity.ok(
@@ -82,6 +87,7 @@ public class LexisSessionController {
             welcome.welcomeTarget(),
             welcome.legacyPath(),
             grantedActions,
+            forestClientNumber,
             orgUnitNo));
   }
 

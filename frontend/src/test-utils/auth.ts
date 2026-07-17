@@ -11,6 +11,7 @@ export const createTestCapabilities = (
   welcomeTarget: '/admin',
   legacyPath: null,
   grantedActions: [],
+  forestClientNumber: null,
   ...overrides,
 })
 

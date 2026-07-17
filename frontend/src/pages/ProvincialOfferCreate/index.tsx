@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
+import PageHeader from '@/components/PageHeader'
+import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -18,11 +21,25 @@ import { submitProvincialOfferCreate } from '@/service/create-submit-service'
 import {
   fetchOfferApplicationDetails,
   fetchOfferApplicationVolume,
+  fetchOfferClientData,
   fetchOfferPackageList,
   fetchOfferPackageVolume,
   type OfferApplicationDetails,
 } from '@/service/provincial-offer-create-service'
-import { fetchProvincialOfferOptions, type SearchOption } from '@/service/search-options-service'
+import type { SearchOption } from '@/service/search-options-service'
+import { formatBusinessIsoDate } from '@/utils/date'
+import { displayAuditIdentity } from '@/utils/text'
+import {
+  OFFER_COMPANY_NAME_MAX_LENGTH,
+  OFFER_CONDITION_MAX_LENGTH,
+  OFFER_CONTACT_NAME_MAX_LENGTH,
+  OFFER_PICKUP_LOCATION_MAX_LENGTH,
+  OFFER_REMARK_MAX_LENGTH,
+  OFFER_VOLUME_MAX,
+  PURCHASE_OFFER_AMOUNT_MAX,
+  offerDecimalStorageFieldError,
+  offerTextStorageFieldError,
+} from '@/pages/shared/offer-storage-validation'
 
 type ProvincialOfferCreateForm = {
   applicationNumber: string
@@ -30,12 +47,8 @@ type ProvincialOfferCreateForm = {
   offeringClientNumber: string
   companyName: string
   contactName: string
-  region: string
   offerVolume: string
   purchaseOfferAmount: string
-  purchaseOfferDate: string
-  offerWithdrawalDate: string
-  withdrawReason: string
   teacReviewDate: string
   fairOfferIndicator: string
   validOfferIndicator: string
@@ -54,12 +67,8 @@ const INITIAL_FORM: ProvincialOfferCreateForm = {
   offeringClientNumber: '',
   companyName: '',
   contactName: '',
-  region: '',
   offerVolume: '',
   purchaseOfferAmount: '',
-  purchaseOfferDate: '',
-  offerWithdrawalDate: '',
-  withdrawReason: '',
   teacReviewDate: '',
   fairOfferIndicator: 'N',
   validOfferIndicator: 'Y',
@@ -97,12 +106,8 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreat
     offeringClientNumber: query.get('offeringClientNumber') ?? query.get('clientNumber') ?? '',
     companyName: query.get('companyName') ?? '',
     contactName: query.get('contactName') ?? '',
-    region: query.get('region') ?? '',
     offerVolume: query.get('offerVolume') ?? '',
     purchaseOfferAmount: query.get('purchaseOfferAmount') ?? '',
-    purchaseOfferDate: query.get('purchaseOfferDate') ?? '',
-    offerWithdrawalDate: query.get('offerWithdrawalDate') ?? query.get('offerEndDate') ?? '',
-    withdrawReason: query.get('withdrawReason') ?? '',
     teacReviewDate: query.get('teacReviewDate') ?? '',
     fairOfferIndicator: query.get('fairOfferIndicator') ?? INITIAL_FORM.fairOfferIndicator,
     validOfferIndicator: query.get('validOfferIndicator') ?? INITIAL_FORM.validOfferIndicator,
@@ -118,6 +123,12 @@ type PageStatus = {
   kind: 'success' | 'error'
   title: string
   message: string
+}
+
+type ScopedOfferClientContext = {
+  clientNumber: string
+  companyName: string
+  errorMessage: string
 }
 
 type OfferApplicationContextState = {
@@ -196,7 +207,9 @@ const ProvincialOfferCreatePage = () => {
     [searchParamsKey],
   )
   const [form, setForm] = useState<ProvincialOfferCreateForm>(() => initialForm)
-  const [regions, setRegions] = useState<SearchOption[]>([])
+  const draftBaselineRef = useRef(form)
+  const [formEdited, setFormEdited] = useState(false)
+  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
   const [applicationContext, dispatchApplicationContext] = useReducer(
     offerApplicationContextReducer,
     queryPackageOptions,
@@ -213,7 +226,42 @@ const ProvincialOfferCreatePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialOfferCreateField>>({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
-  const author = capabilities.principal ?? ''
+  const [scopedClientContext, setScopedClientContext] = useState<ScopedOfferClientContext>({
+    clientNumber: '',
+    companyName: '',
+    errorMessage: '',
+  })
+  const [scopedContact, setScopedContact] = useState({ clientNumber: '', contactName: '' })
+  const scopedContactBaselineRef = useRef(scopedContact)
+  const canManageOfferApproval =
+    hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN')
+  const isScopedProvincialSubmitter =
+    hasProvincialSubmitterRole(capabilities.roles) &&
+    Boolean(capabilities.forestClientNumber?.trim())
+  const canSelectOfferingClient = canManageOfferApproval && !isScopedProvincialSubmitter
+  const authoritativeOfferingClientNumber = capabilities.forestClientNumber?.trim() ?? ''
+  const effectiveOfferingClientNumber = canSelectOfferingClient
+    ? form.offeringClientNumber
+    : authoritativeOfferingClientNumber
+  const scopedClientContextIsCurrent =
+    isScopedProvincialSubmitter &&
+    scopedClientContext.clientNumber === authoritativeOfferingClientNumber
+  const effectiveCompanyName = isScopedProvincialSubmitter
+    ? scopedClientContextIsCurrent
+      ? scopedClientContext.companyName
+      : ''
+    : form.companyName
+  const effectiveContactName = isScopedProvincialSubmitter
+    ? scopedContact.clientNumber === authoritativeOfferingClientNumber
+      ? scopedContact.contactName
+      : ''
+    : form.contactName
+  const scopedClientLookupPending = isScopedProvincialSubmitter && !scopedClientContextIsCurrent
+  const scopedClientLookupError = scopedClientContextIsCurrent
+    ? scopedClientContext.errorMessage
+    : ''
+  const author = displayAuditIdentity(capabilities.principal)
+  const receivedDate = formatBusinessIsoDate()
   const hasApplicationNumber = form.applicationNumber.trim().length > 0
   const hasNoPackagesForApplication =
     hasApplicationNumber &&
@@ -222,13 +270,48 @@ const ProvincialOfferCreatePage = () => {
     packageOptions.length === 0
 
   useEffect(() => {
-    const loadOptions = async () => {
-      const options = await fetchProvincialOfferOptions()
-      setRegions(options.regions)
+    if (createdRecordPath) {
+      navigate(createdRecordPath)
+    }
+  }, [createdRecordPath, navigate])
+
+  useEffect(() => {
+    if (!isScopedProvincialSubmitter) {
+      return undefined
     }
 
-    void loadOptions()
-  }, [])
+    const requestedClientNumber = authoritativeOfferingClientNumber
+    let active = true
+    void fetchOfferClientData(requestedClientNumber)
+      .then((clientData) => {
+        if (!active) {
+          return
+        }
+        setScopedClientContext({
+          clientNumber: requestedClientNumber,
+          companyName: clientData?.companyName ?? '',
+          errorMessage: clientData
+            ? ''
+            : 'The offering company could not be loaded from the authenticated forest client.',
+        })
+      })
+      .catch((error) => {
+        if (!active) {
+          return
+        }
+        console.error(error)
+        setScopedClientContext({
+          clientNumber: requestedClientNumber,
+          companyName: '',
+          errorMessage:
+            'The offering company could not be loaded from the authenticated forest client.',
+        })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [authoritativeOfferingClientNumber, isScopedProvincialSubmitter])
 
   useEffect(() => {
     const applicationNumber = form.applicationNumber.trim()
@@ -343,27 +426,61 @@ const ProvincialOfferCreatePage = () => {
             : null,
       ),
       offeringClientNumber:
-        requiredFieldError(form.offeringClientNumber, 'Offering client number') ?? undefined,
-      companyName: requiredFieldError(form.companyName, 'Company name') ?? undefined,
-      contactName: requiredFieldError(form.contactName, 'Contact name') ?? undefined,
-      offerVolume: positiveNumericFieldError(form.offerVolume) ?? undefined,
-      purchaseOfferAmount: firstValidationError(
-        () => requiredFieldError(form.purchaseOfferAmount, 'Offer amount'),
-        () => positiveNumericFieldError(form.purchaseOfferAmount),
-      ),
-      purchaseOfferDate: firstValidationError(
-        () => requiredFieldError(form.purchaseOfferDate, 'Offer date'),
-        () => isoDateFieldError(form.purchaseOfferDate),
-      ),
-      offerWithdrawalDate: isoDateFieldError(form.offerWithdrawalDate) ?? undefined,
-      withdrawReason:
-        form.offerWithdrawalDate.trim().length > 0
-          ? (requiredFieldError(form.withdrawReason, 'Withdraw reason') ?? undefined)
-          : undefined,
-      teacReviewDate: isoDateFieldError(form.teacReviewDate) ?? undefined,
-      pickupLocation: requiredFieldError(form.pickupLocation, 'Pickup location') ?? undefined,
+        requiredFieldError(effectiveOfferingClientNumber, 'Offering client number') ?? undefined,
+      companyName:
+        offerTextStorageFieldError(
+          effectiveCompanyName,
+          OFFER_COMPANY_NAME_MAX_LENGTH,
+          'Company name',
+          true,
+        ) ?? undefined,
+      contactName:
+        offerTextStorageFieldError(
+          effectiveContactName,
+          OFFER_CONTACT_NAME_MAX_LENGTH,
+          'Contact name',
+          true,
+        ) ?? undefined,
+      offerVolume:
+        offerDecimalStorageFieldError(form.offerVolume, OFFER_VOLUME_MAX, 'Offer volume') ??
+        undefined,
+      purchaseOfferAmount:
+        offerDecimalStorageFieldError(
+          form.purchaseOfferAmount,
+          PURCHASE_OFFER_AMOUNT_MAX,
+          'Offer amount',
+          true,
+        ) ?? undefined,
+      teacReviewDate: canManageOfferApproval
+        ? (isoDateFieldError(form.teacReviewDate) ?? undefined)
+        : undefined,
+      pickupLocation:
+        offerTextStorageFieldError(
+          form.pickupLocation,
+          OFFER_PICKUP_LOCATION_MAX_LENGTH,
+          'Pickup location',
+          true,
+        ) ?? undefined,
+      offerCondition:
+        offerTextStorageFieldError(
+          form.offerCondition,
+          OFFER_CONDITION_MAX_LENGTH,
+          'Offer conditions / remarks',
+        ) ?? undefined,
+      offerRemark: canManageOfferApproval
+        ? (offerTextStorageFieldError(form.offerRemark, OFFER_REMARK_MAX_LENGTH, 'Offer remarks') ??
+          undefined)
+        : undefined,
     }),
-    [form, isLoadingApplicationContext, packageOptions],
+    [
+      canManageOfferApproval,
+      effectiveCompanyName,
+      effectiveContactName,
+      effectiveOfferingClientNumber,
+      form,
+      isLoadingApplicationContext,
+      packageOptions,
+    ],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
@@ -377,7 +494,10 @@ const ProvincialOfferCreatePage = () => {
   const fieldError = (field: ProvincialOfferCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
 
-  const onSave = async () => {
+  const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
+    if (isLoadingApplicationContext || scopedClientLookupPending) {
+      return false
+    }
     if (hasValidationError) {
       const validationMessage =
         Object.values(fieldErrors).find((error): error is string => !!error) ??
@@ -388,7 +508,7 @@ const ProvincialOfferCreatePage = () => {
         title: 'Validation error',
         message: validationMessage,
       })
-      return
+      return false
     }
 
     setStatus(null)
@@ -396,19 +516,33 @@ const ProvincialOfferCreatePage = () => {
     try {
       const result = await submitProvincialOfferCreate({
         ...form,
-        teacReviewDate: form.teacReviewDate || applicationDetails?.teacReviewDate || '',
+        offeringClientNumber: effectiveOfferingClientNumber,
+        companyName: effectiveCompanyName,
+        contactName: effectiveContactName,
+        teacReviewDate: canManageOfferApproval
+          ? form.teacReviewDate || applicationDetails?.teacReviewDate || ''
+          : applicationDetails?.teacReviewDate || '',
+        fairOfferIndicator: canManageOfferApproval ? form.fairOfferIndicator : 'N',
+        validOfferIndicator: canManageOfferApproval ? form.validOfferIndicator : 'Y',
+        approvalIndicator: canManageOfferApproval ? form.approvalIndicator : 'N',
+        offerRemark: canManageOfferApproval ? form.offerRemark : '',
       })
       if (result.success) {
+        draftBaselineRef.current = form
+        scopedContactBaselineRef.current = scopedContact
+        setFormEdited(false)
         if (result.createdId) {
-          navigate(`/provincial/offers/${encodeURIComponent(result.createdId)}`)
-          return
+          if (navigateToCreatedRecord) {
+            setCreatedRecordPath(`/provincial/offers/${encodeURIComponent(result.createdId)}`)
+          }
+          return true
         }
         setStatus({
           kind: 'success',
           title: 'Offer saved',
           message: 'Offer saved successfully.',
         })
-        return
+        return true
       }
 
       setStatus({
@@ -417,6 +551,7 @@ const ProvincialOfferCreatePage = () => {
         message:
           'Offer save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } catch (error) {
       console.error(error)
       setStatus({
@@ -425,27 +560,54 @@ const ProvincialOfferCreatePage = () => {
         message:
           'Offer save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  const onDiscardCreateDraft = (): void => {
+    setForm(draftBaselineRef.current)
+    setScopedContact(scopedContactBaselineRef.current)
+    setFormEdited(false)
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
+    setStatus(null)
+  }
+
+  const markFormEdited = (): void => {
+    if (!formEdited) {
+      draftBaselineRef.current = form
+      scopedContactBaselineRef.current = scopedContact
+    }
+    setFormEdited(true)
+  }
+
+  const isCreateDraftDirty =
+    formEdited &&
+    (!formValuesEqual(form, draftBaselineRef.current) ||
+      !formValuesEqual(scopedContact, scopedContactBaselineRef.current))
+
   return (
-    <Grid fullWidth className="default-grid provincial-offer-create-page">
+    <Grid fullWidth className="default-grid create-page-grid provincial-offer-create-page">
       <Column sm={4} md={8} lg={16}>
-        <div className="application-detail-title-row">
-          <h1>Provincial offers</h1>
-          <dl
-            className="application-detail-header-metrics"
-            role="group"
-            aria-label="New offer state"
-          >
-            <div>
-              <dt>Offer number</dt>
-              <dd>New</dd>
-            </div>
-          </dl>
-        </div>
+        <PageHeader
+          title="Create provincial offer"
+          subtitle="Enter offer details and save a new provincial offer."
+          statusPlacement="end"
+          status={
+            <dl
+              className="application-detail-header-metrics"
+              role="group"
+              aria-label="New offer state"
+            >
+              <div>
+                <dt>Offer number</dt>
+                <dd>New</dd>
+              </div>
+            </dl>
+          }
+        />
       </Column>
 
       {!!status && (
@@ -461,11 +623,22 @@ const ProvincialOfferCreatePage = () => {
         </Column>
       )}
 
+      {!!scopedClientLookupError && (
+        <Column sm={4} md={8} lg={16}>
+          <AppNotification
+            kind="error"
+            title="Offering client unavailable"
+            subtitle={scopedClientLookupError}
+            lowContrast
+          />
+        </Column>
+      )}
+
       <Column sm={4} md={8} lg={16}>
-        <Tile className="provincial-offer-create">
-          <fieldset className="legacy-form-fieldset">
+        <Tile className="provincial-offer-create create-form-tile">
+          <fieldset className="legacy-form-fieldset create-form-section">
             <legend>Application details</legend>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid create-form-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
@@ -473,9 +646,10 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('applicationNumber')}
                 invalidText={fieldError('applicationNumber')}
                 onBlur={() => markFieldTouched('applicationNumber')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, applicationNumber: event.target.value }))
-                }
+                }}
               />
               {packageOptions.length > 0 ? (
                 <SearchableSelect
@@ -489,7 +663,10 @@ const ProvincialOfferCreatePage = () => {
                   invalid={!!fieldError('packageNumber')}
                   invalidText={fieldError('packageNumber')}
                   onBlur={() => markFieldTouched('packageNumber')}
-                  onChange={(value) => setForm((current) => ({ ...current, packageNumber: value }))}
+                  onChange={(value) => {
+                    markFormEdited()
+                    setForm((current) => ({ ...current, packageNumber: value }))
+                  }}
                 />
               ) : (
                 <TextInput
@@ -500,14 +677,16 @@ const ProvincialOfferCreatePage = () => {
                   invalid={!!fieldError('packageNumber')}
                   invalidText={fieldError('packageNumber')}
                   onBlur={() => markFieldTouched('packageNumber')}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    markFormEdited()
                     setForm((current) => ({ ...current, packageNumber: event.target.value }))
-                  }
+                  }}
                 />
               )}
             </div>
             <div className="legacy-search-actions">
               <Button
+                type="button"
                 kind="ghost"
                 size="sm"
                 disabled={!form.applicationNumber.trim() || !form.packageNumber.trim()}
@@ -521,48 +700,76 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset">
+          <fieldset className="legacy-form-fieldset create-form-section">
             <legend>Offering company details</legend>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid create-form-grid">
               <TextInput
                 id="offeringClientNumber"
                 labelText="Offering client number"
-                value={form.offeringClientNumber}
+                value={effectiveOfferingClientNumber}
                 invalid={!!fieldError('offeringClientNumber')}
                 invalidText={fieldError('offeringClientNumber')}
-                onBlur={() => markFieldTouched('offeringClientNumber')}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, offeringClientNumber: event.target.value }))
+                readOnly={!canSelectOfferingClient}
+                helperText={
+                  isScopedProvincialSubmitter
+                    ? 'Loaded from your authenticated forest client access.'
+                    : !canSelectOfferingClient
+                      ? 'Authenticated forest client access is required.'
+                      : undefined
                 }
+                onBlur={() => markFieldTouched('offeringClientNumber')}
+                onChange={(event) => {
+                  markFormEdited()
+                  setForm((current) => ({ ...current, offeringClientNumber: event.target.value }))
+                }}
               />
               <TextInput
                 id="companyName"
                 labelText="Company"
-                value={form.companyName}
+                value={effectiveCompanyName}
                 invalid={!!fieldError('companyName')}
                 invalidText={fieldError('companyName')}
-                onBlur={() => markFieldTouched('companyName')}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, companyName: event.target.value }))
+                readOnly={isScopedProvincialSubmitter}
+                helperText={
+                  isScopedProvincialSubmitter
+                    ? scopedClientLookupPending
+                      ? 'Loading from your authenticated forest client...'
+                      : 'Loaded from your authenticated forest client.'
+                    : undefined
                 }
+                onBlur={() => markFieldTouched('companyName')}
+                onChange={(event) => {
+                  markFormEdited()
+                  setForm((current) => ({ ...current, companyName: event.target.value }))
+                }}
+                maxLength={OFFER_COMPANY_NAME_MAX_LENGTH}
               />
               <TextInput
                 id="contactName"
                 labelText="Contact name"
-                value={form.contactName}
+                value={effectiveContactName}
                 invalid={!!fieldError('contactName')}
                 invalidText={fieldError('contactName')}
                 onBlur={() => markFieldTouched('contactName')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
+                  if (isScopedProvincialSubmitter) {
+                    setScopedContact({
+                      clientNumber: authoritativeOfferingClientNumber,
+                      contactName: event.target.value,
+                    })
+                    return
+                  }
                   setForm((current) => ({ ...current, contactName: event.target.value }))
-                }
+                }}
+                maxLength={OFFER_CONTACT_NAME_MAX_LENGTH}
               />
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset">
+          <fieldset className="legacy-form-fieldset create-form-section">
             <legend>Offer details</legend>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid create-form-grid">
               {contextVolume && (
                 <TextInput
                   id="applicationPackageVolume"
@@ -578,9 +785,10 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('offerVolume')}
                 invalidText={fieldError('offerVolume')}
                 onBlur={() => markFieldTouched('offerVolume')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, offerVolume: event.target.value }))
-                }
+                }}
               />
               {applicationDetails?.speciesGradeCode && (
                 <TextInput
@@ -597,28 +805,24 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('purchaseOfferAmount')}
                 invalidText={fieldError('purchaseOfferAmount')}
                 onBlur={() => markFieldTouched('purchaseOfferAmount')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, purchaseOfferAmount: event.target.value }))
-                }
+                }}
               />
-              <SearchableSelect
+              <TextInput
                 id="region"
                 labelText="Region"
-                value={form.region}
-                placeholder="Select region"
-                options={regions}
-                onChange={(value) => setForm((current) => ({ ...current, region: value }))}
+                value={applicationDetails?.region || 'Not available'}
+                helperText="Derived from the selected application."
+                readOnly
               />
-              <IsoDatePicker
+              <TextInput
                 id="purchaseOfferDate"
                 labelText="Offer received date"
-                value={form.purchaseOfferDate}
-                invalid={!!fieldError('purchaseOfferDate')}
-                invalidText={fieldError('purchaseOfferDate')}
-                onBlur={() => markFieldTouched('purchaseOfferDate')}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, purchaseOfferDate: value }))
-                }
+                value={receivedDate}
+                helperText="Set automatically when the offer is saved."
+                readOnly
               />
               {applicationDetails?.advertisingDate && (
                 <TextInput
@@ -643,100 +847,123 @@ const ProvincialOfferCreatePage = () => {
                 invalid={!!fieldError('pickupLocation')}
                 invalidText={fieldError('pickupLocation')}
                 onBlur={() => markFieldTouched('pickupLocation')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, pickupLocation: event.target.value }))
-                }
+                }}
+                maxLength={OFFER_PICKUP_LOCATION_MAX_LENGTH}
               />
               <TextArea
                 id="offerCondition"
                 labelText="Offer conditions / remarks"
                 value={form.offerCondition}
-                onChange={(event) =>
+                invalid={!!fieldError('offerCondition')}
+                invalidText={fieldError('offerCondition')}
+                onBlur={() => markFieldTouched('offerCondition')}
+                onChange={(event) => {
+                  markFormEdited()
                   setForm((current) => ({ ...current, offerCondition: event.target.value }))
-                }
+                }}
+                maxLength={OFFER_CONDITION_MAX_LENGTH}
               />
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset">
+          <fieldset className="legacy-form-fieldset create-form-section">
             <legend>Offer withdrawals</legend>
-            <div className="legacy-search-grid">
-              <IsoDatePicker
+            <div className="legacy-search-grid create-form-grid">
+              <TextInput
                 id="offerWithdrawalDate"
                 labelText="Offer withdrawal date"
-                value={form.offerWithdrawalDate}
-                invalid={!!fieldError('offerWithdrawalDate')}
-                invalidText={fieldError('offerWithdrawalDate')}
-                onBlur={() => markFieldTouched('offerWithdrawalDate')}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, offerWithdrawalDate: value }))
-                }
+                value=""
+                helperText="New offers are created as not withdrawn."
+                readOnly
               />
-              <TextArea
-                id="withdrawReason"
-                labelText="Offer withdrawal reason"
-                value={form.withdrawReason}
-                invalid={!!fieldError('withdrawReason')}
-                invalidText={fieldError('withdrawReason')}
-                onBlur={() => markFieldTouched('withdrawReason')}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, withdrawReason: event.target.value }))
-                }
-              />
+              <TextArea id="withdrawReason" labelText="Offer withdrawal reason" value="" readOnly />
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset">
+          <fieldset className="legacy-form-fieldset create-form-section">
             <legend>Approval</legend>
-            <div className="legacy-search-grid">
-              <IsoDatePicker
-                id="teacReviewDate"
-                labelText="TEAC review date"
-                value={form.teacReviewDate || applicationDetails?.teacReviewDate || ''}
-                invalid={!!fieldError('teacReviewDate')}
-                invalidText={fieldError('teacReviewDate')}
-                onBlur={() => markFieldTouched('teacReviewDate')}
-                onChange={(value) => setForm((current) => ({ ...current, teacReviewDate: value }))}
-              />
-              <SearchableSelect
-                id="fairOfferIndicator"
-                labelText="Fair market value"
-                value={form.fairOfferIndicator}
-                placeholder="Select value"
-                options={YES_NO_OPTIONS}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, fairOfferIndicator: value }))
-                }
-              />
-              <SearchableSelect
-                id="validOfferIndicator"
-                labelText="Valid offer"
-                value={form.validOfferIndicator}
-                placeholder="Select value"
-                options={YES_NO_OPTIONS}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, validOfferIndicator: value }))
-                }
-              />
-              <SearchableSelect
-                id="approvalIndicator"
-                labelText="Offer approved"
-                value={form.approvalIndicator}
-                placeholder="Select value"
-                options={YES_NO_OPTIONS}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, approvalIndicator: value }))
-                }
-              />
-              <TextArea
-                id="offerRemark"
-                labelText="Offer remarks"
-                value={form.offerRemark}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, offerRemark: event.target.value }))
-                }
-              />
-            </div>
+            {canManageOfferApproval ? (
+              <div className="legacy-search-grid create-form-grid">
+                <IsoDatePicker
+                  id="teacReviewDate"
+                  labelText="TEAC review date"
+                  value={form.teacReviewDate || applicationDetails?.teacReviewDate || ''}
+                  invalid={!!fieldError('teacReviewDate')}
+                  invalidText={fieldError('teacReviewDate')}
+                  onBlur={() => markFieldTouched('teacReviewDate')}
+                  onChange={(value) => {
+                    markFormEdited()
+                    setForm((current) => ({ ...current, teacReviewDate: value }))
+                  }}
+                />
+                <SearchableSelect
+                  id="fairOfferIndicator"
+                  labelText="Fair market value"
+                  value={form.fairOfferIndicator}
+                  placeholder="Select value"
+                  options={YES_NO_OPTIONS}
+                  onChange={(value) => {
+                    markFormEdited()
+                    setForm((current) => ({ ...current, fairOfferIndicator: value }))
+                  }}
+                />
+                <SearchableSelect
+                  id="validOfferIndicator"
+                  labelText="Valid offer"
+                  value={form.validOfferIndicator}
+                  placeholder="Select value"
+                  options={YES_NO_OPTIONS}
+                  onChange={(value) => {
+                    markFormEdited()
+                    setForm((current) => ({ ...current, validOfferIndicator: value }))
+                  }}
+                />
+                <SearchableSelect
+                  id="approvalIndicator"
+                  labelText="Offer approved"
+                  value={form.approvalIndicator}
+                  placeholder="Select value"
+                  options={YES_NO_OPTIONS}
+                  onChange={(value) => {
+                    markFormEdited()
+                    setForm((current) => ({ ...current, approvalIndicator: value }))
+                  }}
+                />
+                <TextArea
+                  id="offerRemark"
+                  labelText="Offer remarks"
+                  value={form.offerRemark}
+                  invalid={!!fieldError('offerRemark')}
+                  invalidText={fieldError('offerRemark')}
+                  onBlur={() => markFieldTouched('offerRemark')}
+                  onChange={(event) => {
+                    markFormEdited()
+                    setForm((current) => ({ ...current, offerRemark: event.target.value }))
+                  }}
+                  maxLength={OFFER_REMARK_MAX_LENGTH}
+                />
+              </div>
+            ) : (
+              <div className="legacy-search-grid create-form-grid">
+                <TextInput
+                  id="teacReviewDate"
+                  labelText="TEAC review date"
+                  value={applicationDetails?.teacReviewDate || 'Not scheduled'}
+                  readOnly
+                />
+                <TextInput
+                  id="fairOfferIndicator"
+                  labelText="Fair market value"
+                  value="No"
+                  readOnly
+                />
+                <TextInput id="validOfferIndicator" labelText="Valid offer" value="Yes" readOnly />
+                <TextInput id="approvalIndicator" labelText="Offer approved" value="No" readOnly />
+              </div>
+            )}
           </fieldset>
 
           <div className="legacy-form-footer">
@@ -747,24 +974,41 @@ const ProvincialOfferCreatePage = () => {
               </div>
               <div className="detail-field-item">
                 <dt className="detail-field-label">Author</dt>
-                <dd className="detail-field-value">{author || 'Not available'}</dd>
+                <dd className="detail-field-value">{author}</dd>
               </div>
             </dl>
-            <div className="legacy-search-actions">
+            <div
+              className="legacy-search-actions create-form-actions"
+              role="group"
+              aria-label="Offer form actions"
+            >
+              <Button type="button" kind="secondary" onClick={() => navigate('/provincial/offers')}>
+                Cancel
+              </Button>
               <Button
+                type="button"
                 kind="primary"
-                onClick={() => void onSave()}
-                disabled={isSubmitting || isLoadingApplicationContext}
+                onClick={() => void onSave(true)}
+                disabled={isSubmitting || isLoadingApplicationContext || scopedClientLookupPending}
               >
                 Save
-              </Button>
-              <Button kind="secondary" onClick={() => navigate('/provincial/offers')}>
-                Cancel
               </Button>
             </div>
           </div>
         </Tile>
       </Column>
+      <UnsavedChangesGuard
+        isDirty={isCreateDraftDirty}
+        isBusy={isSubmitting}
+        onSave={() => onSave(false)}
+        onDiscard={onDiscardCreateDraft}
+        subject="this new purchase offer"
+        saveUnavailableReason={
+          isLoadingApplicationContext || scopedClientLookupPending
+            ? 'Application and client details must finish loading before this offer can be saved.'
+            : undefined
+        }
+      />
     </Grid>
   )
 }

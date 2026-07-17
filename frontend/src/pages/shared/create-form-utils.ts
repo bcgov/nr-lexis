@@ -1,6 +1,16 @@
 export const isValidIsoDate = (value: string): boolean => {
   if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
+  const match = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.exec(value)
+  if (!match) return false
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (year === 0) return false
+
+  const isLeapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, isLeapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  return day <= daysInMonth[month - 1]
 }
 
 export const hasInvalidIsoDateValue = (...values: string[]): boolean =>
@@ -93,6 +103,13 @@ export const atMostOneDecimalFieldError = (value: string, label = 'Value'): stri
   return /^\d+(\.\d)?$/.test(value.trim())
     ? null
     : `${label} must have no more than one decimal place.`
+}
+
+export const atMostTwoDecimalFieldError = (value: string, label = 'Value'): string | null => {
+  if (!value.trim()) return null
+  return /^\d+(\.\d{1,2})?$/.test(value.trim())
+    ? null
+    : `${label} must have no more than two decimal places.`
 }
 
 export const numericFieldError = (value: string, label = 'Value'): string | null => {

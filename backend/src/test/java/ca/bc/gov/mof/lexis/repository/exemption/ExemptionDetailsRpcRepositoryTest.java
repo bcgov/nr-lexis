@@ -1,0 +1,163 @@
+package ca.bc.gov.mof.lexis.repository.exemption;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.io.ByteArrayOutputStream;
+import java.sql.CallableStatement;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.jdbc.core.CallableStatementCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+@DisplayName("Unit Test | ExemptionDetailsRpcRepository")
+class ExemptionDetailsRpcRepositoryTest {
+
+  @Test
+  void fileDeleteShouldPropagateOracleFailure() {
+    ExemptionDetailsRpcRepository repository = new FailingExemptionDetailsRpcRepository();
+
+    assertThatThrownBy(() -> repository.deleteExemptionFile(10L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void exemptionOrgUnitLookupShouldPropagateOracleFailure() {
+    ExemptionDetailsRpcRepository repository = new FailingExemptionDetailsRpcRepository();
+
+    assertThatThrownBy(() -> repository.findExemptionOrgUnitNumbers("EX-205"))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void applicationPermitLookupShouldPropagateOracleFailure() {
+    ExemptionDetailsRpcRepository repository = new FailingExemptionDetailsRpcRepository();
+
+    assertThatThrownBy(() -> repository.findPermitsByApplicationNumberRequired(1000456L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void activationCodeLookupShouldPropagateOracleFailure() {
+    ExemptionDetailsRpcRepository repository = new FailingExemptionDetailsRpcRepository();
+
+    assertThatThrownBy(() -> repository.isExemptionTypeCodeValidRequired("M"))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void attachmentOwnershipReadsShouldPropagateOracleFailure() {
+    ExemptionDetailsRpcRepository repository = new FailingExemptionDetailsRpcRepository();
+
+    assertOracleFailure(
+        () -> repository.findExemptionDocumentDetailsByExemptionNumber("EX-205"));
+    assertOracleFailure(
+        () -> repository.findApplicationDocumentDetailsByApplicationNumber(1000456L));
+    assertOracleFailure(() -> repository.findAttachmentTypeDescription("UPLOAD"));
+  }
+
+  @Test
+  void attachmentOwnershipReadsShouldPreserveLegitimateEmptyResults() {
+    ExemptionDetailsRpcRepository repository = new EmptyDocumentLookupRepository();
+
+    assertThat(repository.findExemptionDocumentDetailsByExemptionNumber("EX-205")).isEmpty();
+    assertThat(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L)).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription("UPLOAD")).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void attachmentStreamShouldTreatMissingCursorAsOracleFailure() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_FILE_ATTACHMENT(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(null);
+    ExemptionDetailsRpcRepository repository =
+        new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(
+            () -> repository.streamFileAttachment(44L, new ByteArrayOutputStream()))
+        .isInstanceOf(java.io.IOException.class)
+        .hasCauseInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  private static void assertOracleFailure(Runnable operation) {
+    assertThatThrownBy(operation::run)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  private static final class FailingExemptionDetailsRpcRepository
+      extends ExemptionDetailsRpcRepository {
+    FailingExemptionDetailsRpcRepository() {
+      super(null);
+    }
+
+    @Override
+    protected void executeProcedureRequired(
+        String procedureSignature, SqlConsumer<CallableStatement> binder) {
+      throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+  }
+
+  private static final class EmptyDocumentLookupRepository
+      extends ExemptionDetailsRpcRepository {
+    EmptyDocumentLookupRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      return List.of();
+    }
+  }
+}

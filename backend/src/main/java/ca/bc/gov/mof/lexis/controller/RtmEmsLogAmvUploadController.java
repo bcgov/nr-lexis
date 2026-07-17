@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -43,14 +44,8 @@ public class RtmEmsLogAmvUploadController {
   @PostMapping(value = "/emslogamv/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<RtmEmsLogAmvUploadPreviewDto> previewUpload(
       @RequestParam(name = "file", required = false) MultipartFile file,
-      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
-      @RequestParam(name = "retrievalDate", required = false) String retrievalDate,
-      @RequestParam(name = "growthIndicator", required = false) String growthIndicator) {
-    RtmEmsLogAmvService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("RTM EMS AMV service unavailable - returning no content for previewUpload");
-      return ResponseEntity.noContent().build();
-    }
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile) {
+    RtmEmsLogAmvService service = requiredService("preview");
 
     MultipartFile uploadFile = firstNonNull(file, formFile);
     RtmEmsLogAmvUploadPreviewDto result = service.previewUpload(uploadFile);
@@ -60,14 +55,8 @@ public class RtmEmsLogAmvUploadController {
   @PostMapping(value = "/emslogamv/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<RtmEmsLogAmvUploadResultDto> upload(
       @RequestParam(name = "file", required = false) MultipartFile file,
-      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
-      @RequestParam(name = "retrievalDate", required = false) String retrievalDate,
-      @RequestParam(name = "growthIndicator", required = false) String growthIndicator) {
-    RtmEmsLogAmvService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("RTM EMS AMV service unavailable - returning no content for upload");
-      return ResponseEntity.noContent().build();
-    }
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile) {
+    RtmEmsLogAmvService service = requiredService("upload");
 
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty()) {
@@ -81,7 +70,7 @@ public class RtmEmsLogAmvUploadController {
                   List.of()));
     }
 
-    RtmEmsLogAmvUploadResultDto result = service.upload(uploadFile, retrievalDate, growthIndicator);
+    RtmEmsLogAmvUploadResultDto result = service.upload(uploadFile);
     return ResponseEntity.status(responseStatus(result.status())).body(result);
   }
 
@@ -109,5 +98,17 @@ public class RtmEmsLogAmvUploadController {
 
   private MultipartFile firstNonNull(MultipartFile primary, MultipartFile alias) {
     return primary == null ? alias : primary;
+  }
+
+  private RtmEmsLogAmvService requiredService(String operation) {
+    RtmEmsLogAmvService service = serviceProvider.getIfAvailable();
+    if (service != null) {
+      return service;
+    }
+
+    LOGGER.warn(
+        "event=lexis_rtm_amv operation={} outcome=service_unavailable", operation);
+    throw new DataAccessResourceFailureException(
+        "The authoritative RTM AMV service is temporarily unavailable.");
   }
 }

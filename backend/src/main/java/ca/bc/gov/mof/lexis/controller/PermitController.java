@@ -2,7 +2,6 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
-import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
@@ -11,6 +10,9 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
@@ -38,12 +40,15 @@ public class PermitController {
 
   private final ObjectProvider<PermitService> serviceProvider;
   private final LexisSessionService sessionService;
+  private final ProvincialAuthorizationService provincialAuthorizationService;
 
   public PermitController(
       ObjectProvider<PermitService> serviceProvider,
-      LexisSessionService sessionService) {
+      LexisSessionService sessionService,
+      ProvincialAuthorizationService provincialAuthorizationService) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
+    this.provincialAuthorizationService = provincialAuthorizationService;
   }
 
   @GetMapping("/search/options")
@@ -80,10 +85,13 @@ public class PermitController {
     }
 
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
-    if (scopedClientNumber != null) {
-      applicantClientNumber = null;
-      ownerClientNumber = scopedClientNumber;
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.PERMIT_SEARCH);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new PermitSearchResponseDto(List.of(), 0, page, size));
     }
+    regionNumbers = orgUnits.orgUnitNumbers();
 
     PermitSearchCriteria criteria =
         buildCriteria(
@@ -96,6 +104,7 @@ public class PermitController {
             invoiceNumber,
             applicantClientNumber,
             ownerClientNumber,
+            scopedClientNumber,
             regionNumbers,
             sortField,
             page,
@@ -127,10 +136,13 @@ public class PermitController {
     }
 
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
-    if (scopedClientNumber != null) {
-      applicantClientNumber = null;
-      ownerClientNumber = scopedClientNumber;
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.PERMIT_SEARCH);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new SearchCountResponseDto(0));
     }
+    regionNumbers = orgUnits.orgUnitNumbers();
 
     PermitSearchCriteria criteria =
         buildCriteria(
@@ -143,6 +155,7 @@ public class PermitController {
             invoiceNumber,
             applicantClientNumber,
             ownerClientNumber,
+            scopedClientNumber,
             regionNumbers,
             null,
             0,
@@ -159,11 +172,8 @@ public class PermitController {
       LOGGER.warn("Permit service unavailable - returning no content for detail");
       return ResponseEntity.noContent().build();
     }
-    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     return service.findByPermitNumber(permitNumber)
-        .filter(
-            detail ->
-                matchesScopedClient(scopedClientNumber, detail.ownerClientNumber(), detail.applicantClientNumber()))
+        .filter(detail -> provincialAuthorizationService.canAccessPermit(authentication, detail))
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
@@ -178,6 +188,7 @@ public class PermitController {
       String invoiceNumber,
       String applicantClientNumber,
       String ownerClientNumber,
+      String accessClientNumber,
       List<Long> regionNumbers,
       String sortField,
       Integer page,
@@ -192,6 +203,8 @@ public class PermitController {
         invoiceNumber,
         applicantClientNumber,
         ownerClientNumber,
+        accessClientNumber,
+        false,
         regionNumbers == null ? List.of() : regionNumbers,
         sortField,
         page,

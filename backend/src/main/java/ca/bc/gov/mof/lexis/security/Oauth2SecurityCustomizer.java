@@ -36,6 +36,8 @@ public class Oauth2SecurityCustomizer
 
   private final JwtDecoder jwtDecoder;
   private final LexisSessionService sessionService;
+  private final String cognitoIssuerUri;
+  private final String keycloakIssuerUri;
 
   public Oauth2SecurityCustomizer(
       @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String cognitoJwkSetUri,
@@ -45,6 +47,7 @@ public class Oauth2SecurityCustomizer
       LexisSessionService sessionService) {
 
     String normalizedCognitoIssuerUri = normalizeIssuerUri(cognitoIssuerUri);
+    this.cognitoIssuerUri = normalizedCognitoIssuerUri;
     Map<String, JwtDecoder> decoders = new LinkedHashMap<>();
     decoders.put(
         normalizedCognitoIssuerUri,
@@ -54,8 +57,9 @@ public class Oauth2SecurityCustomizer
             "spring.security.oauth2.resourceserver.jwt.issuer-uri",
             "spring.security.oauth2.resourceserver.jwt.jwk-set-uri"));
 
+    String normalizedKeycloakIssuerUri = null;
     if (StringUtils.hasText(keycloakIssuerUri)) {
-      String normalizedKeycloakIssuerUri = normalizeIssuerUri(keycloakIssuerUri);
+      normalizedKeycloakIssuerUri = normalizeIssuerUri(keycloakIssuerUri);
       String resolvedKeycloakJwkSetUri =
           resolveKeycloakJwkSetUri(normalizedKeycloakIssuerUri, keycloakJwkSetUri);
       decoders.put(
@@ -67,6 +71,7 @@ public class Oauth2SecurityCustomizer
               "lexis.auth.keycloak.jwk-set-uri"));
     }
 
+    this.keycloakIssuerUri = normalizedKeycloakIssuerUri;
     this.jwtDecoder = token -> decodeWithIssuer(decoders, token);
     this.sessionService = sessionService;
   }
@@ -84,13 +89,16 @@ public class Oauth2SecurityCustomizer
 
   List<GrantedAuthority> normalizedAuthorities(Jwt jwt) {
     LinkedHashSet<String> authorities = new LinkedHashSet<>();
+    String tokenIssuer = normalizeIssuerUri(jwt.getClaimAsString("iss"));
 
-    List<String> groups = jwt.getClaimAsStringList("cognito:groups");
-    if (groups != null && !groups.isEmpty()) {
-      authorities.addAll(sessionService.parseRoleHeader(String.join(",", groups)));
+    if (cognitoIssuerUri.equals(tokenIssuer)) {
+      List<String> groups = jwt.getClaimAsStringList("cognito:groups");
+      if (groups != null && !groups.isEmpty()) {
+        authorities.addAll(sessionService.parseGrantedAuthorities(groups));
+      }
+    } else if (keycloakIssuerUri != null && keycloakIssuerUri.equals(tokenIssuer)) {
+      authorities.addAll(normalizedScopeAuthorities(jwt));
     }
-
-    authorities.addAll(normalizedScopeAuthorities(jwt));
 
     return authorities.stream()
         .map(authority -> (GrantedAuthority) new SimpleGrantedAuthority(authority))

@@ -1,0 +1,2 @@
+# Synthetic idempotency value used by the log-sanitization test; not a credential.
+backend/src/test/java/ca/bc/gov/mof/lexis/controller/LexisUploadLoggingTest.java:generic-api-key:40

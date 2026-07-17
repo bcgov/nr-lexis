@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  FilterableMultiSelect,
   Pagination,
   Table,
   TableBody,
@@ -16,7 +15,11 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import EmptyState from '@/components/EmptyState'
+import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import RegionMultiSelect from '@/components/RegionMultiSelect'
+import PageHeader from '@/components/PageHeader'
 import type {
   ProvincialOfferSearchFilters,
   ProvincialOfferSearchRequest,
@@ -28,6 +31,7 @@ import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-fo
 import {
   buildPageDataCacheKey,
   getPageDataCache,
+  getPageDataCacheGeneration,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
@@ -67,7 +71,7 @@ import {
   fetchProvincialApplicationOptions,
   fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
-import { formatLocalIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   applicationNumber: '',
@@ -131,6 +135,8 @@ const ProvincialOffersPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [defaultListingToDate, setDefaultListingToDate] = useState('')
   const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
+  const [offerOptionsUnavailable, setOfferOptionsUnavailable] = useState(false)
+  const [applicationOptionsUnavailable, setApplicationOptionsUnavailable] = useState(false)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateOffer = canPerform('createOffer')
   const withCurrentSearch = useCallback(
@@ -195,10 +201,6 @@ const ProvincialOffersPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const selectedRegionHelperText =
-    selectedRegions.length > 0
-      ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
-      : undefined
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(
@@ -221,6 +223,7 @@ const ProvincialOffersPage = () => {
 
   const runSearch = useCallback(
     async (request: ProvincialOfferSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
       const pageCacheKey = buildPageDataCacheKey(
         'provincial-offer-search',
         capabilities?.principal,
@@ -266,14 +269,21 @@ const ProvincialOffersPage = () => {
       setErrorMessage('')
       try {
         const totalCacheKey = buildSearchTotalCacheKey(request.filters)
-        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const cachedTotal = options.force
+          ? undefined
+          : getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
         const commitSearchResponse = (
           response: ProvincialOfferSearchResponse,
           totalIsExact: boolean,
         ) => {
+          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
+            return
+          }
           if (totalIsExact) {
+            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
+              return
+            }
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            setPageDataCache(pageCacheKey, response)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-offer-search',
               principal: capabilities?.principal,
@@ -284,7 +294,7 @@ const ProvincialOffersPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest()) {
+            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
               commitResults(response)
             }
           })
@@ -332,15 +342,26 @@ const ProvincialOffersPage = () => {
 
   useEffect(() => {
     const loadOptions = async () => {
-      const [offerOptions, applicationOptions] = await Promise.all([
+      const [offerResult, applicationResult] = await Promise.allSettled([
         fetchProvincialOfferOptions(),
         fetchProvincialApplicationOptions(),
       ])
-      setRegionOptions(mapValueLabelOptionsToIdTextOptions(offerOptions.regions))
-      setDefaultListingToDate(
-        applicationOptions.currentSchedules.find((option) => option.value.trim())?.label ??
-          formatLocalIsoDate(new Date()),
-      )
+
+      if (offerResult.status === 'fulfilled') {
+        setRegionOptions(mapValueLabelOptionsToIdTextOptions(offerResult.value.regions))
+        setOfferOptionsUnavailable(false)
+      } else {
+        setOfferOptionsUnavailable(true)
+      }
+      if (applicationResult.status === 'fulfilled') {
+        setDefaultListingToDate(
+          applicationResult.value.currentSchedules.find((option) => option.value.trim())?.label ??
+            formatBusinessIsoDate(),
+        )
+        setApplicationOptionsUnavailable(false)
+      } else {
+        setApplicationOptionsUnavailable(true)
+      }
       setIsOptionsLoaded(true)
     }
 
@@ -398,8 +419,15 @@ const ProvincialOffersPage = () => {
   return (
     <Grid fullWidth className="default-grid provincial-offer-search-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial offers search</h1>
+        <PageHeader
+          title="Provincial offers search"
+          subtitle="Find provincial purchase offers and open offer details."
+        />
       </Column>
+
+      {(offerOptionsUnavailable || applicationOptionsUnavailable) && (
+        <AuthoritativeOptionsUnavailableNotification />
+      )}
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-offer-search-filters">
@@ -439,16 +467,14 @@ const ProvincialOffersPage = () => {
                 invalidText="Date must be YYYY-MM-DD"
                 onChange={(value) => updateFilter('listingToDate', value)}
               />
-              <FilterableMultiSelect
+              <RegionMultiSelect
                 id="region"
                 titleText="Region"
                 items={regionOptions}
-                itemToString={(item) => (item ? item.text : '')}
                 placeholder="Select region(s)"
-                helperText={selectedRegionHelperText}
                 selectedItems={selectedRegions}
-                onChange={(event) => {
-                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
+                disabled={!isOptionsLoaded || offerOptionsUnavailable}
+                onChange={(nextSelected) => {
                   updateFilter(
                     'region',
                     nextSelected.map((item) => item.id),
@@ -495,67 +521,82 @@ const ProvincialOffersPage = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search results</h2>
-          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+        <section
+          className="legacy-search-section legacy-search-section--results"
+          aria-label="Search results"
+        >
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading offer search results..."
-            totalItems={results.page.totalElements}
+            totalItems={
+              errorMessage || (loading && results.content.length === 0)
+                ? undefined
+                : results.page.totalElements
+            }
           >
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => (
-                  <TableRow key={row.offerNumber}>
-                    <TableCell>
-                      <Link
-                        className="cds--link"
-                        to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
-                      >
-                        {row.offerNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{row.applicationNumber}</TableCell>
-                    <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
-                    <TableCell>{row.listingDate}</TableCell>
-                    <TableCell>{row.region}</TableCell>
-                    <TableCell>{row.offerWithdrawalDate || '-'}</TableCell>
-                  </TableRow>
-                ))}
-                {results.content.length === 0 && (
+            {errorMessage ? (
+              <EmptyState
+                role="alert"
+                title="Offer search unavailable"
+                description={errorMessage}
+              />
+            ) : results.content.length > 0 ? (
+              <Table useZebraStyles>
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={6}>No offers found for the selected criteria.</TableCell>
+                    {SORT_COLUMNS.map((column) => (
+                      <TableHeader key={column.id}>
+                        <button
+                          type="button"
+                          className="legacy-sort-button"
+                          onClick={() => onHeaderClick(column.id)}
+                        >
+                          {column.label}
+                          {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                        </button>
+                      </TableHeader>
+                    ))}
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
+                </TableHead>
+                <TableBody>
+                  {results.content.map((row) => (
+                    <TableRow key={row.offerNumber}>
+                      <TableCell>
+                        <Link
+                          className="cds--link"
+                          to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
+                        >
+                          {row.offerNumber}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{row.applicationNumber}</TableCell>
+                      <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
+                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell>{row.region}</TableCell>
+                      <TableCell>{row.offerWithdrawalDate || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : !loading ? (
+              <EmptyState
+                title="No offers found"
+                description="No offers found for the selected criteria."
+              />
+            ) : null}
+            {!errorMessage && (!loading || results.content.length > 0) && (
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  setSearchParams(
+                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                  )
+                }}
+              />
+            )}
           </SearchResultsTableFrame>
         </section>
       </Column>

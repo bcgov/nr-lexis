@@ -5,43 +5,49 @@ import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 @Profile("oracle")
 public class LexisAdminScheduleService {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(LexisAdminScheduleService.class);
   private static final int DEFAULT_PAGE_SIZE = 100;
   private static final int MAX_PAGE_SIZE = 200;
-  private static final String DEFAULT_SORT_FIELD = "advertisingDate";
-  private static final String DEFAULT_SORT_DIRECTION = "desc";
-  private static final String SCHEDULE_CONSTRAINT_MESSAGE =
-      "Export schedule dates are invalid or conflict with an existing schedule.";
-  private static final String SCHEDULE_DATABASE_MESSAGE =
-      "Export schedule could not be saved. Contact support if the problem persists.";
 
   private final LexisReportScheduleRepository repository;
   private final Clock clock;
+  private final TransactionOperations transactionOperations;
+  private final ReentrantLock scheduleMutationGuard = new ReentrantLock(true);
 
   @Autowired
-  public LexisAdminScheduleService(LexisReportScheduleRepository repository) {
-    this(repository, Clock.systemDefaultZone());
+  public LexisAdminScheduleService(
+      LexisReportScheduleRepository repository,
+      PlatformTransactionManager transactionManager) {
+    this(
+        repository,
+        LexisBusinessTime.systemClock(),
+        scheduleTransactionOperations(transactionManager));
   }
 
-  LexisAdminScheduleService(LexisReportScheduleRepository repository, Clock clock) {
+  LexisAdminScheduleService(
+      LexisReportScheduleRepository repository,
+      Clock clock,
+      TransactionOperations transactionOperations) {
     this.repository = repository;
-    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
+    this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
+    this.transactionOperations = transactionOperations;
   }
 
   public List<ExportScheduleRowDto> upcomingSchedules() {
@@ -69,94 +75,83 @@ public class LexisAdminScheduleService {
         normalizedSize);
   }
 
-  @Transactional
   public ExportScheduleMutationResultDto createSchedule(ExportScheduleCreateRequestDto request) {
+    return executeScheduleMutation(() -> createScheduleInTransaction(request));
+  }
+
+  private ExportScheduleMutationResultDto createScheduleInTransaction(
+      ExportScheduleCreateRequestDto request) {
     String validationError = validate(request, true);
     if (validationError != null) {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
 
-    try {
-      if (repository.advertisingDateExists(request.advertisingDate())) {
-        return new ExportScheduleMutationResultDto(
-            false,
-            "A schedule already exists for that advertising date.",
-            null);
-      }
-      ExportScheduleRowDto row = repository.insertExportSchedule(request);
-      return new ExportScheduleMutationResultDto(true, "Export schedule added.", row);
-    } catch (DataIntegrityViolationException ex) {
-      return new ExportScheduleMutationResultDto(false, SCHEDULE_CONSTRAINT_MESSAGE, null);
-    } catch (DataAccessException ex) {
-      LOGGER.warn(
-          "Export schedule create failed for advertising date {}: {}: {}",
-          request.advertisingDate(),
-          ex.getClass().getSimpleName(),
-          ex.getMessage());
-      LOGGER.debug("Export schedule create failure detail", ex);
-      return new ExportScheduleMutationResultDto(false, SCHEDULE_DATABASE_MESSAGE, null);
-    }
+    ExportScheduleRowDto row = repository.insertExportSchedule(request);
+    return new ExportScheduleMutationResultDto(true, "Export schedule added.", row);
   }
 
-  @Transactional
   public ExportScheduleMutationResultDto updateSchedule(
       long exportScheduleId, ExportScheduleCreateRequestDto request) {
-    String rowValidationError = validateMutableSchedule(exportScheduleId);
-    if (rowValidationError != null) {
-      return new ExportScheduleMutationResultDto(false, rowValidationError, null);
-    }
+    return executeScheduleMutation(() -> updateScheduleInTransaction(exportScheduleId, request));
+  }
 
+  private ExportScheduleMutationResultDto updateScheduleInTransaction(
+      long exportScheduleId, ExportScheduleCreateRequestDto request) {
     String validationError = validate(request, false);
     if (validationError != null) {
       return new ExportScheduleMutationResultDto(false, validationError, null);
     }
 
-    try {
-      if (repository.advertisingDateExistsForOtherSchedule(
-          request.advertisingDate(), exportScheduleId)) {
-        return new ExportScheduleMutationResultDto(
-            false, "A schedule already exists for that advertising date.", null);
-      }
-      ExportScheduleRowDto row = repository.updateExportSchedule(exportScheduleId, request);
-      return new ExportScheduleMutationResultDto(true, "Export schedule updated.", row);
-    } catch (DataIntegrityViolationException ex) {
-      return new ExportScheduleMutationResultDto(false, SCHEDULE_CONSTRAINT_MESSAGE, null);
-    } catch (DataAccessException ex) {
-      LOGGER.warn(
-          "Export schedule update failed for id {} and advertising date {}: {}: {}",
-          exportScheduleId,
-          request.advertisingDate(),
-          ex.getClass().getSimpleName(),
-          ex.getMessage());
-      LOGGER.debug("Export schedule update failure detail", ex);
-      return new ExportScheduleMutationResultDto(false, SCHEDULE_DATABASE_MESSAGE, null);
-    }
-  }
-
-  @Transactional
-  public ExportScheduleMutationResultDto deleteSchedule(long exportScheduleId) {
     String rowValidationError = validateMutableSchedule(exportScheduleId);
     if (rowValidationError != null) {
       return new ExportScheduleMutationResultDto(false, rowValidationError, null);
     }
 
-    try {
-      boolean deleted = repository.deleteExportSchedule(exportScheduleId);
-      return deleted
+    ExportScheduleRowDto row = repository.updateExportSchedule(exportScheduleId, request);
+    return new ExportScheduleMutationResultDto(true, "Export schedule updated.", row);
+  }
+
+  public ExportScheduleMutationResultDto deleteSchedule(long exportScheduleId) {
+    return executeScheduleMutation(() -> deleteScheduleInTransaction(exportScheduleId));
+  }
+
+  private ExportScheduleMutationResultDto deleteScheduleInTransaction(long exportScheduleId) {
+    String rowValidationError = validateMutableSchedule(exportScheduleId);
+    if (rowValidationError != null) {
+      return new ExportScheduleMutationResultDto(false, rowValidationError, null);
+    }
+
+    boolean deleted = repository.deleteExportSchedule(exportScheduleId);
+    return deleted
         ? new ExportScheduleMutationResultDto(true, "Export schedule deleted.", null)
         : new ExportScheduleMutationResultDto(false, "Export schedule not found.", null);
-    } catch (DataAccessException ex) {
-      LOGGER.warn(
-          "Export schedule delete failed for id {}: {}: {}",
-          exportScheduleId,
-          ex.getClass().getSimpleName(),
-          ex.getMessage());
-      LOGGER.debug("Export schedule delete failure detail", ex);
-      return new ExportScheduleMutationResultDto(
-          false,
-          "Export schedule could not be deleted. Contact support if the problem persists.",
-          null);
+  }
+
+  private ExportScheduleMutationResultDto executeScheduleMutation(
+      Supplier<ExportScheduleMutationResultDto> mutation) {
+    scheduleMutationGuard.lock();
+    try {
+      return executeTransaction(mutation);
+    } finally {
+      scheduleMutationGuard.unlock();
     }
+  }
+
+  private ExportScheduleMutationResultDto executeTransaction(
+      Supplier<ExportScheduleMutationResultDto> mutation) {
+    ExportScheduleMutationResultDto result =
+        transactionOperations.execute(status -> mutation.get());
+    if (result == null) {
+      throw new IllegalStateException("Export schedule transaction returned no result.");
+    }
+    return result;
+  }
+
+  private static TransactionOperations scheduleTransactionOperations(
+      PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    return transactionTemplate;
   }
 
   private String validateMutableSchedule(long exportScheduleId) {
@@ -178,7 +173,8 @@ public class LexisAdminScheduleService {
     return null;
   }
 
-  private String validate(ExportScheduleCreateRequestDto request, boolean requireFutureAdvertisingDate) {
+  private String validate(
+      ExportScheduleCreateRequestDto request, boolean requireFutureAdvertisingDate) {
     if (request == null) {
       return "Export schedule details are required.";
     }
@@ -190,33 +186,40 @@ public class LexisAdminScheduleService {
     if (requireFutureAdvertisingDate && advertisingDate.isBefore(LocalDate.now(clock))) {
       return "Advertising date must be today or a future date.";
     }
-    if (request.applicationReceiptDate() != null
-        && request.applicationReceiptDate().isAfter(advertisingDate)) {
+    if (request.applicationReceiptDate() == null) {
+      return "Application receipt date is required.";
+    }
+    if (request.offerReceiptDate() == null) {
+      return "Offer receipt date is required.";
+    }
+    if (request.offerEndDate() == null) {
+      return "Offer end date is required.";
+    }
+    if (request.offerWithdrawalDate() == null) {
+      return "Offer withdrawal date is required.";
+    }
+    if (request.teacMeetingDate() == null) {
+      return "TEAC meeting date is required.";
+    }
+    if (request.applicationReceiptDate().isAfter(advertisingDate)) {
       return "Application receipt date cannot be after the advertising date.";
     }
-    if (request.offerReceiptDate() != null && request.offerReceiptDate().isBefore(advertisingDate)) {
+    if (request.offerReceiptDate().isBefore(advertisingDate)) {
       return "Offer receipt date cannot be before the advertising date.";
     }
-    if (request.offerEndDate() != null
-        && request.offerReceiptDate() != null
-        && request.offerEndDate().isBefore(request.offerReceiptDate())) {
+    if (request.offerEndDate().isBefore(request.offerReceiptDate())) {
       return "Offer end date cannot be before the offer receipt date.";
     }
-    if (request.offerWithdrawalDate() != null
-        && request.offerWithdrawalDate().isBefore(advertisingDate)) {
+    if (request.offerWithdrawalDate().isBefore(advertisingDate)) {
       return "Offer withdrawal date cannot be before the advertising date.";
     }
-    if (request.offerEndDate() != null
-        && request.offerWithdrawalDate() != null
-        && request.offerWithdrawalDate().isAfter(request.offerEndDate())) {
+    if (request.offerWithdrawalDate().isAfter(request.offerEndDate())) {
       return "Offer withdrawal date cannot be after the offer end date.";
     }
-    if (request.teacMeetingDate() != null && request.teacMeetingDate().isBefore(advertisingDate)) {
+    if (request.teacMeetingDate().isBefore(advertisingDate)) {
       return "TEAC meeting date cannot be before the advertising date.";
     }
-    if (request.offerEndDate() != null
-        && request.teacMeetingDate() != null
-        && request.teacMeetingDate().isAfter(request.offerEndDate())) {
+    if (request.teacMeetingDate().isAfter(request.offerEndDate())) {
       return "TEAC meeting date cannot be after the offer end date.";
     }
     return null;

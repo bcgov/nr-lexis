@@ -48,7 +48,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
     String effectiveSort = normalizedSort == null ? "effective_date desc" : normalizedSort;
     int normalizedPage = Math.max(0, page);
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_FEE_POLICIES,
         cs -> {
           cs.setString(1, effectiveSort);
@@ -62,7 +62,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
     if (feePolicyId == null || feePolicyId < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_FEE_POLICY_BY_ID,
         cs -> cs.setLong(1, feePolicyId),
         2,
@@ -74,7 +74,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_FEE_POLICY,
         cs -> {
           cs.setTimestamp(1, toTimestamp(effectiveDate));
@@ -90,7 +90,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         INSERT_FEE_POLICY,
         cs -> {
           cs.setTimestamp(1, toTimestamp(effectiveDate));
@@ -99,7 +99,13 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setString(4, auditUserOrDefault(entryUserId));
         },
         5,
-        this::mapFeePolicyRow);
+        this::mapFeePolicyRow)
+        .filter(
+            row ->
+                row.feePolicyId() > 0
+                    && java.util.Objects.equals(row.effectiveDate(), effectiveDate)
+                    && row.orgUnitNo() == orgUnitNo
+                    && row.percentIncrease() == percentIncrease);
   }
 
   public boolean updateFeePolicy(
@@ -117,7 +123,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
       return false;
     }
 
-    return executeProcedure(
+    executeProcedureRequired(
         UPDATE_FEE_POLICY,
         cs -> {
           cs.setLong(1, feePolicyId);
@@ -126,17 +132,19 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setInt(4, percentIncrease);
           cs.setString(5, auditUserOrDefault(updateUserId));
         });
+    return true;
   }
 
   public boolean deleteFeePolicy(Long feePolicyId) {
     if (feePolicyId == null || feePolicyId < 1) {
       return false;
     }
-    return executeProcedure(DELETE_FEE_POLICY, cs -> cs.setLong(1, feePolicyId));
+    executeProcedureRequired(DELETE_FEE_POLICY, cs -> cs.setLong(1, feePolicyId));
+    return true;
   }
 
   public long countFeePolicies() {
-    return queryCursorProcedure(COUNT_FEE_POLICIES, null, 1, rs -> {
+    return queryCursorProcedureFailClosed(COUNT_FEE_POLICIES, null, 1, rs -> {
       long value = rs.getLong(1);
       return rs.wasNull() ? 0L : value;
     }).stream().findFirst().orElse(0L);
@@ -147,7 +155,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
     String effectiveSort = normalizedSort == null ? "effective_date desc" : normalizedSort;
     int normalizedPage = Math.max(0, page);
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_FIL_POLICIES,
         cs -> {
           cs.setString(1, effectiveSort);
@@ -161,7 +169,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
     if (filPolicyId == null || filPolicyId < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_FIL_POLICY_BY_ID,
         cs -> cs.setLong(1, filPolicyId),
         2,
@@ -173,7 +181,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_FIL_POLICY,
         cs -> cs.setTimestamp(1, toTimestamp(effectiveDate)),
         2,
@@ -186,7 +194,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         INSERT_FIL_POLICY,
         cs -> {
           cs.setTimestamp(1, toTimestamp(effectiveDate));
@@ -194,7 +202,12 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setString(3, auditUserOrDefault(entryUserId));
         },
         4,
-        this::mapFilPolicyRow);
+        this::mapFilPolicyRow)
+        .filter(
+            row ->
+                row.filPolicyId() > 0
+                    && java.util.Objects.equals(row.effectiveDate(), effectiveDate)
+                    && row.filPercent() == filPercent);
   }
 
   public boolean updateFilPolicy(
@@ -203,7 +216,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
       return false;
     }
 
-    return executeProcedure(
+    executeProcedureRequired(
         UPDATE_FIL_POLICY,
         cs -> {
           cs.setLong(1, filPolicyId);
@@ -211,17 +224,19 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setInt(3, filPercent);
           cs.setString(4, auditUserOrDefault(updateUserId));
         });
+    return true;
   }
 
   public boolean deleteFilPolicy(Long filPolicyId) {
     if (filPolicyId == null || filPolicyId < 1) {
       return false;
     }
-    return executeProcedure(DELETE_FIL_POLICY, cs -> cs.setLong(1, filPolicyId));
+    executeProcedureRequired(DELETE_FIL_POLICY, cs -> cs.setLong(1, filPolicyId));
+    return true;
   }
 
   public long countFilPolicies() {
-    return queryCursorProcedure(COUNT_FIL_POLICIES, null, 1, rs -> {
+    return queryCursorProcedureFailClosed(COUNT_FIL_POLICIES, null, 1, rs -> {
       long value = rs.getLong(1);
       return rs.wasNull() ? 0L : value;
     }).stream().findFirst().orElse(0L);
@@ -232,7 +247,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_ORG_UNIT_BY_NUMBER,
         cs -> cs.setLong(1, orgUnitNo),
         2,

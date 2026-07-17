@@ -481,7 +481,7 @@ $P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty()
 		<groupHeader>
 			<band height="13" splitType="Prevent">
 				<printWhenExpression><![CDATA[false]]></printWhenExpression>
-				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 					<reportElement uuid="85d6cc79-8c0f-4d36-8d84-4b84aef6a837" x="0" y="0" width="128" height="13" forecolor="#000000"/>
 					<textElement>
 						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -501,7 +501,7 @@ $P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty()
 		<groupHeader>
 			<band height="13" splitType="Prevent">
 				<printWhenExpression><![CDATA[false]]></printWhenExpression>
-				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 					<reportElement uuid="4b45395d-149d-4e60-be82-57843caf96e0" x="0" y="0" width="128" height="13" forecolor="#000000"/>
 					<textElement>
 						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -559,7 +559,7 @@ $P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty()
 				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
 				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
 			</subreport>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="a9245561-0056-45a3-b416-e684fcf88266" x="145" y="25" width="359" height="65" forecolor="#000000"/>
 				<textElement textAlignment="Center">
 					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>

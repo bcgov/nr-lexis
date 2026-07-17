@@ -34,6 +34,7 @@ const DEFAULT_CAPABILITIES: LexisSessionCapabilities = {
   legacyPath: null,
   grantedActions: [],
   orgUnitNo: null,
+  forestClientNumber: null,
 }
 
 const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
@@ -70,19 +71,6 @@ const REPORT_ACTION_ROUTE_MAP: Record<string, string> = {
   feereport: '/reports/feeReport',
   tenurereport: '/reports/tenureReport',
 }
-
-const REPORT_ACTIONS = new Set<string>([
-  'applicationreport',
-  'offerreport',
-  'teacreport',
-  'exemptionreport',
-  'permitledgerreport',
-  'transportreport',
-  'speciesgradereport',
-  'feereport',
-  'tenurereport',
-  'mofrlisting',
-])
 
 const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_ADMIN: 'ADMIN',
@@ -177,6 +165,7 @@ const sanitizeCapabilities = (
       (action): action is string => typeof action === 'string',
     ),
     orgUnitNo: orgUnitNo ?? payload.orgUnitNo ?? null,
+    forestClientNumber: asNonBlankString(payload.forestClientNumber),
   }
 }
 
@@ -273,6 +262,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       apiService.clearCachedGetData()
+      apiService.clearRecordVersions()
       clearAllPageDataCache()
       authenticatedSessionRef.current = false
       setCapabilities(DEFAULT_CAPABILITIES)
@@ -424,6 +414,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       apiService.clearCachedGetData()
+      apiService.clearRecordVersions()
       clearAllPageDataCache()
       authenticatedSessionRef.current = false
       setCapabilities(DEFAULT_CAPABILITIES)
@@ -454,9 +445,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return true
       }
       const normalizedAction = normalizeAction(action)
-      if (hasRole(capabilities.roles, ROLE_READ_ONLY) && REPORT_ACTIONS.has(normalizedAction)) {
-        return false
-      }
       return grantedActionSet.has(normalizedAction)
     },
     [capabilities.roles, grantedActionSet],

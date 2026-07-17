@@ -224,7 +224,7 @@ $V{REPORT_COUNT} == 0]]></printWhenExpression>
 	<detail>
 		<band height="34" splitType="Prevent">
 			<elementGroup>
-				<textField isStretchWithOverflow="true">
+				<textField textAdjust="StretchHeight">
 					<reportElement uuid="a503bbd1-5b75-4660-82dc-0d15fac4cb94" stretchType="RelativeToTallestObject" x="348" y="0" width="90" height="34" forecolor="#000000"/>
 					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
 						<pen lineWidth="1.0"/>
@@ -294,7 +294,7 @@ $V{REPORT_COUNT} == 0]]></printWhenExpression>
 					</textElement>
 					<textFieldExpression><![CDATA[$F{PACKAGE_NUMBER}]]></textFieldExpression>
 				</textField>
-				<textField isStretchWithOverflow="true">
+				<textField textAdjust="StretchHeight">
 					<reportElement uuid="ae6894c0-ce97-4cf2-8101-7c6903d840ac" stretchType="RelativeToTallestObject" x="244" y="0" width="104" height="34" forecolor="#000000"/>
 					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
 						<pen lineWidth="1.0"/>

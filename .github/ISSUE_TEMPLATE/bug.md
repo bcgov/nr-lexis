@@ -7,6 +7,8 @@ assignees: ''
 
 ---
 
+<!-- This is a public repository. Do not include JWTs, credentials, secrets, private information or LEXIS business data, or unredacted logs or screenshots. Use an approved private channel for sensitive material. -->
+
 **Describe the Bug**
 A clear and concise description of what the bug is.
 
@@ -14,9 +16,9 @@ A clear and concise description of what the bug is.
 A clear and concise description of what you expected to happen.
 
 **Actual Behaviour**
-A clear and concise description of what you expected to happen.
+A clear and concise description of what actually happened.
 
-** Steps To Reproduce**
+**Steps to reproduce**
 Steps to reproduce the behaviour:
 1. Go to '...'
 2. Click on '....'

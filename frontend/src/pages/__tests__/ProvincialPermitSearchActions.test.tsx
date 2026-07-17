@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitSearchResponse } from '@/interfaces/ProvincialPermitSearch'
@@ -41,11 +41,24 @@ const permitSearchResponse = (
   },
 })
 
+const PermitSearchLocation = () => {
+  const location = useLocation()
+  return <output data-testid="permit-search-location">{location.search}</output>
+}
+
 const renderPage = (initialEntry = '/provincial/permit') => {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/provincial/permit" element={<ProvincialPermitPage />} />
+        <Route
+          path="/provincial/permit"
+          element={
+            <>
+              <ProvincialPermitPage />
+              <PermitSearchLocation />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -94,11 +107,67 @@ describe('Provincial Permit Search Actions', () => {
     expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
+          invoiceNumber: '',
+          permitStatus: '',
           region: [],
         }),
+        sortField: 'permitNumber',
+        sortDirection: 'desc',
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
+  })
+
+  it('persists the invoice number in URL-backed filters and clears it with the form', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+
+    renderPage(
+      '/provincial/permit?invoiceNumber=SI-99881&sortField=permitStatus&sortDirection=desc&page=3&pageSize=25',
+    )
+
+    const invoiceNumber = await screen.findByLabelText('Invoice number')
+    expect(invoiceNumber).toHaveValue('SI-99881')
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialPermits.mock.calls.some(
+          ([request]) => request.filters.invoiceNumber === 'SI-99881',
+        ),
+      ).toBe(true)
+    })
+
+    fireEvent.change(invoiceNumber, { target: { value: 'GBMS-4402' } })
+    await waitFor(() => {
+      const currentParams = new URLSearchParams(
+        screen.getByTestId('permit-search-location').textContent ?? '',
+      )
+      expect(currentParams.get('invoiceNumber')).toBe('GBMS-4402')
+      expect(currentParams.get('page')).toBe('1')
+    })
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialPermits.mock.calls.some(
+          ([request]) => request.filters.invoiceNumber === 'GBMS-4402',
+        ),
+      ).toBe(true)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+
+    expect(invoiceNumber).toHaveValue('')
+    await waitFor(() => {
+      const currentParams = new URLSearchParams(
+        screen.getByTestId('permit-search-location').textContent ?? '',
+      )
+      expect(currentParams.has('invoiceNumber')).toBe(false)
+      expect(currentParams.get('sortField')).toBe('permitNumber')
+      expect(currentParams.get('sortDirection')).toBe('desc')
+      expect(currentParams.get('page')).toBe('1')
+      expect(currentParams.get('pageSize')).toBe('10')
+    })
+    await waitFor(() => {
+      const lastRequest = mockedSearchProvincialPermits.mock.calls.at(-1)?.[0]
+      expect(lastRequest?.filters.invoiceNumber).toBe('')
+    })
   })
 
   it('reuses cached search results when the route remounts with the same URL state', async () => {
@@ -113,6 +182,41 @@ describe('Provincial Permit Search Actions', () => {
 
     await screen.findByText('7001')
     expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not render a search response invalidated while it is in flight', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    let resolveSearch: (response: ProvincialPermitSearchResponse) => void = () => {}
+    mockedSearchProvincialPermits.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSearch = resolve
+      }),
+    )
+
+    renderPage('/provincial/permit?permitStatus=Issued')
+    await waitFor(() => expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1))
+
+    clearAllPageDataCache()
+    await act(async () => {
+      resolveSearch(
+        permitSearchResponse([
+          {
+            permitNumber: '7001',
+            status: 'Issued',
+            applicantClientNumber: '11111111',
+            ownerClientNumber: '22222222',
+            totalVolume: 120,
+            issueDate: '2026-01-10',
+            region: '11',
+            packageNumber: 'PKG-1',
+            applicationNumber: '3001',
+          },
+        ]),
+      )
+    })
+
+    expect(await screen.findByRole('heading', { name: 'No permits found' })).toBeInTheDocument()
+    expect(screen.queryByText('7001')).not.toBeInTheDocument()
   })
 
   it('reuses the first search total when pagination changes page', async () => {
@@ -178,7 +282,7 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
-  it('shows selected permit search region names instead of only the selected count', async () => {
+  it('shows selected permit search regions as removable pills', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitOptions.mockResolvedValueOnce({
       permitStatuses: [{ value: 'Issued', label: 'Issued' }],
@@ -188,26 +292,12 @@ describe('Provincial Permit Search Actions', () => {
       ],
     })
 
-    renderPage()
+    renderPage('/provincial/permit?region=1903,1908')
     await screen.findByText('7001')
 
-    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
-    )
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'Skeena' } })
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Skeena Natural Resource Region' }),
-    )
-
-    expect(
-      await screen.findByText(
-        'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region',
-      ),
-    ).toBeInTheDocument()
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
+    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
   })
 
   it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {
@@ -230,14 +320,52 @@ describe('Provincial Permit Search Actions', () => {
       expect(searchButton).toBeEnabled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Permit (ASC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Permit (DESC)' }))
 
     await waitFor(() => {
       expect(
         mockedSearchProvincialPermits.mock.calls.some(
-          ([request]) => request.sortField === 'permitNumber' && request.sortDirection === 'desc',
+          ([request]) => request.sortField === 'permitNumber' && request.sortDirection === 'asc',
         ),
       ).toBe(true)
     })
+  })
+
+  it.each([
+    ['Status', 'permitStatus'],
+    ['Total volume (m³)', 'permitVolume'],
+    ['Issue date', 'dateIssued'],
+  ] as const)(
+    'sends the supported backend sort key when the %s header is clicked',
+    async (header, expectedSortField) => {
+      mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+      renderPage()
+      await screen.findByText('7001')
+
+      await userEvent.click(screen.getByRole('button', { name: header }))
+
+      await waitFor(() => {
+        expect(
+          mockedSearchProvincialPermits.mock.calls.some(
+            ([request]) =>
+              request.sortField === expectedSortField && request.sortDirection === 'asc',
+          ),
+        ).toBe(true)
+      })
+    },
+  )
+
+  it('shows a request failure instead of a no-results state', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedSearchProvincialPermits.mockRejectedValue(new Error('Oracle unavailable'))
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Permit search unavailable' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Unable to retrieve permit search results.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No permits found' })).not.toBeInTheDocument()
   })
 })

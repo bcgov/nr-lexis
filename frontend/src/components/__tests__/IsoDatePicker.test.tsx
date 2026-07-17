@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -55,5 +55,23 @@ describe('IsoDatePicker', () => {
     await userEvent.type(input, '2026-06-12')
 
     expect(input).toHaveValue('2026-06-12')
+  })
+
+  it('does not emit a change when Carbon repeats the controlled date value', () => {
+    const onChange = vi.fn()
+    render(
+      <IsoDatePicker
+        id="approvalDate"
+        labelText="Approval date"
+        value="2026-07-01"
+        onChange={onChange}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Approval date'), {
+      target: { value: '2026-07-01' },
+    })
+
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

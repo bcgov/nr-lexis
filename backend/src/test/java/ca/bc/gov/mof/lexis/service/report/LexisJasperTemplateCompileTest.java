@@ -55,6 +55,9 @@ class LexisJasperTemplateCompileTest {
 
     for (Path template : templates) {
       String classpath = "reports/lexis/" + template.getFileName();
+      assertThat(Files.readString(template))
+          .as("%s should use current Jasper text adjustment attributes", classpath)
+          .doesNotContain("isStretchWithOverflow=");
       assertThatCode(
               () -> {
                 try (InputStream inputStream = new ClassPathResource(classpath).getInputStream()) {

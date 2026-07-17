@@ -13,22 +13,17 @@ concurrency:
 permissions: {}
 
 jobs:
-  cleanup:
-    name: Cleanup and Image Promotion
+  promotion:
+    name: Image Promotion
     uses: bcgov/quickstart-openshift-helpers/.github/workflows/.pr-close.yml@ca6579bdadf383a2513397081f963889b92823a4 # v1.1.0
     permissions:
       packages: write
-    secrets:
-      oc_namespace: ${{ secrets.oc_namespace }}
-      oc_token: ${{ secrets.oc_token }}
     with:
-      cleanup: label
       packages: backend frontend clamav
-      cleanup_name: nr-lexis-backend-${{ github.event.number }} nr-lexis-frontend-${{ github.event.number }} nr-lexis-clamav-${{ github.event.number }}
 
   cleanup-networkpolicies:
     name: Cleanup PR OpenShift Resources
-    needs: cleanup
+    needs: promotion
     if: always()
     runs-on: ubuntu-slim
     timeout-minutes: 10

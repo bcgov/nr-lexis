@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationOfferDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -33,6 +35,8 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGES_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
+  private static final String FIND_PURCHASE_OFFERS_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_APP(?,?)";
   private static final String FIND_FEDERAL_PERMIT_BY_APP =
       LEXIS_GROUP_3_PACKAGE + "FIND_F_PERM_DET_BY_APP(?,?)";
 
@@ -41,13 +45,13 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadApplicationStatusOptions() {
-    return loadCodeNameOptions(FIND_ALL_APPLICATION_STATUS_CODES).stream()
+    return loadCodeNameOptionsRequired(FIND_ALL_APPLICATION_STATUS_CODES).stream()
         .filter(option -> option.code() == null || !"DAL".equalsIgnoreCase(option.code()))
         .toList();
   }
 
   public List<CodeNameDto> loadFederalExemptionTypeOptions() {
-    return loadCodeNameOptions(FIND_ALL_EXEMPTION_TYPE_CODES).stream()
+    return loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES).stream()
         .filter(option -> "F".equalsIgnoreCase(option.code()))
         .toList();
   }
@@ -86,7 +90,9 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
               exemptionNumber,
               getLocalDate(rs, "RECEIVED_DATE"),
               getLocalDate(rs, "ADVERTISING_DATE"),
-              selectable);
+              selectable,
+              // The service replaces this fail-closed value with current editability state.
+              true);
         });
   }
 
@@ -107,6 +113,9 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
     where.addDateLte("v.RECEIVED_DATE", criteria.receivedToDate());
     where.addDateGte("v.ADVERTISING_DATE", criteria.listingFromDate());
     where.addDateLte("v.ADVERTISING_DATE", criteria.listingToDate());
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInEqualsNumberOrNoResults("v.ORG_UNIT_NO", criteria.regionNumbers());
+    }
 
     String ownerClientNumber = trim(criteria.ownerClientNumber());
     if (ownerClientNumber != null) {
@@ -133,12 +142,15 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
     }
 
     Optional<FederalApplicationDetailDto> detail =
-        queryCursorSingle(
+        queryCursorSingleFailClosed(
             FIND_APPLICATION_BY_NUMBER,
             cs -> cs.setString(1, applicationNumber.toString()),
             2,
-            rs ->
-                new FederalApplicationDetailDto(
+            rs -> {
+              if (!"F".equalsIgnoreCase(getString(rs, "EXPORT_JURISDICTION_CODE"))) {
+                return null;
+              }
+              return new FederalApplicationDetailDto(
                     getLong(rs, "APPLICATION_NUMBER"),
                     firstNonNull(getString(rs, "FED_APPLICATION_NUMBER"), getString(rs, "FEDERAL_APPLICATION_NUMBER")),
                     getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
@@ -160,7 +172,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
                     getString(rs, "EXPORT_APPLICANT_TYPE_CODE"),
                     getString(rs, "OWNER_CONTACT_NAME"),
                     getString(rs, "OWNER_COMPANY_NAME"),
-                    getString(rs, "EXPORT_APPLICANT_TYPE_CODE"),
+                    resolveAgentApplicantType(getString(rs, "AGENT_CLIENT_NUMBER")),
                     getString(rs, "AGENT_CONTACT_NAME"),
                     getString(rs, "AGENT_COMPANY_NAME"),
                     firstNonNull(
@@ -173,15 +185,19 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
                     getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
                     getDouble(rs, "AVERAGE_LOG_VOLUME"),
                     firstNonNull(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
-                    getString(rs, "END_USE_SORT"),
-                    firstNonNull(getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID"))));
+                    null,
+                    firstNonNull(getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID")));
+            });
 
     if (detail.isEmpty()) {
       return Optional.empty();
     }
 
-    List<String> packages = findPackageNumbersByApplicationNumber(applicationNumber);
-    Optional<FederalApplicationPermitDto> permit = findPermitByApplicationNumber(applicationNumber);
+    List<String> packages = findPackageNumbersByApplicationNumberFailClosed(applicationNumber);
+    List<FederalApplicationOfferDto> offers =
+        findOffersByApplicationNumberFailClosed(applicationNumber);
+    Optional<FederalApplicationPermitDto> permit =
+        findPermitByApplicationNumberFailClosed(applicationNumber);
     FederalApplicationDetailDto dto = detail.get();
     return Optional.of(
         new FederalApplicationDetailDto(
@@ -201,7 +217,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
             dto.readOnly(),
             packages,
             dto.remarks(),
-            dto.offers(),
+            offers,
             permit.orElse(null),
             dto.ownerApplicantType(),
             dto.ownerContactName(),
@@ -221,43 +237,169 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
             dto.author()));
   }
 
-  public List<String> findPackageNumbersByApplicationNumber(Long applicationNumber) {
+  static String resolveAgentApplicantType(String agentClientNumber) {
+    return agentClientNumber == null || agentClientNumber.isBlank() ? null : "A";
+  }
+
+  private List<FederalApplicationOfferDto> findOffersByApplicationNumberFailClosed(
+      Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
+        FIND_PURCHASE_OFFERS_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new FederalApplicationOfferDto(
+                offerNumberAsString(rs),
+                getString(rs, "COMPANY_NAME"),
+                getLocalDate(rs, "ENTRY_TIMESTAMP")));
+  }
+
+  public List<String> findPackageNumbersByApplicationNumber(Long applicationNumber) {
+    return findPackageNumbersByApplicationNumber(applicationNumber, false);
+  }
+
+  public List<String> findPackageNumbersByApplicationNumberRequired(Long applicationNumber) {
+    return findPackageNumbersByApplicationNumber(applicationNumber, true);
+  }
+
+  private List<String> findPackageNumbersByApplicationNumberFailClosed(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    return normalizePackageNumbers(
+        queryCursorProcedureFailClosed(
             FIND_PACKAGES_BY_APPLICATION,
             cs -> cs.setString(1, applicationNumber.toString()),
             2,
-            rs -> getString(rs, "PACKAGE_NUMBER"))
-        .stream()
+            rs -> getString(rs, "PACKAGE_NUMBER")));
+  }
+
+  private List<String> findPackageNumbersByApplicationNumber(
+      Long applicationNumber, boolean required) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    List<String> packageNumbers =
+        required
+            ? queryCursorProcedureRequired(
+                FIND_PACKAGES_BY_APPLICATION,
+                cs -> cs.setString(1, applicationNumber.toString()),
+                2,
+                rs -> getString(rs, "PACKAGE_NUMBER"))
+            : queryCursorProcedure(
+                FIND_PACKAGES_BY_APPLICATION,
+                cs -> cs.setString(1, applicationNumber.toString()),
+                2,
+                rs -> getString(rs, "PACKAGE_NUMBER"));
+    return normalizePackageNumbers(packageNumbers);
+  }
+
+  private List<String> normalizePackageNumbers(List<String> packageNumbers) {
+    return packageNumbers.stream()
         .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
         .toList();
   }
 
   public Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber) {
+    return findPermitByApplicationNumber(applicationNumber, false);
+  }
+
+  public Optional<FederalApplicationPermitDto> findPermitByApplicationNumberRequired(
+      Long applicationNumber) {
+    return findPermitByApplicationNumber(applicationNumber, true);
+  }
+
+  private Optional<FederalApplicationPermitDto> findPermitByApplicationNumberFailClosed(
+      Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
 
+    return queryCursorSingleFailClosed(
+        FIND_FEDERAL_PERMIT_BY_APP,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapFederalPermit);
+  }
+
+  private Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(
+      Long applicationNumber, boolean required) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+
+    if (required) {
+      List<FederalApplicationPermitDto> permits =
+          queryCursorProcedureRequired(
+              FIND_FEDERAL_PERMIT_BY_APP,
+              cs -> cs.setString(1, applicationNumber.toString()),
+              2,
+              this::mapFederalPermit);
+      if (permits.size() > 1) {
+        throw new IncorrectResultSizeDataAccessException(1, permits.size());
+      }
+      return permits.stream().findFirst();
+    }
     return queryCursorSingle(
         FIND_FEDERAL_PERMIT_BY_APP,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
-        rs ->
-            new FederalApplicationPermitDto(
-                parsePermitNumber(rs),
-                getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
-                getString(rs, "EXPORT_COUNTRY_CODE"),
-                getString(rs, "EXPORT_TRANSPORT_TYPE_CODE"),
-                getString(rs, "TRANSPORT_NAME"),
-                getLocalDate(rs, "ESTIMATED_SHIPPING_DATE"),
-                getString(rs, "EXPORT_PORT_OF_EXPORT_CODE"),
-                getString(rs, "OTHER_PORT_OF_EXPORT")));
+        this::mapFederalPermit);
   }
 
-  public boolean verifyApplicationClients(List<Long> applicationNumbers) {
+  public Optional<FederalMutationContextRow> findMutationContext(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs -> {
+          if (!"F".equalsIgnoreCase(getString(rs, "EXPORT_JURISDICTION_CODE"))) {
+            return null;
+          }
+          return new FederalMutationContextRow(
+                getLong(rs, "APPLICATION_NUMBER"),
+                getLocalDate(rs, "APPLICATION_DATE"),
+                getLong(rs, "ORG_UNIT_NO"),
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+                getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
+                getLocalDate(rs, "ADVERTISING_DATE"));
+        });
+  }
+
+  public Optional<FederalMutationContextRow> findMutationContextRequired(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs -> {
+          if (!"F".equalsIgnoreCase(getString(rs, "EXPORT_JURISDICTION_CODE"))) {
+            return null;
+          }
+          return new FederalMutationContextRow(
+              getLong(rs, "APPLICATION_NUMBER"),
+              getLocalDate(rs, "APPLICATION_DATE"),
+              getLong(rs, "ORG_UNIT_NO"),
+              getString(rs, "OWNER_CLIENT_NUMBER"),
+              getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+              getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
+              getLocalDate(rs, "ADVERTISING_DATE"));
+        });
+  }
+
+  public boolean verifyApplicationClientsRequired(List<Long> applicationNumbers) {
     if (applicationNumbers == null || applicationNumbers.isEmpty()) {
       return false;
     }
@@ -270,11 +412,14 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
       }
 
       Optional<String> currentClient =
-          queryCursorSingle(
+          queryCursorSingleRequired(
               FIND_APPLICATION_BY_NUMBER,
               cs -> cs.setString(1, applicationNumber.toString()),
               2,
-              rs -> getString(rs, "OWNER_CLIENT_NUMBER"));
+              rs ->
+                  "F".equalsIgnoreCase(getString(rs, "EXPORT_JURISDICTION_CODE"))
+                      ? getString(rs, "OWNER_CLIENT_NUMBER")
+                      : null);
 
       if (currentClient.isEmpty() || currentClient.get() == null) {
         return false;
@@ -305,6 +450,48 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
       return Long.parseLong(asString);
     } catch (NumberFormatException ex) {
       return null;
+    }
+  }
+
+  private String offerNumberAsString(java.sql.ResultSet rs) {
+    Long numeric = getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER");
+    return numeric == null ? getString(rs, "EXPORT_PURCHASE_OFFER_NUMBER") : numeric.toString();
+  }
+
+  private FederalApplicationPermitDto mapFederalPermit(java.sql.ResultSet rs) {
+    return new FederalApplicationPermitDto(
+        parsePermitNumber(rs),
+        getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
+        getString(rs, "EXPORT_COUNTRY_CODE"),
+        getString(rs, "EXPORT_TRANSPORT_TYPE_CODE"),
+        getString(rs, "TRANSPORT_NAME"),
+        getLocalDate(rs, "ESTIMATED_SHIPPING_DATE"),
+        getString(rs, "EXPORT_PORT_OF_EXPORT_CODE"),
+        getString(rs, "OTHER_PORT_OF_EXPORT"));
+  }
+
+  public record FederalMutationContextRow(
+      Long applicationNumber,
+      java.time.LocalDate applicationDate,
+      Long orgUnitNumber,
+      String clientNumber,
+      String clientLocationCode,
+      String statusCode,
+      java.time.LocalDate listingDate) {
+    public FederalMutationContextRow(
+        Long applicationNumber,
+        java.time.LocalDate applicationDate,
+        Long orgUnitNumber,
+        String clientNumber,
+        String clientLocationCode) {
+      this(
+          applicationNumber,
+          applicationDate,
+          orgUnitNumber,
+          clientNumber,
+          clientLocationCode,
+          null,
+          null);
     }
   }
 

@@ -113,7 +113,9 @@ class LexisAdminScheduleControllerTest {
     when(scheduleService.updateSchedule(1001L, request))
         .thenReturn(
             new ExportScheduleMutationResultDto(
-                false, "A schedule already exists for that advertising date.", null));
+                false,
+                "Export schedule is used by existing applications and cannot be changed.",
+                null));
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
@@ -123,7 +125,7 @@ class LexisAdminScheduleControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isFalse();
     assertThat(response.getBody().message())
-        .isEqualTo("A schedule already exists for that advertising date.");
+        .isEqualTo("Export schedule is used by existing applications and cannot be changed.");
   }
 
   @Test

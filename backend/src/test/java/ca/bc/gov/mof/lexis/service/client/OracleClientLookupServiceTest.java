@@ -54,6 +54,35 @@ class OracleClientLookupServiceTest {
   }
 
   @Test
+  void getClientDataRequiredShouldUseTheFailClosedRepositoryLookup() {
+    when(repository.findLocationByClientNumberCodeRequired("00077881", "01"))
+        .thenReturn(
+            Optional.of(
+                new ClientLocationRow(
+                    "00077881",
+                    "01",
+                    "Mill",
+                    "Acme Forestry",
+                    "123 Main St",
+                    null,
+                    null,
+                    "Victoria",
+                    "BC",
+                    "V8W1A1",
+                    "CA",
+                    "250-555-0100",
+                    null,
+                    "user@example.com")));
+
+    Optional<ClientLookupService.ClientData> response =
+        service.getClientDataRequired("77881", "01");
+
+    assertThat(response).isPresent();
+    assertThat(response.get().clientNumber()).isEqualTo("00077881");
+    verify(repository).findLocationByClientNumberCodeRequired("00077881", "01");
+  }
+
+  @Test
   void getClientLocationsShouldReturnPlaceholderWhenNoLocationsFound() {
     when(repository.findLocationsByClientNumber("00077881")).thenReturn(List.of());
 

@@ -70,4 +70,21 @@ describe('FAM auth config', () => {
 
     expect(oauth?.redirectSignOut).toEqual([configuredSignOutUrl])
   })
+
+  it.each([
+    ['dev', 'DEV-IDIR', 'DEV-BCEIDBUSINESS'],
+    ['test', 'TEST-IDIR', 'TEST-BCEIDBUSINESS'],
+    ['prod', 'IDIR', 'BCEIDBUSINESS'],
+  ])('maps %s to its deployed Cognito identity providers', async (zone, idir, businessBceid) => {
+    window.config = {
+      ...configuredRuntimeAuth,
+      VITE_ZONE: zone,
+    }
+    vi.resetModules()
+
+    const configModule = await import('@/config/fam/config')
+
+    expect(configModule.idirProviderName).toBe(idir)
+    expect(configModule.businessBceidProviderName).toBe(businessBceid)
+  })
 })

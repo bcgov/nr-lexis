@@ -1,0 +1,3 @@
+Application #{{applicationNumber}} status was changed to {{statusDescription}} with the following reason:
+
+{{remark}}

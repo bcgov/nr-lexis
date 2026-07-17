@@ -24,6 +24,20 @@ describe('AppNotification', () => {
     expect(notificationRegion).toBeTruthy()
     expect(container.querySelector('main')).toBeEmptyDOMElement()
     expect(notificationRegion).toContainElement(screen.getByText('Upload error'))
+    expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
+  })
+
+  it('only renders a close control when the caller can dismiss the notification', () => {
+    render(
+      <AppNotification
+        kind="warning"
+        title="Lookup unavailable"
+        subtitle="Try again later."
+        onCloseButtonClick={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'close notification' })).toBeInTheDocument()
   })
 
   it('uses low-contrast toast styling by default', () => {

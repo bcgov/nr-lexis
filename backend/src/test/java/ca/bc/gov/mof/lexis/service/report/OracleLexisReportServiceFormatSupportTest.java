@@ -11,6 +11,7 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
@@ -23,6 +24,7 @@ import net.sf.jasperreports.engine.base.JRBasePrintPage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -34,7 +36,7 @@ class OracleLexisReportServiceFormatSupportTest {
   }
 
   @Test
-  void shouldKeepRequestedSpreadsheetFormats() {
+  void shouldPreserveRequestedSpreadsheetFormat() {
     OracleLexisReportService service = createService();
 
     assertThat(service.normalizeRequestedFormat(LexisReportFormat.XLS))
@@ -198,7 +200,7 @@ class OracleLexisReportServiceFormatSupportTest {
   }
 
   @Test
-  void shouldReturnEmptyWhenJasperReportCannotConnectToOracle() throws Exception {
+  void shouldPropagateWhenJasperReportCannotConnectToOracle() throws Exception {
     DataSource dataSource = Mockito.mock(DataSource.class);
     OracleLegacyCsvReportService legacyCsvReportService =
         Mockito.mock(OracleLegacyCsvReportService.class);
@@ -208,14 +210,17 @@ class OracleLexisReportServiceFormatSupportTest {
     OracleLexisReportService service =
         createService(dataSource, legacyCsvReportService, legacyJasperTableReportService);
 
-    Optional<LexisGeneratedReport> result =
-        service.generateReport("feeReport", new LexisReportRequestDto(Map.of(), "PDF"));
-
-    assertThat(result).isEmpty();
+    assertThatThrownBy(
+            () ->
+                service.generateReport(
+                    "feeReport", new LexisReportRequestDto(Map.of(), "PDF")))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessage("The report data could not be loaded for feeReport")
+        .hasCauseInstanceOf(SQLException.class);
   }
 
   @Test
-  void shouldReturnEmptyWhenJasperTemplatePreparationFails() {
+  void shouldPropagateWhenJasperTemplatePreparationFails() {
     DataSource dataSource = Mockito.mock(DataSource.class);
     OracleLegacyCsvReportService legacyCsvReportService =
         Mockito.mock(OracleLegacyCsvReportService.class);
@@ -236,10 +241,13 @@ class OracleLexisReportServiceFormatSupportTest {
           }
         };
 
-    Optional<LexisGeneratedReport> result =
-        service.generateReport("feeReport", new LexisReportRequestDto(Map.of(), "PDF"));
-
-    assertThat(result).isEmpty();
+    assertThatThrownBy(
+            () ->
+                service.generateReport(
+                    "feeReport", new LexisReportRequestDto(Map.of(), "PDF")))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessage("The report template could not be prepared for feeReport")
+        .hasCauseInstanceOf(IllegalStateException.class);
     verifyNoInteractions(dataSource);
   }
 
@@ -260,6 +268,21 @@ class OracleLexisReportServiceFormatSupportTest {
   }
 
   @Test
+  void shouldNeutralizeFormulaCellsInTemplateCsv() {
+    OracleLexisReportService service = createService();
+
+    String safe =
+        new String(
+            service.sanitizeTemplateCsv(
+                "\"safe\",\"=cmd\",\"  +SUM(A1)\",\"@user\",\"-2\"\n"
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+            java.nio.charset.StandardCharsets.UTF_8);
+
+    assertThat(safe)
+        .isEqualTo("\"safe\",\"'=cmd\",\"'  +SUM(A1)\",\"'@user\",\"'-2\"\n");
+  }
+
+  @Test
   void shouldExportXlsxFromJasperPrint() throws Exception {
     OracleLexisReportService service = createService();
 
@@ -273,6 +296,32 @@ class OracleLexisReportServiceFormatSupportTest {
 
     assertThat(xlsxBytes).isNotNull();
     assertThat(xlsxBytes).startsWith(new byte[] {'P', 'K'});
+  }
+
+  @Test
+  void shouldExportRealBiffXlsFromJasperPrint() throws Exception {
+    OracleLexisReportService service = createService();
+
+    JasperPrint print = new JasperPrint();
+    print.setName("test-print");
+    print.setPageWidth(50);
+    print.setPageHeight(50);
+    print.addPage(new JRBasePrintPage());
+
+    byte[] xlsBytes = service.exportTemplateXls(print);
+
+    assertThat(xlsBytes)
+        .startsWith(
+            new byte[] {
+              (byte) 0xD0,
+              (byte) 0xCF,
+              (byte) 0x11,
+              (byte) 0xE0,
+              (byte) 0xA1,
+              (byte) 0xB1,
+              (byte) 0x1A,
+              (byte) 0xE1
+            });
   }
 
   @Test
@@ -308,7 +357,7 @@ class OracleLexisReportServiceFormatSupportTest {
   @Test
   void shouldApplyLegacyBiweeklyScheduleDefaultsForBlankMofrGenerateRequest() {
     LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    Mockito.when(scheduleRepository.findCurrentSchedules())
+    Mockito.when(scheduleRepository.findCurrentSchedulesRequired())
         .thenReturn(
             List.of(
                 new LexisReportScheduleRepository.CurrentScheduleRow(
@@ -359,7 +408,7 @@ class OracleLexisReportServiceFormatSupportTest {
     OracleLegacyJasperTableReportService legacyJasperTableReportService =
         Mockito.mock(OracleLegacyJasperTableReportService.class);
     LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    Mockito.when(scheduleRepository.findCurrentSchedules()).thenReturn(List.of());
+    Mockito.when(scheduleRepository.findCurrentSchedulesRequired()).thenReturn(List.of());
     OracleLexisReportService service =
         createService(
             dataSource,
@@ -372,11 +421,29 @@ class OracleLexisReportServiceFormatSupportTest {
 
     assertThatThrownBy(() -> service.generateReport("biweeklyListing", request))
         .isInstanceOf(LexisReportValidationException.class)
-        .hasMessageContaining("Listing from date")
-        .hasMessageContaining("Listing to date");
+        .hasMessage(
+            "The current advertising period is unavailable because two advertising schedule "
+                + "dates are not configured.");
 
-    Mockito.verify(scheduleRepository).findCurrentSchedules();
+    Mockito.verify(scheduleRepository).findCurrentSchedulesRequired();
     verifyNoInteractions(dataSource, legacyCsvReportService, legacyJasperTableReportService);
+  }
+
+  @Test
+  void shouldPropagateCurrentScheduleLookupFailureForBlankBiweeklyRequest() {
+    LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
+    Mockito.when(scheduleRepository.findCurrentSchedulesRequired())
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    OracleLexisReportService service = createService(scheduleRepository);
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("legacyActionMapping", "generate"), "PDF");
+
+    assertThatThrownBy(
+            () ->
+                service.applyLegacyReportDefaults(
+                    LexisJasperReportDefinition.BIWEEKLY_LISTING, request))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
   }
 
   @Test
@@ -410,7 +477,7 @@ class OracleLexisReportServiceFormatSupportTest {
     OracleLexisReportService service = createService();
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("legacyActionMapping", "generatePermitReport"), "PDF");
-    LocalDate today = LocalDate.now();
+    LocalDate today = LexisBusinessTime.today();
     LocalDate previousMonth = today.minusMonths(1);
 
     LexisReportRequestDto result =
@@ -442,11 +509,11 @@ class OracleLexisReportServiceFormatSupportTest {
   @Test
   void shouldApplyLegacyPermitReportInvoiceDefaultFromGbmsHistory() {
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
-    Mockito.when(permitRpcRepository.findGbmsInvoiceHistory("", 900100L, false))
+    Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, false))
         .thenReturn(
             List.of(
                 new PermitRpcRepository.GbmsInvoiceHistoryRow(
-                    "INV-GBMS", null, null, 0.0d, null, null, null)));
+                    "INV-GBMS", null, null, 900100L, 0.0d, null, null, null)));
     OracleLexisReportService service =
         createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
     LexisReportRequestDto request =
@@ -465,11 +532,11 @@ class OracleLexisReportServiceFormatSupportTest {
     SecurityContextHolder.getContext()
         .setAuthentication(new TestingAuthenticationToken("user", "n/a", "LEXIS_READ_ONLY"));
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
-    Mockito.when(permitRpcRepository.findGbmsInvoiceHistory("", 900100L, true))
+    Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, true))
         .thenReturn(
             List.of(
                 new PermitRpcRepository.GbmsInvoiceHistoryRow(
-                    "INV-READONLY", null, null, 0.0d, null, null, null)));
+                    "INV-READONLY", null, null, 900100L, 0.0d, null, null, null)));
     OracleLexisReportService service =
         createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
     LexisReportRequestDto request =
@@ -479,17 +546,17 @@ class OracleLexisReportServiceFormatSupportTest {
         service.applyLegacyReportDefaults(LexisJasperReportDefinition.PERMIT_REPORT, request);
 
     assertThat(result.parameters()).containsEntry("invoiceNumber", "INV-READONLY");
-    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistory("", 900100L, true);
+    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistoryRequired("", 900100L, true);
   }
 
   @Test
   void shouldResolvePermitReportInvoiceNumberFromGbmsEvenWhenRequestIncludesInvoice() {
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
-    Mockito.when(permitRpcRepository.findGbmsInvoiceHistory("", 900100L, false))
+    Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, false))
         .thenReturn(
             List.of(
                 new PermitRpcRepository.GbmsInvoiceHistoryRow(
-                    "INV-GBMS", null, null, 0.0d, null, null, null)));
+                    "INV-GBMS", null, null, 900100L, 0.0d, null, null, null)));
     OracleLexisReportService service =
         createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
     LexisReportRequestDto request =
@@ -501,13 +568,13 @@ class OracleLexisReportServiceFormatSupportTest {
         service.applyLegacyReportDefaults(LexisJasperReportDefinition.PERMIT_REPORT, request);
 
     assertThat(result.parameters()).containsEntry("invoiceNumber", "INV-GBMS");
-    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistory("", 900100L, false);
+    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistoryRequired("", 900100L, false);
   }
 
   @Test
   void shouldBlankPermitReportInvoiceNumberWhenGbmsHistoryHasNoInvoice() {
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
-    Mockito.when(permitRpcRepository.findGbmsInvoiceHistory("", 900100L, false))
+    Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, false))
         .thenReturn(List.of());
     OracleLexisReportService service =
         createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
@@ -520,7 +587,29 @@ class OracleLexisReportServiceFormatSupportTest {
         service.applyLegacyReportDefaults(LexisJasperReportDefinition.PERMIT_REPORT, request);
 
     assertThat(result.parameters()).containsEntry("invoiceNumber", "");
-    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistory("", 900100L, false);
+    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistoryRequired("", 900100L, false);
+  }
+
+  @Test
+  void shouldFailPermitReportDefaultsWhenGbmsHistoryCannotBeLoaded() {
+    PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
+    DataAccessResourceFailureException outage =
+        new DataAccessResourceFailureException("GBMS history unavailable");
+    Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, false))
+        .thenThrow(outage);
+    OracleLexisReportService service =
+        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
+
+    assertThatThrownBy(
+            () ->
+                service.applyLegacyReportDefaults(
+                    LexisJasperReportDefinition.PERMIT_REPORT, request))
+        .isSameAs(outage);
+
+    Mockito.verify(permitRpcRepository)
+        .findGbmsInvoiceHistoryRequired("", 900100L, false);
   }
 
   @Test
@@ -529,7 +618,7 @@ class OracleLexisReportServiceFormatSupportTest {
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
     Mockito.when(permitRpcRepository.findPermitMutationByPermitNumber(900100L))
         .thenReturn(Optional.of(permitRow("00000001", "00000002")));
-    Mockito.when(permitRpcRepository.findApplicationNumbersByPermitNumber(900100L))
+    Mockito.when(permitRpcRepository.findApplicationNumbersByPermitNumberRequired(900100L))
         .thenReturn(List.of(1001L));
     Mockito.when(permitRpcRepository.findApplicationInfoByNumber(1001L))
         .thenReturn(Optional.of(applicationRow(1001L, "00000003", "00000004")));
@@ -557,10 +646,57 @@ class OracleLexisReportServiceFormatSupportTest {
     assertThat(result).isEmpty();
     verifyNoInteractions(dataSource, legacyCsvReportService, legacyJasperTableReportService);
     Mockito.verify(permitRpcRepository).findPermitMutationByPermitNumber(900100L);
-    Mockito.verify(permitRpcRepository).findApplicationNumbersByPermitNumber(900100L);
+    Mockito.verify(permitRpcRepository).findApplicationNumbersByPermitNumberRequired(900100L);
     Mockito.verify(permitRpcRepository).findApplicationInfoByNumber(1001L);
     Mockito.verify(permitRpcRepository, Mockito.never())
-        .findGbmsInvoiceHistory(Mockito.anyString(), Mockito.anyLong(), Mockito.anyBoolean());
+        .findGbmsInvoiceHistoryRequired(Mockito.anyString(), Mockito.anyLong(), Mockito.anyBoolean());
+  }
+
+  @Test
+  void shouldPreserveLegitimatelyEmptyPermitApplicationRelationshipsAsAccessDenied() {
+    PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
+    Mockito.when(permitRpcRepository.findPermitMutationByPermitNumber(900100L))
+        .thenReturn(Optional.of(permitRow("00000001", "00000002")));
+    Mockito.when(permitRpcRepository.findApplicationNumbersByPermitNumberRequired(900100L))
+        .thenReturn(List.of());
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            new TestingAuthenticationToken(
+                "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
+    OracleLexisReportService service =
+        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
+
+    assertThat(service.canGeneratePermitReport(LexisJasperReportDefinition.PERMIT_REPORT, request))
+        .isFalse();
+    Mockito.verify(permitRpcRepository)
+        .findApplicationNumbersByPermitNumberRequired(900100L);
+  }
+
+  @Test
+  void shouldPropagatePermitApplicationRelationshipFailureInsteadOfDenyingAccess() {
+    PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
+    Mockito.when(permitRpcRepository.findPermitMutationByPermitNumber(900100L))
+        .thenReturn(Optional.of(permitRow("00000001", "00000002")));
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle relationships unavailable");
+    Mockito.when(permitRpcRepository.findApplicationNumbersByPermitNumberRequired(900100L))
+        .thenThrow(failure);
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            new TestingAuthenticationToken(
+                "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
+    OracleLexisReportService service =
+        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
+
+    assertThatThrownBy(
+            () ->
+                service.canGeneratePermitReport(
+                    LexisJasperReportDefinition.PERMIT_REPORT, request))
+        .isSameAs(failure);
   }
 
   @Test
@@ -568,7 +704,7 @@ class OracleLexisReportServiceFormatSupportTest {
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
     Mockito.when(permitRpcRepository.findPermitMutationByPermitNumber(900100L))
         .thenReturn(Optional.of(permitRow("00000999", "00000002")));
-    Mockito.when(permitRpcRepository.findGbmsInvoiceHistory("", 900100L, false))
+    Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, false))
         .thenReturn(List.of());
     SecurityContextHolder.getContext()
         .setAuthentication(
@@ -587,7 +723,7 @@ class OracleLexisReportServiceFormatSupportTest {
             LexisJasperReportDefinition.PERMIT_REPORT, request);
 
     assertThat(result.parameters()).containsEntry("invoiceNumber", "");
-    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistory("", 900100L, false);
+    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistoryRequired("", 900100L, false);
   }
 
   @Test
@@ -595,7 +731,7 @@ class OracleLexisReportServiceFormatSupportTest {
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
     Mockito.when(permitRpcRepository.findPermitMutationByPermitNumber(900100L))
         .thenReturn(Optional.of(permitRow("00000001", "00000002")));
-    Mockito.when(permitRpcRepository.findApplicationNumbersByPermitNumber(900100L))
+    Mockito.when(permitRpcRepository.findApplicationNumbersByPermitNumberRequired(900100L))
         .thenReturn(List.of(1001L));
     Mockito.when(permitRpcRepository.findApplicationInfoByNumber(1001L))
         .thenReturn(Optional.of(applicationRow(1001L, "00000003", "00000999")));
@@ -616,13 +752,13 @@ class OracleLexisReportServiceFormatSupportTest {
             LexisJasperReportDefinition.PERMIT_REPORT, request);
 
     assertThat(result.parameters()).containsEntry("invoiceNumber", "");
-    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistory("", 900100L, false);
+    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistoryRequired("", 900100L, false);
   }
 
   @Test
   void shouldAllowPermitReportForLegacyPrivilegedRolesWithoutClientMatch() {
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
-    Mockito.when(permitRpcRepository.findGbmsInvoiceHistory("", 900100L, true))
+    Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, true))
         .thenReturn(List.of());
     SecurityContextHolder.getContext()
         .setAuthentication(
@@ -642,7 +778,19 @@ class OracleLexisReportServiceFormatSupportTest {
 
     assertThat(result.parameters()).containsEntry("invoiceNumber", "");
     Mockito.verify(permitRpcRepository, Mockito.never()).findPermitMutationByPermitNumber(900100L);
-    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistory("", 900100L, true);
+    Mockito.verify(permitRpcRepository).findGbmsInvoiceHistoryRequired("", 900100L, true);
+  }
+
+  @Test
+  void shouldAllowPermitReportForAdminWithoutClientMatch() {
+    SecurityContextHolder.getContext()
+        .setAuthentication(new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN"));
+    OracleLexisReportService service = createService();
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
+
+    assertThat(service.canGeneratePermitReport(LexisJasperReportDefinition.PERMIT_REPORT, request))
+        .isTrue();
   }
 
   private OracleLexisReportService createService() {

@@ -23,3 +23,10 @@ spring:
     properties:
       hibernate:
         format_sql: false
+
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,db
