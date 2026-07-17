@@ -861,7 +861,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(productLocationInput).toHaveValue('BC')
     })
 
-    await userEvent.clear(productLocationInput)
+    fireEvent.change(productLocationInput, { target: { value: '' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
     expect(screen.getAllByText('Location of logs is required.').length).toBeGreaterThan(0)
@@ -1071,10 +1071,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(applicationVolumeInput).toHaveValue(100)
     })
 
-    await userEvent.clear(applicationVolumeInput)
-    await userEvent.type(applicationVolumeInput, '10000000')
-    await userEvent.clear(averageLogVolumeInput)
-    await userEvent.type(averageLogVolumeInput, '100')
+    fireEvent.change(applicationVolumeInput, { target: { value: '10000000' } })
+    fireEvent.change(averageLogVolumeInput, { target: { value: '100' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
     expect(
@@ -1104,8 +1102,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       name: 'Save Summary',
     })
 
-    await userEvent.clear(applicationVolume)
-    await userEvent.type(applicationVolume, '250.999')
+    fireEvent.change(applicationVolume, { target: { value: '250.999' } })
     await userEvent.click(saveSummary)
 
     expect(
@@ -1113,8 +1110,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeGreaterThan(0)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
-    await userEvent.clear(applicationVolume)
-    await userEvent.type(applicationVolume, '9999999.99')
+    fireEvent.change(applicationVolume, { target: { value: '9999999.99' } })
     await userEvent.click(saveSummary)
 
     await waitFor(() =>
@@ -1142,9 +1138,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const productLocation = summaryControls.getByLabelText('Location of logs')
 
     expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
-    await userEvent.clear(averageLogVolume)
-    await userEvent.type(averageLogVolume, '-0.1')
-    await userEvent.clear(productLocation)
+    fireEvent.change(averageLogVolume, { target: { value: '-0.1' } })
+    fireEvent.change(productLocation, { target: { value: '' } })
 
     await chooseComboBoxOption(productType, 'Standing Timber')
     expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
@@ -1282,8 +1277,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
     })
 
-    await userEvent.clear(productLocationInput)
-    await userEvent.type(productLocationInput, 'Changed location')
+    fireEvent.change(productLocationInput, { target: { value: 'Changed location' } })
     await chooseComboBoxOption(
       getSummaryComboBox(summaryControls, 'Owner client location'),
       'Owner Alternate Location',
@@ -1320,8 +1314,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     window.dispatchEvent(unchangedUnload)
     expect(unchangedUnload.defaultPrevented).toBe(false)
 
-    await userEvent.clear(productLocationInput)
-    await userEvent.type(productLocationInput, 'Changed location')
+    fireEvent.change(productLocationInput, { target: { value: 'Changed location' } })
     const dirtyUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(dirtyUnload)
     expect(dirtyUnload.defaultPrevented).toBe(true)
@@ -1400,8 +1393,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Application')
     const ownerContactInput = await screen.findByLabelText('Owner contact name')
-    await userEvent.clear(ownerContactInput)
-    await userEvent.type(ownerContactInput, 'Typed Owner')
+    fireEvent.change(ownerContactInput, { target: { value: 'Typed Owner' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
     await waitFor(() => {
