@@ -3988,17 +3988,21 @@ legend.cds--label {
 }
 
 .cds--data-table tbody tr:nth-child(odd),
-.cds--data-table tbody tr:nth-child(odd) td {
+.cds--data-table tbody tr:nth-child(odd) td,
+.cds--data-table tbody tr:nth-child(odd) th {
   background: #ffffff;
 }
 
 .cds--data-table tbody tr:nth-child(even),
-.cds--data-table tbody tr:nth-child(even) td {
+.cds--data-table tbody tr:nth-child(even) td,
+.cds--data-table tbody tr:nth-child(even) th {
   background: #f3f3f5;
 }
 
 .cds--data-table tbody tr:hover td,
-.cds--data-table tbody tr:focus-within td {
+.cds--data-table tbody tr:hover th,
+.cds--data-table tbody tr:focus-within td,
+.cds--data-table tbody tr:focus-within th {
   background: #dfeaf8;
 }
 
@@ -4007,17 +4011,21 @@ legend.cds--label {
 }
 
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd),
-:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd) td {
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd) td,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd) th {
   background: var(--csp-layer-01);
 }
 
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even),
-:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) td {
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) td,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) th {
   background: var(--csp-table-row-alt-bg);
 }
 
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:hover td,
-:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:focus-within td {
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:hover th,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:focus-within td,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:focus-within th {
   background: var(--csp-layer-hover);
 }
 
