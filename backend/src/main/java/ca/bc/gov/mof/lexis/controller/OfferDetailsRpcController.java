@@ -18,6 +18,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.OfferWithdrawalPolicy;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
@@ -74,6 +75,7 @@ public class OfferDetailsRpcController {
   private final LexisAuthorizationService authorizationService;
   private final ApplicationPermitOperationCoordinator operationCoordinator;
   private final ApplicationEditLockService editLockService;
+  private final OfferWithdrawalPolicy offerWithdrawalPolicy;
   private ProvincialAuthorizationService provincialAuthorizationService;
   private LexisPrincipalService principalService;
 
@@ -86,7 +88,8 @@ public class OfferDetailsRpcController {
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService,
       ApplicationPermitOperationCoordinator operationCoordinator,
-      ApplicationEditLockService editLockService) {
+      ApplicationEditLockService editLockService,
+      OfferWithdrawalPolicy offerWithdrawalPolicy) {
     this.applicationServiceProvider = applicationServiceProvider;
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.federalApplicationServiceProvider = federalApplicationServiceProvider;
@@ -96,6 +99,7 @@ public class OfferDetailsRpcController {
     this.authorizationService = authorizationService;
     this.operationCoordinator = operationCoordinator;
     this.editLockService = editLockService;
+    this.offerWithdrawalPolicy = offerWithdrawalPolicy;
   }
 
   @Autowired
@@ -361,6 +365,11 @@ public class OfferDetailsRpcController {
     }
     PurchaseOfferService.CreateOfferRequest request = originalRequest;
     if (scopedClientNumber != null) {
+      if (request.offerWithdrawalDate() != null
+          && !offerWithdrawalPolicy.canWithdraw(request.applicationNumber())) {
+        return invalidPersistence(
+            request.applicationNumber(), null, false, "The offer is no longer eligible for withdrawal.");
+      }
       ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
       if (clientLookupService == null) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
@@ -457,7 +466,16 @@ public class OfferDetailsRpcController {
       if (!canPerform(authentication, "/offerDetails") || !scopedOfferingClient) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
       }
-      request = restrictOfferingClientUpdate(request, currentOffer.get());
+      boolean withdrawalChanged = withdrawalDateChanged(request, currentOffer.get());
+      boolean canWithdraw =
+          withdrawalChanged
+              && currentOffer.get().offerWithdrawalDate() == null
+              && offerWithdrawalPolicy.canWithdraw(currentOffer.get().applicationNumber());
+      if (withdrawalChanged && !canWithdraw) {
+        return invalidUpdate(
+            currentOffer.get(), "The offer is no longer eligible for withdrawal.");
+      }
+      request = restrictOfferingClientUpdate(request, currentOffer.get(), canWithdraw);
     } else if (canCreateOffer) {
       requireApplicationAccess(currentOffer.get().applicationNumber(), authentication);
       if (!offerApprover) {
@@ -702,11 +720,9 @@ public class OfferDetailsRpcController {
   }
 
   private PurchaseOfferService.UpdateOfferRequest restrictOfferingClientUpdate(
-      PurchaseOfferService.UpdateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
-    boolean canWithdraw =
-        currentOffer.offerWithdrawalDate() == null
-            && currentOffer.offerEndDate() != null
-            && !currentOffer.offerEndDate().isBefore(LexisBusinessTime.today());
+      PurchaseOfferService.UpdateOfferRequest requested,
+      PurchaseOfferDetailDto currentOffer,
+      boolean canWithdraw) {
     return new PurchaseOfferService.UpdateOfferRequest(
         currentOffer.applicationNumber(),
         currentOffer.offerNumber(),

@@ -16,13 +16,13 @@ import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.OfferWithdrawalPolicy;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
-import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
@@ -59,6 +59,7 @@ public class PurchaseOfferController {
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final ProvincialAuthorizationService provincialAuthorizationService;
   private final ApplicationEditLockService editLockService;
+  private final OfferWithdrawalPolicy offerWithdrawalPolicy;
   private LexisPrincipalService principalService;
 
   public PurchaseOfferController(
@@ -68,7 +69,8 @@ public class PurchaseOfferController {
       LexisApplicationService applicationService,
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ProvincialAuthorizationService provincialAuthorizationService,
-      ApplicationEditLockService editLockService) {
+      ApplicationEditLockService editLockService,
+      OfferWithdrawalPolicy offerWithdrawalPolicy) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
@@ -76,6 +78,7 @@ public class PurchaseOfferController {
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.provincialAuthorizationService = provincialAuthorizationService;
     this.editLockService = editLockService;
+    this.offerWithdrawalPolicy = offerWithdrawalPolicy;
   }
 
   @Autowired
@@ -345,7 +348,7 @@ public class PurchaseOfferController {
     return isApplicationApprover(roles)
         || (isOfferingClient(scopedClientNumber, detail)
             && detail.offerWithdrawalDate() == null
-            && canWithdrawByDate(detail.offerEndDate()));
+            && offerWithdrawalPolicy.canWithdraw(detail.applicationNumber()));
   }
 
   private boolean isApplicationApprover(List<String> roles) {
@@ -358,10 +361,6 @@ public class PurchaseOfferController {
         && !scopedClientNumber.isBlank()
         && detail != null
         && matchesScopedClient(scopedClientNumber, detail.offeringClientNumber());
-  }
-
-  private boolean canWithdrawByDate(LocalDate offerEndDate) {
-    return offerEndDate != null && !offerEndDate.isBefore(LexisBusinessTime.today());
   }
 
   private String auditUser(Authentication authentication) {

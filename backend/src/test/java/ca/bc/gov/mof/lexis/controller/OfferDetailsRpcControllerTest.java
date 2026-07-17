@@ -3,7 +3,6 @@ package ca.bc.gov.mof.lexis.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -20,6 +19,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.OfferWithdrawalPolicy;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
@@ -62,6 +62,7 @@ class OfferDetailsRpcControllerTest {
   @Mock private LexisAuthorizationService authorizationService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private ApplicationEditLockService editLockService;
+  @Mock private OfferWithdrawalPolicy offerWithdrawalPolicy;
   @Mock private Authentication authentication;
 
   private OfferDetailsRpcController controller;
@@ -78,7 +79,8 @@ class OfferDetailsRpcControllerTest {
             sessionService,
             authorizationService,
             new ApplicationPermitOperationCoordinator(new PermitOperationMutex()),
-            editLockService);
+            editLockService,
+            offerWithdrawalPolicy);
     lenient().when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     lenient().when(federalApplicationServiceProvider.getIfAvailable()).thenReturn(federalApplicationService);
     lenient()
@@ -95,9 +97,6 @@ class OfferDetailsRpcControllerTest {
     lenient()
         .when(federalApplicationService.findByApplicationNumber(anyLong()))
         .thenReturn(Optional.empty());
-    lenient()
-        .when(editLockService.touchOffer(anyLong(), nullable(String.class)))
-        .thenReturn(true);
   }
 
   @Test
@@ -782,7 +781,6 @@ class OfferDetailsRpcControllerTest {
     verify(purchaseOfferService)
         .updateOfferSnapshot(
             org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\reviewer2"));
-    verify(editLockService, never()).touchOffer(anyLong(), nullable(String.class));
   }
 
   @Test
@@ -811,6 +809,7 @@ class OfferDetailsRpcControllerTest {
     when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offerDetails"))
         .thenReturn(true);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(offerWithdrawalPolicy.canWithdraw(1000456L)).thenReturn(true);
     when(purchaseOfferService.findByOfferNumber(81001L))
         .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
     when(purchaseOfferService.updateOfferSnapshot(
@@ -861,6 +860,38 @@ class OfferDetailsRpcControllerTest {
     assertThat(request.pickupLocation()).isEqualTo("Updated pickup");
     assertThat(request.offerCondition()).isEqualTo("Updated condition");
     assertThat(request.offerVolume()).isEqualTo(55.5d);
+  }
+
+  @Test
+  void updateOfferLegacyShouldRejectScopedWithdrawalWhenTheScheduleDeadlineCannotBeResolved() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(false);
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offerDetails"))
+        .thenReturn(true);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    when(offerWithdrawalPolicy.canWithdraw(1000456L)).thenReturn(false);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("offerWithdrawalDate", LexisBusinessTime.today().toString());
+    params.add("withdrawReason", "Withdrawn by buyer");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("The offer is no longer eligible for withdrawal.");
+    verify(purchaseOfferService, never())
+        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
   }
 
   @Test

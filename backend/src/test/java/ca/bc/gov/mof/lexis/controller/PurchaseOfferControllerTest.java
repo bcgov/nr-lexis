@@ -23,6 +23,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.OfferWithdrawalPolicy;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
@@ -57,6 +58,7 @@ class PurchaseOfferControllerTest {
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private ApplicationEditLockService editLockService;
+  @Mock private OfferWithdrawalPolicy offerWithdrawalPolicy;
   @Mock private Authentication authentication;
 
   private PurchaseOfferController controller;
@@ -71,7 +73,8 @@ class PurchaseOfferControllerTest {
             applicationService,
             applicationDetailsServiceProvider,
             provincialAuthorizationService,
-            editLockService);
+            editLockService,
+            offerWithdrawalPolicy);
     lenient()
         .when(
             provincialAuthorizationService.constrainOrgUnits(
@@ -437,6 +440,26 @@ class PurchaseOfferControllerTest {
     assertThat(response.getBody().offerRemark()).isNull();
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void detailShouldAllowScopedOfferingClientToWithdrawThroughTheScheduleDeadline() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    when(offerWithdrawalPolicy.canWithdraw(1000456L)).thenReturn(true);
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().canEditWithdrawFields()).isTrue();
+    verify(offerWithdrawalPolicy).canWithdraw(1000456L);
   }
 
   @Test
