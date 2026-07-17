@@ -335,33 +335,6 @@ const fetchPackageList = async (permitNumber: string, blanketOic: boolean): Prom
   }
 }
 
-const fetchApplicationList = async (permitNumber: string): Promise<string[]> => {
-  const path = '/lexis/rpc/permit-details/application-list'
-  try {
-    const response = await apiService.getCachedResponse<unknown>(
-      path,
-      {
-        params: {
-          permitNumber,
-        },
-      },
-      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
-    )
-    if (response.status === 204) {
-      throw new Error(`Permit application list service unavailable at ${path}`)
-    }
-
-    const objectPayload = recordOrEmpty(response.data)
-    if (!Array.isArray(objectPayload.applicationList)) {
-      throw new Error(`Invalid application list response from ${path}`)
-    }
-
-    return objectPayload.applicationList.map(asString).filter(Boolean)
-  } catch (error) {
-    throw toSearchServiceError(`Unable to load permit application list from ${path}.`, error)
-  }
-}
-
 const normalizePackageInfoRow = (
   packageNumber: string,
   payload: unknown,
@@ -402,112 +375,84 @@ const normalizePackageDetailsFields = (
   }
 }
 
-const fetchPackageDetails = async (
-  packageNumber: string,
-  permitNumber: string,
-): Promise<
-  Pick<
-    ProvincialPermitPackageInfoRow,
-    'currentPackageVolume' | 'status' | 'reprocessed' | 'comments' | 'ageClass'
-  >
-> => {
-  const path = '/lexis/rpc/permit-details/package-details'
-  try {
-    const response = await apiService.getCachedResponse<unknown>(
-      path,
-      {
-        params: {
-          packageNumber,
-          permitNumber,
-        },
-      },
-      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
-    )
-    if (response.status === 204) {
-      throw new Error(`Permit package details service unavailable at ${path}`)
-    }
-
-    return normalizePackageDetailsFields(response.data)
-  } catch (error) {
-    throw toSearchServiceError(`Unable to load permit package details from ${path}.`, error)
-  }
+type ProvincialPermitCoreTabs = Pick<
+  ProvincialPermitDetailTabsData,
+  'applications' | 'packages' | 'items'
+> & {
+  packageNumbers: string[]
 }
 
-const fetchPackageInfo = async (
-  packageNumber: string,
-  blanketOic: boolean,
+const fetchCoreTabs = async (
   permitNumber: string,
-): Promise<ProvincialPermitPackageInfoRow> => {
-  const path = '/lexis/rpc/permit-details/package-info'
+  blanketOic: boolean,
+): Promise<ProvincialPermitCoreTabs> => {
+  const path = '/lexis/rpc/permit-details/core-tabs'
   try {
     const response = await apiService.getCachedResponse<unknown>(
       path,
       {
         params: {
-          packageNumber,
           permitNumber,
+          blanketOic,
         },
       },
       { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
     )
     if (response.status === 204) {
-      throw new Error(`Permit package information service unavailable at ${path}`)
+      throw new Error(`Permit core tab service unavailable at ${path}`)
     }
 
-    const packageInfo = normalizePackageInfoRow(packageNumber, response.data)
-    if (!blanketOic) {
-      return packageInfo
+    const payload = recordOrEmpty(response.data)
+    if (!Array.isArray(payload.applicationList) || !Array.isArray(payload.packageList)) {
+      throw new Error(`Invalid core tab response from ${path}`)
     }
 
-    const packageDetails = await fetchPackageDetails(packageNumber, permitNumber)
+    const corePackages = payload.packageList.map((entry, packageIndex) => {
+      const corePackage = recordOrEmpty(entry)
+      const packageNumber = asString(corePackage.packageNumber)
+      if (
+        !packageNumber ||
+        !isRecord(corePackage.packageInfo) ||
+        !Array.isArray(corePackage.scaleList)
+      ) {
+        throw new Error(`Invalid package data at index ${packageIndex} from ${path}`)
+      }
+      if (blanketOic && !isRecord(corePackage.packageDetails)) {
+        throw new Error(`Invalid Blanket OIC package data at index ${packageIndex} from ${path}`)
+      }
+
+      const packageInfo = normalizePackageInfoRow(packageNumber, corePackage.packageInfo)
+      const packageDetails = blanketOic
+        ? normalizePackageDetailsFields(corePackage.packageDetails)
+        : null
+      const normalizedItems = corePackage.scaleList.map((row, itemIndex) =>
+        normalizePermitItemRow(row, itemIndex, packageNumber, permitNumber),
+      )
+
+      return {
+        packageNumber,
+        package: {
+          ...packageInfo,
+          ageClass: packageDetails?.ageClass || packageInfo.ageClass,
+          currentPackageVolume: packageDetails?.currentPackageVolume || '',
+          status: packageDetails?.status || '',
+          reprocessed: packageDetails?.reprocessed || '',
+          comments: packageDetails?.comments || '',
+        },
+        items: blanketOic
+          ? normalizedItems
+          : normalizedItems.filter((row) => !row.permitNumber || row.includedInPermit),
+      }
+    })
+
     return {
-      ...packageInfo,
-      ageClass: packageDetails.ageClass || packageInfo.ageClass,
-      currentPackageVolume: packageDetails.currentPackageVolume,
-      status: packageDetails.status,
-      reprocessed: packageDetails.reprocessed,
-      comments: packageDetails.comments,
+      applications: payload.applicationList.map(asString).filter(Boolean),
+      packageNumbers: corePackages.map((corePackage) => corePackage.packageNumber),
+      packages: corePackages.map((corePackage) => corePackage.package),
+      items: corePackages.flatMap((corePackage) => corePackage.items),
     }
   } catch (error) {
-    throw toSearchServiceError(`Unable to load permit package information from ${path}.`, error)
-  }
-}
-
-const fetchScaleRows = async (
-  permitNumber: string,
-  packageNumber: string,
-  blanketOic: boolean,
-): Promise<ProvincialPermitItemRow[]> => {
-  const path = '/lexis/rpc/permit-details/scales-for-package'
-  try {
-    const response = await apiService.getCachedResponse<unknown>(
-      path,
-      {
-        params: {
-          packageNumber,
-          permitNumber,
-        },
-      },
-      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
-    )
-    if (response.status === 204) {
-      throw new Error(`Permit scale service unavailable at ${path}`)
-    }
-
-    const rows = parsePayloadArray(response.data, PERMIT_TAB_ARRAY_KEYS)
-    if (!rows) {
-      throw new Error(`Invalid scale list response from ${path}`)
-    }
-
-    const normalizedRows = rows.map((row, index) =>
-      normalizePermitItemRow(row, index, packageNumber, permitNumber),
-    )
-    if (blanketOic) {
-      return normalizedRows
-    }
-    return normalizedRows.filter((row) => !row.permitNumber || row.includedInPermit)
-  } catch (error) {
-    throw toSearchServiceError(`Unable to load permit scales from ${path}.`, error)
+    throw toSearchServiceError(`Unable to load permit core tab data from ${path}.`, error)
   }
 }
 
@@ -595,31 +540,20 @@ const fetchProvincialPermitDetailTabsData = async (
   const blanketOic = !!blanketOicValue
   // GBMS history is optional, but retain concurrent loading for callers that request the full set.
   const gbmsEventsPromise = includeGbms ? fetchGbmsRows(permitNumber, receiptNumber) : null
-  const [applicationList, packageList] = await Promise.all([
-    fetchApplicationList(permitNumber),
-    fetchPackageList(permitNumber, blanketOic),
-  ])
-
-  const [packages, packageScaleRows, packageFeeRows] = await Promise.all([
-    Promise.all(
-      packageList.map((packageNumber) => fetchPackageInfo(packageNumber, blanketOic, permitNumber)),
-    ),
-    Promise.all(
-      packageList.map((packageNumber) => fetchScaleRows(permitNumber, packageNumber, blanketOic)),
-    ),
-    includeFees
-      ? Promise.all(
-          packageList.map((packageNumber) => fetchScaleFeeRows(permitNumber, packageNumber)),
-        )
-      : Promise.resolve<unknown[][]>([]),
-  ])
-  const scaleRows = packageScaleRows.flat()
+  const coreTabs = await fetchCoreTabs(permitNumber, blanketOic)
+  const packageFeeRows = includeFees
+    ? await Promise.all(
+        coreTabs.packageNumbers.map((packageNumber) =>
+          fetchScaleFeeRows(permitNumber, packageNumber),
+        ),
+      )
+    : []
   const feeRows = packageFeeRows.flat()
 
   return {
-    applications: applicationList,
-    packages,
-    items: scaleRows,
+    applications: coreTabs.applications,
+    packages: coreTabs.packages,
+    items: coreTabs.items,
     fees: feeRows.map(normalizeScaleFeeRow),
     gbmsEvents: gbmsEventsPromise ? await gbmsEventsPromise : [],
     oicItems: [],

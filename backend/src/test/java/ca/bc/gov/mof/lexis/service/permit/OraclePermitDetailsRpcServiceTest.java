@@ -22,6 +22,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcRespo
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
@@ -792,6 +793,83 @@ class OraclePermitDetailsRpcServiceTest {
             7000123L, applicationNumber -> applicationNumber == 1000456L);
 
     assertThat(response.applicationList()).containsExactly("1000456");
+  }
+
+  @Test
+  void coreTabsShouldKeepNormalPackageOrderAndFilterScalesForOtherPermits() {
+    service.setPermitCoreTabsExecutor(Runnable::run);
+    when(repository.findPackageNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of(" PKG-200 ", " ", "PKG-100"));
+    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of(1000456L, 1000457L));
+    when(repository.findPackageInfoByPackageNumber("PKG-200")).thenReturn(Optional.empty());
+    when(repository.findPackageInfoByPackageNumber("PKG-100")).thenReturn(Optional.empty());
+    when(repository.findScaleDetailsByPackageNumber("PKG-200"))
+        .thenReturn(
+            List.of(
+                scale("200-current", "TM1", null, null, 1.0d, 1L, "7000123", "PKG-200", null),
+                scale("200-unassigned", "TM2", null, null, 2.0d, 2L, null, "PKG-200", null),
+                scale("200-other", "TM3", null, null, 3.0d, 3L, "7000999", "PKG-200", null)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-100"))
+        .thenReturn(
+            List.of(
+                scale("100-current", "TM4", null, null, 4.0d, 4L, "7000123", "PKG-100", null)));
+
+    PermitCoreTabsRpcResponseDto response =
+        service.getCoreTabs(7000123L, false, applicationNumber -> applicationNumber == 1000456L);
+
+    assertThat(response.applicationList()).containsExactly("1000456");
+    assertThat(response.packageList())
+        .extracting(corePackage -> corePackage.packageNumber())
+        .containsExactly("PKG-200", "PKG-100");
+    assertThat(response.packageList().get(0).packageDetails()).isNull();
+    assertThat(response.packageList().get(0).scaleList())
+        .extracting(scale -> scale.id())
+        .containsExactly("200-current", "200-unassigned");
+    assertThat(response.packageList().get(1).scaleList())
+        .extracting(scale -> scale.id())
+        .containsExactly("100-current");
+    verify(repository).findPackageNumbersByPermitNumberRequired(7000123L);
+    verify(repository, never()).findPackageNumbersByOicPermitNumber(7000123L);
+    verify(repository, never()).findPackageDetailsByPackageNumberRequired(any());
+  }
+
+  @Test
+  void coreTabsShouldUseOicPackagesAndRetainAllOfTheirScaleRows() {
+    service.setPermitCoreTabsExecutor(Runnable::run);
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L))
+        .thenReturn(List.of("PKG-OIC-2", "PKG-OIC-1"));
+    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of(1000456L));
+    when(repository.findPackageInfoByPackageNumber("PKG-OIC-2")).thenReturn(Optional.empty());
+    when(repository.findPackageInfoByPackageNumber("PKG-OIC-1")).thenReturn(Optional.empty());
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-OIC-2"))
+        .thenReturn(Optional.empty());
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-OIC-1"))
+        .thenReturn(Optional.empty());
+    when(repository.findScaleDetailsByPackageNumber("PKG-OIC-2"))
+        .thenReturn(
+            List.of(
+                scale("oic-other", "TM1", null, null, 1.0d, 1L, "7000999", "PKG-OIC-2", null)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-OIC-1"))
+        .thenReturn(
+            List.of(
+                scale("oic-current", "TM2", null, null, 2.0d, 2L, "7000123", "PKG-OIC-1", null)));
+
+    PermitCoreTabsRpcResponseDto response =
+        service.getCoreTabs(7000123L, true, ignored -> true);
+
+    assertThat(response.applicationList()).containsExactly("1000456");
+    assertThat(response.packageList())
+        .extracting(corePackage -> corePackage.packageNumber())
+        .containsExactly("PKG-OIC-2", "PKG-OIC-1");
+    assertThat(response.packageList())
+        .allSatisfy(corePackage -> assertThat(corePackage.packageDetails().success()).isFalse());
+    assertThat(response.packageList().get(0).scaleList())
+        .extracting(scale -> scale.id())
+        .containsExactly("oic-other");
+    verify(repository).findPackageNumbersByOicPermitNumber(7000123L);
+    verify(repository, never()).findPackageNumbersByPermitNumberRequired(7000123L);
   }
 
   @Test

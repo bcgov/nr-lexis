@@ -50,6 +50,7 @@ class PermitRpcRepositoryTest {
         .queryForObject(
             sql.capture(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L));
     assertThat(sql.getValue())
+        .contains("WHEN EXISTS")
         .contains("FROM EXPORT_PACKAGE P")
         .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
         .contains("LEFT JOIN EXPORT_PERMIT_DETAIL EPD")

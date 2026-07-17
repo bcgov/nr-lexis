@@ -60,52 +60,52 @@ describe('provincial permit detail services', () => {
   it('loads permit detail tab rows from permit RPC endpoints', async () => {
     getCachedResponseMock.mockImplementation((path: string) => {
       switch (path) {
-        case '/lexis/rpc/permit-details/application-list':
-          return Promise.resolve(response({ applicationList: ['1000456'] }))
-        case '/lexis/rpc/permit-details/package-list':
-          return Promise.resolve(response({ packageList: ['PKG-100'] }))
-        case '/lexis/rpc/permit-details/package-info':
+        case '/lexis/rpc/permit-details/core-tabs':
           return Promise.resolve(
             response({
-              region: 'Coast',
-              enduse: 'FI/PL',
-              ageclass: 'Second growth',
-              volume: '34.5',
-              length: '7.1',
-              diameter: '16.2',
-              productType: 'Unmanufactured',
-            }),
-          )
-        case '/lexis/rpc/permit-details/scales-for-package':
-          return Promise.resolve(
-            response({
-              scaleList: [
+              applicationList: ['1000456'],
+              packageList: [
                 {
-                  id: 'SCALE-1',
-                  timbermark: 'TM-1',
-                  species: 'Fir',
-                  grade: 'A',
-                  pieces: 12,
-                  volume: '34.5',
-                  permit: 'P-777',
-                },
-                {
-                  id: 'SCALE-2',
-                  timbermark: 'TM-2',
-                  species: 'Cedar',
-                  grade: 'B',
-                  pieces: 4,
-                  volume: '8.5',
-                  permit: '',
-                },
-                {
-                  id: 'SCALE-OTHER',
-                  timbermark: 'TM-OTHER',
-                  species: 'Spruce',
-                  grade: 'C',
-                  pieces: 2,
-                  volume: '2.5',
-                  permit: 'P-999',
+                  packageNumber: 'PKG-100',
+                  packageInfo: {
+                    region: 'Coast',
+                    enduse: 'FI/PL',
+                    ageclass: 'Second growth',
+                    volume: '34.5',
+                    length: '7.1',
+                    diameter: '16.2',
+                    productType: 'Unmanufactured',
+                  },
+                  packageDetails: null,
+                  scaleList: [
+                    {
+                      id: 'SCALE-1',
+                      timbermark: 'TM-1',
+                      species: 'Fir',
+                      grade: 'A',
+                      pieces: 12,
+                      volume: '34.5',
+                      permit: 'P-777',
+                    },
+                    {
+                      id: 'SCALE-2',
+                      timbermark: 'TM-2',
+                      species: 'Cedar',
+                      grade: 'B',
+                      pieces: 4,
+                      volume: '8.5',
+                      permit: '',
+                    },
+                    {
+                      id: 'SCALE-OTHER',
+                      timbermark: 'TM-OTHER',
+                      species: 'Spruce',
+                      grade: 'C',
+                      pieces: 2,
+                      volume: '2.5',
+                      permit: 'P-999',
+                    },
+                  ],
                 },
               ],
             }),
@@ -150,25 +150,10 @@ describe('provincial permit detail services', () => {
       receiptNumber: 'RCPT-1',
     })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(6)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(3)
     expect(getCachedResponseMock).toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/application-list',
-      { params: { permitNumber: 'P-777' } },
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/package-list',
-      { params: { permitNumber: 'P-777' } },
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/package-info',
-      { params: { packageNumber: 'PKG-100', permitNumber: 'P-777' } },
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/scales-for-package',
-      { params: { packageNumber: 'PKG-100', permitNumber: 'P-777' } },
+      '/lexis/rpc/permit-details/core-tabs',
+      { params: { permitNumber: 'P-777', blanketOic: false } },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenCalledWith(
@@ -266,19 +251,27 @@ describe('provincial permit detail services', () => {
   })
 
   it('loads optional GBMS history while package data is still loading', async () => {
-    let resolvePackageInfo: (() => void) | undefined
+    let resolveCoreTabs: (() => void) | undefined
     getCachedResponseMock.mockImplementation((path: string) => {
-      if (path === '/lexis/rpc/permit-details/package-info') {
+      if (path === '/lexis/rpc/permit-details/core-tabs') {
         return new Promise((resolve) => {
-          resolvePackageInfo = () => resolve(response({ region: 'Coast', volume: '12.5' }))
+          resolveCoreTabs = () =>
+            resolve(
+              response({
+                applicationList: ['1000456'],
+                packageList: [
+                  {
+                    packageNumber: 'PKG-100',
+                    packageInfo: { region: 'Coast', volume: '12.5' },
+                    packageDetails: null,
+                    scaleList: [],
+                  },
+                ],
+              }),
+            )
         })
       }
       switch (path) {
-        case '/lexis/rpc/permit-details/application-list':
-          return Promise.resolve(response({ applicationList: ['1000456'] }))
-        case '/lexis/rpc/permit-details/package-list':
-          return Promise.resolve(response({ packageList: ['PKG-100'] }))
-        case '/lexis/rpc/permit-details/scales-for-package':
         case '/lexis/rpc/permit-details/scale-fees-for-package':
           return Promise.resolve(response({ scaleList: [] }))
         case '/lexis/rpc/permit-details/gbms-invoice-history':
@@ -293,7 +286,7 @@ describe('provincial permit detail services', () => {
       receiptNumber: 'RCPT-1',
     })
 
-    await vi.waitFor(() => expect(resolvePackageInfo).toBeTypeOf('function'))
+    await vi.waitFor(() => expect(resolveCoreTabs).toBeTypeOf('function'))
     expect(getCachedResponseMock).toHaveBeenCalledWith(
       '/lexis/rpc/permit-details/gbms-invoice-history',
       {
@@ -305,7 +298,7 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
 
-    resolvePackageInfo?.()
+    resolveCoreTabs?.()
     await expect(result).resolves.toEqual(
       expect.objectContaining({ applications: ['1000456'], gbmsEvents: [] }),
     )
@@ -314,14 +307,20 @@ describe('provincial permit detail services', () => {
   it('loads core permit tabs without requesting fee or GBMS rows, then defers each request', async () => {
     getCachedResponseMock.mockImplementation((path: string) => {
       switch (path) {
-        case '/lexis/rpc/permit-details/application-list':
-          return Promise.resolve(response({ applicationList: ['1000456'] }))
-        case '/lexis/rpc/permit-details/package-list':
-          return Promise.resolve(response({ packageList: ['PKG-100'] }))
-        case '/lexis/rpc/permit-details/package-info':
-          return Promise.resolve(response({ region: 'Coast' }))
-        case '/lexis/rpc/permit-details/scales-for-package':
-          return Promise.resolve(response({ scaleList: [] }))
+        case '/lexis/rpc/permit-details/core-tabs':
+          return Promise.resolve(
+            response({
+              applicationList: ['1000456'],
+              packageList: [
+                {
+                  packageNumber: 'PKG-100',
+                  packageInfo: { region: 'Coast' },
+                  packageDetails: null,
+                  scaleList: [],
+                },
+              ],
+            }),
+          )
         case '/lexis/rpc/permit-details/gbms-invoice-history':
           return Promise.resolve(response([]))
         case '/lexis/rpc/permit-details/scale-fees-for-package':
@@ -351,6 +350,11 @@ describe('provincial permit detail services', () => {
     })
 
     expect(core.fees).toEqual([])
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/permit-details/core-tabs',
+      { params: { permitNumber: 'P-777', blanketOic: false } },
+      { ttlMs: 30_000 },
+    )
     expect(getCachedResponseMock).not.toHaveBeenCalledWith(
       '/lexis/rpc/permit-details/scale-fees-for-package',
       expect.anything(),
@@ -402,96 +406,83 @@ describe('provincial permit detail services', () => {
     )
   })
 
-  it('loads Blanket OIC package rows from the legacy OIC permit endpoints', async () => {
-    getCachedResponseMock
-      .mockResolvedValueOnce(response({ applicationList: [] }))
-      .mockResolvedValueOnce(response({ packageList: ['BOIC-100'] }))
-      .mockResolvedValueOnce(
-        response({
-          region: 'Coast',
-          enduse: 'HE/PL',
-          ageclass: 'Old growth',
-          volume: '40.0',
-          length: '7.5',
-          diameter: '18.0',
-          productType: 'Unmanufactured',
-        }),
-      )
-      .mockResolvedValueOnce(
-        response({
-          scaleList: [
-            {
-              id: 'OIC-SCALE-1',
-              timbermark: 'TM-OIC',
-              species: 'Hemlock',
-              grade: 'B',
-              pieces: 5,
-              volume: '12.5',
-            },
-          ],
-        }),
-      )
-      .mockResolvedValueOnce(
-        response({
-          scaleList: [
-            {
-              id: 'OIC-FEE-1',
-              timbermark: 'TM-OIC',
-              species: 'Hemlock',
-              grade: 'B',
-              amv: '$80.00',
-              volume: '12.5',
-              ministryUser: false,
-              fil: '10%',
-              mf: '2.0',
-              fee: '$10.50',
-            },
-          ],
-        }),
-      )
-      .mockResolvedValueOnce(
-        response({
-          volume: '38.5',
-          status: 'APP',
-          statusDesc: 'Approved',
-          reprocessed: 'N',
-          comments: 'Current OIC package',
-          ageClass: 'Second growth',
-        }),
-      )
+  it('loads Blanket OIC package rows from the aggregate permit endpoint', async () => {
+    getCachedResponseMock.mockImplementation((path: string) => {
+      switch (path) {
+        case '/lexis/rpc/permit-details/core-tabs':
+          return Promise.resolve(
+            response({
+              applicationList: [],
+              packageList: [
+                {
+                  packageNumber: 'BOIC-100',
+                  packageInfo: {
+                    region: 'Coast',
+                    enduse: 'HE/PL',
+                    ageclass: 'Old growth',
+                    volume: '40.0',
+                    length: '7.5',
+                    diameter: '18.0',
+                    productType: 'Unmanufactured',
+                  },
+                  packageDetails: {
+                    volume: '38.5',
+                    status: 'APP',
+                    statusDesc: 'Approved',
+                    reprocessed: 'N',
+                    comments: 'Current OIC package',
+                    ageClass: 'Second growth',
+                  },
+                  scaleList: [
+                    {
+                      id: 'OIC-SCALE-1',
+                      timbermark: 'TM-OIC',
+                      species: 'Hemlock',
+                      grade: 'B',
+                      pieces: 5,
+                      volume: '12.5',
+                    },
+                  ],
+                },
+              ],
+            }),
+          )
+        case '/lexis/rpc/permit-details/scale-fees-for-package':
+          return Promise.resolve(
+            response({
+              scaleList: [
+                {
+                  id: 'OIC-FEE-1',
+                  timbermark: 'TM-OIC',
+                  species: 'Hemlock',
+                  grade: 'B',
+                  amv: '$80.00',
+                  volume: '12.5',
+                  ministryUser: false,
+                  fil: '10%',
+                  mf: '2.0',
+                  fee: '$10.50',
+                },
+              ],
+            }),
+          )
+        default:
+          return Promise.reject(new Error(`Unexpected request ${path}`))
+      }
+    })
 
     const result = await fetchProvincialPermitDetailTabs({
       permitNumber: 'P-888',
       blanketOic: true,
     })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(6)
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      1,
-      '/lexis/rpc/permit-details/application-list',
-      { params: { permitNumber: 'P-888' } },
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(2)
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/permit-details/core-tabs',
+      { params: { permitNumber: 'P-888', blanketOic: true } },
       { ttlMs: 30_000 },
     )
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      2,
-      '/lexis/rpc/permit-details/oic-package-list',
-      { params: { permitNumber: 'P-888' } },
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      3,
-      '/lexis/rpc/permit-details/package-info',
-      { params: { packageNumber: 'BOIC-100', permitNumber: 'P-888' } },
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      4,
-      '/lexis/rpc/permit-details/scales-for-package',
-      { params: { packageNumber: 'BOIC-100', permitNumber: 'P-888' } },
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      5,
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
       '/lexis/rpc/permit-details/scale-fees-for-package',
       {
         params: {
@@ -499,12 +490,6 @@ describe('provincial permit detail services', () => {
           permitNumber: 'P-888',
         },
       },
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      6,
-      '/lexis/rpc/permit-details/package-details',
-      { params: { packageNumber: 'BOIC-100', permitNumber: 'P-888' } },
       { ttlMs: 30_000 },
     )
     expect(result.packages).toEqual([
@@ -555,18 +540,20 @@ describe('provincial permit detail services', () => {
     ])
   })
 
-  const requiredPermitTabResponse = (path: string) => {
+  const requiredPermitTabResponse = (path: string, blanketOic = false) => {
     switch (path) {
-      case '/lexis/rpc/permit-details/application-list':
-        return response({ applicationList: ['1000456'] })
-      case '/lexis/rpc/permit-details/package-list':
-      case '/lexis/rpc/permit-details/oic-package-list':
-        return response({ packageList: ['PKG-100'] })
-      case '/lexis/rpc/permit-details/package-info':
-        return response({ region: 'Coast', volume: '12.5' })
-      case '/lexis/rpc/permit-details/package-details':
-        return response({ status: 'ACT', volume: '12.5' })
-      case '/lexis/rpc/permit-details/scales-for-package':
+      case '/lexis/rpc/permit-details/core-tabs':
+        return response({
+          applicationList: ['1000456'],
+          packageList: [
+            {
+              packageNumber: 'PKG-100',
+              packageInfo: { region: 'Coast', volume: '12.5' },
+              packageDetails: blanketOic ? { status: 'ACT', volume: '12.5' } : null,
+              scaleList: [],
+            },
+          ],
+        })
       case '/lexis/rpc/permit-details/scale-fees-for-package':
         return response({ scaleList: [] })
       case '/lexis/rpc/permit-details/gbms-invoice-history':
@@ -578,28 +565,8 @@ describe('provincial permit detail services', () => {
 
   const requiredPermitTabDependencies = [
     {
-      label: 'application list',
-      path: '/lexis/rpc/permit-details/application-list',
-      blanketOic: false,
-    },
-    {
-      label: 'package list',
-      path: '/lexis/rpc/permit-details/package-list',
-      blanketOic: false,
-    },
-    {
-      label: 'package information',
-      path: '/lexis/rpc/permit-details/package-info',
-      blanketOic: false,
-    },
-    {
-      label: 'package details',
-      path: '/lexis/rpc/permit-details/package-details',
-      blanketOic: true,
-    },
-    {
-      label: 'scale list',
-      path: '/lexis/rpc/permit-details/scales-for-package',
+      label: 'core tab data',
+      path: '/lexis/rpc/permit-details/core-tabs',
       blanketOic: false,
     },
     {
@@ -616,7 +583,7 @@ describe('provincial permit detail services', () => {
         if (path === testCase.path) {
           return Promise.reject(new Error(`${testCase.label} unavailable`))
         }
-        return Promise.resolve(requiredPermitTabResponse(path))
+        return Promise.resolve(requiredPermitTabResponse(path, testCase.blanketOic))
       })
 
       await expect(
@@ -633,7 +600,9 @@ describe('provincial permit detail services', () => {
     async (testCase) => {
       getCachedResponseMock.mockImplementation((path: string) =>
         Promise.resolve(
-          path === testCase.path ? response(undefined, 204) : requiredPermitTabResponse(path),
+          path === testCase.path
+            ? response(undefined, 204)
+            : requiredPermitTabResponse(path, testCase.blanketOic),
         ),
       )
 
@@ -647,9 +616,7 @@ describe('provincial permit detail services', () => {
   )
 
   it.each([
-    '/lexis/rpc/permit-details/application-list',
-    '/lexis/rpc/permit-details/package-list',
-    '/lexis/rpc/permit-details/scales-for-package',
+    '/lexis/rpc/permit-details/core-tabs',
     '/lexis/rpc/permit-details/scale-fees-for-package',
   ])('rejects malformed required permit tab data from %s', async (malformedPath) => {
     getCachedResponseMock.mockImplementation((path: string) => {
@@ -659,6 +626,45 @@ describe('provincial permit detail services', () => {
     })
 
     await expect(fetchProvincialPermitDetailTabs('P-777')).rejects.toThrow('Invalid')
+  })
+
+  it('rejects malformed aggregate package data', async () => {
+    getCachedResponseMock.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === '/lexis/rpc/permit-details/core-tabs'
+          ? response({
+              applicationList: ['1000456'],
+              packageList: [{ packageNumber: 'PKG-100', packageInfo: {}, scaleList: null }],
+            })
+          : requiredPermitTabResponse(path),
+      ),
+    )
+
+    await expect(fetchProvincialPermitDetailTabs('P-777')).rejects.toThrow('Invalid package data')
+  })
+
+  it('rejects a missing Blanket OIC package detail', async () => {
+    getCachedResponseMock.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === '/lexis/rpc/permit-details/core-tabs'
+          ? response({
+              applicationList: [],
+              packageList: [
+                {
+                  packageNumber: 'PKG-100',
+                  packageInfo: {},
+                  packageDetails: null,
+                  scaleList: [],
+                },
+              ],
+            })
+          : requiredPermitTabResponse(path, true),
+      ),
+    )
+
+    await expect(
+      fetchProvincialPermitDetailTabs({ permitNumber: 'P-777', blanketOic: true }),
+    ).rejects.toThrow('Invalid Blanket OIC package data')
   })
 
   it.each([

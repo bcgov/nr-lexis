@@ -18,6 +18,8 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseD
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCorePackageRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
@@ -89,13 +91,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataRetrievalFailureException;
+import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -165,6 +173,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private final ProvincialPermitMutationValidator permitMutationValidator;
   private final ObjectProvider<PermitInvoiceOrchestrationService>
       permitInvoiceOrchestrationServiceProvider;
+  private Executor permitCoreTabsExecutor = new SyncTaskExecutor();
 
   public OraclePermitDetailsRpcService(
       PermitRpcRepository repository,
@@ -189,6 +198,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         permitInvoiceOrchestrationServiceProvider;
     this.permitMutationValidator =
         new ProvincialPermitMutationValidator(repository, clientLookupService);
+  }
+
+  @Autowired
+  void setPermitCoreTabsExecutor(
+      @Qualifier("oracleLegacyDynamicFetchExecutor") Executor permitCoreTabsExecutor) {
+    this.permitCoreTabsExecutor = permitCoreTabsExecutor;
   }
 
   @Override
@@ -765,6 +780,73 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .map(String::valueOf)
             .toList();
     return new PermitApplicationListRpcResponseDto(applications);
+  }
+
+  @Override
+  public PermitCoreTabsRpcResponseDto getCoreTabs(
+      Long permitNumber, boolean blanketOic, Predicate<Long> applicationAccess) {
+    if (permitNumber == null || permitNumber < 1) {
+      return new PermitCoreTabsRpcResponseDto(List.of(), List.of());
+    }
+
+    List<String> packageNumbers =
+        (blanketOic
+                ? repository.findPackageNumbersByOicPermitNumber(permitNumber)
+                : repository.findPackageNumbersByPermitNumberRequired(permitNumber))
+            .stream()
+            .map(TextUtils::trimToNull)
+            .filter(java.util.Objects::nonNull)
+            .toList();
+    List<String> applicationList = getApplicationList(permitNumber, applicationAccess).applicationList();
+
+    return new PermitCoreTabsRpcResponseDto(
+        applicationList,
+        loadCorePackages(permitNumber, blanketOic, packageNumbers));
+  }
+
+  private List<PermitCorePackageRpcResponseDto> loadCorePackages(
+      Long permitNumber, boolean blanketOic, List<String> packageNumbers) {
+    List<PermitCorePackageRpcResponseDto> packages = new ArrayList<>(packageNumbers.size());
+    for (int startIndex = 0; startIndex < packageNumbers.size(); startIndex += 4) {
+      int endIndex = Math.min(startIndex + 4, packageNumbers.size());
+      List<CompletableFuture<PermitCorePackageRpcResponseDto>> futures =
+          packageNumbers.subList(startIndex, endIndex).stream()
+              .map(
+                  packageNumber ->
+                      CompletableFuture.supplyAsync(
+                          () -> buildCorePackage(permitNumber, blanketOic, packageNumber),
+                          permitCoreTabsExecutor))
+              .toList();
+      try {
+        packages.addAll(futures.stream().map(CompletableFuture::join).toList());
+      } catch (CompletionException exception) {
+        if (exception.getCause() instanceof RuntimeException runtimeException) {
+          throw runtimeException;
+        }
+        throw exception;
+      }
+    }
+    return packages;
+  }
+
+  private PermitCorePackageRpcResponseDto buildCorePackage(
+      Long permitNumber, boolean blanketOic, String packageNumber) {
+    PermitPackageInfoRpcResponseDto packageInfo = getPackageInfo(packageNumber);
+    PermitPackageDetailsRpcResponseDto packageDetails =
+        blanketOic ? getPackageDetails(packageNumber) : null;
+    String permitNumberString = permitNumber.toString();
+    List<PermitScaleItemRpcResponseDto> scaleList = getScalesForPackage(packageNumber).scaleList();
+    if (!blanketOic) {
+      scaleList =
+          scaleList.stream()
+              .filter(
+                  scale -> {
+                    String scalePermitNumber = trimToNull(scale.permit());
+                    return scalePermitNumber == null || permitNumberString.equals(scalePermitNumber);
+                  })
+              .toList();
+    }
+    return new PermitCorePackageRpcResponseDto(packageNumber, packageInfo, packageDetails, scaleList);
   }
 
   @Override
