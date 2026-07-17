@@ -464,6 +464,21 @@ describe('Layout shell', () => {
     )
   })
 
+  it('dismisses the profile panel when clicking outside it', async () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    const profileToggle = screen.getByRole('button', { name: 'Open profile panel' })
+    await userEvent.click(profileToggle)
+
+    expect(profileToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('dialog', { name: 'Profile' })).toHaveClass('is-open')
+
+    await userEvent.click(screen.getByRole('heading', { name: 'Current page content' }))
+
+    expect(profileToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('dialog', { name: 'Profile' })).not.toHaveClass('is-open')
+  })
+
   it('keeps the persisted desktop preference separate from the closed mobile drawer', async () => {
     mockMobileViewport()
     window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'true')

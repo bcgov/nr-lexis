@@ -492,8 +492,24 @@ function Layout({ children }: LayoutProps) {
       }
     }
 
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) {
+        return
+      }
+
+      const profilePanel = document.getElementById('profile-panel')
+      const profileToggle = document.getElementById('profile-panel-toggle')
+      if (!profilePanel?.contains(event.target) && !profileToggle?.contains(event.target)) {
+        setIsProfileOpen(false)
+      }
+    }
+
     document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('pointerdown', handlePointerDown)
+    }
   }, [isProfileOpen])
 
   useEffect(() => {
@@ -568,6 +584,7 @@ function Layout({ children }: LayoutProps) {
             </div>
 
             <IconButton
+              id="profile-panel-toggle"
               align="bottom-right"
               className="csp-header-action"
               kind="ghost"
