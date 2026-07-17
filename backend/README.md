@@ -100,7 +100,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | OpenShift template default `10s` |
 | `LEXIS_MAIL_NON_PRODUCTION` | Derived from the deployment environment |
 | `LEXIS_MAIL_ENVIRONMENT` | Workflow input `environment` |
-| `LEXIS_MAIL_FROM` | Variable `LEXIS_MAIL_FROM` |
+| `LEXIS_MAIL_FROM` | Secret `LEXIS_MAIL_FROM` |
 | `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Secret `LEXIS_MAIL_OVERRIDE_RECIPIENTS` |
 | `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RCO_RECIPIENTS` |
 | `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RNI_RECIPIENTS` |
