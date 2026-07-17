@@ -518,6 +518,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it('renders permit details, client contacts, and invoice history', async () => {
     configureActivePermit()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      gbmsEvents: [
+        {
+          id: 'GBMS-1',
+          eventDate: '2026-05-02',
+          eventType: 'Invoice created',
+          status: 'ACT',
+          reference: 'GBMS-1001',
+          notes: 'Invoice accepted',
+        },
+      ],
+    })
     mockedFetchPermitInvoices.mockResolvedValue({
       rows: [
         {
@@ -631,6 +644,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('agent@example.test')).toBeInTheDocument()
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '01')
+    await selectPermitDetailTab('GBMS')
+    expect(
+      await screen.findByRole('heading', {
+        name: 'General Billing Management System events',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'GBMS-1001' })).toBeInTheDocument()
     await selectPermitDetailTab('Invoices')
     expect(await screen.findByText('INV-001')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
@@ -1070,10 +1090,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByRole('heading', { name: 'No fee details available', level: 3 }),
     ).toBeInTheDocument()
 
-    await selectPermitDetailTab('GBMS')
-    expect(
-      await screen.findByRole('heading', { name: 'No billing events available', level: 3 }),
-    ).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Documents')
     expect(
@@ -1084,6 +1101,26 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       await screen.findByRole('heading', { name: 'No invoices available', level: 3 }),
     ).toBeInTheDocument()
+  })
+
+  it('hides absent agent and GBMS tabs while keeping later panels aligned', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      applicantClientNumber: null,
+      agentClientLocationCode: null,
+    })
+
+    renderPermitDetails()
+
+    expect(await screen.findByRole('tab', { name: 'Permit' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
+
+    await selectPermitDetailTab('Documents')
+    expect(await screen.findByRole('heading', { name: 'Permit documents' })).toBeInTheDocument()
+
+    await selectPermitDetailTab('Invoices')
+    expect(await screen.findByRole('heading', { name: 'Invoices' })).toBeInTheDocument()
   })
 
   it('does not present document and invoice lookup failures as empty collections', async () => {

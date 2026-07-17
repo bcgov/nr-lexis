@@ -176,17 +176,19 @@ const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
   'portOfExport',
   'otherPortOfExport',
 ])
-const PERMIT_DETAIL_TAB_INDEX = {
-  permit: 0,
-  owner: 1,
-  agent: 2,
-  shipping: 3,
-  items: 4,
-  fees: 5,
-  gbms: 6,
-  documents: 7,
-  invoices: 8,
-} as const
+const PERMIT_DETAIL_TABS = [
+  { id: 'permit', label: 'Permit' },
+  { id: 'owner', label: 'Owner' },
+  { id: 'agent', label: 'Agent' },
+  { id: 'shipping', label: 'Shipping' },
+  { id: 'items', label: 'Items' },
+  { id: 'fees', label: 'Fees' },
+  { id: 'gbms', label: 'GBMS' },
+  { id: 'documents', label: 'Documents' },
+  { id: 'invoices', label: 'Invoices' },
+] as const
+
+type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
 
 const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
   packageNumber: '',
@@ -545,9 +547,7 @@ const ProvincialPermitDetailsPage = () => {
   const [invoiceDocumentUploadDirty, setInvoiceDocumentUploadDirty] = useState(false)
   const [invoiceDocumentUploadBusy, setInvoiceDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
-  const [selectedPermitTabIndex, setSelectedPermitTabIndex] = useState<number>(
-    PERMIT_DETAIL_TAB_INDEX.permit,
-  )
+  const [selectedPermitTabId, setSelectedPermitTabId] = useState<PermitDetailTabId>('permit')
   const [touchedPermitFields, setTouchedPermitFields] = useState<
     TouchedFields<PermitDetailFormField>
   >({})
@@ -964,6 +964,24 @@ const ProvincialPermitDetailsPage = () => {
       ),
     )
   }, [gbmsFilter, tabsData])
+
+  const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
+  const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0
+  const availablePermitDetailTabs = useMemo(
+    () =>
+      PERMIT_DETAIL_TABS.filter(
+        ({ id }) => (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
+      ),
+    [hasGbmsHistory, hasPermitAgent],
+  )
+  const effectiveSelectedPermitTabId = availablePermitDetailTabs.some(
+    ({ id }) => id === selectedPermitTabId,
+  )
+    ? selectedPermitTabId
+    : 'permit'
+  const selectedPermitTabIndex = PERMIT_DETAIL_TABS.findIndex(
+    ({ id }) => id === effectiveSelectedPermitTabId,
+  )
 
   const filteredDocumentRows = useMemo(() => {
     return documentRows.filter((row) =>
@@ -2608,7 +2626,12 @@ const ProvincialPermitDetailsPage = () => {
           <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
             <Tabs
               selectedIndex={selectedPermitTabIndex}
-              onChange={({ selectedIndex }) => setSelectedPermitTabIndex(selectedIndex)}
+              onChange={({ selectedIndex }) => {
+                const selectedTab = PERMIT_DETAIL_TABS[selectedIndex]
+                if (selectedTab) {
+                  setSelectedPermitTabId(selectedTab.id)
+                }
+              }}
             >
               <TabList
                 aria-label="Permit detail sections"
@@ -2616,15 +2639,16 @@ const ProvincialPermitDetailsPage = () => {
                 size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
-                <Tab>Permit</Tab>
-                <Tab>Owner</Tab>
-                <Tab>Agent</Tab>
-                <Tab>Shipping</Tab>
-                <Tab>Items</Tab>
-                <Tab>Fees</Tab>
-                <Tab>GBMS</Tab>
-                <Tab>Documents</Tab>
-                <Tab>Invoices</Tab>
+                {PERMIT_DETAIL_TABS.map(({ id, label }) => (
+                  <Tab
+                    key={id}
+                    hidden={
+                      (id === 'agent' && !hasPermitAgent) || (id === 'gbms' && !hasGbmsHistory)
+                    }
+                  >
+                    {label}
+                  </Tab>
+                ))}
               </TabList>
               <TabPanels>
                 <TabPanel className="application-detail-tab-panel">
@@ -4003,16 +4027,8 @@ const ProvincialPermitDetailsPage = () => {
                             </TableFrame>
                           ) : (
                             <EmptyState
-                              title={
-                                (tabsData?.gbmsEvents ?? []).length === 0
-                                  ? 'No billing events available'
-                                  : 'No matching billing events'
-                              }
-                              description={
-                                (tabsData?.gbmsEvents ?? []).length === 0
-                                  ? 'No billing system rows are available for this permit.'
-                                  : 'No billing system rows matched the current filter.'
-                              }
+                              title="No matching billing events"
+                              description="No billing system rows matched the current filter."
                               headingLevel={3}
                             />
                           ))}

@@ -130,6 +130,7 @@ const ProvincialOfferDetailsPage = () => {
       detail.canEditOfferRemarks)
   const canEditOfferDetailFields = isEditing && !offerEditLocked && !!detail?.canEditOfferDetails
   const canEditWithdrawFields = isEditing && !offerEditLocked && !!detail?.canEditWithdrawFields
+  const canEditOfferCondition = canEditOfferDetailFields || canEditWithdrawFields
   const canEditScheduleFields = isEditing && !offerEditLocked && !!detail?.canEditScheduleDates
   const canEditOfferRemarkFields = isEditing && !offerEditLocked && !!detail?.canEditOfferRemarks
   const isOfferDirty = useMemo(
@@ -578,8 +579,8 @@ const ProvincialOfferDetailsPage = () => {
                   id="offerCondition"
                   labelText="Offer conditions / remarks"
                   value={form.offerCondition}
-                  readOnly={!canEditOfferDetailFields}
-                  invalid={canEditOfferDetailFields && !!fieldError('offerCondition')}
+                  readOnly={!canEditOfferCondition}
+                  invalid={canEditOfferCondition && !!fieldError('offerCondition')}
                   invalidText={fieldError('offerCondition')}
                   onBlur={() => markFieldTouched('offerCondition')}
                   onChange={(event) => updateFormField('offerCondition', event.target.value)}

@@ -402,4 +402,39 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeDisabled()
   })
+
+  it('allows withdrawal-only submitters to edit offer comments without broadening other fields', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      canEditScheduleDates: false,
+      canEditOfferRemarks: false,
+      canEditOfferDetails: false,
+      canEditWithdrawFields: true,
+    })
+
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+
+    const offerCondition = screen.getByLabelText('Offer conditions / remarks')
+    expect(offerCondition).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer withdrawal reason')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer amount ($/m³)')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer volume (m³)')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Pickup location')).toHaveAttribute('readonly')
+
+    await userEvent.clear(offerCondition)
+    await userEvent.type(offerCondition, 'Withdraw if loading conditions cannot be met')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerNumber: '81001',
+          offerCondition: 'Withdraw if loading conditions cannot be met',
+        }),
+      )
+    })
+  })
 })
