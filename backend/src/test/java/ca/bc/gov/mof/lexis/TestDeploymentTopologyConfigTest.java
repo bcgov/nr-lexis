@@ -354,7 +354,7 @@ class TestDeploymentTopologyConfigTest {
         "app.openshift.io/redeploy-token: ${ROLLOUT_TRIGGER}";
 
     assertThat(occurrences(workflow, rolloutParameter)).isEqualTo(2);
-    assertThat(occurrences(backendTemplate, rolloutAnnotation)).isEqualTo(2);
+    assertThat(occurrences(backendTemplate, rolloutAnnotation)).isOne();
     assertThat(occurrences(frontendTemplate, rolloutAnnotation)).isOne();
   }
 
