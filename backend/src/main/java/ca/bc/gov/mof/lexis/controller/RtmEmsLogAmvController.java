@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -77,16 +78,28 @@ public class RtmEmsLogAmvController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
-    RtmEmsLogAmvService service = requiredService("save_batch");
-    RtmEmsLogAmvMutationResultDto result = service.saveBatch(values);
-    HttpStatus status = responseStatus(result.status());
-    auditBatch(
-        actor,
-        status,
-        safeAuditToken(result.status(), "unknown"),
-        requestedLogicalCells,
-        result.rows() == null ? 0 : result.rows().size());
-    return ResponseEntity.status(status).body(result);
+    try {
+      RtmEmsLogAmvService service = requiredService("save_batch");
+      RtmEmsLogAmvMutationResultDto result = service.saveBatch(values);
+      HttpStatus status = responseStatus(result.status());
+      auditBatch(
+          actor,
+          status,
+          safeAuditToken(result.status(), "unknown"),
+          requestedLogicalCells,
+          result.rows() == null ? 0 : result.rows().size());
+      return ResponseEntity.status(status).body(result);
+    } catch (RuntimeException exception) {
+      auditBatch(
+          actor,
+          exception instanceof DataAccessException
+              ? HttpStatus.SERVICE_UNAVAILABLE
+              : HttpStatus.INTERNAL_SERVER_ERROR,
+          exception instanceof DataAccessException ? "database_unavailable" : "unexpected_failure",
+          requestedLogicalCells,
+          0);
+      throw exception;
+    }
   }
 
   private HttpStatus responseStatus(String status) {

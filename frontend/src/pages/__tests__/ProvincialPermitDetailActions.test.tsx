@@ -641,6 +641,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(permitFinancialTile as HTMLElement).queryByText('Permit Request Volume (m³)'),
     ).not.toBeInTheDocument()
+    expect(mockedFetchApplicationClientData).not.toHaveBeenCalled()
     await selectPermitDetailTab('Owner')
     expect(await screen.findByText('Owner Co')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()

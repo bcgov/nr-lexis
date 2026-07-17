@@ -495,6 +495,7 @@ const ProvincialPermitDetailsPage = () => {
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [isClientDataLoading, setIsClientDataLoading] = useState(false)
+  const [shouldLoadClientData, setShouldLoadClientData] = useState(false)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
   const [permitForm, setPermitForm] = useState<PermitDetailForm | null>(null)
@@ -656,6 +657,7 @@ const ProvincialPermitDetailsPage = () => {
     setDocumentRows([])
     setInvoiceRows([])
     setSelectedPermitTabId('permit')
+    setShouldLoadClientData(false)
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setHasLoadedAvailablePermitApplications(false)
@@ -902,7 +904,7 @@ const ProvincialPermitDetailsPage = () => {
       setOwnerClientData(null)
       setAgentClientData(null)
 
-      if (!detail) {
+      if (!detail || !shouldLoadClientData) {
         setIsClientDataLoading(false)
         return
       }
@@ -946,7 +948,7 @@ const ProvincialPermitDetailsPage = () => {
     return () => {
       isCancelled = true
     }
-  }, [detail])
+  }, [detail, shouldLoadClientData])
 
   const loadDeferredPermitTab = useCallback(
     async (
@@ -2873,6 +2875,9 @@ const ProvincialPermitDetailsPage = () => {
                 const selectedTab = PERMIT_DETAIL_TABS[selectedIndex]
                 if (selectedTab) {
                   setSelectedPermitTabId(selectedTab.id)
+                  if (selectedTab.id === 'owner' || selectedTab.id === 'agent') {
+                    setShouldLoadClientData(true)
+                  }
                   if (
                     selectedTab.id === 'fees' ||
                     selectedTab.id === 'documents' ||

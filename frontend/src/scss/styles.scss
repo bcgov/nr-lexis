@@ -94,6 +94,7 @@
   --csp-layer-01: #ffffff;
   --csp-layer-02: #f4f4f4;
   --csp-layer-hover: #e8e8e8;
+  --csp-table-row-hover-bg: #dfeaf8;
   --csp-content-bg: #ffffff;
   --csp-border-subtle-01: #e0e0e0;
   --csp-border-strong-01: #8d8d8d;
@@ -209,6 +210,7 @@ body {
   --csp-layer-01: #262626;
   --csp-layer-02: #393939;
   --csp-layer-hover: #474747;
+  --csp-table-row-hover-bg: #1f3d5a;
   --csp-content-bg: #262626;
   --csp-border-subtle-01: #525252;
   --csp-border-strong-01: #6f6f6f;
@@ -1702,7 +1704,7 @@ legend.cds--label {
 
 .cds--g100 .legacy-search-table-frame .cds--data-table tbody tr:hover td,
 .cds--g100 .legacy-search-table-frame .cds--data-table tbody tr:focus-within td {
-  background-color: var(--csp-layer-hover);
+  background-color: var(--csp-table-row-hover-bg);
 }
 
 .legacy-search-table-frame .cds--pagination {
@@ -1864,7 +1866,7 @@ legend.cds--label {
   --fds-border-strong: var(--csp-border-strong-01);
   --fds-interactive: var(--csp-interactive);
   --fds-interactive-hover: var(--csp-link-hover);
-  --fds-interactive-light: var(--csp-layer-hover);
+  --fds-interactive-light: var(--csp-table-row-hover-bg);
   --fds-support-error-bg: var(--cds-notification-background-error, #2c1a1c);
   --fds-support-success-bg: var(--cds-notification-background-success, #1a2a1c);
   --fds-support-info-bg: var(--cds-notification-background-info, #1a2230);
@@ -3123,7 +3125,7 @@ legend.cds--label {
 
 :root[data-carbon-theme='g100'] .rtm-amv-table-wrap .cds--data-table tbody tr:hover > td,
 :root[data-carbon-theme='g100'] .rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td {
-  background: var(--csp-layer-hover);
+  background: var(--csp-table-row-hover-bg);
 }
 
 .rtm-amv-grade-cell {
@@ -4026,7 +4028,36 @@ legend.cds--label {
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:hover th,
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:focus-within td,
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:focus-within th {
-  background: var(--csp-layer-hover);
+  background: var(--csp-table-row-hover-bg);
+}
+
+.rtm-amv-table-wrap .cds--data-table td.rtm-amv-value-cell.has-warning {
+  background: #fff8e1;
+}
+
+.rtm-amv-table-wrap .cds--data-table td.rtm-amv-value-cell.has-error {
+  background: #fff1f1;
+}
+
+:root[data-carbon-theme='g100']
+  .rtm-amv-table-wrap
+  .cds--data-table
+  td.rtm-amv-value-cell.has-warning {
+  background: #3b3300;
+}
+
+:root[data-carbon-theme='g100']
+  .rtm-amv-table-wrap
+  .cds--data-table
+  td.rtm-amv-value-cell.has-error {
+  background: #3d1e21;
+}
+
+.rtm-amv-table-wrap .cds--data-table tbody tr:hover > td.rtm-amv-value-cell.has-warning,
+.rtm-amv-table-wrap .cds--data-table tbody tr:hover > td.rtm-amv-value-cell.has-error,
+.rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td.rtm-amv-value-cell.has-warning,
+.rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td.rtm-amv-value-cell.has-error {
+  background: var(--csp-table-row-hover-bg);
 }
 
 .cds--data-table tbody td,

@@ -201,6 +201,30 @@ class RtmEmsLogAmvControllerTest {
         .contains("writtenPhysicalRows=0");
   }
 
+  @Test
+  void saveBatchShouldAuditDatabaseFailureBeforePropagatingIt() {
+    RtmEmsLogAmvBatchSaveRequestDto request =
+        new RtmEmsLogAmvBatchSaveRequestDto(List.of(request("2026-07-01", "2026-07-01")));
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\rtm-admin");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.saveBatch(request.values()))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+
+    assertThatThrownBy(() -> controller().saveBatch(request, authentication))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+    assertThat(auditAppender.list)
+        .singleElement()
+        .extracting(ILoggingEvent::getFormattedMessage)
+        .asString()
+        .contains("event=lexis_rtm_amv_batch")
+        .contains("actor=idir\\rtm-admin")
+        .contains("status=503")
+        .contains("outcome=database_unavailable")
+        .contains("requestedLogicalCells=1")
+        .contains("writtenPhysicalRows=0");
+  }
+
   private RtmEmsLogAmvSaveRequestDto request(String retrievalDate, String updateDate) {
     return new RtmEmsLogAmvSaveRequestDto(
         "BA", "A", "O", retrievalDate, updateDate, new BigDecimal("10.01"), "update");

@@ -57,10 +57,11 @@ the confirmation that the complete grid submission was accepted.
 
 ## Batch audit event
 
-After the batch service returns, the controller writes one structured
+After the controller resolves a batch outcome, it writes one structured
 `event=lexis_rtm_amv_batch` application audit event. It records the authenticated
 `LexisPrincipalService` identity, a server-generated timestamp, the HTTP status and service
-outcome, requested logical-cell count, and written physical-row count. The request has no actor
+outcome, requested logical-cell count, and written physical-row count. Accepted, rejected,
+identity-rejected, and unexpected database outcomes are all recorded. The request has no actor
 field, so no client-supplied identity is logged or trusted. If a stable identity cannot be
 resolved, the controller logs `identity_rejected`, returns `403 Forbidden`, and does not invoke
 the service.
