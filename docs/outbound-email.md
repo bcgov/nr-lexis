@@ -63,9 +63,9 @@ being queued.
 
 `LEXIS_MAIL_OVERRIDE_RECIPIENTS` is optional in DEV and TEST. When configured, it replaces all
 intended `To` and `Cc` recipients with the designated administrators. The subject and body retain
-the environment label, intended sender, and original recipients so testers can verify the routing
-without contacting business mailboxes. A regional route can therefore be exercised in DEV or TEST
-even if its intended recipient is not deliverable outside the override.
+the environment label, intended sender, and each exact intended `To`/`Cc` address so testers can
+verify the routing without contacting business mailboxes. A regional route can therefore be
+exercised in DEV or TEST even if its intended recipient is not deliverable outside the override.
 
 When no override is configured, messages are sent to their intended recipients. PROD preserves
 the intended recipients and sender, and does not add an interception label.
@@ -86,6 +86,6 @@ For every intercepted message, inspect the raw received headers and the intercep
 - The MIME `From` must be the provincial or selected regional positional mailbox.
 - The MIME `To` must be only the TEST override recipient; no business mailbox should receive TEST
   traffic.
-- The subject/body must identify the intended sender and original `To`/`Cc` routing. Permit review
-  must show both intended recipients as `To`, never as `Cc`.
+- The subject/body must identify the intended sender and every exact intended `To`/`Cc` address.
+  Permit review must show both intended recipients as `To`, never as `Cc`.
 - Confirm the SMTP relay did not reject or rewrite the intended sender identity.

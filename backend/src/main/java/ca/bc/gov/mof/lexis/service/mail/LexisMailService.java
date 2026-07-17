@@ -127,24 +127,26 @@ public class LexisMailService {
       message.setSubject(
           "["
               + environment
-              + " - From "
+              + " - Intended From: "
               + intendedSender(senderAddress, senderRoute)
-              + " - "
+              + " - Intended To: "
               + intendedRecipient(normalizedTo, recipientRouteLabel)
               + (normalizedCc.isEmpty() && !routeOnlyCc
                   ? ""
-                  : "; CC " + intendedRecipient(normalizedCc, copyRecipientRouteLabel))
+                  : "; Intended Cc: "
+                      + intendedRecipient(normalizedCc, copyRecipientRouteLabel))
               + "] "
               + safe(subject));
       message.setText(
-          "Original From: "
+          "Non-production delivery was redirected to the configured override recipient(s).\n"
+              + "Intended From: "
               + intendedSender(senderAddress, senderRoute)
-              + "\nOriginal To: "
-              + originalRecipient(normalizedTo, recipientRouteLabel)
+              + "\nIntended To: "
+              + intendedRecipient(normalizedTo, recipientRouteLabel)
               + (normalizedCc.isEmpty() && !routeOnlyCc
                   ? ""
-                  : "\nOriginal Cc: "
-                      + originalRecipient(normalizedCc, copyRecipientRouteLabel))
+                  : "\nIntended Cc: "
+                      + intendedRecipient(normalizedCc, copyRecipientRouteLabel))
               + "\n\n"
               + safe(body));
     } else {
@@ -199,7 +201,12 @@ public class LexisMailService {
   }
 
   private String intendedRecipient(List<String> recipients, String routeLabel) {
-    return subjectLabel(routeLabel, String.join(", ", recipients));
+    String addresses = String.join(", ", recipients);
+    String route = trimToNull(routeLabel);
+    if (route == null || route.equalsIgnoreCase(addresses)) {
+      return addresses;
+    }
+    return addresses.isEmpty() ? route + " (not configured)" : route + ": " + addresses;
   }
 
   private String intendedSender(String senderAddress, RegionalMailRoute senderRoute) {
@@ -212,13 +219,6 @@ public class LexisMailService {
       return fromAddress;
     }
     return regionalMailRecipientResolver.addressFor(senderRoute).orElse("");
-  }
-
-  private String originalRecipient(List<String> recipients, String routeLabel) {
-    if (!recipients.isEmpty()) {
-      return String.join(", ", recipients);
-    }
-    return subjectLabel(routeLabel, "Not configured") + " (not configured)";
   }
 
   private boolean isInterceptableRouteLabel(String routeLabel) {
