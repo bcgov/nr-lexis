@@ -105,6 +105,7 @@ jobs:
       backend_min_replicas: "3"
       backend_max_replicas: "10"
       frontend_replicas: "3"
+      expiry_enabled: true
 
   # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is
   # unset; alert templates live in monitoring/alerts/.

@@ -30,7 +30,7 @@ class TestDeploymentTopologyConfigTest {
   }
 
   @Test
-  void productionShouldRetainDisabledAutoscalingConfiguration() throws IOException {
+  void productionShouldRetainDisabledAutoscalingAndExpiryConfiguration() throws IOException {
     String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
     String prodDeploy = workflowJob(mergeWorkflow, "deploy-prod", "monitor-prod");
 
@@ -39,7 +39,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_min_replicas: \"3\"")
         .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
-        .doesNotContain("expiry_enabled: true");
+        .contains("expiry_enabled: true");
   }
 
   @Test
