@@ -400,11 +400,23 @@ class PermitDetailsRpcControllerTest {
     assertThatThrownBy(
             () -> controller.getPackageVolumeSum(7000123L, "OTHER-PKG"))
         .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.getScalesForPackage("OTHER-PKG", 7000123L))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.getPackageInfo("OTHER-PKG", 7000123L))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.getPackageDetails("OTHER-PKG", 7000123L))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
 
     verify(service, never())
         .getPermitSummary(7000123L, "US", "2026-01-15", "OTHER-PKG", false);
     verify(service, never()).getScaleFeesForPackage("OTHER-PKG", 7000123L, false);
     verify(service, never()).getPackageVolumeSum(7000123L, "OTHER-PKG");
+    verify(service, never()).getScalesForPackage("OTHER-PKG");
+    verify(service, never()).getPackageInfo("OTHER-PKG");
+    verify(service, never()).getPackageDetails("OTHER-PKG");
   }
 
   @Test

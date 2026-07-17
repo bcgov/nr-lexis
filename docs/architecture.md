@@ -65,7 +65,8 @@ scope.
   the backend and streamed to clients.
 - Permit detail pages render the permit summary first, then load associated applications and
   package tables. Table-dependent edits and review requests remain unavailable while those tables
-  load or refresh, preventing actions against stale data.
+  load or refresh, preventing actions against stale data. Package-scoped endpoints verify a direct
+  Oracle relationship rather than reloading normal and Blanket OIC package lists for every request.
 - Canadian permit invoicing remains internal to LEXIS. Non-Canadian invoicing uses the established
   GBMS Oracle package sequence with ordered best-effort coordination and explicit reconciliation
   guidance.

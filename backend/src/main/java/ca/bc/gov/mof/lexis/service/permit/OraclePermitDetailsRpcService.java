@@ -711,6 +711,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public boolean packageBelongsToPermit(String packageNumber, Long permitNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null || permitNumber == null || permitNumber < 1) {
+      return false;
+    }
+    return repository.isPackageAssignedToPermitRequired(normalizedPackageNumber, permitNumber);
+  }
+
+  @Override
   public PermitHasApplicationsRpcResponseDto getPermitHasApplications(Long permitNumber) {
     boolean hasApplications =
         !repository.findPackageNumbersByPermitNumberRequired(permitNumber).isEmpty();

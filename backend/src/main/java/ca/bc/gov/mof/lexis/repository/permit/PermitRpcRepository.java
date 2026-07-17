@@ -42,6 +42,22 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_PERMIT(?,?)";
   private static final String FIND_PACKAGES_BY_OIC_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_OIC_PERMIT(?,?)";
+  private static final String PACKAGE_BELONGS_TO_PERMIT =
+      """
+      SELECT COUNT(*)
+      FROM EXPORT_PACKAGE P
+      LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA
+        ON EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
+      LEFT JOIN EXPORT_PERMIT_DETAIL EPD
+        ON EPD.OIC_APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+      LEFT JOIN EXPORT_SCALE_DETAIL ESD
+        ON ESD.PACKAGE_NUMBER = P.PACKAGE_NUMBER
+      WHERE P.PACKAGE_NUMBER = ?
+        AND (
+          EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+          OR ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+        )
+      """;
   private static final String FIND_PACKAGES_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
   private static final String FIND_PACKAGES_BY_EXEMPTION =
@@ -343,6 +359,26 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .distinct()
         .sorted()
         .toList();
+  }
+
+  /**
+   * Checks the same normal and Blanket OIC package relationships as the legacy package-list
+   * procedures without materializing either list.
+   */
+  public boolean isPackageAssignedToPermitRequired(String packageNumber, Long permitNumber) {
+    String normalizedPackageNumber = trim(packageNumber);
+    if (normalizedPackageNumber == null || permitNumber == null || permitNumber < 1) {
+      return false;
+    }
+
+    Long matches =
+        jdbcTemplate.queryForObject(
+            PACKAGE_BELONGS_TO_PERMIT,
+            Long.class,
+            normalizedPackageNumber,
+            permitNumber,
+            permitNumber);
+    return matches != null && matches > 0;
   }
 
   public List<Long> findApplicationNumbersByPermitNumber(Long permitNumber) {

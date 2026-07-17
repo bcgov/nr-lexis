@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
@@ -18,6 +20,7 @@ import java.sql.Types;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.CallableStatementCallback;
@@ -31,6 +34,50 @@ class PermitRpcRepositoryTest {
   @Mock private JdbcTemplate jdbcTemplate;
   @Mock private CallableStatement callableStatement;
   @Mock private ResultSet resultSet;
+
+  @Test
+  void packagePermitMembershipShouldUseOneDirectPredicateForNormalAndOicRelationships() {
+    when(
+            jdbcTemplate.queryForObject(
+                anyString(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L)))
+        .thenReturn(1L);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPackageAssignedToPermitRequired(" PKG-903 ", 7000123L)).isTrue();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .queryForObject(
+            sql.capture(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("FROM EXPORT_PACKAGE P")
+        .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("LEFT JOIN EXPORT_PERMIT_DETAIL EPD")
+        .contains("LEFT JOIN EXPORT_SCALE_DETAIL ESD")
+        .contains("EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("OR ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?");
+  }
+
+  @Test
+  void packagePermitMembershipShouldReturnFalseWhenNoRelationshipExists() {
+    when(
+            jdbcTemplate.queryForObject(
+                anyString(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L)))
+        .thenReturn(0L);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPackageAssignedToPermitRequired("PKG-903", 7000123L)).isFalse();
+  }
+
+  @Test
+  void packagePermitMembershipShouldRejectInvalidInputWithoutQueryingOracle() {
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPackageAssignedToPermitRequired(" ", 7000123L)).isFalse();
+    assertThat(repository.isPackageAssignedToPermitRequired("PKG-903", 0L)).isFalse();
+
+    verifyNoInteractions(jdbcTemplate);
+  }
 
   @Test
   void findAllCountryCodesShouldUseOracleRowsWhenAvailable() throws Exception {

@@ -697,6 +697,25 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void packageMembershipShouldUseDirectRepositoryPredicateInsteadOfLoadingPackageLists() {
+    when(repository.isPackageAssignedToPermitRequired("PKG-903", 7000123L)).thenReturn(true);
+
+    assertThat(service.packageBelongsToPermit(" PKG-903 ", 7000123L)).isTrue();
+
+    verify(repository).isPackageAssignedToPermitRequired("PKG-903", 7000123L);
+    verify(repository, never()).findPackageNumbersByPermitNumberRequired(anyLong());
+    verify(repository, never()).findPackageNumbersByOicPermitNumber(anyLong());
+  }
+
+  @Test
+  void packageMembershipShouldRejectInvalidInputWithoutARepositoryCall() {
+    assertThat(service.packageBelongsToPermit(" ", 7000123L)).isFalse();
+    assertThat(service.packageBelongsToPermit("PKG-903", 0L)).isFalse();
+
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void packageListShouldPropagateRelationshipLookupFailure() {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("package relationship lookup unavailable");
