@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.Timestamp;
@@ -2582,6 +2583,8 @@ class OracleExemptionDetailsRpcServiceTest {
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application("EXE", "EX-205", "P")));
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmail(
             "EX-205", " Applicant <edited@example.com> ");
@@ -2593,8 +2596,37 @@ class OracleExemptionDetailsRpcServiceTest {
             new WorkflowEmailEvent.ExemptionApproval(
                 "EX-205",
                 "1000456",
-                "edited@example.com"));
+                "edited@example.com",
+                RegionalMailRoute.RCO));
     verifyNoInteractions(notificationRecipientResolver);
+  }
+
+  @Test
+  void sendExemptionApprovalEmailShouldUseTheFirstLinkedApplicationsRegionalSender() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, 50.0d, 50.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationWithIdentity(
+                    1000456L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
+
+    ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
+        service.sendExemptionApprovalEmail("EX-205", "edited@example.com");
+
+    assertThat(response.success()).isTrue();
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000456\n1000457", "edited@example.com", RegionalMailRoute.RSI));
+    verify(repository, never()).findApplicationLinkRecord(1000457L);
   }
 
   @Test
@@ -2607,6 +2639,8 @@ class OracleExemptionDetailsRpcServiceTest {
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application("EXE", "EX-205", "P")));
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmails("EX-205:attacker@example.com,EX-404:missing@example.com");
 
@@ -2616,7 +2650,7 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.ExemptionApproval(
-                "EX-205", "1000456", "attacker@example.com"));
+                "EX-205", "1000456", "attacker@example.com", RegionalMailRoute.RCO));
     verifyNoInteractions(notificationRecipientResolver);
   }
 
@@ -2643,7 +2677,7 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.ExemptionApproval(
-                "EX-205", "1000456", "agent@example.com"));
+                "EX-205", "1000456", "agent@example.com", RegionalMailRoute.RCO));
   }
 
   @Test
@@ -2729,12 +2763,18 @@ class OracleExemptionDetailsRpcServiceTest {
   void sendExemptionApprovalEmailShouldRejectAMalformedRequestedRecipient() {
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application("EXE", "EX-205", "P")));
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmail("EX-205", "not-an-email");
 
     assertThat(response.success()).isFalse();
-    verify(repository, never()).findApplicationSummariesByExemptionNumber(any());
     verifyNoInteractions(notificationRecipientResolver, notificationService);
   }
 
@@ -2784,6 +2824,26 @@ class OracleExemptionDetailsRpcServiceTest {
       String agentClientLocationCode,
       String statusCode,
       String exemptionNumber) {
+    return applicationWithIdentity(
+        applicationNumber,
+        ownerClientNumber,
+        ownerClientLocationCode,
+        agentClientNumber,
+        agentClientLocationCode,
+        statusCode,
+        exemptionNumber,
+        12L);
+  }
+
+  private ExemptionDetailsRpcRepository.ApplicationLinkRecord applicationWithIdentity(
+      long applicationNumber,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String statusCode,
+      String exemptionNumber,
+      Long orgUnitNumber) {
     return new ExemptionDetailsRpcRepository.ApplicationLinkRecord(
         applicationNumber,
         null,
@@ -2804,7 +2864,7 @@ class OracleExemptionDetailsRpcServiceTest {
         "ER02",
         statusCode,
         agentClientNumber == null ? "O" : "A",
-        12L,
+        orgUnitNumber,
         "S",
         "P",
         "G",
@@ -2880,7 +2940,7 @@ class OracleExemptionDetailsRpcServiceTest {
         "ER02",
         statusCode,
         applicantTypeCode,
-        12L,
+        1835L,
         "S",
         jurisdictionCode,
         "G",

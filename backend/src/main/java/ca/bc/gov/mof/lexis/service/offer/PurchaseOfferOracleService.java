@@ -15,10 +15,12 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver.RecipientGroup;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
@@ -64,6 +66,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
   private final EmailNotificationService notificationService;
   private final RegionalMailRecipientResolver regionalRecipientResolver;
+  private final PermitRpcRepository permitRepository;
   private final Clock clock;
 
   @Autowired
@@ -71,12 +74,14 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       PurchaseOfferRepository repository,
       ApplicationNotificationRecipientResolver notificationRecipientResolver,
       EmailNotificationService notificationService,
-      RegionalMailRecipientResolver regionalRecipientResolver) {
+      RegionalMailRecipientResolver regionalRecipientResolver,
+      PermitRpcRepository permitRepository) {
     this(
         repository,
         notificationRecipientResolver,
         notificationService,
         regionalRecipientResolver,
+        permitRepository,
         LexisBusinessTime.systemClock());
   }
 
@@ -85,11 +90,13 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       ApplicationNotificationRecipientResolver notificationRecipientResolver,
       EmailNotificationService notificationService,
       RegionalMailRecipientResolver regionalRecipientResolver,
+      PermitRpcRepository permitRepository,
       Clock clock) {
     this.repository = repository;
     this.notificationRecipientResolver = notificationRecipientResolver;
     this.notificationService = notificationService;
     this.regionalRecipientResolver = regionalRecipientResolver;
+    this.permitRepository = permitRepository;
     this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
   }
 
@@ -169,7 +176,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
           warnings);
     }
 
-    EmailResult email = sendOfferEmail(normalized.applicationNumber(), offerNumber, OfferEmailType.NEW);
+    EmailResult email =
+        sendOfferEmail(
+            normalized.applicationNumber(), offerNumber, normalized.packageNumber(), OfferEmailType.NEW);
     return new CreateOfferResult(
         true,
         SAVE_SUCCESS_MESSAGE,
@@ -288,6 +297,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
             ? sendOfferEmail(
                 updated.applicationNumber(),
                 offerNumber,
+                updated.packageNumber(),
                 withdrawn ? OfferEmailType.WITHDRAWN : OfferEmailType.UPDATED)
             : EmailResult.notRequired();
     return new CreateOfferResult(
@@ -313,7 +323,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   }
 
   private EmailResult sendOfferEmail(
-      Long applicationNumber, Long offerNumber, OfferEmailType type) {
+      Long applicationNumber, Long offerNumber, String packageNumber, OfferEmailType type) {
     try {
       PurchaseOfferRepository.ApplicationRecipientRow context =
           repository.findApplicationRecipient(applicationNumber).orElse(null);
@@ -322,7 +332,15 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         return new EmailResult(
             true, false, null, "Offer saved, but no client email address was found.");
       }
-      RecipientGroup regionalGroup = regionalRecipientResolver.resolveGroup(context.orgUnitNumber());
+      RegionalMailRoute regionalRoute =
+          RegionalMailRoute.forPermitOrOffer(
+              context.orgUnitNumber(),
+              RegionalMailRoute.isSkeena(context.orgUnitNumber())
+                  ? permitRepository.findScaleDetailsByPackageNumber(packageNumber).stream()
+                      .map(PermitRpcRepository.PermitScaleDetailRow::exportGradeCode)
+                      .toList()
+                  : List.of());
+      RecipientGroup regionalGroup = regionalRecipientResolver.resolveGroupForRoute(regionalRoute);
       List<String> regionalRecipients = safeList(regionalGroup.recipients());
       notificationService.publish(
           new WorkflowEmailEvent.PurchaseOffer(

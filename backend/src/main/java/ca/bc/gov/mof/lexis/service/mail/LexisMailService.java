@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
@@ -23,25 +24,45 @@ public class LexisMailService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisMailService.class);
   private static final Set<String> INTERCEPTABLE_ROUTE_LABELS =
-      Set.of("REGION_RCO", "REGION_RNI", "REGION_RSI", "PERMIT_REQUEST");
+      Set.of("REGION_RCO", "REGION_RNI", "REGION_RSI");
 
   private final JavaMailSender mailSender;
   private final boolean nonProduction;
   private final String fromAddress;
   private final List<String> overrideRecipients;
   private final String environment;
+  private final RegionalMailRecipientResolver regionalMailRecipientResolver;
 
+  @Autowired
   public LexisMailService(
       JavaMailSender mailSender,
       @Value("${lexis.mail.non-production:true}") boolean nonProduction,
       @Value("${lexis.mail.from:}") String fromAddress,
       @Value("${lexis.mail.override-recipients:}") String overrideRecipients,
-      @Value("${lexis.mail.environment:non-prod}") String environment) {
+      @Value("${lexis.mail.environment:non-prod}") String environment,
+      RegionalMailRecipientResolver regionalMailRecipientResolver) {
     this.mailSender = mailSender;
     this.nonProduction = nonProduction;
     this.fromAddress = trimToNull(fromAddress) == null ? "" : fromAddress.trim();
     this.overrideRecipients = parseAddresses(overrideRecipients);
     this.environment = subjectLabel(environment, "NON-PROD").toUpperCase(Locale.ROOT);
+    this.regionalMailRecipientResolver = regionalMailRecipientResolver;
+  }
+
+  /** Convenience constructor for callers that only use the provincial sender. */
+  public LexisMailService(
+      JavaMailSender mailSender,
+      boolean nonProduction,
+      String fromAddress,
+      String overrideRecipients,
+      String environment) {
+    this(
+        mailSender,
+        nonProduction,
+        fromAddress,
+        overrideRecipients,
+        environment,
+        new RegionalMailRecipientResolver("", "", ""));
   }
 
   public boolean send(String subject, String body, List<String> recipients) {
@@ -60,8 +81,31 @@ public class LexisMailService {
       List<String> copyRecipients,
       String recipientRouteLabel,
       String copyRecipientRouteLabel) {
+    return send(
+        subject,
+        body,
+        recipients,
+        copyRecipients,
+        recipientRouteLabel,
+        copyRecipientRouteLabel,
+        RegionalMailRoute.GENERAL);
+  }
+
+  public boolean send(
+      String subject,
+      String body,
+      List<String> recipients,
+      List<String> copyRecipients,
+      String recipientRouteLabel,
+      String copyRecipientRouteLabel,
+      RegionalMailRoute senderRoute) {
     List<String> normalizedTo = validAddresses(recipients);
     List<String> normalizedCc = validAddresses(copyRecipients);
+    String senderAddress = senderAddress(senderRoute);
+    if (!isValidAddress(senderAddress)) {
+      LOGGER.warn("event=lexis_email_delivery outcome=no_valid_sender");
+      return false;
+    }
     boolean intercept = nonProduction && !overrideRecipients.isEmpty();
     boolean routeOnlyTo =
         intercept
@@ -77,12 +121,14 @@ public class LexisMailService {
             && isInterceptableRouteLabel(copyRecipientRouteLabel);
 
     SimpleMailMessage message = new SimpleMailMessage();
-    message.setFrom(fromAddress);
+    message.setFrom(senderAddress);
     if (intercept) {
       message.setTo(overrideRecipients.toArray(String[]::new));
       message.setSubject(
           "["
               + environment
+              + " - From "
+              + intendedSender(senderAddress, senderRoute)
               + " - "
               + intendedRecipient(normalizedTo, recipientRouteLabel)
               + (normalizedCc.isEmpty() && !routeOnlyCc
@@ -91,7 +137,9 @@ public class LexisMailService {
               + "] "
               + safe(subject));
       message.setText(
-          "Original To: "
+          "Original From: "
+              + intendedSender(senderAddress, senderRoute)
+              + "\nOriginal To: "
               + originalRecipient(normalizedTo, recipientRouteLabel)
               + (normalizedCc.isEmpty() && !routeOnlyCc
                   ? ""
@@ -152,6 +200,18 @@ public class LexisMailService {
 
   private String intendedRecipient(List<String> recipients, String routeLabel) {
     return subjectLabel(routeLabel, String.join(", ", recipients));
+  }
+
+  private String intendedSender(String senderAddress, RegionalMailRoute senderRoute) {
+    RegionalMailRoute route = senderRoute == null ? RegionalMailRoute.GENERAL : senderRoute;
+    return route.label() + " <" + senderAddress + ">";
+  }
+
+  private String senderAddress(RegionalMailRoute senderRoute) {
+    if (senderRoute == null || senderRoute == RegionalMailRoute.GENERAL) {
+      return fromAddress;
+    }
+    return regionalMailRecipientResolver.addressFor(senderRoute).orElse("");
   }
 
   private String originalRecipient(List<String> recipients, String routeLabel) {

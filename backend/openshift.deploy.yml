@@ -82,22 +82,19 @@ parameters:
     description: Non-secret deployment environment label used on intercepted messages
     value: non-prod
   - name: LEXIS_MAIL_FROM
-    description: Approved sender mailbox supplied by the GitHub Environment
+    description: Provincial positional sender mailbox supplied by the GitHub Environment secret
     value: ""
   - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
     description: Comma- or semicolon-separated TEST/DEV administrator email addresses
     value: ""
-  - name: LEXIS_MAIL_REGION_RCO_RECIPIENTS
-    description: Externally managed RCO distribution list recipients
+  - name: LEXIS_MAIL_REGION_RCO_ADDRESS
+    description: RCO positional mailbox supplied by the GitHub Environment secret
     value: ""
-  - name: LEXIS_MAIL_REGION_RNI_RECIPIENTS
-    description: Externally managed RNI distribution list recipients
+  - name: LEXIS_MAIL_REGION_RNI_ADDRESS
+    description: RNI positional mailbox supplied by the GitHub Environment secret
     value: ""
-  - name: LEXIS_MAIL_REGION_RSI_RECIPIENTS
-    description: Externally managed RSI distribution list recipients
-    value: ""
-  - name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
-    description: Migration fallback for permit review recipients
+  - name: LEXIS_MAIL_REGION_RSI_ADDRESS
+    description: RSI positional mailbox supplied by the GitHub Environment secret
     value: ""
   - name: AWS_COGNITO_ISSUER_URI
     required: true
@@ -282,32 +279,30 @@ objects:
                 - name: LEXIS_MAIL_ENVIRONMENT
                   value: ${LEXIS_MAIL_ENVIRONMENT}
                 - name: LEXIS_MAIL_FROM
-                  value: ${LEXIS_MAIL_FROM}
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_FROM
                 - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
                   valueFrom:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
                       key: LEXIS_MAIL_OVERRIDE_RECIPIENTS
-                - name: LEXIS_MAIL_REGION_RCO_RECIPIENTS
+                - name: LEXIS_MAIL_REGION_RCO_ADDRESS
                   valueFrom:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
-                      key: LEXIS_MAIL_REGION_RCO_RECIPIENTS
-                - name: LEXIS_MAIL_REGION_RNI_RECIPIENTS
+                      key: LEXIS_MAIL_REGION_RCO_ADDRESS
+                - name: LEXIS_MAIL_REGION_RNI_ADDRESS
                   valueFrom:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
-                      key: LEXIS_MAIL_REGION_RNI_RECIPIENTS
-                - name: LEXIS_MAIL_REGION_RSI_RECIPIENTS
+                      key: LEXIS_MAIL_REGION_RNI_ADDRESS
+                - name: LEXIS_MAIL_REGION_RSI_ADDRESS
                   valueFrom:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
-                      key: LEXIS_MAIL_REGION_RSI_RECIPIENTS
-                - name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
-                  valueFrom:
-                    secretKeyRef:
-                      name: ${NAME}-backend-secret-${ZONE}
-                      key: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
+                      key: LEXIS_MAIL_REGION_RSI_ADDRESS
                 - name: KEYSTORE_SECRET
                   valueFrom:
                     secretKeyRef:
@@ -636,11 +631,11 @@ objects:
       DATABASE_USER: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       KEYSTORE_SECRET: ${KEYSTORE_SECRET}
+      LEXIS_MAIL_FROM: ${LEXIS_MAIL_FROM}
       LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS}
-      LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${LEXIS_MAIL_REGION_RCO_RECIPIENTS}
-      LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${LEXIS_MAIL_REGION_RNI_RECIPIENTS}
-      LEXIS_MAIL_REGION_RSI_RECIPIENTS: ${LEXIS_MAIL_REGION_RSI_RECIPIENTS}
-      LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS}
+      LEXIS_MAIL_REGION_RCO_ADDRESS: ${LEXIS_MAIL_REGION_RCO_ADDRESS}
+      LEXIS_MAIL_REGION_RNI_ADDRESS: ${LEXIS_MAIL_REGION_RNI_ADDRESS}
+      LEXIS_MAIL_REGION_RSI_ADDRESS: ${LEXIS_MAIL_REGION_RSI_ADDRESS}
 
   - apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy

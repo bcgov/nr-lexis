@@ -38,7 +38,7 @@ separate service beside the application workloads.
 | ClamAV                   | Malware scanning for uploaded content before accepted files are persisted.                                                                                             |
 | FAM / Cognito            | Interactive authentication and FAM role authorities, including client-scoped Provincial Submitter access.                                                              |
 | Keycloak and API gateway | Dedicated machine-to-machine authentication, scope enforcement, traffic controls, and routing for NEXCOL federal submissions.                                          |
-| Mail relay               | Delivery of post-commit workflow notifications from one LEXIS sender to validated applicant addresses and configured regional distribution lists.                      |
+| Mail relay               | Delivery of post-commit workflow notifications from provincial and regional positional mailboxes to validated applicants and regional positional recipients.            |
 
 ## Identity and authorization
 
@@ -109,7 +109,7 @@ that finds an existing package receives a conflict for NEXCOL reconciliation.
 | Persistence          | Oracle tables and PL/SQL packages                                       | The same Oracle system of record behind Spring JDBC repositories and explicit transaction boundaries                     |
 | Attachments          | Oracle BLOB storage through application-server upload actions           | Oracle BLOB storage with bounded streaming validation and ClamAV scanning                                                |
 | Reports              | Application-server/WebADE report integration and legacy report assets   | Embedded JasperReports with checked-in templates and streamed HTTP responses                                             |
-| Email                | Request-coupled JavaMail flows with client and regional recipients      | After-commit asynchronous events, validated recipients, regional distribution-list routing, and non-production overrides |
+| Email                | Request-coupled JavaMail flows with client and regional positional mailboxes | After-commit asynchronous events, validated recipients, legacy sender/To/Cc positional-mailbox routing, and non-production overrides |
 | Concurrency          | Process/session-scoped edit locks in a single runtime                   | Optimistic stale-save conflicts plus ordered Oracle row locks for transactional multi-row mutations                       |
 | Delivery             | Legacy build and deployment pipeline                                    | GitHub Actions, container images, security checks, and parameterized OpenShift deployments                               |
 

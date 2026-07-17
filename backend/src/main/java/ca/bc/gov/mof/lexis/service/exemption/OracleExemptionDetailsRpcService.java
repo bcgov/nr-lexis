@@ -8,6 +8,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
@@ -792,6 +793,18 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (!active) {
       return false;
     }
+    List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications =
+        repository.findApplicationSummariesByExemptionNumber(normalizedNumber);
+    RegionalMailRoute senderRoute =
+        applications.stream()
+            .findFirst()
+            .flatMap(row -> repository.findApplicationLinkRecord(row.applicationNumber()))
+            .map(ExemptionDetailsRpcRepository.ApplicationLinkRecord::orgUnitNo)
+            .flatMap(RegionalMailRoute::forOrgUnit)
+            .orElse(null);
+    if (senderRoute == null) {
+      return false;
+    }
     String requestedRecipient = trimToNull(toEmailAddress);
     String recipient =
         requestedRecipient == null
@@ -801,7 +814,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       return false;
     }
     String applicationNumbers =
-        repository.findApplicationSummariesByExemptionNumber(normalizedNumber).stream()
+        applications.stream()
             .map(row -> Long.toString(row.applicationNumber()))
             .reduce((left, right) -> left + "\n" + right)
             .orElse("");
@@ -809,7 +822,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         new WorkflowEmailEvent.ExemptionApproval(
             normalizedNumber,
             applicationNumbers,
-            recipient));
+            recipient,
+            senderRoute));
     return true;
   }
 

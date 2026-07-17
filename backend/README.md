@@ -65,12 +65,11 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | End-to-end deadline for one ClamAV scan | 10s |
 | `LEXIS_MAIL_NON_PRODUCTION` | Marks DEV/TEST messages and redirects them when override recipients are configured | true outside PROD |
 | `LEXIS_MAIL_ENVIRONMENT` | Non-secret environment label shown on intercepted DEV/TEST messages | non-prod locally; derived from deployment environment |
-| `LEXIS_MAIL_FROM` | Approved sender mailbox for LEXIS workflow messages | Required in every environment |
+| `LEXIS_MAIL_FROM` | Provincial/system positional sender mailbox | Required in every environment |
 | `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Optional comma/semicolon-separated recipients receiving all DEV/TEST messages instead of the intended recipients | Optional in DEV/TEST; must be unset in PROD |
-| `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | RCO distribution list recipient(s) | Optional in DEV/TEST; required in PROD unless the fallback is configured |
-| `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | RNI distribution list recipient(s) | Optional in DEV/TEST; required in PROD unless the fallback is configured |
-| `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | RSI distribution list recipient(s) | Optional in DEV/TEST; required in PROD unless the fallback is configured |
-| `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Migration fallback when a regional list cannot be resolved | Optional; may provide PROD coverage instead of all three regional lists |
+| `LEXIS_MAIL_REGION_RCO_ADDRESS` | RCO positional mailbox; selected as a sender or recipient by the persisted organization unit | Required in every environment |
+| `LEXIS_MAIL_REGION_RNI_ADDRESS` | RNI positional mailbox; selected as a sender or recipient by the persisted organization unit | Required in every environment |
+| `LEXIS_MAIL_REGION_RSI_ADDRESS` | RSI positional mailbox; selected as a sender or recipient by the persisted organization unit | Required in every environment |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
 | `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
 
@@ -99,12 +98,11 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | OpenShift template default `10s` |
 | `LEXIS_MAIL_NON_PRODUCTION` | Derived from the deployment environment |
 | `LEXIS_MAIL_ENVIRONMENT` | Workflow input `environment` |
-| `LEXIS_MAIL_FROM` | Variable `LEXIS_MAIL_FROM` |
+| `LEXIS_MAIL_FROM` | Secret `LEXIS_MAIL_FROM` |
 | `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Secret `LEXIS_MAIL_OVERRIDE_RECIPIENTS` |
-| `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RCO_RECIPIENTS` |
-| `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RNI_RECIPIENTS` |
-| `LEXIS_MAIL_REGION_RSI_RECIPIENTS` | Secret `LEXIS_MAIL_REGION_RSI_RECIPIENTS` |
-| `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` | Secret `LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS` |
+| `LEXIS_MAIL_REGION_RCO_ADDRESS` | Secret `LEXIS_MAIL_REGION_RCO_ADDRESS` |
+| `LEXIS_MAIL_REGION_RNI_ADDRESS` | Secret `LEXIS_MAIL_REGION_RNI_ADDRESS` |
+| `LEXIS_MAIL_REGION_RSI_ADDRESS` | Secret `LEXIS_MAIL_REGION_RSI_ADDRESS` |
 
 Backend replicas use optimistic version checks for interactive saves. A stale save returns a
 conflict so the user can refresh or explicitly overwrite after reviewing newer changes. Short

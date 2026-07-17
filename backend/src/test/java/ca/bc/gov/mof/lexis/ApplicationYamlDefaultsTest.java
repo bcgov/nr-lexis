@@ -35,14 +35,12 @@ class ApplicationYamlDefaultsTest {
         .containsEntry("lexis.mail.from", "${LEXIS_MAIL_FROM:}")
         .containsEntry("lexis.mail.environment", "${LEXIS_MAIL_ENVIRONMENT:non-prod}")
         .containsEntry(
-            "lexis.mail.region-rco-recipients", "${LEXIS_MAIL_REGION_RCO_RECIPIENTS:}")
+            "lexis.mail.override-recipients", "${LEXIS_MAIL_OVERRIDE_RECIPIENTS:}")
         .containsEntry(
-            "lexis.mail.region-rni-recipients", "${LEXIS_MAIL_REGION_RNI_RECIPIENTS:}")
+            "lexis.mail.region-rco-address", "${LEXIS_MAIL_REGION_RCO_ADDRESS:}")
         .containsEntry(
-            "lexis.mail.region-rsi-recipients", "${LEXIS_MAIL_REGION_RSI_RECIPIENTS:}")
-        .containsEntry(
-            "lexis.mail.permit-request-recipients",
-            "${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:}")
+            "lexis.mail.region-rni-address", "${LEXIS_MAIL_REGION_RNI_ADDRESS:}")
+        .containsEntry("lexis.mail.region-rsi-address", "${LEXIS_MAIL_REGION_RSI_ADDRESS:}")
         .containsEntry(
             "logging.level.ca.bc.gov.mof.lexis.audit.report",
             "${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}")
@@ -64,7 +62,11 @@ class ApplicationYamlDefaultsTest {
             "spring.mail.properties.mail.smtp.reply-to",
             "spring.mail.properties.mail.smtp.replyTo",
             "lexis.mail.reply-to",
-            "lexis.mail.replyTo");
+            "lexis.mail.replyTo",
+            "lexis.mail.region-rco-recipients",
+            "lexis.mail.region-rni-recipients",
+            "lexis.mail.region-rsi-recipients",
+            "lexis.mail.permit-request-recipients");
   }
 
   @Test

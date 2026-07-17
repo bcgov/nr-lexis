@@ -66,6 +66,7 @@ import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceLine;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceSnapshot;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceDetail;
@@ -208,7 +209,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           "The permit is not ready for review. An active permit must have an application, package, and scale detail.");
     }
 
-    boolean sent = permitEmailService.sendRequest(permitNumber, permit.orgUnitNo());
+    String additionalRecipient = trimToNull(copyToAddress);
+    if (additionalRecipient != null) {
+      additionalRecipient = MailRecipientValidator.normalize(additionalRecipient).orElse(null);
+      if (additionalRecipient == null) {
+        return new PermitEmailResult(false, "Copy-to email address must contain one valid email address.");
+      }
+    }
+    boolean sent = permitEmailService.sendRequest(permitNumber, permit.orgUnitNo(), additionalRecipient);
     if (!sent) {
       return new PermitEmailResult(false, "Permit review request email could not be queued.");
     }
@@ -330,12 +338,26 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               ? "No valid email address is available for the permit applicant."
               : "Client email address must contain one valid email address.");
     }
+    RegionalMailRoute senderRoute;
+    try {
+      senderRoute =
+          RegionalMailRoute.forPermitOrOffer(
+              permit.get().orgUnitNo(),
+              RegionalMailRoute.isSkeena(permit.get().orgUnitNo())
+                  ? repository.findScaleDetailsByPermitNumber(permitNumber).stream()
+                      .map(PermitRpcRepository.PermitScaleDetailRow::exportGradeCode)
+                      .toList()
+                  : List.of());
+    } catch (IllegalArgumentException ex) {
+      return new PermitEmailResult(false, "Permit approval email could not be queued.");
+    }
     boolean sent =
         permitEmailService.sendApproval(
             permitNumber,
             permit.get().permitStatusCode(),
             repository.findPackageNumbersByPermitNumberRequired(permitNumber),
-            recipient);
+            recipient,
+            senderRoute);
     return new PermitEmailResult(
         sent,
         sent ? "Permit approval email queued successfully." : "Permit approval email could not be queued.");

@@ -45,7 +45,8 @@ public class EmailEventDispatcher {
               event.recipients(),
               event.copyRecipients(),
               event.recipientRouteLabel(),
-              event.copyRecipientRouteLabel());
+              event.copyRecipientRouteLabel(),
+              event.senderRoute());
       if (sent) {
         count(eventType, "delivered");
         LOGGER.info(

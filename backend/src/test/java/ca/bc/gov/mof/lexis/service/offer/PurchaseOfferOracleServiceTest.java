@@ -18,9 +18,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRecipientResolver;
+import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.Clock;
@@ -52,6 +54,7 @@ class PurchaseOfferOracleServiceTest {
   @Mock private ApplicationNotificationRecipientResolver clientEmailResolver;
   @Mock private EmailNotificationService notificationService;
   @Mock private RegionalMailRecipientResolver regionalRecipientResolver;
+  @Mock private PermitRpcRepository permitRepository;
   private PurchaseOfferOracleService service;
 
   @BeforeEach
@@ -64,12 +67,16 @@ class PurchaseOfferOracleServiceTest {
             clientEmailResolver,
             notificationService,
             regionalRecipientResolver,
+            permitRepository,
             clock);
     org.mockito.Mockito.lenient()
         .when(
-            regionalRecipientResolver.resolveGroup(
-                org.mockito.ArgumentMatchers.nullable(Long.class)))
-        .thenReturn(new RegionalMailRecipientResolver.RecipientGroup(null, List.of()));
+            regionalRecipientResolver.resolveGroupForRoute(
+                org.mockito.ArgumentMatchers.nullable(RegionalMailRoute.class)))
+        .thenAnswer(
+            invocation ->
+                new RegionalMailRecipientResolver.RecipientGroup(
+                    invocation.getArgument(0, RegionalMailRoute.class), List.of()));
   }
 
   @Test
@@ -434,7 +441,7 @@ class PurchaseOfferOracleServiceTest {
         .thenReturn(
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
-                    "O", "00077881", "00", null, null)));
+                    "O", "00077881", "00", null, null, 1835L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
     PurchaseOfferService.CreateOfferResult response =
@@ -446,13 +453,19 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.warnings())
         .containsExactly(
             "Offer saved and applicant email queued, but no ministry regional recipient was configured.");
-    verify(notificationService)
-        .publish(
+    ArgumentCaptor<WorkflowEmailEvent> eventCaptor =
+        ArgumentCaptor.forClass(WorkflowEmailEvent.class);
+    verify(notificationService).publish(eventCaptor.capture());
+    assertThat(eventCaptor.getValue())
+        .isEqualTo(
             new WorkflowEmailEvent.PurchaseOffer(
                 1000456L,
                 81001L,
                 WorkflowEmailEvent.OfferAction.NEW,
-                "client@example.com"));
+                "client@example.com",
+                List.of(),
+                "REGION_RCO"));
+    assertThat(eventCaptor.getValue().senderRoute()).isEqualTo(RegionalMailRoute.GENERAL);
     verify(clientEmailResolver)
         .resolve(1000456L, "O", "00077881", "00", null, null);
   }
@@ -469,10 +482,10 @@ class PurchaseOfferOracleServiceTest {
                     "O", "00077881", "00", null, null, 1835L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
-    when(regionalRecipientResolver.resolveGroup(1835L))
+    when(regionalRecipientResolver.resolveGroupForRoute(RegionalMailRoute.RCO))
         .thenReturn(
             new RegionalMailRecipientResolver.RecipientGroup(
-                "REGION_RCO", List.of("coast.review@gov.bc.ca")));
+                RegionalMailRoute.RCO, List.of("coast.review@gov.bc.ca")));
 
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
@@ -502,8 +515,8 @@ class PurchaseOfferOracleServiceTest {
                     "O", "00077881", "00", null, null, 1835L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
-    when(regionalRecipientResolver.resolveGroup(1835L))
-        .thenReturn(new RegionalMailRecipientResolver.RecipientGroup("REGION_RCO", List.of()));
+    when(regionalRecipientResolver.resolveGroupForRoute(RegionalMailRoute.RCO))
+        .thenReturn(new RegionalMailRecipientResolver.RecipientGroup(RegionalMailRoute.RCO, List.of()));
 
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
@@ -524,6 +537,102 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void addOfferShouldApplyTheLegacySkeenaGradePriorityToTheCopiedMailbox() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null, 1908L)));
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenReturn(Optional.of("client@example.com"));
+    when(permitRepository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetail("PKG-903", "1A")));
+    when(regionalRecipientResolver.resolveGroupForRoute(RegionalMailRoute.RCO))
+        .thenReturn(
+            new RegionalMailRecipientResolver.RecipientGroup(
+                RegionalMailRoute.RCO, List.of("coast@example.com")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, "PKG-903"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.warnings()).isEmpty();
+    verify(permitRepository).findScaleDetailsByPackageNumber("PKG-903");
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.NEW,
+                "client@example.com",
+                List.of("coast@example.com"),
+                "REGION_RCO"));
+  }
+
+  @Test
+  void addOfferShouldCopyRniForANumericSkeenaScaleGrade() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null, 1908L)));
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenReturn(Optional.of("client@example.com"));
+    when(permitRepository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetail("PKG-903", "1")));
+    when(regionalRecipientResolver.resolveGroupForRoute(RegionalMailRoute.RNI))
+        .thenReturn(
+            new RegionalMailRecipientResolver.RecipientGroup(
+                RegionalMailRoute.RNI, List.of("northern@example.com")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, "PKG-903"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.warnings()).isEmpty();
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.NEW,
+                "client@example.com",
+                List.of("northern@example.com"),
+                "REGION_RNI"));
+  }
+
+  @Test
+  void addOfferShouldWarnWithoutQueuingWhenSkeenaGradesDoNotDetermineARoute() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null, 1908L)));
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenReturn(Optional.of("client@example.com"));
+    when(permitRepository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetail("PKG-903", "Z")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, "PKG-903"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.clientHasEmail()).isFalse();
+    assertThat(response.warnings())
+        .containsExactly("Offer saved, but notification recipients could not be resolved.");
+    verifyNoInteractions(notificationService);
+  }
+
+  @Test
   void addOfferShouldResolveAgentRecipientForAgentApplications() {
     stubProvincialApplication(1000456L);
     when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
@@ -532,7 +641,7 @@ class PurchaseOfferOracleServiceTest {
         .thenReturn(
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
-                    "A", "00011111", "01", "00077881", "02")));
+                    "A", "00011111", "01", "00077881", "02", 1834L)));
     when(clientEmailResolver.resolve(
             1000456L, "A", "00011111", "01", "00077881", "02"))
         .thenReturn(Optional.of("agent@example.com"));
@@ -551,7 +660,9 @@ class PurchaseOfferOracleServiceTest {
                 1000456L,
                 81001L,
                 WorkflowEmailEvent.OfferAction.NEW,
-                "agent@example.com"));
+                "agent@example.com",
+                List.of(),
+                "REGION_RSI"));
   }
 
   @Test
@@ -581,7 +692,7 @@ class PurchaseOfferOracleServiceTest {
         .thenReturn(
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
-                    "O", "00077881", "00", null, null)));
+                    "O", "00077881", "00", null, null, 1835L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.empty());
 
@@ -604,7 +715,7 @@ class PurchaseOfferOracleServiceTest {
         .thenReturn(
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
-                    "O", "00077881", "00", null, null)));
+                    "O", "00077881", "00", null, null, 1835L)));
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("client lookup unavailable");
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
@@ -1034,7 +1145,7 @@ class PurchaseOfferOracleServiceTest {
         .thenReturn(
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
-                    "O", "00077881", "00", null, null)));
+                    "O", "00077881", "00", null, null, 1835L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
 
@@ -1095,7 +1206,9 @@ class PurchaseOfferOracleServiceTest {
                 1000456L,
                 81001L,
                 WorkflowEmailEvent.OfferAction.UPDATED,
-                "client@example.com"));
+                "client@example.com",
+                List.of(),
+                "REGION_RCO"));
   }
 
   @Test
@@ -1246,7 +1359,7 @@ class PurchaseOfferOracleServiceTest {
         .thenReturn(
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
-                    "O", "00077881", "00", null, null)));
+                    "O", "00077881", "00", null, null, 1835L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
 
@@ -1295,7 +1408,9 @@ class PurchaseOfferOracleServiceTest {
                 1000456L,
                 81001L,
                 WorkflowEmailEvent.OfferAction.UPDATED,
-                "client@example.com"));
+                "client@example.com",
+                List.of(),
+                "REGION_RCO"));
   }
 
   @Test
@@ -1309,7 +1424,7 @@ class PurchaseOfferOracleServiceTest {
         .thenReturn(
             Optional.of(
                 new PurchaseOfferRepository.ApplicationRecipientRow(
-                    "O", "00077881", "00", null, null)));
+                    "O", "00077881", "00", null, null, 1835L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
 
@@ -1346,7 +1461,9 @@ class PurchaseOfferOracleServiceTest {
                 1000456L,
                 81001L,
                 WorkflowEmailEvent.OfferAction.WITHDRAWN,
-                "client@example.com"));
+                "client@example.com",
+                List.of(),
+                "REGION_RCO"));
   }
 
   @Test
@@ -1553,6 +1670,24 @@ class PurchaseOfferOracleServiceTest {
         null,
         "00077881",
         "Port Moody",
+        null,
+        null);
+  }
+
+  private PermitRpcRepository.PermitScaleDetailRow scaleDetail(
+      String packageNumber, String gradeCode) {
+    return new PermitRpcRepository.PermitScaleDetailRow(
+        "scale-1",
+        "TM-1",
+        "SP",
+        gradeCode,
+        1.0d,
+        1L,
+        1000456L,
+        "permit-detail-1",
+        packageNumber,
+        null,
+        null,
         null,
         null);
   }
