@@ -19,9 +19,10 @@ Full-stack LEXIS application for log export workflows.
 
 ## Architecture
 
-LEXIS runs as separate frontend, backend, and ClamAV workloads on OpenShift while retaining Oracle
-as its system of record. Interactive access uses FAM/Cognito; NEXCOL federal submissions use a
-dedicated Keycloak service client through the API gateway.
+LEXIS runs as separate frontend and backend workloads on OpenShift while retaining Oracle as its
+system of record. Uploaded content is scanned through a shared ClamAV service in a dedicated
+namespace. Interactive access uses FAM/Cognito; NEXCOL federal submissions use a dedicated
+Keycloak service client through the API gateway.
 
 See [docs/architecture.md](docs/architecture.md) for the runtime architecture, component boundaries,
 deployment constraints, and the major legacy-to-modern shifts.
@@ -38,6 +39,11 @@ Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 | **Best for** | Day-to-day backend/frontend work | Quick smoke tests, frontend-only work, and container parity |
 
 Both options share the same prerequisites and property files below. Reports use the checked-in JRXML templates in the Spring Boot backend.
+
+Virus scanning is disabled by default for local development, and neither option starts a ClamAV
+container. Deployed environments use a shared ClamAV service; see
+[Shared ClamAV service](docs/shared-clamav-service.md) for configuration and network-policy
+ownership.
 
 ### Shared prerequisites
 
@@ -162,6 +168,7 @@ default URL from `VITE_ZONE`.
 ## Component docs
 
 - [docs/architecture.md](docs/architecture.md) - Runtime architecture and legacy-to-modern shifts.
+- [docs/shared-clamav-service.md](docs/shared-clamav-service.md) - Shared scanner deployment, policy, verification, and ownership.
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
 - [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.
 - [docs/permit-invoicing.md](docs/permit-invoicing.md) - Canadian and GBMS permit invoicing modes, consistency limits, and recovery.

@@ -78,6 +78,9 @@ on:
       oc_namespace:
         description: OpenShift namespace
         required: true
+      clamav_namespace:
+        description: Shared ClamAV OpenShift namespace
+        required: true
       oc_token:
         description: OpenShift token
         required: true
@@ -105,6 +108,9 @@ on:
       keycloak_sa_client_secret:
         description: Keycloak service-account client secret used to provision LEXIS clients/scopes
         required: false
+      lexis_mail_from:
+        description: Approved sender mailbox for LEXIS workflow messages
+        required: true
       lexis_mail_override_recipients:
         description: Non-production recipient override
         required: false
@@ -171,7 +177,7 @@ jobs:
           LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS: ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}
           LEXIS_MAIL_NON_PRODUCTION: ${{ inputs.environment == 'prod' && 'false' || 'true' }}
           LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}
-          LEXIS_MAIL_FROM: ${{ vars.LEXIS_MAIL_FROM }}
+          LEXIS_MAIL_FROM: ${{ secrets.lexis_mail_from }}
           LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}
           LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${{ secrets.lexis_mail_region_rco_recipients }}
           LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${{ secrets.lexis_mail_region_rni_recipients }}
@@ -207,8 +213,7 @@ jobs:
             -p DATABASE_USER="$DATABASE_USER"
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
-            -p CLAMAV_REGISTRY="ghcr.io/${{ github.repository }}/clamav"
-            -p CLAMAV_IMAGE_TAG="${{ inputs.tag }}"
+            -p LEXIS_VIRUS_SCAN_HOST="clamav.${{ secrets.clamav_namespace }}.svc"
             -p LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
             -p LEXIS_EXPIRY_ENABLED="$LEXIS_EXPIRY_ENABLED"
             -p LEXIS_EXPIRY_CRON="$LEXIS_EXPIRY_CRON"

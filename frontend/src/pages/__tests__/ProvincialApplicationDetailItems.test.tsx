@@ -291,8 +291,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       )
     })
 
-    await userEvent.clear(screen.getByLabelText('Package Comments'))
-    await userEvent.type(screen.getByLabelText('Package Comments'), 'Updated package')
+    fireEvent.change(screen.getByLabelText('Package Comments'), {
+      target: { value: 'Updated package' },
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
 
     await waitFor(() => {
@@ -329,8 +330,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Items')
     const comments = await screen.findByLabelText('Package Comments')
-    await userEvent.clear(comments)
-    await userEvent.type(comments, 'Unsaved package draft')
+    fireEvent.change(comments, { target: { value: 'Unsaved package draft' } })
     await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
 
     const dialog = await screen.findByRole('dialog', {
@@ -457,7 +457,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       'Package Number',
     ) as HTMLInputElement
 
-    await userEvent.type(packageNumberInput, 'pkg-1')
+    fireEvent.change(packageNumberInput, { target: { value: 'pkg-1' } })
     expect(packageNumberInput.value).toBe('PKG-1')
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
 
@@ -484,10 +484,18 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(createPackageSection).toBeTruthy()
     const createPackageControls = within(createPackageSection as HTMLElement)
 
-    await userEvent.type(createPackageControls.getByLabelText('Package Number'), 'pkg-new')
-    await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.55')
-    await userEvent.type(createPackageControls.getByLabelText('Average Length'), '100')
-    await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '100')
+    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+      target: { value: 'pkg-new' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Package Volume'), {
+      target: { value: '25.55' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average Length'), {
+      target: { value: '100' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
+      target: { value: '100' },
+    })
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
 
     expect(
@@ -518,10 +526,18 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(createPackageSection).toBeTruthy()
     const createPackageControls = within(createPackageSection as HTMLElement)
 
-    await userEvent.type(createPackageControls.getByLabelText('Package Number'), 'PKG-NEW')
-    await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.0')
-    await userEvent.type(createPackageControls.getByLabelText('Average Length'), '12.0')
-    await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '24.0')
+    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+      target: { value: 'PKG-NEW' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Package Volume'), {
+      target: { value: '25.0' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average Length'), {
+      target: { value: '12.0' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
+      target: { value: '24.0' },
+    })
     await chooseComboBoxOption(
       createPackageControls.getByRole('combobox', { name: 'Status Code' }),
       'ACT - Active',
@@ -570,10 +586,18 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(createPackageControls.getByText('CE - Cedar')).toBeInTheDocument()
     })
 
-    await userEvent.type(createPackageControls.getByLabelText('Package Number'), 'PKG-NEW')
-    await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.0')
-    await userEvent.type(createPackageControls.getByLabelText('Average Length'), '12.0')
-    await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '24.0')
+    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+      target: { value: 'PKG-NEW' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Package Volume'), {
+      target: { value: '25.0' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average Length'), {
+      target: { value: '12.0' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
+      target: { value: '24.0' },
+    })
     await chooseComboBoxOption(
       createPackageControls.getByRole('combobox', { name: 'Status Code' }),
       'ACT - Active',
@@ -877,7 +901,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Package Comments')).toHaveValue('PKG-1 comments'),
     )
-    await userEvent.type(screen.getByLabelText('Timber Mark'), 'DRAFT-A')
+    fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'DRAFT-A' } })
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Selected Package' }), 'PKG-2')
 
     const confirmation = await screen.findByRole('dialog', {

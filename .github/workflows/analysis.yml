@@ -85,19 +85,6 @@ jobs:
           supply_scan: true
           triggers: ('frontend/')
 
-  clamav-daemon-detection:
-    name: ClamAV Daemon Detection
-    if: (! github.event.pull_request.draft)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Build and verify ClamAV daemon and malware detection
-        run: bash .github/scripts/check-clamav-daemon-detection.sh
-
   trivy:
     name: Trivy Security Scan
     if: (! github.event.pull_request.draft)
@@ -140,7 +127,7 @@ jobs:
 
   results:
     name: Analysis Results
-    needs: [backend-tests, frontend-tests, clamav-daemon-detection, trivy]
+    needs: [backend-tests, frontend-tests, trivy]
     if: always() && (! github.event.pull_request.draft)
     runs-on: ubuntu-slim
     steps:

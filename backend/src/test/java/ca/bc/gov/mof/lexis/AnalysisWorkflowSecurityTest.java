@@ -30,7 +30,7 @@ class AnalysisWorkflowSecurityTest {
     String resultsJob = workflow.substring(workflow.indexOf("  results:"));
 
     assertThat(resultsJob)
-        .contains("needs: [backend-tests, frontend-tests, clamav-daemon-detection, trivy]")
+        .contains("needs: [backend-tests, frontend-tests, trivy]")
         .contains("contains(needs.*.result, 'cancelled')")
         .doesNotContain("contains(needs.*.result, 'canceled')");
   }
@@ -38,7 +38,7 @@ class AnalysisWorkflowSecurityTest {
   @Test
   void frontendTestsShouldNotInheritTheSonarSecret() throws IOException {
     String workflow = read(".github/workflows/analysis.yml");
-    String frontendJob = section(workflow, "  frontend-tests:", "  clamav-daemon-detection:");
+    String frontendJob = section(workflow, "  frontend-tests:", "  trivy:");
     String testCommands = section(frontendJob, "          commands: |", "          dir: frontend");
 
     assertThat(frontendJob)
@@ -52,7 +52,7 @@ class AnalysisWorkflowSecurityTest {
   void ordinaryPullRequestTestsShouldNotReceiveRepositorySecrets() throws IOException {
     String workflow = read(".github/workflows/pr-open.yml");
     String backendJob = section(workflow, "  backend-tests:", "  frontend-tests:");
-    String frontendJob = section(workflow, "  frontend-tests:", "  clamav-daemon-detection:");
+    String frontendJob = section(workflow, "  frontend-tests:", "  deploys:");
 
     assertThat(backendJob).doesNotContain("secrets.", "environment:");
     assertThat(frontendJob).doesNotContain("secrets.", "environment:");

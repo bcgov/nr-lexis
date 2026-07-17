@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        package: [backend, frontend, clamav]
+        package: [backend, frontend]
     timeout-minutes: 10
     steps:
       - uses: bcgov/action-builder-ghcr@de3d575cf158e16f5dc2789630f6d587483b911c # v4.4.0
@@ -90,27 +90,16 @@ jobs:
           npm run format:check
           npm run test:cov
 
-  clamav-daemon-detection:
-    name: ClamAV Daemon Detection
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Build and verify ClamAV daemon and malware detection
-        run: bash .github/scripts/check-clamav-daemon-detection.sh
-
   deploys:
     name: Deploys (${{ github.event.number }})
     if: github.event.pull_request.head.repo.full_name == github.repository
-    needs: [builds, vars, backend-tests, frontend-tests, clamav-daemon-detection]
+    needs: [builds, vars, backend-tests, frontend-tests]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
     secrets:
       oc_namespace: ${{ secrets.oc_namespace }}
+      clamav_namespace: ${{ secrets.clamav_namespace }}
       oc_token: ${{ secrets.oc_token }}
       database_user: ${{ secrets.database_user }}
       database_password: ${{ secrets.database_password }}
@@ -118,6 +107,7 @@ jobs:
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
       lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
+      lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}
     with:
       environment: dev
       target: ${{ github.event.number }}
@@ -125,7 +115,7 @@ jobs:
       backend_min_replicas: "1"
       backend_max_replicas: "1"
       frontend_replicas: "1"
-      triggers: ('backend/', 'frontend/', 'clamav/', '.github/workflows/')
+      triggers: ('backend/', 'frontend/', '.github/workflows/')
 
   tests:
     name: Tests
@@ -142,7 +132,7 @@ jobs:
 
   results:
     name: PR Results
-    needs: [builds, backend-tests, frontend-tests, clamav-daemon-detection, deploys, tests]
+    needs: [builds, backend-tests, frontend-tests, deploys, tests]
     if: always()
     runs-on: ubuntu-slim
     steps:

@@ -6,7 +6,7 @@ Modern LEXIS uses Spring Mail with the BC Government application SMTP relay defa
 - port: `25`
 - SMTP authentication: disabled
 - STARTTLS: disabled
-- From address: supplied by the `LEXIS_MAIL_FROM` GitHub Environment variable
+- From address: supplied by the `LEXIS_MAIL_FROM` GitHub Environment secret
 
 Workflow services publish immutable email snapshots. A dedicated executor dispatches them asynchronously after the surrounding transaction commits. Events published outside a transaction use the same executor.
 
@@ -34,7 +34,7 @@ Configure the GitHub Environment:
 
 | Setting | Type | Required value |
 |---|---|---|
-| `LEXIS_MAIL_FROM` | Variable | Approved sender mailbox; required in every environment |
+| `LEXIS_MAIL_FROM` | Secret | Approved sender mailbox; required in every environment |
 | `LEXIS_MAIL_OVERRIDE_RECIPIENTS` | Secret | Optional comma/semicolon-separated DEV/TEST interception recipients; must be unset in PROD |
 | `LEXIS_MAIL_REGION_RCO_RECIPIENTS` | Secret | RCO distribution list; optional in DEV/TEST and required in PROD unless the fallback is configured |
 | `LEXIS_MAIL_REGION_RNI_RECIPIENTS` | Secret | RNI distribution list; optional in DEV/TEST and required in PROD unless the fallback is configured |
