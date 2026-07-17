@@ -67,6 +67,8 @@ scope.
   package tables. Table-dependent edits and review requests remain unavailable while those tables
   load or refresh, preventing actions against stale data. Package-scoped endpoints verify a direct
   Oracle relationship rather than reloading normal and Blanket OIC package lists for every request.
+  The [TEST validation guide](permit-package-membership-test-validation.md) identifies both
+  relationship paths and denial cases without writing data.
 - Canadian permit invoicing remains internal to LEXIS. Non-Canadian invoicing uses the established
   GBMS Oracle package sequence with ordered best-effort coordination and explicit reconciliation
   guidance.
@@ -116,7 +118,7 @@ that finds an existing package receives a conflict for NEXCOL reconciliation.
 | Attachments          | Oracle BLOB storage through application-server upload actions           | Oracle BLOB storage with bounded streaming validation and ClamAV scanning                                                |
 | Reports              | Application-server/WebADE report integration and legacy report assets   | Embedded JasperReports with checked-in templates and streamed HTTP responses                                             |
 | Email                | Request-coupled JavaMail flows with client and regional recipients      | After-commit asynchronous events, validated recipients, regional distribution-list routing, and non-production overrides |
-| Concurrency          | Process/session-scoped edit locks in a single runtime                   | Optimistic stale-save conflicts plus ordered Oracle row locks for transactional multi-row mutations                       |
+| Concurrency          | Process/session-scoped edit locks in a single runtime                   | Optimistic stale-save conflicts plus ordered Oracle row locks for transactional multi-row mutations                      |
 | Delivery             | Legacy build and deployment pipeline                                    | GitHub Actions, container images, security checks, and parameterized OpenShift deployments                               |
 
 The modernization intentionally preserves Oracle contracts, core workflow semantics, BLOB storage,
