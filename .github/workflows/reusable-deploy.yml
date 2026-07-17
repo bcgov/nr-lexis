@@ -108,6 +108,9 @@ on:
       keycloak_sa_client_secret:
         description: Keycloak service-account client secret used to provision LEXIS clients/scopes
         required: false
+      lexis_mail_from:
+        description: Approved sender mailbox for LEXIS workflow messages
+        required: true
       lexis_mail_override_recipients:
         description: Non-production recipient override
         required: false
@@ -174,7 +177,7 @@ jobs:
           LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS: ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}
           LEXIS_MAIL_NON_PRODUCTION: ${{ inputs.environment == 'prod' && 'false' || 'true' }}
           LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}
-          LEXIS_MAIL_FROM: ${{ secrets.LEXIS_MAIL_FROM }}
+          LEXIS_MAIL_FROM: ${{ secrets.lexis_mail_from }}
           LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}
           LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${{ secrets.lexis_mail_region_rco_recipients }}
           LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${{ secrets.lexis_mail_region_rni_recipients }}

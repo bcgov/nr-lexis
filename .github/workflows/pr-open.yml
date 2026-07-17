@@ -107,6 +107,7 @@ jobs:
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
       lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
+      lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}
     with:
       environment: dev
       target: ${{ github.event.number }}

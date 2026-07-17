@@ -26,6 +26,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("frontend_memory_request: \"128Mi\"")
         .contains("frontend_cpu_limit: \"500m\"")
         .contains("frontend_memory_limit: \"256Mi\"")
+        .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}")
         .contains("expiry_enabled: true");
   }
 
@@ -40,6 +41,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
         .contains("expiry_enabled: true")
+        .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}")
         .doesNotContain("lexis_mail_override_recipients", "LEXIS_MAIL_OVERRIDE_RECIPIENTS");
   }
 
@@ -54,7 +56,8 @@ class TestDeploymentTopologyConfigTest {
     assertThat(prDeploy)
         .contains("backend_min_replicas: \"1\"")
         .contains("backend_max_replicas: \"1\"")
-        .contains("frontend_replicas: \"1\"");
+        .contains("frontend_replicas: \"1\"")
+        .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}");
     assertThat(backendDeploy)
         .contains("file: backend/openshift.deploy.yml")
         .contains("lite_mode: false");
@@ -85,6 +88,10 @@ class TestDeploymentTopologyConfigTest {
     assertThat(workflow)
         .contains("backend_min_replicas:")
         .contains("backend_max_replicas:")
+        .contains(
+            "lexis_mail_from:\n"
+                + "        description: Approved sender mailbox for LEXIS workflow messages\n"
+                + "        required: true")
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
@@ -118,6 +125,7 @@ class TestDeploymentTopologyConfigTest {
         .contains(
             "-p LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS="
                 + "\"$LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS\"")
+        .contains("LEXIS_MAIL_FROM: ${{ secrets.lexis_mail_from }}")
         .contains(
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}")
         .contains("LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}")
@@ -294,7 +302,7 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_NON_PRODUCTION:"
                 + " ${{ inputs.environment == 'prod' && 'false' || 'true' }}")
         .contains("LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}")
-        .contains("LEXIS_MAIL_FROM: ${{ secrets.LEXIS_MAIL_FROM }}")
+        .contains("LEXIS_MAIL_FROM: ${{ secrets.lexis_mail_from }}")
         .contains(
             "LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}")
         .contains(
