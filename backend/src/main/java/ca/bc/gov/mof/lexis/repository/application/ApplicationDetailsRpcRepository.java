@@ -3,7 +3,10 @@ package ca.bc.gov.mof.lexis.repository.application;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.sql.CallableStatement;
 import java.sql.Date;
 import java.sql.ResultSet;
@@ -18,6 +21,9 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -42,12 +48,16 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_ID(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_APP(?,?)";
+  private static final String FIND_PERMIT_DETAIL_BY_OIC_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_OIC_APP(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGES_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
+  private static final String FIND_PURCHASE_OFFERS_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_APP(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_END_USE_BY_APPLICATION =
@@ -72,6 +82,16 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)";
   private static final String FIND_PRODUCT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)";
+  private static final String FIND_EXEMPTION_REASON_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_EXEMPTION_REASON_CODE(?,?)";
+  private static final String FIND_APPLICATION_STATUS_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_APPLICATION_STATUS_CODE(?,?)";
+  private static final String FIND_APPLICANT_TYPE_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_APPLICANT_TYPE_CODE(?,?)";
+  private static final String FIND_JURISDICTION_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_JURISDICTION_CODE(?,?)";
+  private static final String FIND_ORG_UNIT_BY_NUMBER =
+      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
   private static final String FIND_SPECIES_GRADE_BY_REGION_SPECIES =
       LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REG_SPEC(?,?,?)";
   private static final String FIND_SPECIES_GRADE_BY_REGION =
@@ -88,6 +108,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "DELETE_APPL_FILE_ATTACHMENT(?)";
   private static final String FIND_REMARK_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_REMARK_BY_NUMBER(?,?)";
+  private static final String FIND_REMARKS_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_REMARKS_BY_APP(?,?)";
   private static final String INSERT_REMARK =
       LEXIS_GROUP_14_PACKAGE + "INSERT_EXEMPTION_APP_REMARK(?,?,?,?,?,?)";
   private static final String UPDATE_REMARK =
@@ -126,7 +148,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_APPLICATION_FILE_DETAILS,
         cs -> cs.setLong(1, applicationNumber),
         2,
@@ -137,7 +159,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (permitNumber == null || permitNumber < 1) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_PERMIT_FILE_DETAILS,
         cs -> cs.setLong(1, permitNumber),
         2,
@@ -149,7 +171,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
             FIND_SCALE_DETAIL_BY_APPLICATION,
             cs -> cs.setLong(1, applicationNumber),
             2,
@@ -164,7 +186,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_SCALE_DETAIL_BY_APPLICATION,
         cs -> cs.setLong(1, applicationNumber),
         2,
@@ -175,11 +197,53 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_PERMIT_DETAIL_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
         rs -> new ApplicationPermitRow(getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
+  }
+
+  public List<ApplicationPermitRow> findPermitsByApplicationNumberRequired(
+      Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      throw new IllegalArgumentException("Application number must be positive.");
+    }
+    return queryCursorProcedureRequired(
+        FIND_PERMIT_DETAIL_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationPermitRow(
+                getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
+  }
+
+  public Optional<ApplicationPermitRow> findPermitByOicApplicationNumberRequired(
+      Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      throw new IllegalArgumentException("Application number must be positive.");
+    }
+    return queryCursorSingleRequired(
+        FIND_PERMIT_DETAIL_BY_OIC_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationPermitRow(
+                getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
+  }
+
+  public List<ApplicationPermitRow> findPermitsByOicApplicationNumberRequired(
+      Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      throw new IllegalArgumentException("Application number must be positive.");
+    }
+    return queryCursorProcedureRequired(
+        FIND_PERMIT_DETAIL_BY_OIC_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationPermitRow(
+                getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
   }
 
   public List<ApplicationScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {
@@ -187,7 +251,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_PACKAGE,
         cs -> cs.setString(1, normalized),
         2,
@@ -199,7 +263,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_SCALE_DETAIL_BY_ID,
         cs -> cs.setString(1, normalized),
         2,
@@ -210,7 +274,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (permitNumber == null || permitNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
             FIND_PERMIT_DETAIL_BY_ID,
             cs -> cs.setString(1, permitNumber.toString()),
             2,
@@ -223,7 +287,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return false;
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
             FIND_PACKAGE_BY_NUMBER,
             cs -> cs.setString(1, normalized),
             2,
@@ -243,15 +307,50 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapPackageDetailsRow);
   }
 
+  public Optional<PackageDetailsRow> findPackageDetailsByPackageNumberRequired(
+      String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
+        FIND_PACKAGE_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapPackageDetailsRow);
+  }
+
   public List<PackageDetailsRow> findPackagesByApplicationNumber(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
         FIND_PACKAGES_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
         this::mapPackageDetailsRow);
+  }
+
+  public List<PackageMutationRow> findPackageMutationsByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_PACKAGES_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapPackageMutationRow);
+  }
+
+  public List<ScaleMutationRow> findScaleMutationsByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_SCALE_DETAIL_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapScaleMutationRow);
   }
 
   public Optional<PackageMutationRow> findPackageMutationByPackageNumber(String packageNumber) {
@@ -259,11 +358,28 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_PACKAGE_BY_NUMBER,
         cs -> cs.setString(1, normalized),
         2,
         this::mapPackageMutationRow);
+  }
+
+  public boolean hasPurchaseOffersForPackageRequired(
+      Long applicationNumber, String packageNumber) {
+    String normalizedPackageNumber = trim(packageNumber);
+    if (applicationNumber == null
+        || applicationNumber < 1
+        || normalizedPackageNumber == null) {
+      return true;
+    }
+    return queryCursorProcedureRequired(
+            FIND_PURCHASE_OFFERS_BY_APPLICATION,
+            cs -> cs.setString(1, applicationNumber.toString()),
+            2,
+            rs -> trim(getString(rs, "PACKAGE_NUMBER")))
+        .stream()
+        .anyMatch(normalizedPackageNumber::equals);
   }
 
   @Transactional
@@ -271,14 +387,33 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (record == null || trim(record.packageNumber()) == null) {
       return Optional.empty();
     }
-    Optional<PackageMutationRow> inserted =
-        queryCursorSingle(
-            INSERT_PACKAGE,
-            cs -> bindPackageInsert(cs, record),
-            18,
-            this::mapPackageMutationRow);
+    Optional<PackageMutationRow> inserted;
+    try {
+      inserted =
+          queryCursorSingleRequired(
+              INSERT_PACKAGE,
+              cs -> bindPackageInsert(cs, record),
+              18,
+              this::mapPackageMutationRow);
+    } catch (DuplicateKeyException exception) {
+      if (packageExists(record.packageNumber())) {
+        throw new DuplicatePackageNumberException(record.packageNumber(), exception);
+      }
+      throw exception;
+    }
 
-    if (inserted.isPresent() && !insertPackageEndUses(record.packageNumber(), record.endUses())) {
+    if (inserted
+        .filter(
+            row ->
+                java.util.Objects.equals(
+                        trim(row.packageNumber()), trim(record.packageNumber()))
+                    && java.util.Objects.equals(
+                        row.applicationNumber(), record.applicationNumber()))
+        .isEmpty()) {
+      markRollbackOnly();
+      return Optional.empty();
+    }
+    if (!insertPackageEndUses(record.packageNumber(), record.endUses())) {
       markRollbackOnly();
       return Optional.empty();
     }
@@ -291,13 +426,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       return false;
     }
 
-    boolean updated =
-        executeProcedure(
-            UPDATE_PACKAGE,
-            cs -> bindPackageUpdate(cs, record));
-    if (!updated) {
-      return false;
-    }
+    executeProcedureRequired(UPDATE_PACKAGE, cs -> bindPackageUpdate(cs, record));
 
     if (!deletePackageEndUses(record.packageNumber())
         || !insertPackageEndUses(record.packageNumber(), record.endUses())) {
@@ -307,15 +436,41 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return true;
   }
 
+  /**
+   * Updates the package row without replacing its end-use children. This is reserved for internal
+   * synchronization paths that have no authority to change the package's species/end-use set.
+   */
+  public boolean updatePackagePreservingEndUses(PackageMutationRecord record) {
+    if (record == null || trim(record.packageNumber()) == null) {
+      return false;
+    }
+    executeProcedureRequired(UPDATE_PACKAGE, cs -> bindPackageUpdate(cs, record));
+    return true;
+  }
+
   public Optional<ApplicationScaleDetailRow> insertScaleDetail(ScaleMutationRecord record) {
     if (record == null || trim(record.packageNumber()) == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
-        INSERT_SCALE_DETAIL,
-        cs -> bindScaleInsert(cs, record),
-        13,
-        this::mapApplicationScaleDetailRow);
+    Optional<ApplicationScaleDetailRow> inserted =
+        queryCursorSingleRequired(
+            INSERT_SCALE_DETAIL,
+            cs -> bindScaleInsert(cs, record),
+            13,
+            this::mapApplicationScaleDetailRow);
+    if (inserted
+        .filter(
+            row ->
+                parsePositiveLong(row.exportScaleDetailId()) != null
+                    && java.util.Objects.equals(
+                        trim(row.packageNumber()), trim(record.packageNumber()))
+                    && java.util.Objects.equals(
+                        row.applicationNumber(), record.applicationNumber()))
+        .isEmpty()) {
+      markRollbackOnly();
+      return Optional.empty();
+    }
+    return inserted;
   }
 
   public List<ScaleMutationRow> findScaleMutationDetailsByPackageNumber(String packageNumber) {
@@ -323,7 +478,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_PACKAGE,
         cs -> cs.setString(1, normalized),
         2,
@@ -334,7 +489,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (record == null || trim(record.scaleDetailId()) == null) {
       return false;
     }
-    return executeProcedure(UPDATE_SCALE, cs -> bindScaleUpdate(cs, record));
+    executeProcedureRequired(UPDATE_SCALE, cs -> bindScaleUpdate(cs, record));
+    return true;
   }
 
   public boolean deleteScaleById(String scaleDetailId, String userId) {
@@ -342,12 +498,13 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalizedScaleDetailId == null) {
       return false;
     }
-    return executeProcedure(
+    executeProcedureRequired(
         DELETE_SCALE_DETAIL,
         cs -> {
           cs.setString(1, normalizedScaleDetailId);
           cs.setString(2, auditUserOrDefault(userId));
         });
+    return true;
   }
 
   public boolean deletePackageById(String packageNumber, String userId) {
@@ -355,12 +512,13 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalizedPackageNumber == null) {
       return false;
     }
-    return executeProcedure(
+    executeProcedureRequired(
         DELETE_PACKAGE,
         cs -> {
           cs.setString(1, normalizedPackageNumber);
           cs.setString(2, auditUserOrDefault(userId));
         });
+    return true;
   }
 
   public Optional<String> findAttachmentTypeDescription(String attachmentTypeCode) {
@@ -369,7 +527,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
             FIND_ATTACHMENT_TYPE_CODE,
             cs -> cs.setString(1, normalized),
             2,
@@ -377,51 +535,54 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .filter(value -> value != null && !value.isBlank());
   }
 
-  public Optional<byte[]> findFileAttachmentBytes(Long fileId) {
-    if (fileId == null || fileId < 1) {
-      return Optional.empty();
+  public boolean streamFileAttachment(Long fileId, OutputStream outputStream) throws IOException {
+    if (fileId == null || fileId < 1 || outputStream == null) {
+      return false;
     }
-
     String call = "{ call " + FIND_FILE_ATTACHMENT + " }";
     try {
-      return jdbcTemplate.execute(
-          call,
-          (CallableStatementCallback<Optional<byte[]>>)
-              cs -> {
-                cs.setLong(1, fileId);
-                cs.registerOutParameter(2, Types.REF_CURSOR);
-                cs.execute();
-
-                try (ResultSet rs = (ResultSet) cs.getObject(2)) {
-                  if (rs == null || !rs.next()) {
-                    return Optional.empty();
-                  }
-                  InputStream input = rs.getBinaryStream(1);
-                  if (input == null) {
-                    return Optional.empty();
-                  }
-                  try {
-                    try {
-                      return Optional.of(input.readAllBytes());
-                    } catch (java.io.IOException ex) {
-                      logger.warn(
-                          "Oracle file attachment read failed [{}]: {}",
-                          FIND_FILE_ATTACHMENT,
-                          ex.getMessage());
-                      return Optional.empty();
+      Boolean streamed =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatementCallback<Boolean>)
+                  cs -> {
+                    cs.setLong(1, fileId);
+                    cs.registerOutParameter(2, Types.REF_CURSOR);
+                    cs.execute();
+                    Object cursor = cs.getObject(2);
+                    if (cursor == null) {
+                      throw new DataAccessResourceFailureException(
+                          "Oracle returned no application attachment cursor.");
                     }
-                  } finally {
-                    try {
-                      input.close();
-                    } catch (java.io.IOException ignored) {
-                      // Ignore stream close exceptions for read-only download lookups.
+                    if (!(cursor instanceof ResultSet rs)) {
+                      throw new DataRetrievalFailureException(
+                          "Oracle returned an invalid application attachment cursor.");
                     }
-                  }
-                }
-              });
+                    try (rs) {
+                      if (!rs.next()) {
+                        return false;
+                      }
+                      try (InputStream input = rs.getBinaryStream(1)) {
+                        if (input == null) {
+                          throw new DataRetrievalFailureException(
+                              "Oracle returned an application attachment row without file content.");
+                        }
+                        input.transferTo(outputStream);
+                        return true;
+                      } catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                      }
+                    }
+                  });
+      if (streamed == null) {
+        throw new DataAccessResourceFailureException(
+            "Oracle returned no application attachment stream result.");
+      }
+      return streamed;
+    } catch (UncheckedIOException ex) {
+      throw ex.getCause();
     } catch (DataAccessException ex) {
-      logger.warn("Oracle file attachment lookup failed [{}]: {}", FIND_FILE_ATTACHMENT, ex.getMessage());
-      return Optional.empty();
+      throw new IOException("Oracle application attachment stream failed", ex);
     }
   }
 
@@ -429,14 +590,27 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (documentId == null || documentId < 1) {
       return false;
     }
-    return executeProcedure(DELETE_APPLICATION_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    executeProcedureRequired(
+        DELETE_APPLICATION_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    return true;
   }
 
   public Optional<RemarkRow> findRemarkByNumber(Long remarkId) {
     if (remarkId == null || remarkId < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
+        FIND_REMARK_BY_NUMBER,
+        cs -> cs.setLong(1, remarkId),
+        2,
+        this::mapRemarkRow);
+  }
+
+  public Optional<RemarkRow> findRemarkByNumberRequired(Long remarkId) {
+    if (remarkId == null || remarkId < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
         FIND_REMARK_BY_NUMBER,
         cs -> cs.setLong(1, remarkId),
         2,
@@ -452,16 +626,42 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     Timestamp timestamp = Timestamp.from(remarkDate == null ? Instant.now() : remarkDate);
     String remark = normalizeRemarkBody(remarkBody);
 
-    return queryCursorSingle(
-        INSERT_REMARK,
-        cs -> {
-          cs.setTimestamp(1, timestamp);
-          cs.setString(2, remark);
-          cs.setString(3, auditUserOrDefault(entryUserId));
-          cs.setTimestamp(4, Timestamp.from(Instant.now()));
-          cs.setLong(5, applicationNumber);
-        },
-        6,
+    Optional<RemarkRow> inserted =
+        queryCursorSingleRequired(
+            INSERT_REMARK,
+            cs -> {
+              cs.setTimestamp(1, timestamp);
+              cs.setString(2, remark);
+              cs.setString(3, auditUserOrDefault(entryUserId));
+              cs.setTimestamp(4, Timestamp.from(Instant.now()));
+              cs.setLong(5, applicationNumber);
+            },
+            6,
+            this::mapRemarkRow);
+    if (inserted
+        .filter(
+            row ->
+                row.remarkId() > 0
+                    && java.util.Objects.equals(
+                        row.applicationNumber(), applicationNumber)
+                    && java.util.Objects.equals(row.remark(), remark)
+                    && java.util.Objects.equals(
+                        trim(row.user()), trim(auditUserOrDefault(entryUserId))))
+        .isEmpty()) {
+      markRollbackOnly();
+      return Optional.empty();
+    }
+    return inserted;
+  }
+
+  public List<RemarkRow> findRemarksByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_REMARKS_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
         this::mapRemarkRow);
   }
 
@@ -474,7 +674,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     Timestamp timestamp = Timestamp.from(remarkDate == null ? Instant.now() : remarkDate);
     String remark = normalizeRemarkBody(remarkBody);
 
-    return executeProcedure(
+    executeProcedureRequired(
         UPDATE_REMARK,
         cs -> {
           cs.setLong(1, remarkId);
@@ -484,6 +684,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
           cs.setTimestamp(5, Timestamp.from(Instant.now()));
           cs.setLong(6, applicationNumber);
         });
+    return true;
   }
 
   public Optional<ApplicationInsertRow> insertApplication(ApplicationInsertRecord record) {
@@ -491,29 +692,58 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
-        INSERT_EXEMPTION_APPLICATION,
-        cs -> bindApplicationInsert(cs, record),
-        28,
-        this::mapApplicationInsertRow);
+    Optional<ApplicationInsertRow> inserted =
+        queryCursorSingleRequired(
+            INSERT_EXEMPTION_APPLICATION,
+            cs -> bindApplicationInsert(cs, record),
+            28,
+            this::mapApplicationInsertRow);
+    if (inserted.filter(row -> row.applicationNumber() != null && row.applicationNumber() > 0).isEmpty()) {
+      markRollbackOnly();
+      return Optional.empty();
+    }
+    return inserted;
   }
 
   public Optional<ApplicationUpdateRecord> findApplicationUpdateRecord(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_APPLICATION_BY_NUMBER,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
         this::mapApplicationUpdateRecord);
   }
 
+  public Optional<ApplicationEditContextRow> findApplicationEditContext(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationEditContextRow(
+                getLong(rs, "APPLICATION_NUMBER"),
+                getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
+                getString(rs, "EXPORT_JURISDICTION_CODE"),
+                getLong(rs, "EXPORT_SCHEDULE_ID"),
+                getLocalDate(rs, "ADVERTISING_DATE"),
+                getInstant(rs, "APPROVAL_DATE"),
+                getString(rs, "OIC_INDICATOR"),
+                getString(rs, "EXEMPTION_NUMBER"),
+                getLong(rs, "ORG_UNIT_NO")));
+  }
+
   public boolean updateApplication(ApplicationUpdateRecord record) {
     if (record == null || record.applicationNumber() == null || record.applicationNumber() < 1) {
       return false;
     }
-    return executeProcedure(UPDATE_EXEMPTION_APPLICATION, cs -> bindApplicationUpdate(cs, record));
+    executeProcedureRequired(
+        UPDATE_EXEMPTION_APPLICATION, cs -> bindApplicationUpdate(cs, record));
+    return true;
   }
 
   @Transactional
@@ -539,7 +769,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_APPLICATION_BY_NUMBER,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
@@ -564,6 +794,17 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapEndUseRow);
   }
 
+  public List<EndUseRow> findEndUsesByApplicationNumberRequired(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_END_USE_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapEndUseRow);
+  }
+
   public List<EndUseRow> findEndUsesByPackageNumber(String packageNumber) {
     String normalizedPackageNumber = trim(packageNumber);
     if (normalizedPackageNumber == null) {
@@ -576,8 +817,37 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapEndUseRow);
   }
 
+  public List<EndUseRow> findEndUsesByPackageNumberRequired(String packageNumber) {
+    String normalizedPackageNumber = trim(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_END_USE_BY_PACKAGE,
+        cs -> cs.setString(1, normalizedPackageNumber),
+        2,
+        this::mapEndUseRow);
+  }
+
   public List<CodeRow> findAllSpeciesCodes() {
     return queryCursorProcedure(
+            FIND_ALL_SPECIES_CODES,
+            null,
+            1,
+            rs ->
+                new CodeRow(
+                    getString(rs, "CODE"),
+                    getString(rs, "DESCRIPTION"),
+                    zeroIfNull(getLong(rs, "GROUP_BY")),
+                    zeroIfNull(getLong(rs, "ORDER_BY"))))
+        .stream()
+        .filter(row -> trim(row.code()) != null && trim(row.description()) != null)
+        .sorted(Comparator.comparingLong(CodeRow::groupBy).thenComparingLong(CodeRow::orderBy))
+        .toList();
+  }
+
+  public List<CodeRow> findAllSpeciesCodesRequired() {
+    return queryCursorProcedureRequired(
             FIND_ALL_SPECIES_CODES,
             null,
             1,
@@ -610,12 +880,46 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .toList();
   }
 
+  public List<CodeRow> findAllPackageStatusCodesRequired() {
+    return queryCursorProcedureRequired(
+            FIND_ALL_PACKAGE_STATUS_CODES,
+            null,
+            1,
+            rs ->
+                new CodeRow(
+                    getString(rs, "CODE"),
+                    getString(rs, "DESCRIPTION"),
+                    zeroIfNull(getLong(rs, "GROUP_BY")),
+                    zeroIfNull(getLong(rs, "ORDER_BY"))))
+        .stream()
+        .filter(row -> trim(row.code()) != null && trim(row.description()) != null)
+        .sorted(Comparator.comparingLong(CodeRow::groupBy).thenComparingLong(CodeRow::orderBy))
+        .toList();
+  }
+
   public Optional<CodeRow> findGradeCode(String gradeCode) {
     String normalized = trim(gradeCode);
     if (normalized == null) {
       return Optional.empty();
     }
     return queryCursorSingle(
+        FIND_GRADE_CODE,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new CodeRow(
+                getString(rs, "CODE"),
+                getString(rs, "DESCRIPTION"),
+                zeroIfNull(getLong(rs, "GROUP_BY")),
+                zeroIfNull(getLong(rs, "ORDER_BY"))));
+  }
+
+  public Optional<CodeRow> findGradeCodeRequired(String gradeCode) {
+    String normalized = trim(gradeCode);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
         FIND_GRADE_CODE,
         cs -> cs.setString(1, normalized),
         2,
@@ -644,12 +948,29 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 zeroIfNull(getLong(rs, "ORDER_BY"))));
   }
 
+  public Optional<CodeRow> findSpeciesCodeRequired(String speciesCode) {
+    String normalized = trim(speciesCode);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
+        FIND_SPECIES_CODE,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new CodeRow(
+                getString(rs, "CODE"),
+                getString(rs, "DESCRIPTION"),
+                zeroIfNull(getLong(rs, "GROUP_BY")),
+                zeroIfNull(getLong(rs, "ORDER_BY"))));
+  }
+
   public Optional<TimberMarkRow> findTimberMark(String timberMark) {
     String normalized = trim(timberMark);
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_TIMBER_MARK,
         cs -> cs.setString(1, normalized),
         2,
@@ -661,7 +982,23 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null || orgUnitNumber == null || orgUnitNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
+        FIND_TIMBER_MARK_BY_ORG_UNIT,
+        cs -> {
+          cs.setString(1, normalized);
+          cs.setString(2, orgUnitNumber.toString());
+        },
+        3,
+        this::mapTimberMarkRow);
+  }
+
+  public Optional<TimberMarkRow> findTimberMarkByOrgUnitRequired(
+      String timberMark, Long orgUnitNumber) {
+    String normalized = trim(timberMark);
+    if (normalized == null || orgUnitNumber == null || orgUnitNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
         FIND_TIMBER_MARK_BY_ORG_UNIT,
         cs -> {
           cs.setString(1, normalized);
@@ -693,6 +1030,23 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
     return queryCursorSingle(
+        FIND_END_USE_CODE,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new CodeRow(
+                getString(rs, "CODE"),
+                getString(rs, "DESCRIPTION"),
+                zeroIfNull(getLong(rs, "GROUP_BY")),
+                zeroIfNull(getLong(rs, "ORDER_BY"))));
+  }
+
+  public Optional<CodeRow> findEndUseCodeRequired(String endUseCode) {
+    String normalized = trim(endUseCode);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingleRequired(
         FIND_END_USE_CODE,
         cs -> cs.setString(1, normalized),
         2,
@@ -736,6 +1090,26 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .toList();
   }
 
+  public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionSpeciesRequired(
+      String orgUnitNumber, String speciesCode) {
+    String normalizedOrgUnitNumber = trim(orgUnitNumber);
+    String normalizedSpeciesCode = trim(speciesCode);
+    if (normalizedOrgUnitNumber == null || normalizedSpeciesCode == null) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+            FIND_SPECIES_GRADE_BY_REGION_SPECIES,
+            cs -> {
+              cs.setString(1, normalizedOrgUnitNumber);
+              cs.setString(2, normalizedSpeciesCode);
+            },
+            3,
+            this::mapSpeciesGradeEndUseRow)
+        .stream()
+        .filter(row -> trim(row.gradeCode()) != null)
+        .toList();
+  }
+
   public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegion(String orgUnitNumber) {
     String normalizedOrgUnitNumber = trim(orgUnitNumber);
     if (normalizedOrgUnitNumber == null) {
@@ -748,9 +1122,27 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapSpeciesGradeEndUseRow);
   }
 
+  public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionRequired(String orgUnitNumber) {
+    String normalizedOrgUnitNumber = trim(orgUnitNumber);
+    if (normalizedOrgUnitNumber == null) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_SPECIES_GRADE_BY_REGION,
+        cs -> cs.setString(1, normalizedOrgUnitNumber),
+        2,
+        this::mapSpeciesGradeEndUseRow);
+  }
+
   public List<ExcolValidationRow> findCandidateEndUseCodes(
       int speciesCount, String speciesCode, Long orgUnitNumber) {
     return findCandidateExcolRows(
+        FIND_CANDIDATE_END_USES, excolPattern(speciesCount, false), speciesCode, orgUnitNumber);
+  }
+
+  public List<ExcolValidationRow> findCandidateEndUseCodesRequired(
+      int speciesCount, String speciesCode, Long orgUnitNumber) {
+    return findCandidateExcolRowsRequired(
         FIND_CANDIDATE_END_USES, excolPattern(speciesCount, false), speciesCode, orgUnitNumber);
   }
 
@@ -778,9 +1170,83 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         rs -> new ExcolValidationRow(getString(rs, "EXCOL_TRANSLATION_VALUE")));
   }
 
+  public List<ExcolValidationRow> findCandidateExcolCodesRequired(
+      int speciesCount, String speciesCode, String endUseCode, Long orgUnitNumber) {
+    String normalizedSpeciesCode = trim(speciesCode);
+    String normalizedEndUseCode = trim(endUseCode);
+    String excolPattern = excolPattern(speciesCount, false);
+    if (excolPattern == null
+        || normalizedSpeciesCode == null
+        || normalizedEndUseCode == null
+        || orgUnitNumber == null
+        || orgUnitNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_CANDIDATE_EXCOL_VALUES,
+        cs -> {
+          cs.setString(1, excolPattern);
+          cs.setString(2, normalizedSpeciesCode);
+          cs.setString(3, normalizedEndUseCode);
+          cs.setLong(4, orgUnitNumber);
+        },
+        5,
+        rs -> new ExcolValidationRow(getString(rs, "EXCOL_TRANSLATION_VALUE")));
+  }
+
+  public boolean isProductTypeCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_PRODUCT_TYPE_CODE, code);
+  }
+
+  public boolean isGrowthTypeCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_GROWTH_TYPE_CODE, code);
+  }
+
+  public boolean isPackageStatusCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_PACKAGE_STATUS_CODE, code);
+  }
+
+  public boolean isExemptionReasonCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_EXEMPTION_REASON_CODE, code);
+  }
+
+  public boolean isApplicationStatusCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_APPLICATION_STATUS_CODE, code);
+  }
+
+  public boolean isApplicantTypeCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_APPLICANT_TYPE_CODE, code);
+  }
+
+  public boolean isJurisdictionCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_JURISDICTION_CODE, code);
+  }
+
+  public boolean isOrgUnitValidRequired(Long orgUnitNumber) {
+    if (orgUnitNumber == null || orgUnitNumber < 1) {
+      return false;
+    }
+    return queryCursorSingleRequired(
+            FIND_ORG_UNIT_BY_NUMBER,
+            cs -> cs.setLong(1, orgUnitNumber),
+            2,
+            rs -> getLong(rs, "ORG_UNIT_NO"))
+        .filter(value -> value.equals(orgUnitNumber))
+        .isPresent();
+  }
+
   public List<ExcolValidationRow> findCandidateExcolCombinations(
       int speciesCount, String speciesCode, Long orgUnitNumber) {
     return findCandidateExcolRows(
+        FIND_CANDIDATE_EXCOL_COMBINATIONS,
+        excolPattern(speciesCount, true),
+        speciesCode,
+        orgUnitNumber);
+  }
+
+  public List<ExcolValidationRow> findCandidateExcolCombinationsRequired(
+      int speciesCount, String speciesCode, Long orgUnitNumber) {
+    return findCandidateExcolRowsRequired(
         FIND_CANDIDATE_EXCOL_COMBINATIONS,
         excolPattern(speciesCount, true),
         speciesCode,
@@ -822,6 +1288,26 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         rs -> new ExcolValidationRow(getString(rs, "EXCOL_TRANSLATION_VALUE")));
   }
 
+  private List<ExcolValidationRow> findCandidateExcolRowsRequired(
+      String procedureSignature, String excolPattern, String speciesCode, Long orgUnitNumber) {
+    String normalizedSpeciesCode = trim(speciesCode);
+    if (excolPattern == null
+        || normalizedSpeciesCode == null
+        || orgUnitNumber == null
+        || orgUnitNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        procedureSignature,
+        cs -> {
+          cs.setString(1, excolPattern);
+          cs.setString(2, normalizedSpeciesCode);
+          cs.setLong(3, orgUnitNumber);
+        },
+        4,
+        rs -> new ExcolValidationRow(getString(rs, "EXCOL_TRANSLATION_VALUE")));
+  }
+
   private String excolPattern(int speciesCount, boolean includeAdditionalSpecies) {
     if (speciesCount < 1) {
       return null;
@@ -849,6 +1335,20 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
             rs -> trim(rs.getString(2)))
         .filter(value -> value != null && !value.isBlank())
         .or(() -> fallbackCodeDescription(procedureSignature, normalized));
+  }
+
+  private boolean codeExistsRequired(String procedureSignature, String code) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return false;
+    }
+    return queryCursorSingleRequired(
+            procedureSignature,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> trim(rs.getString(1)))
+        .filter(normalized::equalsIgnoreCase)
+        .isPresent();
   }
 
   private void bindApplicationInsert(CallableStatement cs, ApplicationInsertRecord record)
@@ -1007,17 +1507,13 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       if (speciesCode == null || endUseCode == null) {
         continue;
       }
-      boolean inserted =
-          executeProcedure(
-              INSERT_END_USE,
-              cs -> {
-                cs.setLong(1, applicationNumber);
-                cs.setString(2, speciesCode);
-                cs.setString(3, endUseCode);
-              });
-      if (!inserted) {
-        return false;
-      }
+      executeProcedureRequired(
+          INSERT_END_USE,
+          cs -> {
+            cs.setLong(1, applicationNumber);
+            cs.setString(2, speciesCode);
+            cs.setString(3, endUseCode);
+          });
     }
     return true;
   }
@@ -1026,7 +1522,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return false;
     }
-    return executeProcedure(DELETE_END_USE, cs -> cs.setLong(1, applicationNumber));
+    executeProcedureRequired(DELETE_END_USE, cs -> cs.setLong(1, applicationNumber));
+    return true;
   }
 
   private boolean insertPackageEndUses(String packageNumber, List<EndUseMutationRecord> endUses) {
@@ -1043,17 +1540,13 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       if (speciesCode == null || endUseCode == null) {
         continue;
       }
-      boolean inserted =
-          executeProcedure(
+      executeProcedureRequired(
           INSERT_END_USE_PACKAGE,
           cs -> {
             cs.setString(1, normalizedPackageNumber);
             cs.setString(2, speciesCode);
             cs.setString(3, endUseCode);
           });
-      if (!inserted) {
-        return false;
-      }
     }
     return true;
   }
@@ -1063,7 +1556,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalizedPackageNumber == null) {
       return false;
     }
-    return executeProcedure(DELETE_END_USE_PACKAGE, cs -> cs.setString(1, normalizedPackageNumber));
+    executeProcedureRequired(
+        DELETE_END_USE_PACKAGE, cs -> cs.setString(1, normalizedPackageNumber));
+    return true;
   }
 
   private DocumentRow mapDocumentRow(ResultSet rs) {
@@ -1083,7 +1578,12 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     String remark = getString(rs, "REMARK");
     String user = getString(rs, "ENTRY_USERID");
     Instant date = getInstant(rs, "ENTRY_TIMESTAMP");
-    return new RemarkRow(remarkId == null ? 0L : remarkId, remark == null ? "" : remark, user, date);
+    return new RemarkRow(
+        remarkId == null ? 0L : remarkId,
+        getLong(rs, "APPLICATION_NUMBER"),
+        remark == null ? "" : remark,
+        user,
+        date);
   }
 
   private ApplicationInsertRow mapApplicationInsertRow(ResultSet rs) {
@@ -1226,7 +1726,12 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   public record DocumentRow(
       long id, String fileName, String description, String attachmentTypeCode) {}
 
-  public record RemarkRow(long remarkId, String remark, String user, Instant date) {}
+  public record RemarkRow(
+      long remarkId, Long applicationNumber, String remark, String user, Instant date) {
+    public RemarkRow(long remarkId, String remark, String user, Instant date) {
+      this(remarkId, null, remark, user, date);
+    }
+  }
 
   public record ApplicationInsertRecord(
       LocalDate applicationDate,
@@ -1293,6 +1798,17 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String ownerClientNumber,
       String ownerClientLocationCode,
       String ownerContactName) {}
+
+  public record ApplicationEditContextRow(
+      Long applicationNumber,
+      String applicationStatusCode,
+      String jurisdictionCode,
+      Long exportScheduleId,
+      LocalDate advertisingDate,
+      Instant approvalDate,
+      String oicIndicator,
+      String exemptionNumber,
+      Long orgUnitNumber) {}
 
   public record CodeRow(String code, String description, long groupBy, long orderBy) {}
 

@@ -1,36 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { openBlobInNewTab } from '@/utils/download'
-
-const WINDOW_FEATURES = 'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1'
+import { triggerBrowserDownload } from '@/utils/download'
 
 describe('download utilities', () => {
   beforeEach(() => {
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:report')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   })
 
   afterEach(() => {
-    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
-  it('revokes blob URLs immediately when a popup is blocked', () => {
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+  it('downloads a blob with the supplied filename', () => {
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const report = new Blob(['report'], { type: 'application/pdf' })
 
-    expect(openBlobInNewTab(new Blob(['test']), 'reportWindow')).toBe(false)
+    triggerBrowserDownload(report, 'advertising-list.pdf')
 
-    expect(openSpy).toHaveBeenCalledWith('blob:test', 'reportWindow', WINDOW_FEATURES)
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test')
-  })
-
-  it('keeps blob URLs available briefly when a new tab opens', () => {
-    vi.useFakeTimers()
-    vi.spyOn(window, 'open').mockReturnValue({} as Window)
-
-    expect(openBlobInNewTab(new Blob(['test']), 'reportWindow')).toBe(true)
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
-
-    vi.advanceTimersByTime(60_000)
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test')
+    const clickedAnchor = clickSpy.mock.instances[0] as HTMLAnchorElement
+    expect(URL.createObjectURL).toHaveBeenCalledWith(report)
+    expect(clickedAnchor.href).toBe('blob:report')
+    expect(clickedAnchor.download).toBe('advertising-list.pdf')
+    expect(clickedAnchor.isConnected).toBe(false)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:report')
   })
 })

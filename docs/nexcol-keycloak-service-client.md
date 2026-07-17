@@ -13,6 +13,10 @@ NEXCOL
   -> LEXIS federal application tables
 ```
 
+The OpenShift Route remains internet-accessible. Direct requests still require a valid Keycloak
+token with the submission scope, but bypass gateway metrics and throttling. The submission scope
+must be assigned only to the approved NEXCOL client.
+
 ## Authentication
 
 NEXCOL uses a dedicated confidential Keycloak client. Both federal endpoints require the OAuth
@@ -25,13 +29,23 @@ lexis:federal-submission:submit
 The gateway validates the token issuer, expiry, required scope, and audience when configured.
 LEXIS validates the forwarded token and applies the same scope-based authorization.
 
-CI idempotently creates/checks the client scope, confidential client, and default scope assignment
-when these GitHub environment values are configured:
+The TEST deployment, and the PROD deployment when enabled, idempotently create or check the client
+scope, confidential client, and default scope assignment. Each GitHub environment requires:
+
+- secrets `KEYCLOAK_SA_CLIENT_ID` and `KEYCLOAK_SA_CLIENT_SECRET` for the least-privilege
+  provisioning service account;
+- variable `KEYCLOAK_ISSUER_URI` for the target realm; and
+- variable `NEXCOL_KEYCLOAK_CLIENT_ID` for the approved calling client.
+
+The expected calling-client values are:
 
 - TEST: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
 - PROD: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-prod`
 
-Runtime client-secret lifecycle is managed through the environment's operational process.
+The deployment fails when required configuration is absent, the existing scope/client shape is
+unexpected, or the submission scope is assigned as a realm default or to another client. It does
+not remove assignments from unrelated clients. Runtime client-secret lifecycle is managed through
+the environment's operational process.
 
 Obtain an access token with the standard client-credentials grant:
 
@@ -48,6 +62,9 @@ Tokens should contain the expected issuer, an unexpired access-token lifetime, a
 represented in `aud`.
 
 ## Endpoints
+
+Both endpoints are live in every backend environment. TEST and PROD provide the supported NEXCOL
+gateway and service-client integration; DEV has no supported NEXCOL gateway/client configuration.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|
@@ -136,14 +153,30 @@ identifiers when available.
 | `401` | Missing, expired or invalid token |
 | `403` | Required scope is absent |
 | `404` | Gateway route or method is unavailable |
+| `409` | The idempotency key conflicts, processing is already in flight on this replica, or the package already exists |
 | `422` | XML or business validation failed |
-| `503` | LEXIS processing dependency is unavailable |
+| `503` | A LEXIS processing dependency is unavailable |
 
-A successful submission includes an `applicationNumber` and, when available, a relative
-`Location` header. Processing is synchronous; there is no submission-status polling endpoint.
+A successful submission includes the generated internal LEXIS `APPLICATION_NUMBER` as
+`applicationNumber` and, when available, a relative `Location` header that uses that identifier.
+The submitted `FED_APPLICATION_NUMBER` is returned as
+`submissionSummary.federalApplicationNumber`; it is display and search metadata, is not guaranteed
+to be unique, and must not be used as a detail or mutation identifier. Processing is synchronous;
+there is no submission-status polling endpoint.
 
-For a transport timeout or `503`, retries use the original idempotency key. Durable response replay
-and duplicate suppression are required before automated submission retries are enabled.
+CREATE requires `X-Idempotency-Key`. The key is scoped to the authenticated caller and bound to the
+XML payload, user reference, source-system metadata, and effective filename. A completed non-5xx
+response is replayed when the retry reaches the same replica while its bounded entry remains
+available. An in-flight `409` includes `Retry-After` guidance and must be retried with the same key
+and identical payload. A different-payload `409` must not be retried with that key.
+
+NEXCOL validates before submission and assigns a stable package number and idempotency key to each
+logical submission. Distinct validated submissions can be processed concurrently. The application,
+package, and scale writes use one Oracle transaction, and `EXPORT_PACKAGE.PACKAGE_NUMBER` is the
+cross-replica collision boundary. A retry reaching another replica after the first commit receives
+`409` when its package already exists; NEXCOL must stop blind retries and reconcile that package.
+This contract intentionally provides best-effort replay rather than durable exactly-once response
+replay.
 
 ## ESF Migration Mapping
 

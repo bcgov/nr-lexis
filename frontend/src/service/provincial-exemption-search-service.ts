@@ -1,5 +1,5 @@
 import {
-  createPagedSearchParams,
+  createSortedPagedSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
   requireParsedSearchResponse,
@@ -12,16 +12,19 @@ import type {
   ProvincialExemptionSearchRequest,
   ProvincialExemptionSearchResponse,
 } from '@/interfaces/ProvincialExemptionSearch'
+import { isRecord } from '@/utils/record'
 
 type BackendProvincialExemptionSearchResult = {
-  applicationNumber: number
   exemptionNumber: string
-  exemptionType: string
-  status: string
-  ownerClientNumber: string
-  listingDate: string
-  region: string
+  exemptionType: string | null
+  status: string | null
+  applicantClientNumber: string | null
+  ownerClientNumber: string | null
+  listingDate: string | null
+  expiryDate: string | null
+  region: string | null
   approvedVolume: number
+  balanceRemaining: number
   locked: boolean
 }
 
@@ -37,7 +40,6 @@ export type ProvincialExemptionNumberOption = {
   ownerClientNumber: string
   region: string
   listingDate: string
-  applicationNumber: string
 }
 
 const DEFAULT_EXEMPTION_SEARCH_FILTERS = {
@@ -45,6 +47,8 @@ const DEFAULT_EXEMPTION_SEARCH_FILTERS = {
   packageNumber: '',
   exemptionNumber: '',
   region: [],
+  approvalFromDate: '',
+  approvalToDate: '',
   listFromDate: '',
   listToDate: '',
   exemptionTypeCode: '',
@@ -59,12 +63,14 @@ const normalizeStatusCode = (status: string): string => {
 
 const buildBackendParams = (request: ProvincialExemptionSearchRequest): URLSearchParams => {
   const { filters } = request
-  return createPagedSearchParams(
+  return createSortedPagedSearchParams(
     request,
     [
       ['applicationNumber', filters.applicationNumber],
       ['packageNumber', filters.packageNumber],
       ['exemptionNumber', filters.exemptionNumber],
+      ['approvalFromDate', filters.approvalFromDate],
+      ['approvalToDate', filters.approvalToDate],
       ['listingFromDate', filters.listFromDate],
       ['listingToDate', filters.listToDate],
       ['exemptionTypeCode', filters.exemptionTypeCode],
@@ -76,30 +82,75 @@ const buildBackendParams = (request: ProvincialExemptionSearchRequest): URLSearc
   )
 }
 
+const REQUIRED_RESULT_FIELDS: (keyof BackendProvincialExemptionSearchResult)[] = [
+  'exemptionNumber',
+  'exemptionType',
+  'status',
+  'applicantClientNumber',
+  'ownerClientNumber',
+  'listingDate',
+  'expiryDate',
+  'region',
+  'approvedVolume',
+  'balanceRemaining',
+  'locked',
+]
+
+const isNullableString = (value: unknown): value is string | null =>
+  value === null || typeof value === 'string'
+
+const isBackendSearchResult = (value: unknown): value is BackendProvincialExemptionSearchResult => {
+  if (!isRecord(value) || !REQUIRED_RESULT_FIELDS.every((field) => Object.hasOwn(value, field))) {
+    return false
+  }
+
+  return (
+    typeof value.exemptionNumber === 'string' &&
+    isNullableString(value.exemptionType) &&
+    isNullableString(value.status) &&
+    isNullableString(value.applicantClientNumber) &&
+    isNullableString(value.ownerClientNumber) &&
+    isNullableString(value.listingDate) &&
+    isNullableString(value.expiryDate) &&
+    isNullableString(value.region) &&
+    typeof value.approvedVolume === 'number' &&
+    Number.isFinite(value.approvedVolume) &&
+    typeof value.balanceRemaining === 'number' &&
+    Number.isFinite(value.balanceRemaining) &&
+    typeof value.locked === 'boolean'
+  )
+}
+
 const parseBackendResponse = (payload: unknown): ProvincialExemptionSearchResponse | null => {
+  if (
+    !isRecord(payload) ||
+    !Array.isArray(payload.results) ||
+    !payload.results.every(isBackendSearchResult)
+  ) {
+    return null
+  }
+
   return parsePagedSearchResponse<
     BackendProvincialExemptionSearchResult,
     ProvincialExemptionSearchResponse['content'][number]
   >(payload, (row) => {
     const statusCode = normalizeStatusCode(row.status ?? '')
     return {
-      applicationNumber: String(row.applicationNumber ?? ''),
-      packageNumber: '',
       exemptionNumber: row.exemptionNumber ?? '',
       type: row.exemptionType ?? '',
       typeCode: row.exemptionType ?? '',
       status: row.status ?? '',
       statusCode,
-      applicantClientNumber: '',
+      applicantClientNumber: row.applicantClientNumber ?? '',
       ownerClientNumber: row.ownerClientNumber ?? '',
-      approvedVolume: row.approvedVolume ?? 0,
-      balanceRemaining: 0,
+      approvedVolume: row.approvedVolume,
+      balanceRemaining: row.balanceRemaining,
       listingDate: row.listingDate ?? '',
-      expiryDate: '',
+      expiryDate: row.expiryDate ?? '',
       region: row.region ?? '',
       canApprove: statusCode === 'NEW',
       canViewExemption: true,
-      isLocked: Boolean(row.locked),
+      isLocked: row.locked,
     }
   })
 }
@@ -168,6 +219,5 @@ export const searchProvincialExemptionNumberOptions = async (
     ownerClientNumber: item.ownerClientNumber,
     region: item.region,
     listingDate: item.listingDate,
-    applicationNumber: item.applicationNumber,
   }))
 }

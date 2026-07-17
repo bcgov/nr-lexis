@@ -12,8 +12,9 @@ import org.springframework.boot.test.context.SpringBootTest;
     classes = LexisApiApplication.class,
     webEnvironment = SpringBootTest.WebEnvironment.NONE,
     properties = {
-      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.ca-central-1.amazonaws.com/test",
-      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json"
+      "spring.profiles.active=stub-reports,stub-services",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json"
     })
 class LexisAuthorizationMatrixParityTest {
 
@@ -87,21 +88,23 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void provincialSubmitterShouldCreateApplicationsAndViewProvincialRecordsOnly() {
+  void provincialSubmitterShouldCreateApplicationsAndOffersAndViewProvincialRecordsOnly() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("createApplication")
+        .contains("createApplication", "createOffer")
         .contains("uploadApplicationSubmission")
-        .doesNotContain(
-            "/summary",
-            "/applicationRemarks",
-            "/createExemption",
+        .contains(
             "/fileApplicationUpload",
             "/fileExemptionUpload",
             "/fileInvoiceUpload",
-            "/filePermitUpload",
+            "/filePermitUpload")
+        .doesNotContain(
+            "/summary",
+            "/changeApplicantType",
+            "/applicationRemarks",
+            "/createExemption",
             "approveExemption",
-            "createOffer",
+            "createPermit",
             "saveExemption",
             "savePermit",
             "uploadFederalSubmission")
@@ -115,18 +118,29 @@ class LexisAuthorizationMatrixParityTest {
             authorizationService.resolveGrantedActions(
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("createApplication")
+        .contains("createApplication", "createOffer")
         .contains("uploadApplicationSubmission")
-        .doesNotContain(
+        .contains(
             "/fileApplicationUpload",
             "/fileExemptionUpload",
             "/fileInvoiceUpload",
-            "/filePermitUpload",
-            "createOffer",
+            "/filePermitUpload")
+        .doesNotContain(
+            "/changeApplicantType",
+            "createPermit",
             "saveExemption",
             "savePermit",
             "uploadFederalSubmission")
         .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS);
+  }
+
+  @Test
+  void applicationApplicantTypeSelectionShouldRemainSeparatelyAuthorized() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+        .contains("createApplication")
+        .doesNotContain("/changeApplicantType");
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
+        .contains("createApplication", "/changeApplicantType");
   }
 
   @Test
@@ -147,6 +161,22 @@ class LexisAuthorizationMatrixParityTest {
             "LEXIS_READ_ONLY",
             "LEXIS_EXEMPTION_APPROVER",
             "LEXIS_DELEGATED_ADMIN");
+  }
+
+  @Test
+  void supportingDocumentUploadsShouldFollowLegacyGroupNineRoles() {
+    List.of(
+            "/fileApplicationUpload",
+            "/fileExemptionUpload",
+            "/fileInvoiceUpload",
+            "/filePermitUpload")
+        .forEach(
+            action ->
+                assertThat(authorizationService.resolveRolesForAction(action))
+                    .containsExactlyInAnyOrder(
+                        "LEXIS_ADMIN",
+                        "LEXIS_APPLICATION_APPROVER",
+                        "LEXIS_PROVINCIAL_SUBMITTER"));
   }
 
   @Test
@@ -195,27 +225,31 @@ class LexisAuthorizationMatrixParityTest {
         .containsAll(REPORT_ACTIONS)
         .contains(
             "/applicationsReview",
+            "/changeApplicantType",
             "/applicationRemarks",
             "/createExemption",
+            "/permitsReview",
             "approveExemption",
             "createApplication",
             "createOffer",
+            "createPermit",
             "saveExemption",
             "savePermit",
-            "uploadApplicationSubmission")
+            "manageFederalApplication",
+            "uploadApplicationSubmission",
+            "/fileApplicationUpload",
+            "/fileExemptionUpload",
+            "/fileInvoiceUpload",
+            "/filePermitUpload")
         .doesNotContain(
             "/summary",
             "/lexisAgentAdmin",
             "/lexisFILAdmin",
-            "/lexisPolicyAdmin",
-            "/fileApplicationUpload",
-            "/fileExemptionUpload",
-            "/fileInvoiceUpload",
-            "/filePermitUpload");
+            "/lexisPolicyAdmin");
   }
 
   @Test
-  void exemptionApproverShouldManageProvincialExemptionsAndReadFederalApplications() {
+  void exemptionApproverShouldManageExemptionsWithoutFederalAccess() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_EXEMPTION_APPROVER")))
         .contains(
             "/createExemption",
@@ -223,7 +257,6 @@ class LexisAuthorizationMatrixParityTest {
             "/exemptionDetails",
             "approveExemption",
             "saveExemption")
-        .containsAll(FEDERAL_READ_ACTIONS)
         .doesNotContain(
             "/applicationsReview",
             "/applicationSearch",
@@ -232,6 +265,11 @@ class LexisAuthorizationMatrixParityTest {
             "/permitSearch",
             "createApplication",
             "createOffer",
+            "createPermit",
+            "/federalApplicationSearch",
+            "/federalApplicationDetails",
+            "viewFederalApplication",
+            "manageFederalApplication",
             "savePermit",
             "uploadApplicationSubmission")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
@@ -257,9 +295,16 @@ class LexisAuthorizationMatrixParityTest {
             "approveExemption",
             "createApplication",
             "createOffer",
+            "createPermit",
             "saveExemption",
             "savePermit",
             "uploadApplicationSubmission")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
+  }
+
+  @Test
+  void createPermitShouldBeAvailableToAdminsAndApplicationApproversOnly() {
+    assertThat(authorizationService.resolveRolesForAction("createPermit"))
+        .containsExactlyInAnyOrder("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
   }
 }

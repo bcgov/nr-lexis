@@ -1,0 +1,6 @@
+Exemption #{{exemptionNumber}} has been approved.
+
+Application number(s):
+{{applicationNumbers}}
+
+This is an automated notification; do not reply.

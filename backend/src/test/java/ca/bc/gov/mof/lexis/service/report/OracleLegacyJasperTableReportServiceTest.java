@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
@@ -53,7 +54,7 @@ class OracleLegacyJasperTableReportServiceTest {
             LexisReportFormat.PDF);
 
     assertThat(report).isPresent();
-    assertThat(report.orElseThrow().filename()).isEqualTo("teacReport.pdf");
+    assertThat(report.orElseThrow().filename()).isEqualTo("teac-package-report.pdf");
     assertThat(report.orElseThrow().mediaType()).isEqualTo("application/pdf");
     assertThat(report.orElseThrow().content()).isNotEmpty();
   }
@@ -81,7 +82,7 @@ class OracleLegacyJasperTableReportServiceTest {
             LexisReportFormat.PDF);
 
     assertThat(report).isPresent();
-    assertThat(report.orElseThrow().filename()).isEqualTo("approvedExemptionReport.pdf");
+    assertThat(report.orElseThrow().filename()).isEqualTo("approved-exemption.pdf");
     assertThat(report.orElseThrow().mediaType()).isEqualTo("application/pdf");
     assertThat(report.orElseThrow().content()).isNotEmpty();
   }
@@ -239,7 +240,7 @@ class OracleLegacyJasperTableReportServiceTest {
   }
 
   @Test
-  void shouldReturnEmptyWhenMigratedLegacyPdfRenderFails() {
+  void shouldPropagateWhenMigratedLegacyPdfRenderFails() {
     LegacyTabularReportData tabularData =
         new LegacyTabularReportData(List.of("ORG_UNIT"), List.of(List.of("RKB")));
     LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), "PDF");
@@ -255,10 +256,14 @@ class OracleLegacyJasperTableReportServiceTest {
           }
         };
 
-    Optional<LexisGeneratedReport> report =
-        service.generateLegacyPdfReport(
-            LexisJasperReportDefinition.TEAC_REPORT, request, LexisReportFormat.PDF);
-
-    assertThat(report).isEmpty();
+    assertThatThrownBy(
+            () ->
+                service.generateLegacyPdfReport(
+                    LexisJasperReportDefinition.TEAC_REPORT,
+                    request,
+                    LexisReportFormat.PDF))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessage("The migrated report could not be rendered for teacReport")
+        .hasCauseInstanceOf(JRException.class);
   }
 }

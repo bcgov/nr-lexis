@@ -13,22 +13,17 @@ concurrency:
 permissions: {}
 
 jobs:
-  cleanup:
-    name: Cleanup and Image Promotion
+  promotion:
+    name: Image Promotion
     uses: bcgov/quickstart-openshift-helpers/.github/workflows/.pr-close.yml@ca6579bdadf383a2513397081f963889b92823a4 # v1.1.0
     permissions:
       packages: write
-    secrets:
-      oc_namespace: ${{ secrets.oc_namespace }}
-      oc_token: ${{ secrets.oc_token }}
     with:
-      cleanup: label
       packages: backend frontend
-      cleanup_name: nr-lexis-backend-${{ github.event.number }} nr-lexis-frontend-${{ github.event.number }}
 
   cleanup-networkpolicies:
     name: Cleanup PR OpenShift Resources
-    needs: cleanup
+    needs: promotion
     if: always()
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -78,7 +73,7 @@ jobs:
             delete_preview() {
               local pr_number="$1"
 
-              for component in backend frontend; do
+              for component in backend frontend clamav; do
                 local label="${REPO}-${component}-${pr_number}"
                 echo "Deleting PR resources matching app=${label}"
                 oc delete "${RESOURCE_TYPES}" -n "${NAMESPACE}" -l "app=${label}" --ignore-not-found
@@ -90,7 +85,7 @@ jobs:
 
             PREVIEW_PRS=$(
               oc get deploy -n "${NAMESPACE}" --no-headers -o custom-columns=:metadata.name \
-                | sed -nE "s/^${REPO}-(backend|frontend)-([0-9]+)$/\2/p" \
+                | sed -nE "s/^${REPO}-(backend|frontend|clamav)-([0-9]+)$/\2/p" \
                 | sort -un
             )
 

@@ -8,6 +8,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.access.AccessDeniedException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("Unit Test | LexisSessionService")
 class LexisSessionServiceTest {
@@ -278,5 +280,68 @@ class LexisSessionServiceTest {
     String clientNumber = service.resolveForestClientNumber(List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY"));
 
     assertThat(clientNumber).isNull();
+  }
+
+  @Test
+  void shouldKeepAdministratorsUnrestrictedWhenScopedSubmitterAuthorityIsAlsoPresent() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\admin",
+            "n/a",
+            "lexis_provincial_submitter_00077881",
+            " lexis_admin ");
+
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(authentication);
+
+    assertThat(scope.scoped()).isFalse();
+    assertThat(scope.invalid()).isFalse();
+    assertThat(service.resolveForestClientNumber(authentication)).isNull();
+  }
+
+  @Test
+  void shouldLetAdministratorAuthorityOverrideInvalidSubmitterScopes() {
+    assertThat(
+            service.resolveForestClientNumber(
+                List.of("LEXIS_PROVINCIAL_SUBMITTER", "lexis_admin")))
+        .isNull();
+    assertThat(
+            service.resolveForestClientNumber(
+                List.of(
+                    "LEXIS_PROVINCIAL_SUBMITTER_00012345",
+                    "LEXIS_PROVINCIAL_SUBMITTER_00067890",
+                    "LEXIS_ADMIN")))
+        .isNull();
+  }
+
+  @Test
+  void shouldFailClosedWhenProvincialSubmitterScopeIsMissing() {
+    assertThatThrownBy(
+            () -> service.resolveForestClientNumber(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("missing");
+  }
+
+  @Test
+  void shouldFailClosedWhenProvincialSubmitterScopesAreAmbiguous() {
+    assertThatThrownBy(
+            () ->
+                service.resolveForestClientNumber(
+                    List.of(
+                        "LEXIS_PROVINCIAL_SUBMITTER_00012345",
+                        "LEXIS_PROVINCIAL_SUBMITTER_00067890")))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("multiple");
+  }
+
+  @Test
+  void shouldRetainConcreteAuthorityAndAddBaseAuthorityForActionChecks() {
+    assertThat(
+            service.parseGrantedAuthorities(
+                List.of("lexis_provincial_submitter_00012345", "lexis_read_only")))
+        .containsExactly(
+            "LEXIS_PROVINCIAL_SUBMITTER_00012345",
+            "LEXIS_PROVINCIAL_SUBMITTER",
+            "LEXIS_READ_ONLY");
   }
 }

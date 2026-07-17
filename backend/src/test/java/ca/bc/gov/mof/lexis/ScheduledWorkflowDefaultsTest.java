@@ -46,9 +46,26 @@ class ScheduledWorkflowDefaultsTest {
         .doesNotContain("oc delete \"${RESOURCE_TYPES}\" -n \"${NAMESPACE}\" --all");
   }
 
+  @Test
+  void scheduledRepositoryAutomationShouldUseLeastPrivilegeAndAvoidPublicFindings()
+      throws IOException {
+    String workflow = Files.readString(resolveScheduledWorkflow());
+    String staleJob = workflowJob(workflow, "stale-branches", "ageOutPRs");
+    String zapJob = workflow.substring(workflow.indexOf("  zap:"));
+
+    assertThat(staleJob)
+        .contains("permissions:\n      issues: write\n      pull-requests: write")
+        .doesNotContain("contents: write");
+    assertThat(zapJob)
+        .contains("allow_issue_writing: false")
+        .doesNotContain("issues: write", "issue_title:", "secrets.GITHUB_TOKEN");
+    assertThat(workflow)
+        .doesNotContain("schema-spy:", ".schema-spy.yml@", "pages: write");
+  }
+
   private static String scheduledPrPurgeJob() throws IOException {
     String workflow = Files.readString(resolveScheduledWorkflow());
-    return workflowJob(workflow, "ageOutPRs", "schema-spy");
+    return workflowJob(workflow, "ageOutPRs", "zap");
   }
 
   private static Path resolveScheduledWorkflow() {

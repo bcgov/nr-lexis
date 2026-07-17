@@ -122,17 +122,85 @@ export const formatUploadQueuedAt = (timestamp: number): string => {
   }).format(timestamp)
 }
 
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+
+export const DOCUMENT_UPLOAD_EXTENSIONS = [
+  '.bmp',
+  '.csv',
+  '.doc',
+  '.docx',
+  '.jpg',
+  '.pdf',
+  '.png',
+  '.rtf',
+  '.txt',
+  '.xls',
+  '.xlsx',
+  '.xml',
+  '.zip',
+] as const
+
+export const DOCUMENT_UPLOAD_ACCEPT = DOCUMENT_UPLOAD_EXTENSIONS.join(',')
+
+export const DOCUMENT_UPLOAD_GUIDANCE =
+  'BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, or ZIP; 20 MiB maximum. File names and descriptions must use US-ASCII and be 250 bytes or fewer'
+
+const MAX_ATTACHMENT_METADATA_BYTES = 250
+const PRINTABLE_US_ASCII_PATTERN = /^[\x20-\x7e]+$/
+const DESCRIPTION_US_ASCII_PATTERN = /^[\x09\x0a\x0d\x20-\x7e]*$/
+const DOCUMENT_UPLOAD_EXTENSION_SET = new Set<string>(DOCUMENT_UPLOAD_EXTENSIONS)
+
+export const validateDocumentUploadDescription = (description: string): string => {
+  const normalizedDescription = description.trim()
+  if (!DESCRIPTION_US_ASCII_PATTERN.test(normalizedDescription)) {
+    return 'Document description must use US-ASCII characters.'
+  }
+  if (normalizedDescription.length > MAX_ATTACHMENT_METADATA_BYTES) {
+    return 'Document description must be 250 bytes or fewer.'
+  }
+
+  return ''
+}
+
+export const validateUploadFileSize = (file: File): string => {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return 'File must be 20 MiB or smaller.'
+  }
+
+  return ''
+}
+
 export const validateDocumentUploadFile = (file: File): string => {
-  if (!file.name.trim()) {
+  const fileName = file.name
+  if (!fileName.trim()) {
     return 'File name is required.'
+  }
+
+  if (
+    fileName !== fileName.trim() ||
+    !PRINTABLE_US_ASCII_PATTERN.test(fileName) ||
+    fileName.includes('/') ||
+    fileName.includes('\\')
+  ) {
+    return 'File name must use printable US-ASCII characters without path separators.'
+  }
+
+  if (fileName.length > MAX_ATTACHMENT_METADATA_BYTES) {
+    return 'File name must be 250 bytes or fewer.'
   }
 
   if (file.size === 0) {
     return 'File is empty.'
   }
 
-  if (!getFileExtension(file.name)) {
-    return 'Document uploads need a file extension so LEXIS can resolve the file type.'
+  const sizeError = validateUploadFileSize(file)
+  if (sizeError) {
+    return sizeError
+  }
+
+  const extension = getFileExtension(fileName)
+  if (!DOCUMENT_UPLOAD_EXTENSION_SET.has(extension)) {
+    return 'File type is not supported. Choose BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, or ZIP.'
   }
 
   return ''

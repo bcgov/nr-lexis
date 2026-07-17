@@ -4,15 +4,19 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.sql.CallableStatement;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -44,7 +48,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   private static final String FIND_FOREST_CLIENT = LEXIS_CODES_PACKAGE + "FIND_FOREST_CLIENT(?,?)";
   private static final String FIND_ORG_UNIT_BY_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_CODE(?,?)";
-  private static final String FIND_UPCOMING_EXPORT_SCHEDULES =
+  private static final String EXPORT_SCHEDULE_SELECT =
       """
       SELECT ES.EXPORT_SCHEDULE_ID,
              ES.ADVERTISING_DATE,
@@ -54,20 +58,28 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
              ES.OFFER_WITHDRAWAL_DATE,
              ES.TEAC_MEETING_DATE,
              (SELECT COUNT(*)
-                FROM EXPORT_EXEMPTION_APPLICATION EEA
+               FROM EXPORT_EXEMPTION_APPLICATION EEA
                WHERE EEA.EXPORT_SCHEDULE_ID = ES.EXPORT_SCHEDULE_ID) AS APPLICATION_COUNT
         FROM EXPORT_SCHEDULE ES
-       WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)
-       ORDER BY ES.ADVERTISING_DATE ASC
       """;
+  private static final String UPCOMING_EXPORT_SCHEDULE_CONDITION =
+      "ES.ADVERTISING_DATE >= "
+          + "TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Vancouver' AS DATE))";
+  private static final String FIND_UPCOMING_EXPORT_SCHEDULES =
+      EXPORT_SCHEDULE_SELECT
+          + " WHERE "
+          + UPCOMING_EXPORT_SCHEDULE_CONDITION
+          + " ORDER BY ES.ADVERTISING_DATE ASC";
+  private static final String FIND_UPCOMING_EXPORT_SCHEDULES_PAGE =
+      FIND_UPCOMING_EXPORT_SCHEDULES + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
   private static final String COUNT_UPCOMING_EXPORT_SCHEDULES =
       """
       SELECT COUNT(*)
         FROM EXPORT_SCHEDULE ES
-       WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)
+       WHERE ES.ADVERTISING_DATE >=
+             TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Vancouver' AS DATE))
       """;
-  private static final String FIND_UPCOMING_EXPORT_SCHEDULES_PAGE =
-      FIND_UPCOMING_EXPORT_SCHEDULES + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
+  private static final String COUNT_EXPORT_SCHEDULES = "SELECT COUNT(*) FROM EXPORT_SCHEDULE";
   private static final String FIND_EXPORT_SCHEDULE_BY_ID =
       """
       SELECT ES.EXPORT_SCHEDULE_ID,
@@ -99,30 +111,22 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
        WHERE TRUNC(ES.ADVERTISING_DATE) = ?
        ORDER BY ES.EXPORT_SCHEDULE_ID
       """;
-  private static final String FIND_DUPLICATE_ADVERTISING_DATE_COUNT =
-      "SELECT COUNT(*) FROM EXPORT_SCHEDULE WHERE TRUNC(ADVERTISING_DATE) = ?";
-  private static final String FIND_DUPLICATE_ADVERTISING_DATE_COUNT_EXCLUDING_ID =
-      """
-      SELECT COUNT(*)
-        FROM EXPORT_SCHEDULE
-       WHERE TRUNC(ADVERTISING_DATE) = ?
-         AND EXPORT_SCHEDULE_ID <> ?
-      """;
   private static final String COUNT_APPLICATIONS_FOR_EXPORT_SCHEDULE =
       "SELECT COUNT(*) FROM EXPORT_EXEMPTION_APPLICATION WHERE EXPORT_SCHEDULE_ID = ?";
-  private static final String NEXT_EXPORT_SCHEDULE_ID =
-      "SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL";
   private static final String INSERT_EXPORT_SCHEDULE =
       """
-      INSERT INTO EXPORT_SCHEDULE (
-        EXPORT_SCHEDULE_ID,
-        ADVERTISING_DATE,
-        APPLICATION_RECEIPT_DATE,
-        OFFER_RECEIPT_DATE,
-        OFFER_END_DATE,
-        OFFER_WITHDRAWAL_DATE,
-        TEAC_MEETING_DATE
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      BEGIN
+        INSERT INTO EXPORT_SCHEDULE (
+          EXPORT_SCHEDULE_ID,
+          ADVERTISING_DATE,
+          APPLICATION_RECEIPT_DATE,
+          OFFER_RECEIPT_DATE,
+          OFFER_END_DATE,
+          OFFER_WITHDRAWAL_DATE,
+          TEAC_MEETING_DATE
+        ) VALUES (EXPORT_SCHEDULE_SEQ.NEXTVAL, ?, ?, ?, ?, ?, ?)
+        RETURNING EXPORT_SCHEDULE_ID INTO ?;
+      END;
       """;
   private static final String UPDATE_EXPORT_SCHEDULE =
       """
@@ -142,8 +146,12 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     super(jdbcTemplate);
   }
 
-  public List<CurrentScheduleRow> findCurrentSchedules() {
-    return queryCursorProcedure(
+  /**
+   * Loads the authoritative current advertising-period boundary without converting an Oracle
+   * failure into an empty schedule list.
+   */
+  public List<CurrentScheduleRow> findCurrentSchedulesRequired() {
+    return queryCursorProcedureRequired(
         FIND_CURRENT_SCHEDULES,
         null,
         1,
@@ -157,6 +165,16 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<ExportScheduleRowDto> findUpcomingExportSchedules(int page, int size) {
+    return queryExportSchedulePage(FIND_UPCOMING_EXPORT_SCHEDULES_PAGE, page, size);
+  }
+
+  public List<ExportScheduleRowDto> findExportSchedules(
+      int page, int size, String sortField, String sortDirection) {
+    return queryExportSchedulePage(
+        findExportSchedulesPageSql(sortField, sortDirection), page, size);
+  }
+
+  private List<ExportScheduleRowDto> queryExportSchedulePage(String sql, int page, int size) {
     int normalizedPage = Math.max(0, page);
     int normalizedSize = Math.max(1, size);
     long offsetLong = (long) normalizedPage * normalizedSize;
@@ -165,7 +183,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     }
     int offset = (int) offsetLong;
     return jdbcTemplate.query(
-        FIND_UPCOMING_EXPORT_SCHEDULES_PAGE,
+        sql,
         ps -> {
           ps.setInt(1, offset);
           ps.setInt(2, normalizedSize);
@@ -175,6 +193,11 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
   public int countUpcomingExportSchedules() {
     Integer count = jdbcTemplate.queryForObject(COUNT_UPCOMING_EXPORT_SCHEDULES, Integer.class);
+    return count == null ? 0 : Math.max(0, count);
+  }
+
+  public int countExportSchedules() {
+    Integer count = jdbcTemplate.queryForObject(COUNT_EXPORT_SCHEDULES, Integer.class);
     return count == null ? 0 : Math.max(0, count);
   }
 
@@ -202,32 +225,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
         .findFirst();
   }
 
-  public boolean advertisingDateExists(LocalDate advertisingDate) {
-    if (advertisingDate == null) {
-      return false;
-    }
-    Integer count =
-        jdbcTemplate.queryForObject(
-            FIND_DUPLICATE_ADVERTISING_DATE_COUNT,
-            Integer.class,
-            java.sql.Date.valueOf(advertisingDate));
-    return count != null && count > 0;
-  }
-
-  public boolean advertisingDateExistsForOtherSchedule(
-      LocalDate advertisingDate, long exportScheduleId) {
-    if (advertisingDate == null) {
-      return false;
-    }
-    Integer count =
-        jdbcTemplate.queryForObject(
-            FIND_DUPLICATE_ADVERTISING_DATE_COUNT_EXCLUDING_ID,
-            Integer.class,
-            java.sql.Date.valueOf(advertisingDate),
-            exportScheduleId);
-    return count != null && count > 0;
-  }
-
   public long countApplicationsForExportSchedule(long exportScheduleId) {
     Long count =
         jdbcTemplate.queryForObject(
@@ -236,13 +233,13 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public ExportScheduleRowDto insertExportSchedule(ExportScheduleCreateRequestDto request) {
-    Long scheduleId = jdbcTemplate.queryForObject(NEXT_EXPORT_SCHEDULE_ID, Long.class);
-    long finalScheduleId = scheduleId == null ? 1L : scheduleId;
-    jdbcTemplate.update(
-        INSERT_EXPORT_SCHEDULE,
-        ps -> bindExportScheduleInsert(ps, finalScheduleId, request));
+    Long scheduleId =
+        jdbcTemplate.execute((Connection connection) -> insertExportSchedule(connection, request));
+    if (scheduleId == null) {
+      throw new DataRetrievalFailureException("Export schedule insert did not return an id.");
+    }
     return new ExportScheduleRowDto(
-        finalScheduleId,
+        scheduleId,
         request.advertisingDate(),
         request.applicationReceiptDate(),
         request.offerReceiptDate(),
@@ -270,48 +267,50 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return loadOrgUnitOptions(true);
+    return loadOrgUnitOptionsRequired(true);
   }
 
   public List<CodeNameDto> loadReportJurisdictionOptions() {
-    return withAll(withoutReserveJurisdiction(loadCodeNameOptions(FIND_ALL_JURISDICTION_CODES)));
+    return withAll(
+        withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadBiweeklyJurisdictionOptions() {
-    return withAll(withoutReserveJurisdiction(loadCodeNameOptions(FIND_ALL_JURISDICTION_CODES)));
+    return withAll(
+        withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadTeacJurisdictionOptions() {
-    return withoutReserveJurisdiction(loadCodeNameOptions(FIND_ALL_JURISDICTION_CODES));
+    return withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES));
   }
 
   public List<CodeNameDto> loadReportExemptionTypeOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_EXEMPTION_TYPE_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES));
   }
 
   public List<CodeNameDto> loadTenureExemptionTypeOptions() {
-    return withTrailingAll(loadCodeNameOptions(FIND_ALL_EXEMPTION_TYPE_CODES));
+    return withTrailingAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES));
   }
 
   public List<CodeNameDto> loadReportExemptionReasonOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_EXEMPTION_REASON_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_REASON_CODES));
   }
 
   public List<CodeNameDto> loadReportExemptionStatusOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_EXEMPTION_STATUS_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_STATUS_CODES));
   }
 
   public List<CodeNameDto> loadReportGrowthTypeOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_GROWTH_TYPE_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_GROWTH_TYPE_CODES));
   }
 
   public List<CodeNameDto> loadReportPermitStatusOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_PERMIT_STATUS_CODES));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_PERMIT_STATUS_CODES));
   }
 
   public List<CodeNameDto> loadReportDestinationCountryOptions() {
     List<CodeNameDto> options =
-        queryCursorProcedure(
+        queryCursorProcedureFailClosed(
                 FIND_COUNTRY_GROUP,
                 cs -> cs.setInt(1, 1),
                 2,
@@ -319,18 +318,15 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
                     new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")))
             .stream()
             .toList();
-    if (options.isEmpty()) {
-      options = fallbackReportDestinationCountryOptions();
-    }
     return withAll(options);
   }
 
   public List<CodeNameDto> loadAllReportDestinationCountryOptions() {
-    return loadCodeNameOptions(FIND_ALL_COUNTRY_CODES);
+    return loadCodeNameOptionsRequired(FIND_ALL_COUNTRY_CODES);
   }
 
   public List<CodeNameDto> loadReportPortOfExportOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_PORTS_OF_EXPORT));
+    return withAll(loadCodeNameOptionsRequired(FIND_ALL_PORTS_OF_EXPORT));
   }
 
   public Optional<String> findDefaultRegionForForestClientNumber(String forestClientNumber) {
@@ -356,18 +352,57 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
         applicationCount == 0L);
   }
 
+  private String findExportSchedulesPageSql(String sortField, String sortDirection) {
+    return EXPORT_SCHEDULE_SELECT
+        + " ORDER BY "
+        + exportScheduleSortColumn(sortField)
+        + " "
+        + exportScheduleSortDirection(sortDirection)
+        + ", ES.EXPORT_SCHEDULE_ID ASC"
+        + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
+  }
+
+  private String exportScheduleSortColumn(String sortField) {
+    if (sortField == null) {
+      return "ES.ADVERTISING_DATE";
+    }
+    return switch (sortField) {
+      case "exportScheduleId" -> "ES.EXPORT_SCHEDULE_ID";
+      case "applicationReceiptDate" -> "ES.APPLICATION_RECEIPT_DATE";
+      case "offerReceiptDate" -> "ES.OFFER_RECEIPT_DATE";
+      case "offerEndDate" -> "ES.OFFER_END_DATE";
+      case "offerWithdrawalDate" -> "ES.OFFER_WITHDRAWAL_DATE";
+      case "teacMeetingDate" -> "ES.TEAC_MEETING_DATE";
+      case "applicationCount" -> "APPLICATION_COUNT";
+      case "advertisingDate" -> "ES.ADVERTISING_DATE";
+      default -> "ES.ADVERTISING_DATE";
+    };
+  }
+
+  private String exportScheduleSortDirection(String sortDirection) {
+    return "desc".equalsIgnoreCase(sortDirection) ? "DESC" : "ASC";
+  }
+
   private void bindExportScheduleInsert(
-      PreparedStatement ps,
-      long exportScheduleId,
-      ExportScheduleCreateRequestDto request)
+      PreparedStatement ps, ExportScheduleCreateRequestDto request)
       throws SQLException {
-    ps.setLong(1, exportScheduleId);
-    setDateOrNull(ps, 2, request.advertisingDate());
-    setDateOrNull(ps, 3, request.applicationReceiptDate());
-    setDateOrNull(ps, 4, request.offerReceiptDate());
-    setDateOrNull(ps, 5, request.offerEndDate());
-    setDateOrNull(ps, 6, request.offerWithdrawalDate());
-    setDateOrNull(ps, 7, request.teacMeetingDate());
+    setDateOrNull(ps, 1, request.advertisingDate());
+    setDateOrNull(ps, 2, request.applicationReceiptDate());
+    setDateOrNull(ps, 3, request.offerReceiptDate());
+    setDateOrNull(ps, 4, request.offerEndDate());
+    setDateOrNull(ps, 5, request.offerWithdrawalDate());
+    setDateOrNull(ps, 6, request.teacMeetingDate());
+  }
+
+  private Long insertExportSchedule(Connection connection, ExportScheduleCreateRequestDto request)
+      throws SQLException {
+    try (CallableStatement statement = connection.prepareCall(INSERT_EXPORT_SCHEDULE)) {
+      bindExportScheduleInsert(statement, request);
+      statement.registerOutParameter(7, Types.NUMERIC);
+      statement.executeUpdate();
+      long exportScheduleId = statement.getLong(7);
+      return statement.wasNull() ? null : exportScheduleId;
+    }
   }
 
   private void bindExportScheduleUpdate(
@@ -398,7 +433,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   private Optional<String> findClientAcronym(String forestClientNumber) {
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_FOREST_CLIENT,
         cs -> cs.setString(1, forestClientNumber),
         2,
@@ -411,7 +446,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_ORG_UNIT_BY_CODE,
         cs -> cs.setString(1, normalizedOrgUnitCode),
         2,
@@ -438,14 +473,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return options.stream()
         .filter(option -> !RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
         .toList();
-  }
-
-  private List<CodeNameDto> fallbackReportDestinationCountryOptions() {
-    return List.of(
-        new CodeNameDto("US", "United States"),
-        new CodeNameDto("JP", "Japan"),
-        new CodeNameDto("CN", "China"),
-        new CodeNameDto("NZ", "New Zealand"));
   }
 
   public record CurrentScheduleRow(Long exportScheduleId, LocalDate advertisingDate) {}

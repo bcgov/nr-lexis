@@ -1,7 +1,7 @@
 # Local-dev Compose for nr-lexis.
 #
-# Two-service stack: Spring Boot backend (port 8080) + Vite frontend (port
-# 3000) + optional Caddy production-image variant (profile `caddy`, port 3005).
+# Two-service stack: Spring Boot backend (port 8080) + Vite frontend (port 3000),
+# with an optional Caddy production-image variant (profile `caddy`, port 3005).
 # No database service: LEXIS connects to shared Oracle directly.
 #
 # Prereqs (host machine):
@@ -20,7 +20,7 @@
 
 x-var:
   - &java-image maven:3.9.9-amazoncorretto-21-alpine
-  - &node-image node:22-alpine
+  - &node-image node:24-alpine
 
 services:
   backend:
@@ -41,7 +41,6 @@ services:
       timeout: 5s
       start_period: 90s
       retries: 5
-
   frontend:
     image: *node-image
     container_name: frontend
@@ -71,6 +70,8 @@ services:
     container_name: caddy
     profiles: ["caddy"]
     build: ./frontend
+    env_file:
+      - ./frontend/.env
     environment:
       BACKEND_URL: http://backend:8080
       LOG_LEVEL: info

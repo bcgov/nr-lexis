@@ -5,7 +5,10 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.sql.CallableStatement;
 import java.sql.Date;
 import java.sql.ResultSet;
@@ -19,9 +22,14 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 @Repository
 @Profile("oracle")
@@ -33,12 +41,16 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
+  private static final String FIND_ALL_EXPIRING_EXEMPTIONS =
+      LEXIS_GROUP_11_PACKAGE + "FIND_ALL_EXPIRING_EXEMPTIONS(?)";
   private static final String FIND_EXEMPTION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPT_FILE_DETAILS(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_PURCHASE_OFFERS_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_APP(?,?)";
+  private static final String FIND_PERMITS_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_APP(?,?)";
   private static final String FIND_APPLICATION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
@@ -46,6 +58,14 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String FIND_RATE_BY_EXEMPTION =
       LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
+  private static final String FIND_EXEMPTION_TYPE_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_EXEMPTION_TYPE_CODE(?,?)";
+  private static final String FIND_EXEMPTION_STATUS_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_EXEMPTION_STATUS_CODE(?,?)";
+  private static final String FIND_ORG_UNIT_BY_NUMBER =
+      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
+  private static final String FIND_EXEMPTION_ORG_UNIT =
+      LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_ORG_UNIT(?,?)";
   private static final String DELETE_EXEMPTION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_EXEMPT_FILE_ATTACHMENT(?)";
   private static final String INSERT_EXEMPTION =
@@ -74,7 +94,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
         FIND_APPLICATIONS_BY_EXEMPTION,
         cs -> cs.setString(1, normalized),
         2,
@@ -86,7 +106,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
         FIND_PERMITS_BY_EXEMPTION,
         cs -> cs.setString(1, normalized),
         2,
@@ -98,7 +118,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
             FIND_EXEMPTION_BY_NUMBER,
             cs -> cs.setString(1, normalized),
             2,
@@ -111,7 +131,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return false;
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
             FIND_EXEMPTION_BY_NUMBER,
             cs -> cs.setString(1, normalized),
             2,
@@ -124,11 +144,23 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_EXEMPTION_BY_NUMBER,
         cs -> cs.setString(1, normalized),
         2,
         this::mapExemptionRecord);
+  }
+
+  public List<String> findAllExpiringExemptionNumbers() {
+    return queryCursorProcedureRequired(
+            FIND_ALL_EXPIRING_EXEMPTIONS,
+            ignored -> {},
+            1,
+            rs -> trim(getString(rs, "EXEMPTION_NUMBER")))
+        .stream()
+        .filter(value -> value != null && !value.isBlank())
+        .distinct()
+        .toList();
   }
 
   public Optional<ExemptionRateRecord> findExemptionRate(String exemptionNumber) {
@@ -136,18 +168,34 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_RATE_BY_EXEMPTION,
         cs -> cs.setString(1, normalized),
         2,
         this::mapExemptionRateRecord);
   }
 
+  public List<Long> findExemptionOrgUnitNumbers(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+            FIND_EXEMPTION_ORG_UNIT,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> getLong(rs, "ORG_UNIT_NO"))
+        .stream()
+        .filter(value -> value != null && value > 0)
+        .distinct()
+        .toList();
+  }
+
   public Optional<ApplicationLinkRecord> findApplicationLinkRecord(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         FIND_APPLICATION_BY_NUMBER,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
@@ -158,7 +206,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return false;
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureRequired(
             FIND_PURCHASE_OFFERS_BY_APPLICATION,
             cs -> cs.setString(1, applicationNumber.toString()),
             2,
@@ -169,13 +217,51 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         .anyMatch(Boolean.TRUE::equals);
   }
 
+  public List<ApplicationPermitRow> findPermitsByApplicationNumberRequired(
+      Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      throw new IllegalArgumentException("Application number must be positive.");
+    }
+    return queryCursorProcedureRequired(
+        FIND_PERMITS_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationPermitRow(
+                coalesce(
+                    getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+                    getLong(rs, "EXPORT_PERMIT_NUMBER")),
+                trim(getString(rs, "EXEMPTION_NUMBER"))));
+  }
+
+  public boolean isExemptionTypeCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_EXEMPTION_TYPE_CODE, code);
+  }
+
+  public boolean isExemptionStatusCodeValidRequired(String code) {
+    return codeExistsRequired(FIND_EXEMPTION_STATUS_CODE, code);
+  }
+
+  public boolean isOrgUnitValidRequired(Long orgUnitNumber) {
+    if (orgUnitNumber == null || orgUnitNumber < 1) {
+      return false;
+    }
+    return queryCursorSingleRequired(
+            FIND_ORG_UNIT_BY_NUMBER,
+            cs -> cs.setLong(1, orgUnitNumber),
+            2,
+            rs -> getLong(rs, "ORG_UNIT_NO"))
+        .filter(orgUnitNumber::equals)
+        .isPresent();
+  }
+
   public boolean updateApplicationExemption(ApplicationLinkUpdateRecord record) {
     if (record == null || record.application() == null) {
       return false;
     }
-    return executeProcedure(
-        UPDATE_EXEMPTION_APPLICATION,
-        cs -> bindApplicationLinkUpdate(cs, record));
+    executeProcedureRequired(
+        UPDATE_EXEMPTION_APPLICATION, cs -> bindApplicationLinkUpdate(cs, record));
+    return true;
   }
 
   public List<DocumentRow> findExemptionDocumentDetailsByExemptionNumber(String exemptionNumber) {
@@ -183,7 +269,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_EXEMPTION_FILE_DETAILS,
         cs -> cs.setString(1, normalized),
         2,
@@ -194,7 +280,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
-    return queryCursorProcedure(
+    return queryCursorProcedureFailClosed(
         FIND_APPLICATION_FILE_DETAILS,
         cs -> cs.setLong(1, applicationNumber),
         2,
@@ -206,7 +292,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
             FIND_ATTACHMENT_TYPE_CODE,
             cs -> cs.setString(1, normalized),
             2,
@@ -214,51 +300,54 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         .filter(value -> value != null && !value.isBlank());
   }
 
-  public Optional<byte[]> findFileAttachmentBytes(Long fileId) {
-    if (fileId == null || fileId < 1) {
-      return Optional.empty();
+  public boolean streamFileAttachment(Long fileId, OutputStream outputStream) throws IOException {
+    if (fileId == null || fileId < 1 || outputStream == null) {
+      return false;
     }
-
     String call = "{ call " + FIND_FILE_ATTACHMENT + " }";
     try {
-      return jdbcTemplate.execute(
-          call,
-          (CallableStatementCallback<Optional<byte[]>>)
-              cs -> {
-                cs.setLong(1, fileId);
-                cs.registerOutParameter(2, Types.REF_CURSOR);
-                cs.execute();
-
-                try (ResultSet rs = (ResultSet) cs.getObject(2)) {
-                  if (rs == null || !rs.next()) {
-                    return Optional.empty();
-                  }
-                  InputStream input = rs.getBinaryStream(1);
-                  if (input == null) {
-                    return Optional.empty();
-                  }
-                  try {
-                    try {
-                      return Optional.of(input.readAllBytes());
-                    } catch (java.io.IOException ex) {
-                      logger.warn(
-                          "Oracle file attachment read failed [{}]: {}",
-                          FIND_FILE_ATTACHMENT,
-                          ex.getMessage());
-                      return Optional.empty();
+      Boolean streamed =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatementCallback<Boolean>)
+                  cs -> {
+                    cs.setLong(1, fileId);
+                    cs.registerOutParameter(2, Types.REF_CURSOR);
+                    cs.execute();
+                    Object cursor = cs.getObject(2);
+                    if (cursor == null) {
+                      throw new DataAccessResourceFailureException(
+                          "Oracle returned no exemption attachment cursor.");
                     }
-                  } finally {
-                    try {
-                      input.close();
-                    } catch (java.io.IOException ignored) {
-                      // Ignore close exceptions for read-only attachment lookups.
+                    if (!(cursor instanceof ResultSet rs)) {
+                      throw new DataRetrievalFailureException(
+                          "Oracle returned an invalid exemption attachment cursor.");
                     }
-                  }
-                }
-              });
+                    try (rs) {
+                      if (!rs.next()) {
+                        return false;
+                      }
+                      try (InputStream input = rs.getBinaryStream(1)) {
+                        if (input == null) {
+                          throw new DataRetrievalFailureException(
+                              "Oracle returned an exemption attachment row without file content.");
+                        }
+                        input.transferTo(outputStream);
+                        return true;
+                      } catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                      }
+                    }
+                  });
+      if (streamed == null) {
+        throw new DataAccessResourceFailureException(
+            "Oracle returned no exemption attachment stream result.");
+      }
+      return streamed;
+    } catch (UncheckedIOException ex) {
+      throw ex.getCause();
     } catch (DataAccessException ex) {
-      logger.warn("Oracle file attachment lookup failed [{}]: {}", FIND_FILE_ATTACHMENT, ex.getMessage());
-      return Optional.empty();
+      throw new IOException("Oracle exemption attachment stream failed", ex);
     }
   }
 
@@ -266,22 +355,38 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (documentId == null || documentId < 1) {
       return false;
     }
-    return executeProcedure(DELETE_EXEMPTION_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    executeProcedureRequired(
+        DELETE_EXEMPTION_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+    return true;
   }
 
+  @Transactional
   public Optional<ExemptionInsertRow> insertExemption(ExemptionInsertRecord record) {
     if (record == null) {
       return Optional.empty();
     }
 
     Optional<ExemptionInsertRow> inserted =
-        queryCursorSingle(
+        queryCursorSingleRequired(
             INSERT_EXEMPTION,
             cs -> bindExemptionInsert(cs, record),
             12,
             this::mapExemptionInsertRow);
 
-    if (inserted.isPresent() && record.regionNumbers() != null) {
+    if (inserted
+        .filter(
+            row ->
+                trim(row.exemptionNumber()) != null
+                    && (trim(record.exemptionNumber()) == null
+                        || java.util.Objects.equals(
+                            trim(row.exemptionNumber()),
+                            trim(record.exemptionNumber()))))
+        .isEmpty()) {
+      markRollbackOnly();
+      return Optional.empty();
+    }
+
+    if (record.regionNumbers() != null) {
       record.regionNumbers().stream()
           .filter(region -> region != null && region > 0)
           .distinct()
@@ -291,23 +396,24 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     return inserted;
   }
 
+  @Transactional
   public boolean updateExemption(ExemptionUpdateRecord record) {
     if (record == null || trim(record.exemptionNumber()) == null || trim(record.previousExemptionNumber()) == null) {
       return false;
     }
 
-    boolean updated = executeProcedure(UPDATE_EXEMPTION, cs -> bindExemptionUpdate(cs, record));
-    if (updated && "B".equalsIgnoreCase(trim(record.exemptionTypeCode())) && record.regionNumbers() != null) {
+    executeProcedureRequired(UPDATE_EXEMPTION, cs -> bindExemptionUpdate(cs, record));
+    if ("B".equalsIgnoreCase(trim(record.exemptionTypeCode())) && record.regionNumbers() != null) {
       replaceExemptionOrgUnits(record.exemptionNumber(), record.regionNumbers());
     }
-    return updated;
+    return true;
   }
 
   public Optional<ExemptionRateRecord> insertExemptionRate(ExemptionRateMutationRecord record) {
     if (record == null || trim(record.exemptionNumber()) == null || record.fixedExemptionRate() == null) {
       return Optional.empty();
     }
-    return queryCursorSingle(
+    return queryCursorSingleRequired(
         INSERT_EXEMPTION_RATE,
         cs -> {
           setStringOrNull(cs, 1, record.exemptionNumber());
@@ -316,14 +422,23 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
           cs.setTimestamp(4, Timestamp.from(Instant.now()));
         },
         5,
-        this::mapExemptionRateRecord);
+        this::mapExemptionRateRecord)
+        .filter(
+            row ->
+                java.util.Objects.equals(
+                        trim(row.exemptionNumber()), trim(record.exemptionNumber()))
+                    && row.fixedExemptionRate() != null
+                    && java.math.BigDecimal.valueOf(row.fixedExemptionRate())
+                            .compareTo(
+                                java.math.BigDecimal.valueOf(record.fixedExemptionRate()))
+                        == 0);
   }
 
   public boolean updateExemptionRate(ExemptionRateMutationRecord record) {
     if (record == null || trim(record.exemptionNumber()) == null || record.fixedExemptionRate() == null) {
       return false;
     }
-    return executeProcedure(
+    executeProcedureRequired(
         UPDATE_EXEMPTION_RATE,
         cs -> {
           setStringOrNull(cs, 1, record.exemptionNumber());
@@ -331,6 +446,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
           cs.setString(3, auditUserOrDefault(record.userId()));
           cs.setTimestamp(4, Timestamp.from(Instant.now()));
         });
+    return true;
   }
 
   public boolean deleteExemptionRate(String exemptionNumber) {
@@ -338,7 +454,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return false;
     }
-    return executeProcedure(DELETE_EXEMPTION_RATE, cs -> cs.setString(1, normalized));
+    executeProcedureRequired(DELETE_EXEMPTION_RATE, cs -> cs.setString(1, normalized));
+    return true;
   }
 
   private void bindExemptionInsert(CallableStatement cs, ExemptionInsertRecord record)
@@ -375,7 +492,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   private void insertExemptionOrgUnit(String exemptionNumber, Long regionNumber) {
-    executeProcedure(
+    executeProcedureRequired(
         INSERT_EXEMPTION_ORG_UNIT,
         cs -> {
           cs.setString(1, exemptionNumber);
@@ -388,11 +505,19 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return;
     }
-    executeProcedure(DELETE_EXEMPTION_ORG_UNIT, cs -> cs.setString(1, normalized));
+    executeProcedureRequired(DELETE_EXEMPTION_ORG_UNIT, cs -> cs.setString(1, normalized));
     regionNumbers.stream()
         .filter(region -> region != null && region > 0)
         .distinct()
         .forEach(region -> insertExemptionOrgUnit(normalized, region));
+  }
+
+  private void markRollbackOnly() {
+    try {
+      TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+    } catch (NoTransactionException ignored) {
+      // Direct unit calls do not have a surrounding Spring transaction.
+    }
   }
 
   private ApplicationSummaryRow mapApplicationSummaryRow(ResultSet rs) {
@@ -528,6 +653,20 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index, app.oicIndicator());
   }
 
+  private boolean codeExistsRequired(String procedureSignature, String code) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return false;
+    }
+    return queryCursorSingleRequired(
+            procedureSignature,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> trim(rs.getString(1)))
+        .filter(normalized::equalsIgnoreCase)
+        .isPresent();
+  }
+
   private String valueOrEmpty(String value) {
     return value == null ? "" : value;
   }
@@ -560,6 +699,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LocalDate issueDate,
       String clientNumber,
       String agentNumber) {}
+
+  public record ApplicationPermitRow(Long permitNumber, String exemptionNumber) {}
 
   public record DocumentRow(
       long id, String fileName, String description, String attachmentTypeCode) {}

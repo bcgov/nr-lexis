@@ -1,5 +1,6 @@
 import { Button } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
+import EmptyState from '@/components/EmptyState'
 
 const NotFound = () => {
   const navigate = useNavigate()
@@ -8,13 +9,16 @@ const NotFound = () => {
   }
   return (
     <div className="not-found-page">
-      <div>
-        <h1>404</h1>
-        <p>The page you're looking for does not exist.</p>
-        <Button kind="secondary" name="homeBtn" id="homeBtn" onClick={() => buttonClicked()}>
-          Back Home
-        </Button>
-      </div>
+      <EmptyState
+        headingLevel={1}
+        title="404"
+        description="The page you're looking for does not exist."
+        action={
+          <Button kind="secondary" name="homeBtn" id="homeBtn" onClick={() => buttonClicked()}>
+            Back Home
+          </Button>
+        }
+      />
     </div>
   )
 }

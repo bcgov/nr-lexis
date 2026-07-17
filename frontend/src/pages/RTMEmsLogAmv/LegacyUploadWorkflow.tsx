@@ -43,6 +43,7 @@ import {
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
 import UploadWorkflowProgress from '@/components/uploads/UploadWorkflowProgress'
+import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
 
 type PendingUploadValidation = {
   fileName: string
@@ -153,7 +154,7 @@ const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 const RTM_UPLOAD_ONLY_DESCRIPTION = 'Update average monthly values by uploading an XLSX file.'
 const RTM_UPLOAD_STEP_DESCRIPTION =
   'Add your completed template to check for errors before the new values take effect.'
-const RTM_UPLOAD_FIELD_HELPER = 'Accepted formats: .xlsx.'
+const RTM_UPLOAD_FIELD_HELPER = 'Accepted formats: .xlsx. Maximum file size: 20 MiB.'
 
 const RTM_UPLOAD_REVIEW_STEPS = [
   { id: 'upload', label: 'Upload' },
@@ -167,7 +168,9 @@ const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'CY', label: 'Cypress', speciesCodes: ['CY'] },
   { key: 'FI', label: 'Fir', speciesCodes: ['FI'] },
   { key: 'SP', label: 'Spruce', speciesCodes: ['SP'] },
-  { key: 'PINE', label: 'Pine', speciesCodes: ['PINE', 'WH', 'LO', 'YE'] },
+  { key: 'WH', label: 'Western white pine', speciesCodes: ['WH'] },
+  { key: 'LO', label: 'Lodgepole pine', speciesCodes: ['LO'] },
+  { key: 'YE', label: 'Yellow pine', speciesCodes: ['YE'] },
 ]
 
 const RTM_REVIEW_GRADE_ORDER = [
@@ -185,6 +188,7 @@ const RTM_REVIEW_GRADE_ORDER = [
   'L',
   'M',
   'U',
+  'W',
   'X',
   'Y',
   'Z',
@@ -194,11 +198,21 @@ const RTM_REVIEW_GRADE_ORDER = [
   '4',
   '5',
   '6',
+  'BLANK',
 ]
 
 const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
 
 const normalizeKey = (value: string | null | undefined) => (value ?? '').trim().toUpperCase()
+
+const normalizeGrade = (value: string | null | undefined) => {
+  if (value === ' ') {
+    return 'BLANK'
+  }
+
+  const normalized = normalizeKey(value)
+  return normalized === 'BLANK' ? 'BLANK' : normalized
+}
 
 const isAcceptedUploadFile = (file: File) => {
   return (
@@ -284,7 +298,7 @@ const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] =>
   })
 
   rows.forEach((row) => {
-    const grade = normalizeKey(row.grade)
+    const grade = normalizeGrade(row.grade)
     const growthIndicator = normalizeKey(row.growthIndicator)
     const speciesColumnKey = resolveSpeciesColumnKey(row.species)
 
@@ -578,6 +592,12 @@ const LegacyRtmEmsLogAmvUploadWorkflow = () => {
     setPendingUploadValidation(null)
 
     if (!nextFile) {
+      return
+    }
+
+    const sizeError = validateUploadFileSize(nextFile)
+    if (sizeError) {
+      setUploadError(sizeError)
       return
     }
 

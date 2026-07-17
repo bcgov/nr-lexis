@@ -1,14 +1,18 @@
 package ca.bc.gov.mof.lexis.repository.offer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import org.springframework.data.domain.Page;
+import org.springframework.dao.DataAccessResourceFailureException;
 import java.sql.CallableStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
@@ -79,6 +83,71 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
+  void ordinaryClientFilterShouldRemainLimitedToApplicationOwnerOrAgent() {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+
+    repository.search(
+        new PurchaseOfferSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00099999",
+            List.of(),
+            null,
+            0,
+            10));
+
+    assertThat(repository.whereSql())
+        .contains("EEA.OWNER_CLIENT_NUMBER LIKE")
+        .contains("EEA.AGENT_CLIENT_NUMBER LIKE")
+        .doesNotContain("PO.OFFERING_CLIENT_NUMBER =");
+    assertThat(repository.bindValues()).containsExactly("00099999", "00099999");
+  }
+
+  @Test
+  void scopedAccessShouldIncludeOfferingClientAndUseIdenticalSearchAndCountCriteria() {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+    PurchaseOfferSearchCriteria criteria =
+        new PurchaseOfferSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00099999",
+            null,
+            "00077881",
+            false,
+            false,
+            List.of(),
+            null,
+            0,
+            10);
+
+    repository.search(criteria);
+    String searchSql = repository.whereSql();
+    List<String> searchBinds = repository.bindValues();
+
+    repository.count(criteria);
+
+    assertThat(searchSql)
+        .contains("EEA.OWNER_CLIENT_NUMBER LIKE")
+        .contains("EEA.AGENT_CLIENT_NUMBER LIKE")
+        .contains("EEA.OWNER_CLIENT_NUMBER =")
+        .contains("EEA.AGENT_CLIENT_NUMBER =")
+        .contains("PO.OFFERING_CLIENT_NUMBER =");
+    assertThat(searchBinds)
+        .containsExactly(
+            "00099999", "00099999", "00077881", "00077881", "00077881");
+    assertThat(repository.whereSql()).isEqualTo(searchSql);
+    assertThat(repository.bindValues()).isEqualTo(searchBinds);
+  }
+
+  @Test
   void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<PurchaseOfferSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(810001L, 810010L)
@@ -111,7 +180,7 @@ class PurchaseOfferRepositoryTest {
         new PurchaseOfferRepository.PurchaseOfferInsertRecord(
             null,
             "Example Lumber",
-            "Alex Example",
+            "Sample Contact",
             12500.25d,
             LocalDate.of(2026, 3, 2),
             null,
@@ -144,7 +213,7 @@ class PurchaseOfferRepositoryTest {
             81001L,
             null,
             "Example Lumber",
-            "Alex Example",
+            "Sample Contact",
             12500.25d,
             LocalDate.of(2026, 3, 2),
             null,
@@ -165,6 +234,124 @@ class PurchaseOfferRepositoryTest {
 
     verify(repository.callableStatement()).setString(15, " ");
     verify(repository.callableStatement(), never()).setNull(15, java.sql.Types.VARCHAR);
+  }
+
+  @Test
+  void detailLookupShouldPropagateOracleFailure() {
+    FailingPurchaseOfferRepository repository = new FailingPurchaseOfferRepository();
+
+    assertThatThrownBy(() -> repository.findByOfferNumber(81001L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void detailLookupShouldPreserveANullOfferVolume() {
+    NullVolumePurchaseOfferRepository repository = new NullVolumePurchaseOfferRepository();
+
+    assertThat(repository.findByOfferNumber(81001L))
+        .hasValueSatisfying(
+            detail -> {
+              assertThat(detail.offerVolume()).isNull();
+              assertThat(detail.region()).isEqualTo("Cariboo Natural Resource Region");
+            });
+  }
+
+  @Test
+  void applicationRecipientLookupShouldUseRequiredCursorAndPropagateOracleFailure() {
+    FailingPurchaseOfferRepository repository = new FailingPurchaseOfferRepository();
+
+    assertThatThrownBy(() -> repository.findApplicationRecipient(1000456L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void applicationRecipientLookupShouldKeepAValidMissingRowDistinctFromAnOutage()
+      throws Exception {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+
+    assertThat(repository.findApplicationRecipient(1000456L)).isEmpty();
+    verify(repository.callableStatement()).setString(1, "1000456");
+  }
+
+  @Test
+  void applicationRecipientLookupShouldReturnThePersistedOrganizationUnit() {
+    PurchaseOfferRepository repository = new ApplicationRecipientPurchaseOfferRepository();
+
+    assertThat(repository.findApplicationRecipient(1000456L))
+        .hasValueSatisfying(
+            recipient -> {
+              assertThat(recipient.ownerClientNumber()).isEqualTo("00077881");
+              assertThat(recipient.ownerClientLocationCode()).isEqualTo("00");
+              assertThat(recipient.orgUnitNumber()).isEqualTo(1903L);
+            });
+  }
+
+  @Test
+  void insertShouldPropagateOracleFailure() {
+    FailingPurchaseOfferRepository repository = new FailingPurchaseOfferRepository();
+
+    assertThatThrownBy(
+            () ->
+                repository.insertOffer(
+                    new PurchaseOfferRepository.PurchaseOfferInsertRecord(
+                        null,
+                        "Example Lumber",
+                        "Sample Contact",
+                        12500.25d,
+                        LocalDate.of(2026, 3, 2),
+                        null,
+                        null,
+                        "N",
+                        "Y",
+                        null,
+                        "N",
+                        null,
+                        "P",
+                        " ",
+                        "idir\\jsmith",
+                        null,
+                        null,
+                        "Port Moody",
+                        null,
+                        1000456L,
+                        99.9d)))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void updateShouldPropagateOracleFailure() {
+    FailingPurchaseOfferRepository repository = new FailingPurchaseOfferRepository();
+
+    assertThatThrownBy(
+            () ->
+                repository.updateOffer(
+                    new PurchaseOfferRepository.PurchaseOfferUpdateRecord(
+                        81001L,
+                        null,
+                        "Example Lumber",
+                        "Sample Contact",
+                        12500.25d,
+                        LocalDate.of(2026, 3, 2),
+                        null,
+                        null,
+                        "N",
+                        "Y",
+                        null,
+                        "N",
+                        null,
+                        "P",
+                        null,
+                        "Port Moody",
+                        null,
+                        "creator",
+                        null,
+                        "idir\\jsmith",
+                        99.9d)))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
   }
 
   private static final class TestPurchaseOfferRepository extends PurchaseOfferRepository {
@@ -237,9 +424,19 @@ class PurchaseOfferRepositoryTest {
     }
 
     @Override
-    protected boolean executeProcedure(String procedureSignature, SqlConsumer<CallableStatement> binder) {
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
       bind(binder);
-      return true;
+      return Optional.empty();
+    }
+
+    @Override
+    protected void executeProcedureRequired(
+        String procedureSignature, SqlConsumer<CallableStatement> binder) {
+      bind(binder);
     }
 
     private void bind(SqlConsumer<CallableStatement> binder) {
@@ -248,6 +445,82 @@ class PurchaseOfferRepositoryTest {
         binder.accept(callableStatement);
       } catch (SQLException ex) {
         throw new AssertionError(ex);
+      }
+    }
+  }
+
+  private static final class FailingPurchaseOfferRepository extends PurchaseOfferRepository {
+    FailingPurchaseOfferRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+
+    @Override
+    protected void executeProcedureRequired(
+        String procedureSignature, SqlConsumer<CallableStatement> binder) {
+      throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+  }
+
+  private static final class NullVolumePurchaseOfferRepository extends PurchaseOfferRepository {
+    NullVolumePurchaseOfferRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      ResultSet resultSet = mock(ResultSet.class);
+      try {
+        when(resultSet.getLong("EXPORT_PURCHASE_OFFER_NUMBER")).thenReturn(81001L);
+        when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+        when(resultSet.getDouble("PURCHASE_OFFER_AMOUNT")).thenReturn(12500.25d);
+        when(resultSet.getDouble("EXPORT_PURCHASE_VOLUME")).thenReturn(0.0d);
+        when(resultSet.getString("REGION")).thenReturn("Cariboo Natural Resource Region");
+        when(resultSet.getString("ORG_UNIT_CODE"))
+            .thenThrow(new SQLException("Column is not present in the legacy detail cursor"));
+        when(resultSet.wasNull()).thenReturn(false, false, false, true);
+        return Optional.of(rowMapper.map(resultSet));
+      } catch (SQLException exception) {
+        throw new AssertionError(exception);
+      }
+    }
+  }
+
+  private static final class ApplicationRecipientPurchaseOfferRepository
+      extends PurchaseOfferRepository {
+
+    ApplicationRecipientPurchaseOfferRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      ResultSet resultSet = mock(ResultSet.class);
+      try {
+        when(resultSet.getString("EXPORT_APPLICANT_TYPE_CODE")).thenReturn("O");
+        when(resultSet.getString("OWNER_CLIENT_NUMBER")).thenReturn("00077881");
+        when(resultSet.getString("OWNER_CLIENT_LOCATION_CODE")).thenReturn("00");
+        when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L);
+        when(resultSet.wasNull()).thenReturn(false);
+        return Optional.of(rowMapper.map(resultSet));
+      } catch (SQLException exception) {
+        throw new AssertionError(exception);
       }
     }
   }

@@ -24,32 +24,32 @@ class LexisAdminScheduleControllerTest {
   @Mock private LexisAdminScheduleService scheduleService;
 
   @Test
-  void upcomingSchedulesShouldReturnNoContentWhenServiceMissing() {
+  void schedulesShouldReturnNoContentWhenServiceMissing() {
     when(scheduleServiceProvider.getIfAvailable()).thenReturn(null);
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
-    var response = controller.upcomingSchedules(0, 100);
+    var response = controller.schedules(0, 100, "advertisingDate", "desc");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
   }
 
   @Test
-  void upcomingSchedulesShouldDelegateToService() {
+  void schedulesShouldDelegateToService() {
     when(scheduleServiceProvider.getIfAvailable()).thenReturn(scheduleService);
     ExportScheduleRowDto row =
         new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
     LexisAdminPagedResponseDto<ExportScheduleRowDto> payload =
         new LexisAdminPagedResponseDto<>(java.util.List.of(row), 1, 0, 100);
-    when(scheduleService.upcomingSchedules(0, 100)).thenReturn(payload);
+    when(scheduleService.schedules(0, 100, "teacMeetingDate", "desc")).thenReturn(payload);
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
-    var response = controller.upcomingSchedules(0, 100);
+    var response = controller.schedules(0, 100, "teacMeetingDate", "desc");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(scheduleService).upcomingSchedules(0, 100);
+    verify(scheduleService).schedules(0, 100, "teacMeetingDate", "desc");
   }
 
   @Test
@@ -113,7 +113,9 @@ class LexisAdminScheduleControllerTest {
     when(scheduleService.updateSchedule(1001L, request))
         .thenReturn(
             new ExportScheduleMutationResultDto(
-                false, "A schedule already exists for that advertising date.", null));
+                false,
+                "Export schedule is used by existing applications and cannot be changed.",
+                null));
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
@@ -123,7 +125,7 @@ class LexisAdminScheduleControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isFalse();
     assertThat(response.getBody().message())
-        .isEqualTo("A schedule already exists for that advertising date.");
+        .isEqualTo("Export schedule is used by existing applications and cannot be changed.");
   }
 
   @Test

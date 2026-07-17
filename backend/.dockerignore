@@ -139,3 +139,7 @@ buildNumber.properties
 config/
 mvnw.cmd
 Dockerfile
+
+# Local-only Oracle credentials and trust material must never enter an image build context.
+src/main/resources/application-local.yml
+src/main/resources/cert/

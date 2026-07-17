@@ -3,6 +3,7 @@ export type ProvincialApplicationDetail = {
   exemptionNumber: string | null
   applicationStatusCode: string | null
   statusDescription: string | null
+  author?: string | null
   ownerClientNumber: string | null
   agentClientNumber: string | null
   orgUnitNumber: number | null
@@ -19,6 +20,11 @@ export type ProvincialApplicationDetail = {
   industryUser: boolean
   readOnly: boolean
   exemptionApprover: boolean
+  canEditApplicationDetails: boolean
+  canEditPackages: boolean
+  canAddPackages: boolean
+  canAddScales: boolean
+  canUpdatePackageNumber: boolean
   locked: boolean
   lockedBy?: string | null
   lockMessage?: string | null
@@ -97,6 +103,9 @@ export type ProvincialOfferDetail = {
   canEditOfferRemarks: boolean
   canEditOfferDetails: boolean
   canEditWithdrawFields: boolean
+  locked: boolean
+  lockedBy: string | null
+  lockMessage: string | null
 }
 
 export type ProvincialPermitDetail = {
@@ -116,6 +125,7 @@ export type ProvincialPermitDetail = {
   transportName: string | null
   portOfExportCode: string | null
   otherPortOfExport: string | null
+  applicationDate: string | null
   issueDate: string | null
   expiryDate: string | null
   receivedDate: string | null
@@ -131,6 +141,9 @@ export type ProvincialPermitDetail = {
   invoiceNumber: string | null
   remarks: string | null
   oicApplicationNumber: number | null
+  oicRequestPieces: number | null
+  oicRequestVolume: number | null
+  orgUnitNumber: number | null
   region: string | null
 }
 
@@ -143,6 +156,23 @@ export type FederalPermitDetail = {
   shippingDate: string | null
   portOfExport: string | null
   otherPortOfExport: string | null
+}
+
+export type FederalApplicationClientContext = {
+  address: string | null
+  city: string | null
+  province: string | null
+  postalCode: string | null
+  country: string | null
+  phone: string | null
+  fax: string | null
+  email: string | null
+}
+
+export type FederalApplicationOffer = {
+  offerNumber: string
+  companyName: string | null
+  receivedDate: string | null
 }
 
 export type FederalApplicationDetail = {
@@ -175,9 +205,15 @@ export type FederalApplicationDetail = {
   applicationVolume?: number | null
   endUse?: string | null
   author?: string | null
+  ownerClientContext?: FederalApplicationClientContext | null
+  agentClientContext?: FederalApplicationClientContext | null
   readOnly: boolean
+  locked: boolean
+  lockHeldByCurrentUser: boolean
+  lockedBy: string | null
+  lockMessage: string | null
   packages: string[]
   remarks: string[]
-  offers: string[]
+  offers: FederalApplicationOffer[]
   federalPermit: FederalPermitDetail | null
 }

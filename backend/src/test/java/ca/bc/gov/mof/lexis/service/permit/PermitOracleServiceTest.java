@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -13,10 +14,8 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -28,12 +27,17 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | PermitOracleService")
 class PermitOracleServiceTest {
 
   @Mock private PermitRepository repository;
+  @Mock private PermitRpcRepository permitRpcRepository;
   @InjectMocks private PermitOracleService service;
 
   @Test
@@ -113,6 +117,8 @@ class PermitOracleServiceTest {
             " SI-99881 ",
             " 00055667 ",
             " 00077881 ",
+            " 00012345 ",
+            false,
             Arrays.asList(12L, null, 12L, -1L, 0L),
             " permitNumber DESC ",
             -2,
@@ -134,10 +140,43 @@ class PermitOracleServiceTest {
     assertThat(normalized.invoiceNumber()).isEqualTo("SI-99881");
     assertThat(normalized.applicantClientNumber()).isEqualTo("00055667");
     assertThat(normalized.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(normalized.accessClientNumber()).isEqualTo("00012345");
     assertThat(normalized.regionNumbers()).containsExactly(12L);
     assertThat(normalized.sortField()).isEqualTo("permitNumber DESC");
     assertThat(normalized.page()).isZero();
     assertThat(normalized.size()).isEqualTo(1);
+  }
+
+  @Test
+  void countShouldPreserveNormalizedScopedAccessCriterion() {
+    PermitSearchCriteria criteria =
+        new PermitSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            " 00012345 ",
+            false,
+            List.of(),
+            null,
+            0,
+            1);
+    when(repository.count(any(PermitSearchCriteria.class))).thenReturn(5);
+
+    int result = service.count(criteria);
+
+    assertThat(result).isEqualTo(5);
+    ArgumentCaptor<PermitSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PermitSearchCriteria.class);
+    verify(repository).count(criteriaCaptor.capture());
+    assertThat(criteriaCaptor.getValue().applicantClientNumber()).isNull();
+    assertThat(criteriaCaptor.getValue().ownerClientNumber()).isNull();
+    assertThat(criteriaCaptor.getValue().accessClientNumber()).isEqualTo("00012345");
   }
 
   @Test
@@ -184,6 +223,36 @@ class PermitOracleServiceTest {
   void detailShouldReturnEmptyForInvalidPermitNumber() {
     assertThat(service.findByPermitNumber(0L)).isEmpty();
     verifyNoInteractions(repository);
+  }
+
+  @Test
+  void detailShouldPropagateRepositoryFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(repository.findByPermitNumber(9000123L)).thenThrow(failure);
+
+    assertThatThrownBy(() -> service.findByPermitNumber(9000123L)).isSameAs(failure);
+  }
+
+  @Test
+  void linkedApplicationsShouldUseRequiredPackagesByPermitLookup() {
+    when(permitRpcRepository.findApplicationNumbersByPermitNumberRequired(9000123L))
+        .thenReturn(List.of(1000456L, 1000457L));
+
+    List<Long> result = service.findLinkedApplicationNumbers(9000123L);
+
+    assertThat(result).containsExactly(1000456L, 1000457L);
+    verify(permitRpcRepository).findApplicationNumbersByPermitNumberRequired(9000123L);
+  }
+
+  @Test
+  void linkedApplicationLookupShouldPropagateOracleFailure() {
+    when(permitRpcRepository.findApplicationNumbersByPermitNumberRequired(9000123L))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+
+    assertThatThrownBy(() -> service.findLinkedApplicationNumbers(9000123L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
   }
 
   private PermitSearchResultDto row(Long permitNumber, LocalDate issueDate) {

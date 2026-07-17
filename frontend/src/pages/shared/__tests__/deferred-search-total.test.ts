@@ -192,4 +192,34 @@ describe('loadSearchWithDeferredTotal', () => {
       expect(getPageDataCache<TestResponse>(cacheKey)).toEqual(nextResponse)
     })
   })
+
+  it('does not cache an in-flight prefetch after page data is invalidated', async () => {
+    clearAllPageDataCache()
+    let resolveSearch: ((response: TestResponse) => void) | undefined
+    const currentResponse = responseWith(20, 45, 20, 0)
+    const nextResponse = responseWith(20, 45, 20, 1)
+    const searchPromise = new Promise<TestResponse>((resolve) => {
+      resolveSearch = resolve
+    })
+    const search = vi.fn(() => searchPromise)
+
+    prefetchAdjacentSearchPages({
+      pageId: 'test-search',
+      principal: 'IDIR\\TEST',
+      request: { page: 0, pageSize: 20 },
+      response: currentResponse,
+      search,
+    })
+    expect(search).toHaveBeenCalledTimes(1)
+
+    clearAllPageDataCache()
+    resolveSearch?.(nextResponse)
+    await searchPromise
+
+    const cacheKey = buildPageDataCacheKey('test-search', 'IDIR\\TEST', {
+      page: 1,
+      pageSize: 20,
+    })
+    expect(getPageDataCache<TestResponse>(cacheKey)).toBeNull()
+  })
 })

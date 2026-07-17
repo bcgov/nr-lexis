@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Layout from '../Layout'
 import { useAuth } from '@/context/auth/useAuth'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
@@ -12,6 +12,25 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const THEME_PREFERENCE_KEY = 'lexis.ui.theme'
+const SIDE_NAV_PREFERENCE_KEY = 'lexis.ui.sideNavCollapsed'
+const COLLAPSED_SECTIONS_PREFERENCE_KEY = 'lexis.ui.collapsedSections'
+const NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
+
+const mockMobileViewport = (): void => {
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string): MediaQueryList => ({
+      matches: query === '(max-width: 671px)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => false),
+    }),
+  )
+}
 
 const LocationProbe = () => {
   const location = useLocation()
@@ -20,7 +39,7 @@ const LocationProbe = () => {
 }
 
 const renderLayout = (path: string) => {
-  render(
+  return render(
     <MemoryRouter initialEntries={[path]}>
       <Layout>
         <h1>Current page content</h1>
@@ -32,10 +51,146 @@ const renderLayout = (path: string) => {
 
 describe('Layout shell', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
+    window.localStorage.clear()
     window.config = {}
+    document.documentElement.removeAttribute('data-carbon-theme')
+    document.getElementById(NOTIFICATION_REGION_ID)?.remove()
 
     mockedUseAuth.mockReturnValue(createTestAuthContext())
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    document.documentElement.removeAttribute('data-carbon-theme')
+    document.getElementById(NOTIFICATION_REGION_ID)?.remove()
+  })
+
+  it('uses and persists public-safe defaults when no preferences exist', () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'white')
+    expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
+    expect(window.localStorage.getItem(THEME_PREFERENCE_KEY)).toBe('white')
+    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('false')
+    expect(window.localStorage.getItem(COLLAPSED_SECTIONS_PREFERENCE_KEY)).toBe('{}')
+  })
+
+  it('restores persisted theme, side-nav, and collapsed sections', async () => {
+    window.localStorage.setItem(THEME_PREFERENCE_KEY, 'g100')
+    window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'true')
+    window.localStorage.setItem(
+      COLLAPSED_SECTIONS_PREFERENCE_KEY,
+      JSON.stringify({ Reports: true }),
+    )
+
+    renderLayout('/admin/rtm/emslogamv')
+
+    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'g100')
+    expect(document.querySelector('.app-shell')).toHaveClass('is-side-nav-collapsed')
+    expect(document.getElementById(NOTIFICATION_REGION_ID)).toHaveClass('cds--g100')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Expand side navigation' }))
+
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+  })
+
+  it('persists preference updates without storing auth or user data', async () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
+    await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+
+    expect(window.localStorage.getItem(THEME_PREFERENCE_KEY)).toBe('g100')
+    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
+    expect(
+      JSON.parse(window.localStorage.getItem(COLLAPSED_SECTIONS_PREFERENCE_KEY) ?? '{}'),
+    ).toEqual({ Reports: true })
+    const storedKeys = Array.from({ length: window.localStorage.length }, (_, index) =>
+      window.localStorage.key(index),
+    ).sort()
+    expect(storedKeys).toEqual(
+      [THEME_PREFERENCE_KEY, SIDE_NAV_PREFERENCE_KEY, COLLAPSED_SECTIONS_PREFERENCE_KEY].sort(),
+    )
+  })
+
+  it('falls back to defaults for malformed preference values', () => {
+    window.localStorage.setItem(THEME_PREFERENCE_KEY, 'dark')
+    window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'collapsed')
+    window.localStorage.setItem(COLLAPSED_SECTIONS_PREFERENCE_KEY, '{not-json')
+
+    expect(() => renderLayout('/admin/rtm/emslogamv')).not.toThrow()
+
+    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'white')
+    expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('continues with in-memory preferences when local storage fails', async () => {
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('Storage unavailable')
+    })
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('Storage unavailable')
+    })
+
+    expect(() => renderLayout('/admin/rtm/emslogamv')).not.toThrow()
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+
+    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'g100')
+    expect(document.querySelector('.app-shell')).toHaveClass('is-side-nav-collapsed')
+  })
+
+  it('restores the root theme on unmount and does not leak cleared preferences', async () => {
+    document.documentElement.setAttribute('data-carbon-theme', 'g90')
+    const firstRender = renderLayout('/admin/rtm/emslogamv')
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'g100')
+
+    firstRender.unmount()
+
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'g90')
+
+    window.localStorage.clear()
+    const secondRender = renderLayout('/admin/rtm/emslogamv')
+
+    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'white')
+
+    secondRender.unmount()
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'g90')
   })
 
   it('marks only the exact side-nav route as active', () => {
@@ -191,6 +346,7 @@ describe('Layout shell', () => {
       welcomeTarget: '/reports',
       legacyPath: null,
       grantedActions: ['/applicationReport'],
+      forestClientNumber: null,
     } as LexisSessionCapabilities
 
     mockedUseAuth.mockReturnValue(
@@ -296,15 +452,86 @@ describe('Layout shell', () => {
 
     expect(shell).not.toHaveClass('is-side-nav-collapsed')
     expect(sideNav).not.toHaveClass('is-collapsed')
-    expect(collapseButton).toHaveAttribute('aria-expanded', 'true')
+    expect(collapseButton).toHaveAttribute('aria-controls', 'side-navigation-list')
+    expect(collapseButton).not.toHaveAttribute('aria-expanded')
 
     await userEvent.click(collapseButton)
 
     expect(shell).toHaveClass('is-side-nav-collapsed')
     expect(sideNav).toHaveClass('is-collapsed')
-    expect(screen.getByRole('button', { name: 'Expand side navigation' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Expand side navigation' })).not.toHaveAttribute(
+      'aria-expanded',
+    )
+  })
+
+  it('keeps the persisted desktop preference separate from the closed mobile drawer', async () => {
+    mockMobileViewport()
+    window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'true')
+    renderLayout('/admin/rtm/emslogamv')
+
+    const sideNav = document.getElementById('side-navigation')
+    const mainContent = document.getElementById('main-content')
+    const openMenuButton = screen.getByRole('button', { name: 'Open navigation menu' })
+
+    expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
+    expect(openMenuButton).toHaveAttribute('aria-expanded', 'false')
+    expect(openMenuButton).toHaveAttribute('aria-controls', 'side-navigation')
+    expect(sideNav).toHaveAttribute('aria-hidden', 'true')
+    expect(sideNav).toHaveAttribute('inert')
+    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
+
+    await userEvent.click(openMenuButton)
+
+    expect(screen.getByRole('button', { name: 'Close navigation menu' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(sideNav).toHaveClass('is-mobile-open')
+    expect(sideNav).not.toHaveAttribute('aria-hidden')
+    expect(sideNav).not.toHaveAttribute('inert')
+    expect(mainContent).toHaveAttribute('aria-hidden', 'true')
+    expect(mainContent).toHaveAttribute('inert')
+    expect(screen.getByRole('button', { name: 'Dismiss navigation menu' })).toBeInTheDocument()
+    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }))
+
+    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
+    expect(sideNav).not.toHaveClass('is-mobile-open')
+    expect(mainContent).not.toHaveAttribute('aria-hidden')
+    expect(mainContent).not.toHaveAttribute('inert')
+    expect(
+      screen.queryByRole('button', { name: 'Dismiss navigation menu' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('supports Escape and navigation-link dismissal for the mobile drawer', async () => {
+    mockMobileViewport()
+    renderLayout('/admin/rtm/emslogamv')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /^Review$/i })).toHaveFocus()
+    })
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveFocus()
+    })
+    expect(document.getElementById('side-navigation')).not.toHaveClass('is-mobile-open')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
+    await userEvent.click(screen.getByRole('link', { name: /^Applications$/i }))
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/application')
+    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(document.getElementById('side-navigation')).not.toHaveClass('is-mobile-open')
   })
 })

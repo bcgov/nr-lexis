@@ -12,6 +12,47 @@ export type OfferApplicationDetails = {
   speciesGradeCode: string
   advertisingDate: string
   teacReviewDate: string
+  region: string
+}
+
+export type OfferClientData = {
+  clientNumber: string
+  companyName: string
+}
+
+export const fetchOfferClientData = async (
+  clientNumber: string,
+): Promise<OfferClientData | null> => {
+  const normalizedClientNumber = clientNumber.trim()
+  if (!normalizedClientNumber) {
+    return null
+  }
+
+  const data = await apiService.getCachedData<unknown>(
+    '/lexis/rpc/offer-details/client-data',
+    {
+      params: {
+        clientNumber: normalizedClientNumber,
+        clientLocationCode: '00',
+      },
+    },
+    {
+      cacheKey: `offer-client-data:${normalizedClientNumber}:00`,
+      ttlMs: OFFER_CREATE_CACHE_TTL_MS,
+    },
+  )
+  const source = recordOrEmpty(data)
+  const resolvedClientNumber = asString(source.clientNumber)
+  const companyName = asString(source.companyName)
+  const notFound = asString(source.notfound).toLowerCase() === 'true'
+  if (notFound || !resolvedClientNumber || !companyName) {
+    return null
+  }
+
+  return {
+    clientNumber: resolvedClientNumber,
+    companyName,
+  }
 }
 
 export const fetchOfferApplicationDetails = async (
@@ -33,6 +74,7 @@ export const fetchOfferApplicationDetails = async (
     speciesGradeCode: asString(source.speciesGradeCode),
     advertisingDate: asString(source.advertisingDate),
     teacReviewDate: asString(source.teacReviewDate),
+    region: asString(source.region),
   }
 }
 

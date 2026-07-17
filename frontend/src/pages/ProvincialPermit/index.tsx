@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  FilterableMultiSelect,
   Pagination,
   Table,
   TableBody,
@@ -16,7 +15,12 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import EmptyState from '@/components/EmptyState'
+import PageHeader from '@/components/PageHeader'
+import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
+import RegionMultiSelect from '@/components/RegionMultiSelect'
+import StatusTag from '@/components/StatusTag'
 import type {
   ProvincialPermitSearchFilters,
   ProvincialPermitSearchRequest,
@@ -45,6 +49,7 @@ import {
 import {
   buildPageDataCacheKey,
   getPageDataCache,
+  getPageDataCacheGeneration,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
@@ -74,6 +79,7 @@ const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   issuedToDate: '',
   permitStatus: '',
   permitNumber: '',
+  invoiceNumber: '',
   ownerClientNumber: '',
   applicantClientNumber: '',
 }
@@ -85,16 +91,16 @@ const SORT_COLUMNS: {
   label: string
 }[] = [
   { id: 'permitNumber', label: 'Permit' },
-  { id: 'status', label: 'Status' },
+  { id: 'permitStatus', label: 'Status' },
   { id: 'applicantClientNumber', label: 'Applicant client number' },
   { id: 'ownerClientNumber', label: 'Owner client number' },
-  { id: 'totalVolume', label: 'Total volume (m³)' },
-  { id: 'issueDate', label: 'Issue date' },
+  { id: 'permitVolume', label: 'Total volume (m³)' },
+  { id: 'dateIssued', label: 'Issue date' },
   { id: 'region', label: 'Region' },
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialPermitSearchSortField = 'permitNumber'
-const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialPermitSearchSortField[]
@@ -114,6 +120,7 @@ const buildSearchParams = (
     ['issuedToDate', filters.issuedToDate],
     ['permitStatus', filters.permitStatus],
     ['permitNumber', filters.permitNumber],
+    ['invoiceNumber', filters.invoiceNumber],
     ['ownerClientNumber', filters.ownerClientNumber],
     ['applicantClientNumber', filters.applicantClientNumber],
     ['sortField', sortField],
@@ -127,6 +134,8 @@ const ProvincialPermitPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
+  const [optionsLoading, setOptionsLoading] = useState(true)
+  const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -145,6 +154,7 @@ const ProvincialPermitPage = () => {
       issuedToDate: searchParams.get('issuedToDate') ?? '',
       permitStatus: searchParams.get('permitStatus') ?? '',
       permitNumber: searchParams.get('permitNumber') ?? '',
+      invoiceNumber: searchParams.get('invoiceNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
     }
@@ -194,10 +204,6 @@ const ProvincialPermitPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const selectedRegionHelperText =
-    selectedRegions.length > 0
-      ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
-      : undefined
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(filters.issuedFromDate, filters.issuedToDate)
@@ -210,6 +216,7 @@ const ProvincialPermitPage = () => {
 
   const runSearch = useCallback(
     async (request: ProvincialPermitSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
       const pageCacheKey = buildPageDataCacheKey(
         'provincial-permit-search',
         capabilities?.principal,
@@ -247,14 +254,21 @@ const ProvincialPermitPage = () => {
       setErrorMessage('')
       try {
         const cacheKey = buildSearchTotalCacheKey(request.filters)
-        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, cacheKey)
+        const cachedTotal = options.force
+          ? undefined
+          : getCachedSearchTotal(totalCacheRef.current, cacheKey)
         const commitSearchResponse = (
           response: ProvincialPermitSearchResponse,
           totalIsExact: boolean,
         ) => {
+          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
+            return
+          }
           if (totalIsExact) {
+            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
+              return
+            }
             setCachedSearchTotal(totalCacheRef.current, cacheKey, response.page.totalElements)
-            setPageDataCache(pageCacheKey, response)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-permit-search',
               principal: capabilities?.principal,
@@ -265,7 +279,7 @@ const ProvincialPermitPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest()) {
+            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
               commitResults(response)
             }
           })
@@ -309,9 +323,16 @@ const ProvincialPermitPage = () => {
 
   useEffect(() => {
     const loadOptions = async () => {
-      const options = await fetchProvincialPermitOptions()
-      setPermitStatusOptions(options.permitStatuses)
-      setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+      try {
+        const options = await fetchProvincialPermitOptions()
+        setPermitStatusOptions(options.permitStatuses)
+        setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setOptionsUnavailable(false)
+      } catch {
+        setOptionsUnavailable(true)
+      } finally {
+        setOptionsLoading(false)
+      }
     }
 
     void loadOptions()
@@ -345,8 +366,13 @@ const ProvincialPermitPage = () => {
   return (
     <Grid fullWidth className="default-grid provincial-permit-search-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial permit search</h1>
+        <PageHeader
+          title="Provincial permit search"
+          subtitle="Find provincial export permits and open permit details."
+        />
       </Column>
+
+      {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-permit-search-filters">
@@ -364,6 +390,7 @@ const ProvincialPermitPage = () => {
                 value={filters.permitStatus}
                 placeholder="All statuses"
                 options={permitStatusOptions}
+                disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('permitStatus', value)}
               />
               <TextInput
@@ -378,16 +405,20 @@ const ProvincialPermitPage = () => {
                 value={filters.permitNumber}
                 onChange={(event) => updateFilter('permitNumber', event.target.value)}
               />
-              <FilterableMultiSelect
+              <TextInput
+                id="invoiceNumber"
+                labelText="Invoice number"
+                value={filters.invoiceNumber}
+                onChange={(event) => updateFilter('invoiceNumber', event.target.value)}
+              />
+              <RegionMultiSelect
                 id="region"
                 titleText="Region"
                 items={regionOptions}
-                itemToString={(item) => (item ? item.text : '')}
                 placeholder="Select region(s)"
-                helperText={selectedRegionHelperText}
                 selectedItems={selectedRegions}
-                onChange={(event) => {
-                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
+                disabled={optionsLoading || optionsUnavailable}
+                onChange={(nextSelected) => {
                   updateFilter(
                     'region',
                     nextSelected.map((item) => item.id),
@@ -441,68 +472,85 @@ const ProvincialPermitPage = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search results</h2>
-          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+        <section
+          className="legacy-search-section legacy-search-section--results"
+          aria-label="Search results"
+        >
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading permit search results..."
-            totalItems={results.page.totalElements}
+            totalItems={
+              errorMessage || (loading && results.content.length === 0)
+                ? undefined
+                : results.page.totalElements
+            }
           >
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => (
-                  <TableRow key={row.permitNumber}>
-                    <TableCell>
-                      <Link
-                        className="cds--link"
-                        to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
-                      >
-                        {row.permitNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell>{row.applicantClientNumber}</TableCell>
-                    <TableCell>{row.ownerClientNumber}</TableCell>
-                    <TableCell>{row.totalVolume}</TableCell>
-                    <TableCell>{row.issueDate}</TableCell>
-                    <TableCell>{row.region}</TableCell>
-                  </TableRow>
-                ))}
-                {results.content.length === 0 && (
+            {errorMessage ? (
+              <EmptyState
+                role="alert"
+                title="Permit search unavailable"
+                description={errorMessage}
+              />
+            ) : results.content.length > 0 ? (
+              <Table useZebraStyles>
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={7}>No permits found for the selected criteria.</TableCell>
+                    {SORT_COLUMNS.map((column) => (
+                      <TableHeader key={column.id}>
+                        <button
+                          type="button"
+                          className="legacy-sort-button"
+                          onClick={() => onHeaderClick(column.id)}
+                        >
+                          {column.label}
+                          {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                        </button>
+                      </TableHeader>
+                    ))}
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
+                </TableHead>
+                <TableBody>
+                  {results.content.map((row) => (
+                    <TableRow key={row.permitNumber}>
+                      <TableCell>
+                        <Link
+                          className="cds--link"
+                          to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
+                        >
+                          {row.permitNumber}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <StatusTag status={row.status} />
+                      </TableCell>
+                      <TableCell>{row.applicantClientNumber}</TableCell>
+                      <TableCell>{row.ownerClientNumber}</TableCell>
+                      <TableCell>{row.totalVolume}</TableCell>
+                      <TableCell>{row.issueDate}</TableCell>
+                      <TableCell>{row.region}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : !loading ? (
+              <EmptyState
+                title="No permits found"
+                description="No permits found for the selected criteria."
+              />
+            ) : null}
+            {!errorMessage && (!loading || results.content.length > 0) && (
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  setSearchParams(
+                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                  )
+                }}
+              />
+            )}
           </SearchResultsTableFrame>
         </section>
       </Column>

@@ -22,7 +22,9 @@ See the [root README's Local Development section](../README.md#local-development
 
 ### Environment Variables
 
-Mirrors `frontend/.env.example`. Vite bundles these values at dev/build time; changing them requires restarting the dev server.
+Mirrors `frontend/.env.example`. Local Vite reads these values at dev/build time. The deployed
+container writes them to runtime configuration during startup, so an environment change requires a
+rollout but not an image rebuild.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -114,8 +116,7 @@ frontend/
 
 ## UI Components
 
-The application uses [Carbon Design System](https://carbondesignsystem.com/) with BC Gov theming:
+The application uses [Carbon Design System](https://carbondesignsystem.com/) components:
 
 - `@carbon/react` - React components
 - `@carbon/icons-react` - Icon library
-- `@bcgov-nr/nr-theme` - BC Gov theme

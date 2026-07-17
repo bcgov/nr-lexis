@@ -2,27 +2,39 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Column, Grid, InlineLoading, TextArea, TextInput, Tile } from '@carbon/react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
+import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import PageHeader from '@/components/PageHeader'
 import SearchableSelect from '../../components/SearchableSelect'
+import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
-  maxLengthFieldError,
-  maxNumericValueFieldError,
-  positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { fetchProvincialOfferDetail } from '@/service/lexis-detail-service'
+import { fetchProvincialOfferDetail, releaseOfferEditLock } from '@/service/lexis-detail-service'
 import {
   submitProvincialOfferUpdate,
   type ProvincialOfferUpdateSubmission,
 } from '@/service/create-submit-service'
+import {
+  OFFER_COMPANY_NAME_MAX_LENGTH,
+  OFFER_CONDITION_MAX_LENGTH,
+  OFFER_CONTACT_NAME_MAX_LENGTH,
+  OFFER_PICKUP_LOCATION_MAX_LENGTH,
+  OFFER_REMARK_MAX_LENGTH,
+  OFFER_VOLUME_MAX,
+  OFFER_WITHDRAW_REASON_MAX_LENGTH,
+  PURCHASE_OFFER_AMOUNT_MAX,
+  offerDecimalStorageFieldError,
+  offerTextStorageFieldError,
+} from '@/pages/shared/offer-storage-validation'
 
 type ProvincialOfferDetailField = keyof ProvincialOfferUpdateSubmission & string
 
@@ -37,10 +49,6 @@ const YES_NO_OPTIONS = [
   { value: 'N', label: 'No' },
 ]
 
-const LEGACY_OFFER_TEXT_LIMIT = 250
-const LEGACY_OFFER_MAX_NUMERIC_VALUE = 9_999_999.99
-const LEGACY_OFFER_DECIMAL_PATTERN = /^\d{1,7}(\.\d{1,2})?$/
-
 const textValue = (value: string | number | null | undefined): string =>
   value === null || value === undefined ? '' : String(value)
 
@@ -53,23 +61,6 @@ const nullableNumber = (value: string): number | null => {
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : null
 }
-
-const legacyOfferDecimalFieldError = (value: string, label: string): string | null => {
-  if (!value.trim()) {
-    return null
-  }
-
-  return LEGACY_OFFER_DECIMAL_PATTERN.test(value.trim())
-    ? null
-    : `${label} must be a number with up to two decimal places.`
-}
-
-const legacyOfferNumericFieldError = (value: string, label: string): string | null =>
-  firstValidationError(
-    () => positiveNumericFieldError(value),
-    () => maxNumericValueFieldError(value, LEGACY_OFFER_MAX_NUMERIC_VALUE, label),
-    () => legacyOfferDecimalFieldError(value, label),
-  ) ?? null
 
 const buildOfferForm = (detail: ProvincialOfferDetail): ProvincialOfferUpdateSubmission => ({
   offerNumber: textValue(detail.offerNumber),
@@ -129,16 +120,23 @@ const ProvincialOfferDetailsPage = () => {
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialOfferDetailField>>({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
+  const offerEditLocked = detail?.locked === true
   const canEditAnyOfferField =
     !!detail &&
+    !offerEditLocked &&
     (detail.canEditOfferDetails ||
       detail.canEditWithdrawFields ||
       detail.canEditScheduleDates ||
       detail.canEditOfferRemarks)
-  const canEditOfferDetailFields = isEditing && !!detail?.canEditOfferDetails
-  const canEditWithdrawFields = isEditing && !!detail?.canEditWithdrawFields
-  const canEditScheduleFields = isEditing && !!detail?.canEditScheduleDates
-  const canEditOfferRemarkFields = isEditing && !!detail?.canEditOfferRemarks
+  const canEditOfferDetailFields = isEditing && !offerEditLocked && !!detail?.canEditOfferDetails
+  const canEditWithdrawFields = isEditing && !offerEditLocked && !!detail?.canEditWithdrawFields
+  const canEditOfferCondition = canEditOfferDetailFields || canEditWithdrawFields
+  const canEditScheduleFields = isEditing && !offerEditLocked && !!detail?.canEditScheduleDates
+  const canEditOfferRemarkFields = isEditing && !offerEditLocked && !!detail?.canEditOfferRemarks
+  const isOfferDirty = useMemo(
+    () => isEditing && !!detail && !!form && !formValuesEqual(form, buildOfferForm(detail)),
+    [detail, form, isEditing],
+  )
 
   const loadOfferDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
@@ -183,6 +181,14 @@ const ProvincialOfferDetailsPage = () => {
     void loadOfferDetail()
   }, [loadOfferDetail])
 
+  useEffect(() => {
+    return () => {
+      if (offerNumber) {
+        void releaseOfferEditLock(offerNumber)
+      }
+    }
+  }, [offerNumber])
+
   const fieldErrors = useMemo<FieldErrors<ProvincialOfferDetailField>>(
     () => ({
       offerNumber: requiredFieldError(form?.offerNumber ?? '', 'Offer number') ?? undefined,
@@ -190,14 +196,30 @@ const ProvincialOfferDetailsPage = () => {
         requiredFieldError(form?.applicationNumber ?? '', 'Application number') ?? undefined,
       offeringClientNumber:
         requiredFieldError(form?.offeringClientNumber ?? '', 'Offering client number') ?? undefined,
-      companyName: requiredFieldError(form?.companyName ?? '', 'Company name') ?? undefined,
-      contactName: requiredFieldError(form?.contactName ?? '', 'Contact name') ?? undefined,
+      companyName:
+        offerTextStorageFieldError(
+          form?.companyName ?? '',
+          OFFER_COMPANY_NAME_MAX_LENGTH,
+          'Company name',
+          true,
+        ) ?? undefined,
+      contactName:
+        offerTextStorageFieldError(
+          form?.contactName ?? '',
+          OFFER_CONTACT_NAME_MAX_LENGTH,
+          'Contact name',
+          true,
+        ) ?? undefined,
       offerVolume:
-        legacyOfferNumericFieldError(form?.offerVolume ?? '', 'Offer volume') ?? undefined,
-      purchaseOfferAmount: firstValidationError(
-        () => requiredFieldError(form?.purchaseOfferAmount ?? '', 'Offer amount'),
-        () => legacyOfferNumericFieldError(form?.purchaseOfferAmount ?? '', 'Offer amount'),
-      ),
+        offerDecimalStorageFieldError(form?.offerVolume ?? '', OFFER_VOLUME_MAX, 'Offer volume') ??
+        undefined,
+      purchaseOfferAmount:
+        offerDecimalStorageFieldError(
+          form?.purchaseOfferAmount ?? '',
+          PURCHASE_OFFER_AMOUNT_MAX,
+          'Offer amount',
+          true,
+        ) ?? undefined,
       purchaseOfferDate: firstValidationError(
         () => requiredFieldError(form?.purchaseOfferDate ?? '', 'Offer date'),
         () => isoDateFieldError(form?.purchaseOfferDate ?? ''),
@@ -209,9 +231,9 @@ const ProvincialOfferDetailsPage = () => {
             ? requiredFieldError(form?.withdrawReason ?? '', 'Withdraw reason')
             : null,
         () =>
-          maxLengthFieldError(
+          offerTextStorageFieldError(
             form?.withdrawReason ?? '',
-            LEGACY_OFFER_TEXT_LIMIT,
+            OFFER_WITHDRAW_REASON_MAX_LENGTH,
             'Withdraw reason',
           ),
       ),
@@ -219,21 +241,24 @@ const ProvincialOfferDetailsPage = () => {
       pickupLocation: firstValidationError(
         () => requiredFieldError(form?.pickupLocation ?? '', 'Pickup location'),
         () =>
-          maxLengthFieldError(
+          offerTextStorageFieldError(
             form?.pickupLocation ?? '',
-            LEGACY_OFFER_TEXT_LIMIT,
+            OFFER_PICKUP_LOCATION_MAX_LENGTH,
             'Pickup location',
           ),
       ),
       offerCondition:
-        maxLengthFieldError(
+        offerTextStorageFieldError(
           form?.offerCondition ?? '',
-          LEGACY_OFFER_TEXT_LIMIT,
+          OFFER_CONDITION_MAX_LENGTH,
           'Offer conditions / remarks',
         ) ?? undefined,
       offerRemark:
-        maxLengthFieldError(form?.offerRemark ?? '', LEGACY_OFFER_TEXT_LIMIT, 'Offer remarks') ??
-        undefined,
+        offerTextStorageFieldError(
+          form?.offerRemark ?? '',
+          OFFER_REMARK_MAX_LENGTH,
+          'Offer remarks',
+        ) ?? undefined,
     }),
     [form],
   )
@@ -267,12 +292,26 @@ const ProvincialOfferDetailsPage = () => {
       return
     }
     const params = new URLSearchParams({ packageFilter: packageNumber })
-    navigate(`/provincial/application/${applicationNumber}?${params}`)
+    const applicationPath =
+      detail?.exportJurisdictionCode?.trim().toUpperCase() === 'F'
+        ? `/federal/application/${applicationNumber}`
+        : `/provincial/application/${applicationNumber}`
+    navigate(`${applicationPath}?${params}`)
   }
 
-  const onSave = async () => {
-    if (!form || !detail) {
-      return
+  const onSave = async (): Promise<boolean> => {
+    if (!form || !detail || isSubmitting) {
+      return false
+    }
+
+    if (offerEditLocked) {
+      setStatus({
+        kind: 'error',
+        title: 'Offer locked',
+        message:
+          detail.lockMessage || 'This offer is currently locked for editing by another user.',
+      })
+      return false
     }
 
     if (hasValidationError) {
@@ -285,7 +324,7 @@ const ProvincialOfferDetailsPage = () => {
         title: 'Validation error',
         message: validationMessage,
       })
-      return
+      return false
     }
 
     setStatus(null)
@@ -304,7 +343,7 @@ const ProvincialOfferDetailsPage = () => {
           title: 'Offer saved',
           message: result.message || 'Offer saved successfully.',
         })
-        return
+        return true
       }
 
       setStatus({
@@ -315,6 +354,7 @@ const ProvincialOfferDetailsPage = () => {
           result.message ||
           'Offer update failed. Please review the form and try again.',
       })
+      return false
     } catch (error) {
       console.error(error)
       setStatus({
@@ -322,21 +362,30 @@ const ProvincialOfferDetailsPage = () => {
         title: 'Save failed',
         message: 'Offer update failed. Please review the form and try again.',
       })
+      return false
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid detail-page-grid">
+      <Column sm={4} md={8} lg={16}>
+        <DetailBreadcrumb label="Provincial offer search" to="/provincial/offers" />
+      </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <div className="application-detail-title-row">
-          <div>
-            <h1>Provincial offer details</h1>
-            <p>
-              Offer <code>{offerNumber}</code>
-            </p>
-          </div>
+          <PageHeader
+            title={`Offer ${detail?.offerNumber ?? offerNumber ?? ''}`.trim()}
+            subtitle="Check and manage this provincial offer"
+            actions={
+              !isEditing && detail && form && canEditAnyOfferField ? (
+                <Button kind="primary" onClick={() => setIsEditing(true)}>
+                  Edit
+                </Button>
+              ) : undefined
+            }
+          />
           {detail && (
             <dl className="application-detail-header-metrics" aria-label="Offer highlights">
               <div>
@@ -383,6 +432,19 @@ const ProvincialOfferDetailsPage = () => {
             lowContrast
             autoDismissMs={status.kind === 'success' ? 8000 : undefined}
             onCloseButtonClick={() => setStatus(null)}
+          />
+        </Column>
+      )}
+
+      {!loading && detail?.locked && (
+        <Column sm={4} md={8} lg={16} className="detail-page-error">
+          <AppNotification
+            kind="warning"
+            title="Offer locked"
+            subtitle={
+              detail.lockMessage || 'This offer is currently locked for editing by another user.'
+            }
+            lowContrast
           />
         </Column>
       )}
@@ -445,12 +507,14 @@ const ProvincialOfferDetailsPage = () => {
                   labelText="Company"
                   value={form.companyName}
                   readOnly
+                  maxLength={OFFER_COMPANY_NAME_MAX_LENGTH}
                 />
                 <TextInput
                   id="offerContactName"
                   labelText="Contact name"
                   value={form.contactName}
                   readOnly
+                  maxLength={OFFER_CONTACT_NAME_MAX_LENGTH}
                 />
               </div>
             </fieldset>
@@ -509,18 +573,18 @@ const ProvincialOfferDetailsPage = () => {
                   invalidText={fieldError('pickupLocation')}
                   onBlur={() => markFieldTouched('pickupLocation')}
                   onChange={(event) => updateFormField('pickupLocation', event.target.value)}
-                  maxLength={LEGACY_OFFER_TEXT_LIMIT}
+                  maxLength={OFFER_PICKUP_LOCATION_MAX_LENGTH}
                 />
                 <TextArea
                   id="offerCondition"
                   labelText="Offer conditions / remarks"
                   value={form.offerCondition}
-                  readOnly={!canEditOfferDetailFields}
-                  invalid={canEditOfferDetailFields && !!fieldError('offerCondition')}
+                  readOnly={!canEditOfferCondition}
+                  invalid={canEditOfferCondition && !!fieldError('offerCondition')}
                   invalidText={fieldError('offerCondition')}
                   onBlur={() => markFieldTouched('offerCondition')}
                   onChange={(event) => updateFormField('offerCondition', event.target.value)}
-                  maxLength={LEGACY_OFFER_TEXT_LIMIT}
+                  maxLength={OFFER_CONDITION_MAX_LENGTH}
                 />
               </div>
             </fieldset>
@@ -547,7 +611,7 @@ const ProvincialOfferDetailsPage = () => {
                   invalidText={fieldError('withdrawReason')}
                   onBlur={() => markFieldTouched('withdrawReason')}
                   onChange={(event) => updateFormField('withdrawReason', event.target.value)}
-                  maxLength={LEGACY_OFFER_TEXT_LIMIT}
+                  maxLength={OFFER_WITHDRAW_REASON_MAX_LENGTH}
                 />
               </div>
             </fieldset>
@@ -592,17 +656,19 @@ const ProvincialOfferDetailsPage = () => {
                   disabled={!canEditScheduleFields}
                   onChange={(value) => updateFormField('approvalIndicator', value)}
                 />
-                <TextArea
-                  id="offerRemark"
-                  labelText="Offer remarks"
-                  value={form.offerRemark}
-                  readOnly={!canEditOfferRemarkFields}
-                  invalid={canEditOfferRemarkFields && !!fieldError('offerRemark')}
-                  invalidText={fieldError('offerRemark')}
-                  onBlur={() => markFieldTouched('offerRemark')}
-                  onChange={(event) => updateFormField('offerRemark', event.target.value)}
-                  maxLength={LEGACY_OFFER_TEXT_LIMIT}
-                />
+                {detail.canEditOfferRemarks && (
+                  <TextArea
+                    id="offerRemark"
+                    labelText="Offer remarks"
+                    value={form.offerRemark}
+                    readOnly={!canEditOfferRemarkFields}
+                    invalid={canEditOfferRemarkFields && !!fieldError('offerRemark')}
+                    invalidText={fieldError('offerRemark')}
+                    onBlur={() => markFieldTouched('offerRemark')}
+                    onChange={(event) => updateFormField('offerRemark', event.target.value)}
+                    maxLength={OFFER_REMARK_MAX_LENGTH}
+                  />
+                )}
               </div>
             </fieldset>
 
@@ -635,18 +701,19 @@ const ProvincialOfferDetailsPage = () => {
                       Cancel
                     </Button>
                   </>
-                ) : (
-                  canEditAnyOfferField && (
-                    <Button kind="primary" onClick={() => setIsEditing(true)}>
-                      Edit
-                    </Button>
-                  )
-                )}
+                ) : null}
               </div>
             </div>
           </Tile>
         </Column>
       )}
+      <UnsavedChangesGuard
+        isDirty={isOfferDirty}
+        isBusy={isSubmitting}
+        onSave={onSave}
+        onDiscard={onCancelEdit}
+        subject="this purchase offer"
+      />
     </Grid>
   )
 }

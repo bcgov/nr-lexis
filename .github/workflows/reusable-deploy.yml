@@ -17,14 +17,54 @@ on:
           URLs. Omit for TEST/PROD; defaults to target.
         default: ""
         type: string
-      backend_replicas:
-        description: Backend replica count (also HPA min/max)
+      backend_min_replicas:
+        description: Minimum backend replica count
         default: "1"
+        type: string
+      backend_max_replicas:
+        description: Maximum backend replica count used by the HPA
+        default: "3"
         type: string
       frontend_replicas:
         description: Frontend replica count
         default: "2"
         type: string
+      backend_cpu_request:
+        description: Backend CPU request
+        default: "200m"
+        type: string
+      backend_memory_request:
+        description: Backend memory request
+        default: "500Mi"
+        type: string
+      backend_cpu_limit:
+        description: Backend CPU limit
+        default: "1000m"
+        type: string
+      backend_memory_limit:
+        description: Backend memory limit
+        default: "800Mi"
+        type: string
+      frontend_cpu_request:
+        description: Frontend CPU request
+        default: "50m"
+        type: string
+      frontend_memory_request:
+        description: Frontend memory request
+        default: "64Mi"
+        type: string
+      frontend_cpu_limit:
+        description: Frontend CPU limit
+        default: "200m"
+        type: string
+      frontend_memory_limit:
+        description: Frontend memory limit
+        default: "128Mi"
+        type: string
+      expiry_enabled:
+        description: Enable the daily exemption expiry scheduler
+        default: false
+        type: boolean
       tag:
         description: Container tag
         default: ${{ github.event.number }}
@@ -68,6 +108,21 @@ on:
       keycloak_sa_client_secret:
         description: Keycloak service-account client secret used to provision LEXIS clients/scopes
         required: false
+      lexis_mail_override_recipients:
+        description: Non-production recipient override
+        required: false
+      lexis_mail_region_rco_recipients:
+        description: RCO workflow distribution list
+        required: false
+      lexis_mail_region_rni_recipients:
+        description: RNI workflow distribution list
+        required: false
+      lexis_mail_region_rsi_recipients:
+        description: RSI workflow distribution list
+        required: false
+      lexis_mail_permit_request_recipients:
+        description: Permit-review migration fallback recipients
+        required: false
 
     outputs:
       triggered:
@@ -86,30 +141,49 @@ jobs:
       contents: read
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
-    env:
-      DATABASE_HOST: ${{ secrets.database_host }}
-      DATABASE_SERVICE_NAME: ${{ secrets.database_service_name }}
-      DATABASE_USER: ${{ secrets.database_user }}
-      DATABASE_PASSWORD: ${{ secrets.database_password }}
-      KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
-      KC_SA_CLIENT_ID: ${{ secrets.keycloak_sa_client_id }}
-      LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
     steps:
       - uses: actions/checkout@v6
 
       # DEV deployments are ephemeral PR previews; gateway client provisioning is TEST/PROD-only.
       - name: Ensure Keycloak scopes and NEXCOL client
-        if: ${{ inputs.environment != 'dev' && env.KC_SA_CLIENT_ID != '' }}
+        if: ${{ inputs.environment != 'dev' }}
         env:
           KEYCLOAK_ISSUER_URI: ${{ vars.KEYCLOAK_ISSUER_URI }}
+          KC_SA_CLIENT_ID: ${{ secrets.keycloak_sa_client_id }}
           KC_SA_CLIENT_SECRET: ${{ secrets.keycloak_sa_client_secret }}
           NEXCOL_KEYCLOAK_CLIENT_ID: ${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}
-        run: ./.github/scripts/ensure-keycloak-scopes.sh
+        run: bash ./.github/scripts/ensure-keycloak-scopes.sh
 
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
+        env:
+          DATABASE_HOST: ${{ secrets.database_host }}
+          DATABASE_SERVICE_NAME: ${{ secrets.database_service_name }}
+          DATABASE_USER: ${{ secrets.database_user }}
+          DATABASE_PASSWORD: ${{ secrets.database_password }}
+          KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
+          LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
+          LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}
+          LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}
+          LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}
+          LEXIS_EXPIRY_LOCK_AT_MOST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_MOST_FOR || 'PT6H' }}
+          LEXIS_EXPIRY_LOCK_AT_LEAST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_LEAST_FOR || 'PT5M' }}
+          LEXIS_REPORT_QUERY_TIMEOUT_SECONDS: ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}
+          LEXIS_REPORT_STATISTICS_LOG_LEVEL: ${{ (inputs.environment == 'dev' || inputs.environment == 'test') && 'DEBUG' || 'INFO' }}
+          LEXIS_PERMIT_INVOICE_MODE: ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}
+          LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS: ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}
+          LEXIS_MAIL_NON_PRODUCTION: ${{ inputs.environment == 'prod' && 'false' || 'true' }}
+          LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}
+          LEXIS_MAIL_FROM: ${{ vars.LEXIS_MAIL_FROM }}
+          LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}
+          LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${{ secrets.lexis_mail_region_rco_recipients }}
+          LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${{ secrets.lexis_mail_region_rni_recipients }}
+          LEXIS_MAIL_REGION_RSI_RECIPIENTS: ${{ secrets.lexis_mail_region_rsi_recipients }}
+          LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${{ secrets.lexis_mail_permit_request_recipients }}
         with:
           file: backend/openshift.deploy.yml
+          # PR lite mode produces an invalid strategy for this RollingUpdate deployment.
+          lite_mode: false
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
@@ -120,8 +194,13 @@ jobs:
             -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
             -p IMAGE_TAG="${{ inputs.tag }}"
-            -p MIN_REPLICAS="${{ inputs.backend_replicas }}"
-            -p MAX_REPLICAS="${{ inputs.backend_replicas }}"
+            -p ROLLOUT_TRIGGER="${{ github.run_id }}-${{ github.run_attempt }}"
+            -p MIN_REPLICAS="${{ inputs.backend_min_replicas }}"
+            -p MAX_REPLICAS="${{ inputs.backend_max_replicas }}"
+            -p MIN_CPU="${{ inputs.backend_cpu_request }}"
+            -p MIN_MEM="${{ inputs.backend_memory_request }}"
+            -p MAX_CPU="${{ inputs.backend_cpu_limit }}"
+            -p MAX_MEM="${{ inputs.backend_memory_limit }}"
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
             -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
             -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
@@ -133,6 +212,23 @@ jobs:
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
             -p LEXIS_VIRUS_SCAN_HOST="clamav.${{ secrets.clamav_namespace }}.svc"
             -p LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
+            -p LEXIS_EXPIRY_ENABLED="$LEXIS_EXPIRY_ENABLED"
+            -p LEXIS_EXPIRY_CRON="$LEXIS_EXPIRY_CRON"
+            -p LEXIS_EXPIRY_ZONE="$LEXIS_EXPIRY_ZONE"
+            -p LEXIS_EXPIRY_LOCK_AT_MOST_FOR="$LEXIS_EXPIRY_LOCK_AT_MOST_FOR"
+            -p LEXIS_EXPIRY_LOCK_AT_LEAST_FOR="$LEXIS_EXPIRY_LOCK_AT_LEAST_FOR"
+            -p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS="$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS"
+            -p LEXIS_REPORT_STATISTICS_LOG_LEVEL="$LEXIS_REPORT_STATISTICS_LOG_LEVEL"
+            -p LEXIS_PERMIT_INVOICE_MODE="$LEXIS_PERMIT_INVOICE_MODE"
+            -p LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS="$LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS"
+            -p LEXIS_MAIL_NON_PRODUCTION="$LEXIS_MAIL_NON_PRODUCTION"
+            -p LEXIS_MAIL_ENVIRONMENT="$LEXIS_MAIL_ENVIRONMENT"
+            -p LEXIS_MAIL_FROM="$LEXIS_MAIL_FROM"
+            -p LEXIS_MAIL_OVERRIDE_RECIPIENTS="$LEXIS_MAIL_OVERRIDE_RECIPIENTS"
+            -p LEXIS_MAIL_REGION_RCO_RECIPIENTS="$LEXIS_MAIL_REGION_RCO_RECIPIENTS"
+            -p LEXIS_MAIL_REGION_RNI_RECIPIENTS="$LEXIS_MAIL_REGION_RNI_RECIPIENTS"
+            -p LEXIS_MAIL_REGION_RSI_RECIPIENTS="$LEXIS_MAIL_REGION_RSI_RECIPIENTS"
+            -p LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS="$LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS"
           triggers: ${{ inputs.triggers }}
 
   frontend:
@@ -145,11 +241,34 @@ jobs:
       contents: read
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
-    env:
-      LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
     steps:
+      - name: Resolve frontend logout URL
+        env:
+          CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          LEXIS_SLOT: ${{ inputs.slot || inputs.target }}
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          if [ "${DEPLOY_ENVIRONMENT}" = "dev" ]; then
+            if [[ ! "${LEXIS_SLOT}" =~ ^([0-9]|[1-4][0-9])$ ]]; then
+              echo "::error title=Invalid DEV logout slot::Expected a Cognito slot from 0 through 49."
+              exit 1
+            fi
+            sign_out="https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2F${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca%2F"
+          else
+            sign_out="${CONFIGURED_SIGN_OUT}"
+          fi
+          if [ -z "${sign_out}" ]; then
+            echo "::error title=Missing logout URL::VITE_REDIRECT_SIGN_OUT is required outside DEV."
+            exit 1
+          fi
+          printf 'VITE_REDIRECT_SIGN_OUT=%s\n' "${sign_out}" >> "${GITHUB_ENV}"
+
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
+        env:
+          LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
         with:
           file: frontend/openshift.deploy.yml
           oc_namespace: ${{ secrets.oc_namespace }}
@@ -162,13 +281,17 @@ jobs:
             -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
             -p IMAGE_TAG="${{ inputs.tag }}"
-            -p ROLLOUT_TRIGGER="${{ github.sha }}"
+            -p ROLLOUT_TRIGGER="${{ github.run_id }}-${{ github.run_attempt }}"
             -p REPLICAS="${{ inputs.frontend_replicas }}"
+            -p MIN_CPU="${{ inputs.frontend_cpu_request }}"
+            -p MIN_MEM="${{ inputs.frontend_memory_request }}"
+            -p MAX_CPU="${{ inputs.frontend_cpu_limit }}"
+            -p MAX_MEM="${{ inputs.frontend_memory_limit }}"
             -p VITE_USER_POOLS_ID="${{ vars.VITE_USER_POOLS_ID }}"
             -p VITE_USER_POOLS_WEB_CLIENT_ID="${{ vars.VITE_USER_POOLS_WEB_CLIENT_ID }}"
             -p VITE_COGNITO_DOMAIN="${{ vars.VITE_COGNITO_DOMAIN }}"
             -p VITE_REDIRECT_SIGN_IN="${{ vars.VITE_REDIRECT_SIGN_IN }}"
-            -p VITE_REDIRECT_SIGN_OUT="${{ vars.VITE_REDIRECT_SIGN_OUT }}"
+            -p VITE_REDIRECT_SIGN_OUT="$VITE_REDIRECT_SIGN_OUT"
             -p VITE_COGNITO_SCOPES="${{ vars.VITE_COGNITO_SCOPES }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
             -p VITE_LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"

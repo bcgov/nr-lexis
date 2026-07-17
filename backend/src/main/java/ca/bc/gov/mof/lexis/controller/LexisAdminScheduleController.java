@@ -27,20 +27,23 @@ public class LexisAdminScheduleController {
 
   private final ObjectProvider<LexisAdminScheduleService> scheduleServiceProvider;
 
-  public LexisAdminScheduleController(ObjectProvider<LexisAdminScheduleService> scheduleServiceProvider) {
+  public LexisAdminScheduleController(
+      ObjectProvider<LexisAdminScheduleService> scheduleServiceProvider) {
     this.scheduleServiceProvider = scheduleServiceProvider;
   }
 
   @GetMapping
-  public ResponseEntity<LexisAdminPagedResponseDto<ExportScheduleRowDto>> upcomingSchedules(
+  public ResponseEntity<LexisAdminPagedResponseDto<ExportScheduleRowDto>> schedules(
       @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "100") int size) {
+      @RequestParam(defaultValue = "100") int size,
+      @RequestParam(defaultValue = "advertisingDate") String sortField,
+      @RequestParam(defaultValue = "desc") String sortDirection) {
     LexisAdminScheduleService service = scheduleServiceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Admin schedule service unavailable - returning no content for schedules");
       return ResponseEntity.noContent().build();
     }
-    return ResponseEntity.ok(service.upcomingSchedules(page, size));
+    return ResponseEntity.ok(service.schedules(page, size, sortField, sortDirection));
   }
 
   @PostMapping

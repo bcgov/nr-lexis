@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.service.report.LexisReportRequestNormalizer.normalizeExplicitFormat;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
@@ -11,12 +12,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/lexis")
@@ -71,10 +74,11 @@ public class LegacyReportRouteController {
         "/tenureReport.do"
       },
       method = {RequestMethod.GET, RequestMethod.POST})
-  public ResponseEntity<byte[]> legacyReport(
+  public ResponseEntity<StreamingResponseBody> legacyReport(
       @RequestParam Map<String, String> requestParams,
       @RequestParam MultiValueMap<String, String> multiValueRequestParams,
-      HttpServletRequest request) {
+      HttpServletRequest request,
+      Authentication authentication) {
     String reportAction = resolveReportAction(request);
     if (reportAction == null) {
       return ResponseEntity.noContent().build();
@@ -96,17 +100,21 @@ public class LegacyReportRouteController {
 
     LexisReportRequestDto requestDto =
         new LexisReportRequestDto(normalizedParameters, format);
-    return dispatch(reportAction, requestDto);
+    return dispatch(reportAction, requestDto, authentication);
   }
 
-  private ResponseEntity<byte[]> dispatch(String reportAction, LexisReportRequestDto request) {
+  private ResponseEntity<StreamingResponseBody> dispatch(
+      String reportAction,
+      LexisReportRequestDto request,
+      Authentication authentication) {
     return switch (reportAction) {
       case "offerReport" -> reportController.offerReport(request);
       case "speciesGradeReport" -> reportController.speciesGradeReport(request);
       case "exemptionReport" -> reportController.exemptionReport(request);
       case "applicationReport" -> reportController.applicationReport(request);
-      case "approvedExemptionReport" -> reportController.approvedExemptionReport(request);
-      case "permitReport" -> reportController.permitReport(request);
+      case "approvedExemptionReport" ->
+          reportController.approvedExemptionReport(request, authentication);
+      case "permitReport" -> reportController.permitReport(request, authentication);
       case "permitLedgerReport" -> reportController.permitLedgerReport(request);
       case "feeReport" -> reportController.feeReport(request);
       case "transportReport" -> reportController.transportReport(request);
@@ -142,14 +150,15 @@ public class LegacyReportRouteController {
 
     if (ACTION_GENERATE.equalsIgnoreCase(actionMapping) || normalizedAction.startsWith(ACTION_GENERATE)) {
       String explicitFormat = trimToNull(outputFormat);
+      String normalizedExplicitFormat = normalizeExplicitFormat(explicitFormat);
       if ("approvedExemptionReport".equals(reportAction) || "permitReport".equals(reportAction)) {
         return "PDF";
       }
       if ("tenureReport".equals(reportAction)) {
-        return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "XLS";
+        return "PDF".equals(normalizedExplicitFormat) ? "PDF" : "XLS";
       }
-      if (explicitFormat != null) {
-        return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "CSV";
+      if (normalizedExplicitFormat != null) {
+        return "PDF".equals(normalizedExplicitFormat) ? "PDF" : "CSV";
       }
 
       // Struts legacy behavior defaulted to CSV when outputFormat was absent.

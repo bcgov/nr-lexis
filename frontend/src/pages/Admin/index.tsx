@@ -17,10 +17,14 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
+import EmptyState from '@/components/EmptyState'
+import PageHeader from '@/components/PageHeader'
+import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import StatusTag from '@/components/StatusTag'
+import TableFrame from '@/components/TableFrame'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   searchFamUserRoleAssignments,
-  type FamUserRoleAssignment,
   type FamUserRoleAssignmentSearchResponse,
 } from '@/service/fam-user-access-service'
 import { resolveFamManageUrl } from '@/service/fam-manage-url'
@@ -149,6 +153,7 @@ const LEGACY_ACTION_CATALOG = [
   'approveExemption',
   'createApplication',
   'createOffer',
+  'manageFederalApplication',
   'mofrListing',
   'saveExemption',
   'savePermit',
@@ -174,28 +179,6 @@ const displayValue = (value: string | number | null | undefined): string => {
     return '-'
   }
   return String(value)
-}
-
-const roleScopeLabel = (assignment: FamUserRoleAssignment): string => {
-  if (assignment.scopeValue?.trim()) {
-    return assignment.scopeType?.trim()
-      ? `${assignment.scopeType}: ${assignment.scopeValue}`
-      : assignment.scopeValue
-  }
-  if (!assignment.forestClientNumber && !assignment.forestClientName) {
-    return '-'
-  }
-  const client = [assignment.forestClientNumber, assignment.forestClientName]
-    .filter((value): value is string => Boolean(value?.trim()))
-    .join(' - ')
-  return client || 'Forest client'
-}
-
-const formatDate = (value: string | null): string => {
-  if (!value) {
-    return '-'
-  }
-  return value.slice(0, 10)
 }
 
 const AdminPage = () => {
@@ -232,7 +215,7 @@ const AdminPage = () => {
   const runFamUserSearch = async (pageNumber = famPageNumber, pageSize = famPageSize) => {
     const search = famSearchText.trim()
     if (search.length < 3) {
-      setFamSearchError('Enter at least 3 characters to search FAM user access.')
+      setFamSearchError('Enter at least 3 characters to search IDIR identities.')
       setFamSearchResponse(null)
       return
     }
@@ -255,7 +238,7 @@ const AdminPage = () => {
       }
     } catch (error) {
       setFamSearchError(
-        error instanceof Error ? error.message : 'Unable to search FAM user access.',
+        error instanceof Error ? error.message : 'Unable to search IDIR identities.',
       )
       setFamSearchResponse(null)
     } finally {
@@ -266,7 +249,15 @@ const AdminPage = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Administration</h1>
+        <PageHeader
+          title="Administration"
+          subtitle="Review session capabilities, verify IDIR identities, and open authorized administration tools."
+          actions={
+            <Button kind="ghost" size="sm" onClick={() => void refresh()}>
+              Refresh Capabilities
+            </Button>
+          }
+        />
       </Column>
 
       <Column sm={4} md={8} lg={8}>
@@ -289,11 +280,6 @@ const AdminPage = () => {
               </Tag>
             ))}
           </div>
-          <div className="legacy-search-actions">
-            <Button kind="ghost" size="sm" onClick={() => void refresh()}>
-              Refresh Capabilities
-            </Button>
-          </div>
         </Tile>
       </Column>
 
@@ -314,7 +300,10 @@ const AdminPage = () => {
                   <TableRow key={entry.label}>
                     <TableCell>{entry.label}</TableCell>
                     <TableCell>
-                      <Tag type={granted ? 'green' : 'red'}>{granted ? 'Allowed' : 'Denied'}</Tag>
+                      <StatusTag
+                        status={granted ? 'Allowed' : 'Denied'}
+                        variant={granted ? 'positive' : 'negative'}
+                      />
                     </TableCell>
                   </TableRow>
                 )
@@ -326,12 +315,13 @@ const AdminPage = () => {
 
       {canSearchFamUserAccess && (
         <Column sm={4} md={8} lg={16}>
-          <Tile>
+          <Tile className="admin-identity-workspace">
             <div className="admin-section-heading">
               <div>
-                <h2 className="dashboard-title">FAM user access lookup</h2>
+                <h2 className="dashboard-title">IDIR identity lookup</h2>
                 <p>
-                  Search IDIR users to confirm their FAM identity before managing access in FAM.
+                  Confirm that an IDIR identity exists before managing LEXIS role assignments in
+                  FAM. This lookup does not display or change FAM roles.
                 </p>
               </div>
               <Button
@@ -345,20 +335,22 @@ const AdminPage = () => {
               </Button>
             </div>
 
-            <div className="legacy-search-grid">
-              <TextInput
-                id="famUserSearch"
-                labelText="IDIR username"
-                value={famSearchText}
-                onChange={(event) => setFamSearchText(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    setFamPageNumber(1)
-                    void runFamUserSearch(1, famPageSize)
-                  }
-                }}
-              />
-              <div className="legacy-search-actions">
+            <div className="admin-identity-workspace__search">
+              <div className="admin-identity-workspace__field">
+                <TextInput
+                  id="famUserSearch"
+                  labelText="IDIR username"
+                  value={famSearchText}
+                  onChange={(event) => setFamSearchText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      setFamPageNumber(1)
+                      void runFamUserSearch(1, famPageSize)
+                    }
+                  }}
+                />
+              </div>
+              <div className="admin-identity-workspace__actions">
                 <Button
                   type="button"
                   onClick={() => {
@@ -367,7 +359,7 @@ const AdminPage = () => {
                   }}
                   disabled={isFamSearchLoading}
                 >
-                  Search FAM Access
+                  Search IDIR
                 </Button>
               </div>
             </div>
@@ -376,80 +368,84 @@ const AdminPage = () => {
               <InlineNotification
                 kind={famSearchResponse?.configured === false ? 'warning' : 'error'}
                 lowContrast
-                title="FAM user access"
+                title="IDIR identity lookup"
                 subtitle={famSearchError}
               />
             )}
 
-            <Table useZebraStyles size="sm">
-              <TableHead>
-                <TableRow>
-                  <TableHeader>User</TableHeader>
-                  <TableHeader>Type</TableHeader>
-                  <TableHeader>Email</TableHeader>
-                  <TableHeader>Role</TableHeader>
-                  <TableHeader>Scope</TableHeader>
-                  <TableHeader>Created</TableHeader>
-                  <TableHeader>Expires</TableHeader>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(famSearchResponse?.results ?? []).map((assignment) => (
-                  <TableRow
-                    key={assignment.assignmentId ?? `${assignment.userName}-${assignment.roleName}`}
-                  >
-                    <TableCell>
-                      <strong>{displayValue(assignment.userName)}</strong>
-                      <div>{displayValue(assignment.fullName)}</div>
-                    </TableCell>
-                    <TableCell>
-                      {displayValue(assignment.userTypeDescription ?? assignment.userTypeCode)}
-                    </TableCell>
-                    <TableCell>{displayValue(assignment.email)}</TableCell>
-                    <TableCell>
-                      <strong>
-                        {displayValue(assignment.roleDisplayName ?? assignment.roleName)}
-                      </strong>
-                      <div>{displayValue(assignment.roleName)}</div>
-                    </TableCell>
-                    <TableCell>{roleScopeLabel(assignment)}</TableCell>
-                    <TableCell>{formatDate(assignment.createDate)}</TableCell>
-                    <TableCell>{formatDate(assignment.expiryDate)}</TableCell>
-                  </TableRow>
-                ))}
-                {famSearchResponse?.results.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7}>
-                      {famSearchResponse.configured
-                        ? 'No FAM users matched the current search.'
-                        : 'FAM user access lookup is not configured.'}
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!famSearchResponse && (
-                  <TableRow>
-                    <TableCell colSpan={7}>Search to confirm a FAM IDIR user.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <SearchResultsTableFrame
+              loading={isFamSearchLoading}
+              loadingDescription="Loading IDIR identities..."
+              totalItems={famSearchResponse?.configured ? famSearchResponse.total : undefined}
+              totalItemsLabel={
+                famSearchResponse?.configured
+                  ? `${famSearchResponse.total.toLocaleString('en-CA')} IDIR ${famSearchResponse.total === 1 ? 'identity' : 'identities'} found`
+                  : undefined
+              }
+            >
+              {famSearchResponse?.results.length ? (
+                <Table useZebraStyles size="sm">
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>User</TableHeader>
+                      <TableHeader>Type</TableHeader>
+                      <TableHeader>Email</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {famSearchResponse.results.map((assignment) => (
+                      <TableRow key={assignment.userId ?? assignment.userName}>
+                        <TableCell>
+                          <strong>{displayValue(assignment.userName)}</strong>
+                          <div>{displayValue(assignment.fullName)}</div>
+                        </TableCell>
+                        <TableCell>
+                          {displayValue(assignment.userTypeDescription ?? assignment.userTypeCode)}
+                        </TableCell>
+                        <TableCell>{displayValue(assignment.email)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : famSearchResponse ? (
+                <EmptyState
+                  title={
+                    famSearchResponse.configured
+                      ? 'No IDIR identities found'
+                      : 'IDIR lookup unavailable'
+                  }
+                  description={
+                    famSearchResponse.configured
+                      ? 'No IDIR identities matched the current search.'
+                      : 'IDIR identity lookup is not configured.'
+                  }
+                  headingLevel={3}
+                />
+              ) : (
+                <EmptyState
+                  title="Search IDIR identities"
+                  description="Search to confirm an IDIR identity before opening FAM."
+                  headingLevel={3}
+                />
+              )}
 
-            {famSearchResponse && famSearchResponse.configured && (
-              <Pagination
-                backwardText="Previous page"
-                forwardText="Next page"
-                itemsPerPageText="Items per page"
-                page={famPageNumber}
-                pageSize={famPageSize}
-                pageSizes={FAM_USER_ROLE_PAGE_SIZES}
-                totalItems={famSearchResponse.total}
-                onChange={({ page, pageSize }) => {
-                  setFamPageNumber(page)
-                  setFamPageSize(pageSize)
-                  void runFamUserSearch(page, pageSize)
-                }}
-              />
-            )}
+              {famSearchResponse && famSearchResponse.configured && (
+                <Pagination
+                  backwardText="Previous page"
+                  forwardText="Next page"
+                  itemsPerPageText="Items per page"
+                  page={famPageNumber}
+                  pageSize={famPageSize}
+                  pageSizes={FAM_USER_ROLE_PAGE_SIZES}
+                  totalItems={famSearchResponse.total}
+                  onChange={({ page, pageSize }) => {
+                    setFamPageNumber(page)
+                    setFamPageSize(pageSize)
+                    void runFamUserSearch(page, pageSize)
+                  }}
+                />
+              )}
+            </SearchResultsTableFrame>
           </Tile>
         </Column>
       )}
@@ -458,59 +454,64 @@ const AdminPage = () => {
         <Tile>
           <h2 className="dashboard-title">Admin and upload tools</h2>
 
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Tool</TableHeader>
-                <TableHeader>Required action</TableHeader>
-                <TableHeader>Access</TableHeader>
-                <TableHeader>Open</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {[...LEGACY_ADMIN_TOOLS, ...LEGACY_UPLOAD_TOOLS].map((tool) => {
-                const granted = canPerform(tool.requiredAction)
-                const reactPath = tool.reactPath
-                return (
-                  <TableRow key={tool.id}>
-                    <TableCell>
-                      <strong>{tool.label}</strong>
-                      <div>{tool.description}</div>
-                    </TableCell>
-                    <TableCell>
-                      <code>{tool.requiredAction}</code>
-                    </TableCell>
-                    <TableCell>
-                      <Tag type={granted ? 'green' : 'red'}>{granted ? 'Allowed' : 'Denied'}</Tag>
-                    </TableCell>
-                    <TableCell>
-                      {tool.reactUploadType ? (
-                        <Button
-                          kind="secondary"
-                          size="sm"
-                          onClick={() => navigate(`/admin/uploads?type=${tool.reactUploadType}`)}
-                          disabled={!granted}
-                        >
-                          Open
-                        </Button>
-                      ) : reactPath ? (
-                        <Button
-                          kind="secondary"
-                          size="sm"
-                          onClick={() => navigate(reactPath)}
-                          disabled={!granted}
-                        >
-                          Open
-                        </Button>
-                      ) : (
-                        <span>-</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          <TableFrame ariaLabel="Admin and upload tools table">
+            <Table useZebraStyles className="dashboard-data-table">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Tool</TableHeader>
+                  <TableHeader>Required action</TableHeader>
+                  <TableHeader>Access</TableHeader>
+                  <TableHeader>Open</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {[...LEGACY_ADMIN_TOOLS, ...LEGACY_UPLOAD_TOOLS].map((tool) => {
+                  const granted = canPerform(tool.requiredAction)
+                  const reactPath = tool.reactPath
+                  return (
+                    <TableRow key={tool.id}>
+                      <TableCell>
+                        <strong>{tool.label}</strong>
+                        <div>{tool.description}</div>
+                      </TableCell>
+                      <TableCell>
+                        <code>{tool.requiredAction}</code>
+                      </TableCell>
+                      <TableCell>
+                        <StatusTag
+                          status={granted ? 'Allowed' : 'Denied'}
+                          variant={granted ? 'positive' : 'negative'}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {tool.reactUploadType ? (
+                          <Button
+                            kind="secondary"
+                            size="sm"
+                            onClick={() => navigate(`/admin/uploads?type=${tool.reactUploadType}`)}
+                            disabled={!granted}
+                          >
+                            Open
+                          </Button>
+                        ) : reactPath ? (
+                          <Button
+                            kind="secondary"
+                            size="sm"
+                            onClick={() => navigate(reactPath)}
+                            disabled={!granted}
+                          >
+                            Open
+                          </Button>
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </TableFrame>
         </Tile>
       </Column>
 
@@ -538,34 +539,40 @@ const AdminPage = () => {
             </div>
           </div>
 
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Action</TableHeader>
-                <TableHeader>Granted</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visibleActions.map((action) => {
-                const granted = canPerform(action)
-                return (
-                  <TableRow key={action}>
-                    <TableCell>
-                      <code>{action}</code>
-                    </TableCell>
-                    <TableCell>
-                      <Tag type={granted ? 'green' : 'red'}>{granted ? 'Yes' : 'No'}</Tag>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {visibleActions.length === 0 && (
+          {visibleActions.length > 0 ? (
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={2}>No actions matched the current filters.</TableCell>
+                  <TableHeader>Action</TableHeader>
+                  <TableHeader>Granted</TableHeader>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {visibleActions.map((action) => {
+                  const granted = canPerform(action)
+                  return (
+                    <TableRow key={action}>
+                      <TableCell>
+                        <code>{action}</code>
+                      </TableCell>
+                      <TableCell>
+                        <StatusTag
+                          status={granted ? 'Yes' : 'No'}
+                          variant={granted ? 'positive' : 'negative'}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <EmptyState
+              title="No actions matched"
+              description="No actions matched the current filters."
+              headingLevel={3}
+            />
+          )}
         </Tile>
       </Column>
     </Grid>

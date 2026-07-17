@@ -25,11 +25,14 @@ type PostWithCsrfOptions = {
   data?: Record<string, unknown>
   form?: Record<string, string>
   multipart?: Record<string, string | number | boolean | MultipartFile>
+  params?: Record<string, string>
+  headers?: Record<string, string>
 }
 
 type GetWithAuthOptions = {
   params?: Record<string, string>
   failOnStatusCode?: boolean
+  headers?: Record<string, string>
 }
 
 type RealCredentials = {
@@ -297,7 +300,10 @@ export const getWithAuth = async (
   return page.request.get(path, {
     ...options,
     failOnStatusCode: options.failOnStatusCode ?? false,
-    headers: await authHeaders(page),
+    headers: {
+      ...options.headers,
+      ...(await authHeaders(page)),
+    },
   })
 }
 
@@ -326,7 +332,14 @@ const accessTokenDiagnostics = (accessToken?: string): AccessTokenDiagnostics | 
 }
 
 export const redactedTextSnippet = (text: string, maxLength = 500): string => {
-  const normalized = text
+  let redacted = text
+  for (const credential of [process.env.E2E_IDIR_USER, process.env.E2E_IDIR_PASSWORD]) {
+    if (credential) {
+      redacted = redacted.split(credential).join('[credential-redacted]')
+    }
+  }
+
+  const normalized = redacted
     .replace(/Bearer\s+eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/gi, 'Bearer [redacted]')
     .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt-redacted]')
     .replace(
@@ -657,11 +670,6 @@ export const expectAccessiblePage = async (
   await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
 }
 
-export const expectRouteUnauthorized = async (page: Page, path: string): Promise<void> => {
-  await navigateSpaRoute(page, path)
-  await expect(page.getByRole('heading', { name: 'Unauthorized' })).toBeVisible()
-}
-
 export const postWithCsrf = async (
   page: Page,
   path: string,
@@ -669,7 +677,10 @@ export const postWithCsrf = async (
 ): Promise<APIResponse> => {
   return page.request.post(path, {
     ...options,
-    headers: await authHeaders(page),
+    headers: {
+      ...options.headers,
+      ...(await authHeaders(page)),
+    },
     failOnStatusCode: false,
   })
 }
@@ -681,7 +692,10 @@ export const putWithCsrf = async (
 ): Promise<APIResponse> => {
   return page.request.put(path, {
     ...options,
-    headers: await authHeaders(page),
+    headers: {
+      ...options.headers,
+      ...(await authHeaders(page)),
+    },
     failOnStatusCode: false,
   })
 }
@@ -691,22 +705,17 @@ export const deleteWithCsrf = async (
   path: string,
   options: {
     params?: Record<string, string>
+    headers?: Record<string, string>
   } = {},
 ): Promise<APIResponse> => {
   return page.request.delete(path, {
     ...options,
-    headers: await authHeaders(page),
+    headers: {
+      ...options.headers,
+      ...(await authHeaders(page)),
+    },
     failOnStatusCode: false,
   })
-}
-
-export const expectForbiddenPost = async (
-  page: Page,
-  path: string,
-  options: PostWithCsrfOptions = {},
-): Promise<void> => {
-  const response = await postWithCsrf(page, path, options)
-  expect(response.status(), `${path} should be forbidden for this user`).toBe(403)
 }
 
 export const expectInvalidApplicationCreateValidation = async (

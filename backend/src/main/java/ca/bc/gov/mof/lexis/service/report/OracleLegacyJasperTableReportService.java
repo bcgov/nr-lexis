@@ -1,11 +1,12 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static ca.bc.gov.mof.lexis.service.report.ReportParameterUtils.firstNonBlank;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -20,6 +21,7 @@ import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
@@ -35,10 +37,19 @@ public class OracleLegacyJasperTableReportService {
   private static final String TEMPLATE_CLASSPATH = "reports/lexis/LEXIS_DYNAMIC_TABLE.jrxml";
 
   private final OracleLegacyCsvReportService legacyCsvReportService;
+  private final LexisReportResourceManager reportResources;
   private volatile JasperReport compiledTemplate;
 
   public OracleLegacyJasperTableReportService(OracleLegacyCsvReportService legacyCsvReportService) {
+    this(legacyCsvReportService, LexisReportResourceManager.defaults());
+  }
+
+  @Autowired
+  public OracleLegacyJasperTableReportService(
+      OracleLegacyCsvReportService legacyCsvReportService,
+      LexisReportResourceManager reportResources) {
     this.legacyCsvReportService = legacyCsvReportService;
+    this.reportResources = reportResources;
   }
 
   public Optional<LexisGeneratedReport> generateLegacyPdfReport(
@@ -67,18 +78,28 @@ public class OracleLegacyJasperTableReportService {
               LexisReportFormat.PDF.mediaType(),
               pdfBytes));
     } catch (JRException ex) {
-      LOGGER.warn(
-          "Failed to generate migrated legacy PDF table for action [{}]: {}",
+      reportResources.rethrowOutputLimit(ex);
+      LOGGER.error(
+          "event=lexis_report operation=migrated_table_render outcome=failed action={} failureType={}",
           definition.action(),
-          ex.getMessage());
-      return Optional.empty();
+          exceptionType(ex));
+      throw new LexisReportGenerationException(
+          "The migrated report could not be rendered for " + definition.action(), ex);
     }
   }
 
   byte[] renderPdf(Map<String, Object> parameters, JRMapCollectionDataSource dataSource)
       throws JRException {
-    JasperPrint print = JasperFillManager.fillReport(getOrCompileTemplate(), parameters, dataSource);
-    return JasperExportManager.exportReportToPdf(print);
+    try (LexisReportResourceManager.JasperVirtualizerSession ignored =
+        reportResources.openVirtualizer(parameters)) {
+      JasperPrint print =
+          JasperFillManager.getInstance(reportResources.jasperReportsContext())
+              .fill(getOrCompileTemplate(), parameters, dataSource);
+      LexisReportResourceManager.LimitedByteArrayOutputStream output =
+          reportResources.newOutputStream();
+      JasperExportManager.exportReportToPdfStream(print, output);
+      return reportResources.requireWithinOutputLimit(output.toByteArray());
+    }
   }
 
   private boolean supportsPdfMigration(LexisJasperReportDefinition definition) {
@@ -120,7 +141,7 @@ public class OracleLegacyJasperTableReportService {
     Map<String, Object> parameters = new HashMap<>();
     parameters.put("REPORT_TITLE", titleFor(definition));
     parameters.put("REPORT_SUBTITLE", subtitleFor(definition, request));
-    parameters.put("REPORT_GENERATED_DATE", LocalDate.now().toString());
+    parameters.put("REPORT_GENERATED_DATE", LexisBusinessTime.today().toString());
     parameters.put("P_COLUMN_COUNT", Math.min(data.columnHeaders().size(), MAX_COLUMNS));
 
     boolean overflowColumns = data.columnHeaders().size() > MAX_COLUMNS;

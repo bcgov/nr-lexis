@@ -63,6 +63,7 @@ export const fetchExemptionDocuments = async (
 export const openExemptionDocument = async (
   fileId: string,
   fileName: string,
+  exemptionNumber: string,
 ): Promise<OpenProvincialExemptionDocumentResult> => {
   const response = await apiService
     .getAxiosInstance()
@@ -70,6 +71,7 @@ export const openExemptionDocument = async (
       params: {
         fileId,
         fileName,
+        exemptionNumber,
       },
       responseType: 'blob',
       headers: {
@@ -90,6 +92,7 @@ export const openExemptionDocument = async (
 
 export const removeExemptionDocument = async (
   documentId: string,
+  exemptionNumber: string,
 ): Promise<RemoveProvincialExemptionDocumentResult> => {
   const normalizedDocumentId = documentId.trim()
   const response = await apiService
@@ -97,14 +100,12 @@ export const removeExemptionDocument = async (
     .delete<unknown>('/lexis/rpc/exemption-details/document', {
       params: {
         documentId: normalizedDocumentId,
+        exemptionNumber: exemptionNumber.trim(),
       },
     })
 
-  if (response.status === 204) {
-    return {
-      success: true,
-      source: 'api',
-    }
+  if (response.status !== 200) {
+    throw new Error('Unexpected exemption document removal response.')
   }
 
   return {

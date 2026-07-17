@@ -4,6 +4,7 @@ import {
   greaterThanOrEqualFieldError,
   hasInvalidIsoDateValue,
   integerFieldError,
+  isValidIsoDate,
   joinCreateSubmitMessages,
   lessThanOrEqualFieldError,
   parseNonNegativeDecimalFieldValue,
@@ -27,6 +28,15 @@ describe('create-form-utils', () => {
     expect(hasInvalidIsoDateValue('', '2026-06-23')).toBe(false)
     expect(hasInvalidIsoDateValue('2026-06-23', '2026-13-23')).toBe(true)
     expect(hasInvalidIsoDateValue('not-a-date')).toBe(true)
+  })
+
+  it('rejects impossible calendar dates while accepting leap days', () => {
+    expect(isValidIsoDate('2025-02-29')).toBe(false)
+    expect(isValidIsoDate('2026-04-31')).toBe(false)
+    expect(isValidIsoDate('0000-01-01')).toBe(false)
+    expect(isValidIsoDate('2024-02-29')).toBe(true)
+    expect(isValidIsoDate('2000-02-29')).toBe(true)
+    expect(isValidIsoDate('2100-02-29')).toBe(false)
   })
 
   it('parses non-negative decimal field values', () => {

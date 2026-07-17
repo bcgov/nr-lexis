@@ -1,17 +1,22 @@
 package ca.bc.gov.mof.lexis.service.rtm;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
 
 class RtmEmsLogAmvUploadPreviewAnalyzerTest {
@@ -20,16 +25,17 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   void shouldParseMatrixWorkbookForUpload() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook()),
-            LocalDate.of(2026, 6, 1));
+            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook()));
 
     assertThat(result.headerDetected()).isTrue();
     assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 6, 1));
     assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
     assertThat(result.dataRowCount()).isEqualTo(2);
-    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.growthIndicator()).isEqualTo("O");
+    assertThat(result.numericCellCount()).isEqualTo(6);
     assertThat(result.errors()).isEmpty();
-    assertThat(result.rows()).hasSize(6);
+    assertThat(result.rows()).hasSize(result.numericCellCount());
+    assertThat(result.rows()).allMatch(row -> "O".equals(row.growthIndicator()));
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
         .contains("BA", "HE", "WH", "LO", "YE");
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::grade)
@@ -37,18 +43,34 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
-  void shouldUseSubmissionMonthAsUploadRetrievalDate() throws IOException {
+  void shouldUseTheWorkbookMonthAsTheOnlyUploadEffectiveDate() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
             new ByteArrayInputStream(
-                RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbookWithMetadataRows()),
-            LocalDate.of(2026, 8, 14));
+                RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbookWithMetadataRows()));
 
     assertThat(result.headerDetected()).isTrue();
     assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 6, 1));
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 8, 1));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
     assertThat(result.dataRowCount()).isEqualTo(2);
-    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.growthIndicator()).isEqualTo("O");
+    assertThat(result.numericCellCount()).isEqualTo(6);
+    assertThat(result.rows()).hasSize(result.numericCellCount());
+    assertThat(result.errors()).isEmpty();
+  }
+
+  @Test
+  void shouldPreserveMidMonthWorkbookDateForAuthoritativeServiceValidation()
+      throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(
+                RtmEmsLogAmvWorkbookTestFixtures.midMonthSingleBalsamWorkbook()));
+
+    assertThat(result.headerDetected()).isTrue();
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+    assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+    assertThat(result.numericCellCount()).isOne();
     assertThat(result.errors()).isEmpty();
   }
 
@@ -62,7 +84,8 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     assertThat(analysis.updateDate()).isNotNull();
     assertThat(analysis.retrievalDate()).isNotNull();
     assertThat(analysis.dataRowCount()).isEqualTo(2);
-    assertThat(analysis.numericCellCount()).isEqualTo(4);
+    assertThat(analysis.growthIndicator()).isEqualTo("O");
+    assertThat(analysis.numericCellCount()).isEqualTo(6);
     assertThat(analysis.rows()).hasSize(6);
     assertThat(analysis.errors()).isEmpty();
   }
@@ -73,8 +96,8 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
 
     assertThat(sheetXml)
-        .contains("Update Date (YYYY-MM-DD)")
-        .contains("Enter update date here")
+        .contains("Update Date (YYYY-MM-01)")
+        .contains("Growth Indicator (O or S)")
         .contains("GRADE")
         .doesNotContain("<t>Retrieval Date</t>")
         .doesNotContain("<f>TODAY()</f>")
@@ -85,14 +108,15 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
 
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-            new ByteArrayInputStream(templateBytes), LocalDate.of(2026, 7, 6));
+            new ByteArrayInputStream(templateBytes));
 
     assertThat(result.headerDetected()).isTrue();
     assertThat(result.updateDate()).isNull();
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 7, 1));
-    assertThat(result.dataRowCount()).isEqualTo(23);
+    assertThat(result.retrievalDate()).isNull();
+    assertThat(result.growthIndicator()).isNull();
+    assertThat(result.dataRowCount()).isEqualTo(25);
     assertThat(result.numericCellCount()).isZero();
-    assertThat(result.errors()).isEmpty();
+    assertThat(result.errors()).contains("Growth indicator is required in the uploaded template.");
     assertThat(result.rows()).isEmpty();
   }
 
@@ -101,17 +125,57 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
             new ByteArrayInputStream(
-                RtmEmsLogAmvWorkbookTestFixtures.fullGradeWorkbookWithBlankRow()),
-            LocalDate.of(2026, 6, 1));
+                RtmEmsLogAmvWorkbookTestFixtures.fullGradeWorkbookWithBlankRow()));
 
     assertThat(result.headerDetected()).isTrue();
-    assertThat(result.dataRowCount()).isEqualTo(23);
-    assertThat(result.numericCellCount()).isEqualTo(23);
-    assertThat(result.rows()).hasSize(23);
+    assertThat(result.growthIndicator()).isEqualTo("O");
+    assertThat(result.dataRowCount()).isEqualTo(25);
+    assertThat(result.numericCellCount()).isEqualTo(25);
+    assertThat(result.rows()).hasSize(25);
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::grade)
         .containsExactlyElementsOf(expectedUploadGrades());
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::grade)
-        .doesNotContain(" ", "N", "O", "P", "Q", "R", "S", "T", "V", "W");
+        .contains("W", "BLANK")
+        .doesNotContain(" ", "N", "O", "P", "Q", "R", "S", "T", "V");
+  }
+
+  @Test
+  void shouldKeepWhiteLodgepoleAndYellowPineAsDistinctPhysicalKeys() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.singleWhitePineWorkbook()));
+
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.numericCellCount()).isOne();
+    assertThat(result.rows()).hasSize(1);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
+        .containsExactly("WH");
+  }
+
+  @Test
+  void shouldRejectAmbiguousPineHeader() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook()));
+
+    assertThat(result.errors())
+        .anyMatch(error -> error.contains("ambiguous") && error.contains("WH, LO and YE"));
+    assertThat(result.rows()).isEmpty();
+  }
+
+  @Test
+  void shouldRequireOneSupportedGrowthIndicator() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult missing =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.missingGrowthWorkbook()));
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult invalid =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.invalidGrowthWorkbook()));
+
+    assertThat(missing.errors())
+        .contains("Growth indicator is required in the uploaded template.");
+    assertThat(invalid.errors())
+        .contains("Growth indicator in the uploaded template must be O or S.");
   }
 
   @Test
@@ -126,15 +190,305 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
         .contains("The template header was not recognized as RTM EMS AMV data.");
   }
 
+  @Test
+  void shouldRejectWorksheetWithTooManyRows() throws IOException {
+    StringBuilder sheet =
+        new StringBuilder(
+            "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+    for (int row = 1; row <= 10_001; row++) {
+      sheet.append("<row r=\"").append(row).append("\"><c r=\"A")
+          .append(row).append("\"><v>1</v></c></row>");
+    }
+    sheet.append("</sheetData></worksheet>");
+
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put("xl/worksheets/sheet1.xml", sheet.toString().getBytes(StandardCharsets.UTF_8));
+    byte[] workbook = workbook(entries);
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook)))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("too many rows");
+  }
+
+  @Test
+  void shouldRejectWorkbookWithTooManyArchiveEntries() throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    try (ZipOutputStream zip = new ZipOutputStream(output)) {
+      for (int index = 0; index < 129; index++) {
+        zip.putNextEntry(new ZipEntry("part-" + index + ".xml"));
+        zip.closeEntry();
+      }
+    }
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(output.toByteArray())))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("too many entries");
+  }
+
+  @Test
+  void shouldResolveFirstDeclaredWorksheetInsteadOfFirstWorksheetArchiveEntry()
+      throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "[Content_Types].xml",
+        textEntry(entries, "[Content_Types].xml")
+            .replace(
+                "</Types>",
+                "<Override PartName=\"/xl/worksheets/sheet2.xml\" "
+                    + "ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+                    + "</Types>")
+            .getBytes(StandardCharsets.UTF_8));
+    entries.put(
+        "xl/workbook.xml",
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <sheets>
+            <sheet name="Declared first" sheetId="2" r:id="rId2"/>
+            <sheet name="Archive first" sheetId="1" r:id="rId1"/>
+          </sheets>
+        </workbook>
+        """.getBytes(StandardCharsets.UTF_8));
+    entries.put(
+        "xl/_rels/workbook.xml.rels",
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+          <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+        </Relationships>
+        """.getBytes(StandardCharsets.UTF_8));
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        "<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>999</v></c></row></sheetData></worksheet>"
+            .getBytes(StandardCharsets.UTF_8));
+    entries.put("xl/worksheets/sheet2.xml", uploadWorksheet().getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.Analysis result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+            new ByteArrayInputStream(workbook(entries)));
+
+    assertThat(result.headerDetected()).isTrue();
+    assertThat(result.numericCellCount()).isEqualTo(1);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
+        .containsExactly("BA");
+  }
+
+  @Test
+  void shouldRejectPackageMissingWorkbookCorePart() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.remove("xl/workbook.xml");
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("missing required part xl/workbook.xml");
+  }
+
+  @Test
+  void shouldRejectCaseCollidingCoreParts() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put("[content_types].xml", entries.get("[Content_Types].xml"));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("duplicate entries");
+  }
+
+  @Test
+  void shouldRejectMacroEnabledWorkbookContentType() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "[Content_Types].xml",
+        textEntry(entries, "[Content_Types].xml")
+            .replace(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+                "application/vnd.ms-excel.sheet.macroEnabled.main+xml")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("unsafe content type");
+  }
+
+  @Test
+  void shouldRejectExternalWorkbookRelationship() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/_rels/workbook.xml.rels",
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="https://example.invalid/sheet.xml" TargetMode="External"/>
+        </Relationships>
+        """.getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("external relationship");
+  }
+
+  @Test
+  void shouldRejectRelationshipTargetThatEscapesThePackage() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/_rels/workbook.xml.rels",
+        textEntry(entries, "xl/_rels/workbook.xml.rels")
+            .replace("worksheets/sheet1.xml", "../../../outside.xml")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("unsafe relationship target");
+  }
+
+  @Test
+  void shouldRejectEncodedTraversalAndBackslashRelationshipTargets() throws IOException {
+    for (String unsafeTarget :
+        List.of(
+            "%2e%2e/%2e%2e/%2e%2e/outside.xml",
+            "worksheets%5csheet1.xml")) {
+      Map<String, byte[]> entries = validWorkbookEntries();
+      entries.put(
+          "xl/_rels/workbook.xml.rels",
+          textEntry(entries, "xl/_rels/workbook.xml.rels")
+              .replace("worksheets/sheet1.xml", unsafeTarget)
+              .getBytes(StandardCharsets.UTF_8));
+      byte[] unsafeWorkbook = workbook(entries);
+
+      assertThatThrownBy(
+              () ->
+                  RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                      new ByteArrayInputStream(unsafeWorkbook)))
+          .isInstanceOf(IOException.class)
+          .hasMessageContaining("unsafe relationship target");
+    }
+  }
+
+  @Test
+  void shouldRejectTooManyContentTypeDeclarations() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "[Content_Types].xml",
+        contentTypesWithDeclarationCount(513).getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("too many declarations");
+  }
+
+  @Test
+  void shouldRejectTooManyRelationshipsInOnePart() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/_rels/workbook.xml.rels",
+        relationshipPart("workbook", 513).getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("relationships part contains too many relationships");
+  }
+
+  @Test
+  void shouldRejectTooManyRelationshipsAcrossThePackage() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    for (int part = 1; part <= 4; part++) {
+      entries.put(
+          "xl/worksheets/_rels/extra" + part + ".xml.rels",
+          relationshipPart("part" + part, 512).getBytes(StandardCharsets.UTF_8));
+    }
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("package contains too many relationships");
+  }
+
+  @Test
+  void shouldRejectTooManyWorkbookSheetDeclarations() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/workbook.xml", workbookWithSheetCount(257).getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("workbook declares too many sheets");
+  }
+
+  @Test
+  void shouldRejectOversizedCellReferenceAttribute() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    String oversizedReference = "A".repeat(33) + "1";
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        uploadWorksheet()
+            .replace("r=\"A2\"", "r=\"" + oversizedReference + "\"")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("oversized cell reference");
+  }
+
+  @Test
+  void shouldRejectHighCompressionRatioWhenZipEntryUsesDataDescriptor() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put("docProps/compressed.bin", new byte[2 * 1024 * 1024]);
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
+                    new ByteArrayInputStream(workbook(entries))))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("compression ratio is too high");
+  }
+
   private static List<String> expectedUploadGrades() {
     List<String> grades = new ArrayList<>();
     for (char grade = 'A'; grade <= 'M'; grade++) {
       grades.add(String.valueOf(grade));
     }
     grades.addAll(List.of("U", "X", "Y", "Z"));
+    grades.add(14, "W");
     for (int grade = 1; grade <= 6; grade++) {
       grades.add(String.valueOf(grade));
     }
+    grades.add("BLANK");
     return grades;
   }
 
@@ -157,5 +511,120 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
       }
     }
     throw new IOException("Workbook entry not found: " + entryName);
+  }
+
+  private static Map<String, byte[]> validWorkbookEntries() throws IOException {
+    return workbookEntries(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
+  }
+
+  private static Map<String, byte[]> workbookEntries(byte[] workbook) throws IOException {
+    Map<String, byte[]> entries = new LinkedHashMap<>();
+    try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(workbook))) {
+      ZipEntry entry;
+      while ((entry = zip.getNextEntry()) != null) {
+        entries.put(entry.getName(), zip.readAllBytes());
+      }
+    }
+    return entries;
+  }
+
+  private static String textEntry(Map<String, byte[]> entries, String entryName) {
+    return new String(entries.get(entryName), StandardCharsets.UTF_8);
+  }
+
+  private static byte[] workbook(Map<String, byte[]> entries) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    try (ZipOutputStream zip = new ZipOutputStream(output)) {
+      for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
+        zip.putNextEntry(new ZipEntry(entry.getKey()));
+        zip.write(entry.getValue());
+        zip.closeEntry();
+      }
+    }
+    return output.toByteArray();
+  }
+
+  private static String contentTypesWithDeclarationCount(int declarationCount) {
+    StringBuilder contentTypes =
+        new StringBuilder(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+            """);
+    for (int index = 0; index < declarationCount; index++) {
+      contentTypes
+          .append("<Override PartName=\"/custom/part-")
+          .append(index)
+          .append(".xml\" ContentType=\"application/xml\"/>");
+    }
+    return contentTypes.append("</Types>").toString();
+  }
+
+  private static String relationshipPart(String idPrefix, int relationshipCount) {
+    StringBuilder relationships =
+        new StringBuilder(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            """);
+    for (int index = 0; index < relationshipCount; index++) {
+      relationships
+          .append("<Relationship Id=\"")
+          .append(idPrefix)
+          .append(index)
+          .append(
+              "\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/image-")
+          .append(index)
+          .append(".png\"/>");
+    }
+    return relationships.append("</Relationships>").toString();
+  }
+
+  private static String workbookWithSheetCount(int sheetCount) {
+    StringBuilder workbook =
+        new StringBuilder(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                      xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <sheets>
+            """);
+    for (int index = 1; index <= sheetCount; index++) {
+      workbook
+          .append("<sheet name=\"Sheet ")
+          .append(index)
+          .append("\" sheetId=\"")
+          .append(index)
+          .append("\" r:id=\"rId")
+          .append(index)
+          .append("\"/>");
+    }
+    return workbook.append("</sheets></workbook>").toString();
+  }
+
+  private static String uploadWorksheet() {
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+          <sheetData>
+            <row r="1">
+              <c r="A1" t="inlineStr"><is><t>Update Date</t></is></c>
+              <c r="B1" t="inlineStr"><is><t>2026-06-01</t></is></c>
+            </row>
+            <row r="2">
+              <c r="A2" t="inlineStr"><is><t>Growth Indicator (O or S)</t></is></c>
+              <c r="B2" t="inlineStr"><is><t>O</t></is></c>
+            </row>
+            <row r="3">
+              <c r="A3" t="inlineStr"><is><t>GRADE</t></is></c>
+              <c r="B3" t="inlineStr"><is><t>BA</t></is></c>
+            </row>
+            <row r="4">
+              <c r="A4" t="inlineStr"><is><t>A</t></is></c>
+              <c r="B4"><v>10.25</v></c>
+            </row>
+          </sheetData>
+        </worksheet>
+        """;
   }
 }

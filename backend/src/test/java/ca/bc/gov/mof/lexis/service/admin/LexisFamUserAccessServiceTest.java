@@ -126,6 +126,31 @@ class LexisFamUserAccessServiceTest {
   }
 
   @Test
+  void searchRoleAssignmentsShouldTreatAnEmptyUpstreamBodyAsUnavailable() {
+    RestClient.Builder builder = RestClient.builder().baseUrl("https://fam.example");
+    MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+    LexisFamUserAccessService service =
+        new LexisFamUserAccessService(builder.build(), "https://fam.example");
+    setJwt("token-123");
+
+    server
+        .expect(
+            requestTo(
+                "https://fam.example/external/v1/users/identity/idir/search?pageSize=10&userId=smith&username=smith"))
+        .andExpect(method(HttpMethod.GET))
+        .andRespond(withSuccess("", MediaType.APPLICATION_JSON));
+
+    LexisFamUserRoleAssignmentSearchResponseDto response =
+        service.searchRoleAssignments("smith", 1, 10, null, null);
+
+    assertThat(response.configured()).isTrue();
+    assertThat(response.results()).isEmpty();
+    assertThat(response.message())
+        .isEqualTo("FAM user access lookup failed while calling the FAM identity lookup API.");
+    server.verify();
+  }
+
+  @Test
   void searchRoleAssignmentsShouldReturnConfiguredFalseWhenFamConfigMissing() {
     LexisFamUserAccessService service = new LexisFamUserAccessService(RestClient.create(), "");
 

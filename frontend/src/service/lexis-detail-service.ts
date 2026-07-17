@@ -10,6 +10,13 @@ import apiService from '@/service/api-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 
 const DETAIL_CACHE_TTL_MS = 30_000
+const OFFER_LOCK_UNAVAILABLE_MESSAGE =
+  'Offer edit lock state could not be verified. Editing is unavailable until the offer is reloaded.'
+const OFFER_LOCKED_MESSAGE = 'This offer is currently locked for editing by another user.'
+const FEDERAL_APPLICATION_LOCK_UNAVAILABLE_MESSAGE =
+  'Application edit lock state could not be verified. Editing is unavailable until the application is reloaded.'
+const FEDERAL_APPLICATION_LOCKED_MESSAGE =
+  'This application is currently locked for editing by another user. The ability to make changes has been disabled.'
 
 const valueAsNumberOrNull = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -34,11 +41,13 @@ export const fetchProvincialApplicationDetail = async (
   applicationNumber: string,
 ): Promise<ProvincialApplicationDetail | null> => {
   try {
+    const path = `/lexis/applications/${applicationNumber}`
     const response = await apiService.getCachedResponse<ProvincialApplicationDetail>(
-      `/lexis/applications/${applicationNumber}`,
+      path,
       undefined,
       { ttlMs: 0 },
     )
+    apiService.registerRecordVersion('application', applicationNumber, response, path)
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -54,7 +63,7 @@ export const releaseApplicationEditLock = async (applicationNumber: string): Pro
       params: { applicationNumber },
     })
   } catch {
-    // Best-effort cleanup only; the server expires abandoned locks.
+    // Compatibility cleanup only; record versions enforce save conflicts.
   }
 }
 
@@ -62,11 +71,13 @@ export const fetchProvincialExemptionDetail = async (
   exemptionNumber: string,
 ): Promise<ProvincialExemptionDetail | null> => {
   try {
+    const path = `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`
     const response = await apiService.getCachedResponse<ProvincialExemptionDetail>(
-      `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+      path,
       undefined,
-      { ttlMs: DETAIL_CACHE_TTL_MS },
+      { ttlMs: 0 },
     )
+    apiService.registerRecordVersion('exemption', exemptionNumber, response, path)
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -80,12 +91,34 @@ export const fetchProvincialOfferDetail = async (
   offerNumber: string,
 ): Promise<ProvincialOfferDetail | null> => {
   try {
-    const response = await apiService.getCachedResponse<ProvincialOfferDetail>(
-      `/lexis/purchase-offers/${offerNumber}`,
-      undefined,
-      { ttlMs: DETAIL_CACHE_TTL_MS },
-    )
-    return response.data
+    const path = `/lexis/purchase-offers/${offerNumber}`
+    const response = await apiService.getCachedResponse<ProvincialOfferDetail>(path, undefined, {
+      ttlMs: 0,
+    })
+    apiService.registerRecordVersion('offer', offerNumber, response, path)
+    const detail = response.data
+    if (!detail) {
+      return null
+    }
+    const lockStateAvailable = typeof detail?.locked === 'boolean'
+    const locked = lockStateAvailable ? detail.locked : true
+    return {
+      ...detail,
+      canEditScheduleDates: lockStateAvailable ? detail.canEditScheduleDates : false,
+      canEditOfferRemarks: lockStateAvailable ? detail.canEditOfferRemarks : false,
+      canEditOfferDetails: lockStateAvailable ? detail.canEditOfferDetails : false,
+      canEditWithdrawFields: lockStateAvailable ? detail.canEditWithdrawFields : false,
+      locked,
+      lockedBy: typeof detail?.lockedBy === 'string' ? detail.lockedBy : null,
+      lockMessage:
+        typeof detail?.lockMessage === 'string' && detail.lockMessage.trim()
+          ? detail.lockMessage
+          : lockStateAvailable
+            ? locked
+              ? OFFER_LOCKED_MESSAGE
+              : null
+            : OFFER_LOCK_UNAVAILABLE_MESSAGE,
+    }
   } catch (error) {
     if (isNotFound(error)) {
       return null
@@ -94,69 +127,81 @@ export const fetchProvincialOfferDetail = async (
   }
 }
 
+export const releaseOfferEditLock = async (offerNumber: string): Promise<void> => {
+  try {
+    await apiService.getAxiosInstance().post('/lexis/rpc/offer-details/release-lock', null, {
+      params: { offerNumber },
+    })
+  } catch {
+    // Compatibility cleanup only; record versions enforce save conflicts.
+  }
+}
+
 const fetchPermitApprovedExemptionVolume = async (
   exemptionNumber: string,
 ): Promise<number | null> => {
-  try {
-    const response = await apiService.getCachedResponse<{ approvedExemptionVolume?: unknown }>(
-      '/lexis/rpc/permit-details/approved-exemption-volume',
-      {
-        params: {
-          exemptionNumber,
-        },
+  const path = '/lexis/rpc/permit-details/approved-exemption-volume'
+  const response = await apiService.getCachedResponse<{ approvedExemptionVolume?: unknown }>(
+    path,
+    {
+      params: {
+        exemptionNumber,
       },
-      { ttlMs: DETAIL_CACHE_TTL_MS },
-    )
-
-    return response.status === 204
-      ? null
-      : valueAsNumberOrNull(response.data.approvedExemptionVolume)
-  } catch {
-    return null
+    },
+    { ttlMs: DETAIL_CACHE_TTL_MS },
+  )
+  if (response.status === 204) {
+    throw new Error(`Permit approved exemption volume service unavailable at ${path}`)
   }
+
+  const volume = valueAsNumberOrNull(response.data?.approvedExemptionVolume)
+  if (volume === null) {
+    throw new Error(`Invalid approved exemption volume response from ${path}`)
+  }
+  return volume
 }
 
 const fetchPermitExemptionVolumeRemaining = async (
   exemptionNumber: string,
 ): Promise<number | null> => {
-  try {
-    const response = await apiService.getCachedResponse<{ exemptionVolumeRemaining?: unknown }>(
-      '/lexis/rpc/permit-details/exemption-volume-remaining',
-      {
-        params: {
-          exemptionNumber,
-        },
+  const path = '/lexis/rpc/permit-details/exemption-volume-remaining'
+  const response = await apiService.getCachedResponse<{ exemptionVolumeRemaining?: unknown }>(
+    path,
+    {
+      params: {
+        exemptionNumber,
       },
-      { ttlMs: DETAIL_CACHE_TTL_MS },
-    )
-
-    return response.status === 204
-      ? null
-      : valueAsNumberOrNull(response.data.exemptionVolumeRemaining)
-  } catch {
-    return null
+    },
+    { ttlMs: DETAIL_CACHE_TTL_MS },
+  )
+  if (response.status === 204) {
+    throw new Error(`Permit exemption volume remaining service unavailable at ${path}`)
   }
+
+  const volume = valueAsNumberOrNull(response.data?.exemptionVolumeRemaining)
+  if (volume === null) {
+    throw new Error(`Invalid exemption volume remaining response from ${path}`)
+  }
+  return volume
 }
 
 const fetchPermitExemptionContext = async (
   exemptionNumber: string,
 ): Promise<Pick<ProvincialPermitDetail, 'exemptionTypeDescription' | 'blanketOic'>> => {
-  try {
-    const response = await apiService.getCachedResponse<ProvincialExemptionDetail>(
-      `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
-      undefined,
-      { ttlMs: DETAIL_CACHE_TTL_MS },
-    )
+  const path = `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`
+  const response = await apiService.getCachedResponse<ProvincialExemptionDetail>(path, undefined, {
+    ttlMs: DETAIL_CACHE_TTL_MS,
+  })
+  if (response.status === 204) {
+    throw new Error(`Permit exemption context service unavailable at ${path}`)
+  }
+  if (!response.data || typeof response.data.blanketOic !== 'boolean') {
+    throw new Error(`Invalid permit exemption context response from ${path}`)
+  }
 
-    return {
-      exemptionTypeDescription: response.data.exemptionTypeDescription ?? null,
-      blanketOic: response.data.blanketOic,
-    }
-  } catch {
-    return {
-      exemptionTypeDescription: null,
-      blanketOic: false,
-    }
+  return {
+    exemptionTypeDescription: response.data.exemptionTypeDescription ?? null,
+    blanketOic: response.data.blanketOic,
   }
 }
 
@@ -164,11 +209,11 @@ export const fetchProvincialPermitDetail = async (
   permitNumber: string,
 ): Promise<ProvincialPermitDetail | null> => {
   try {
-    const response = await apiService.getCachedResponse<ProvincialPermitDetail>(
-      `/lexis/permits/${permitNumber}`,
-      undefined,
-      { ttlMs: DETAIL_CACHE_TTL_MS },
-    )
+    const path = `/lexis/permits/${permitNumber}`
+    const response = await apiService.getCachedResponse<ProvincialPermitDetail>(path, undefined, {
+      ttlMs: DETAIL_CACHE_TTL_MS,
+    })
+    apiService.registerRecordVersion('permit', permitNumber, response, path)
     const permitDetail = response.data
     if (!permitDetail.exemptionNumber) {
       return {
@@ -205,12 +250,31 @@ export const fetchFederalApplicationDetail = async (
   applicationNumber: string,
 ): Promise<FederalApplicationDetail | null> => {
   try {
-    const response = await apiService.getCachedResponse<FederalApplicationDetail>(
-      `/lexis/federal/applications/${applicationNumber}`,
-      undefined,
-      { ttlMs: DETAIL_CACHE_TTL_MS },
-    )
-    return response.data
+    const path = `/lexis/federal/applications/${applicationNumber}`
+    const response = await apiService.getCachedResponse<FederalApplicationDetail>(path, undefined, {
+      ttlMs: 0,
+    })
+    apiService.registerRecordVersion('federal-application', applicationNumber, response, path)
+    const detail = response.data
+    if (!detail) {
+      return null
+    }
+    const lockStateAvailable =
+      typeof detail.locked === 'boolean' && typeof detail.lockHeldByCurrentUser === 'boolean'
+    const locked = lockStateAvailable ? detail.locked : true
+    return {
+      ...detail,
+      locked,
+      lockHeldByCurrentUser: lockStateAvailable ? detail.lockHeldByCurrentUser : false,
+      lockedBy: locked && typeof detail.lockedBy === 'string' ? detail.lockedBy : null,
+      lockMessage: lockStateAvailable
+        ? locked
+          ? typeof detail.lockMessage === 'string' && detail.lockMessage.trim()
+            ? detail.lockMessage
+            : FEDERAL_APPLICATION_LOCKED_MESSAGE
+          : null
+        : FEDERAL_APPLICATION_LOCK_UNAVAILABLE_MESSAGE,
+    }
   } catch (error) {
     if (isNotFound(error)) {
       return null

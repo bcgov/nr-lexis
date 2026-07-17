@@ -8,17 +8,18 @@ export type ProvincialPermitSearchFilters = {
   issuedToDate: string
   permitStatus: string
   permitNumber: string
+  invoiceNumber: string
   ownerClientNumber: string
   applicantClientNumber: string
 }
 
 export type ProvincialPermitSearchSortField =
   | 'permitNumber'
-  | 'status'
+  | 'permitStatus'
   | 'applicantClientNumber'
   | 'ownerClientNumber'
-  | 'totalVolume'
-  | 'issueDate'
+  | 'permitVolume'
+  | 'dateIssued'
   | 'region'
 
 export type ProvincialPermitSearchItem = {

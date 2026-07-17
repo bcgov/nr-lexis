@@ -206,12 +206,15 @@ class OracleLexisSummaryServiceTest {
                         "EX-205",
                         "M",
                         "APP",
+                        "00055667",
                         "00077881",
                         1000456L,
                         LocalDate.of(2026, 2, 27),
                         LocalDate.of(2026, 2, 26),
+                        LocalDate.of(2027, 2, 27),
                         "R2",
                         95.0,
+                        83.0,
                         false)),
                 1,
                 0,
@@ -250,6 +253,8 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.applicantClientNumber()).isEqualTo("00077881");
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.regionNumbers()).containsExactly(12L, 24L);
+    assertThat(criteria.includeBlanketOic()).isTrue();
+    assertThat(criteria.excludeBlanketOic()).isFalse();
 
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).hasSize(1);

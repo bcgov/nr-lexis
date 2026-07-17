@@ -1,26 +1,27 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
-import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportOptionsDto;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -29,37 +30,35 @@ import org.springframework.security.core.Authentication;
 @DisplayName("Unit Test | LexisReportOptionsController")
 class LexisReportOptionsControllerTest {
 
-  private static final Clock FIXED_CLOCK =
-      Clock.fixed(Instant.parse("2026-06-25T00:00:00Z"), ZoneOffset.UTC);
-
   @Mock private ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider;
   @Mock private LexisReportScheduleRepository scheduleRepository;
   @Mock private LexisSessionService sessionService;
+  @Mock private LexisPrincipalService principalService;
   @Mock private Authentication authentication;
 
   @Test
-  void optionsShouldReturnNoContentWhenScheduleRepositoryMissing() {
+  void optionsShouldFailClosedWhenScheduleRepositoryMissing() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(null);
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
 
-    ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThatThrownBy(() -> controller.options(authentication))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Authoritative report options repository is unavailable");
     verifyNoInteractions(scheduleRepository);
   }
 
   @Test
   void optionsShouldReturnCurrentScheduleCodesAndAdvertisingDateLabels() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
-    when(scheduleRepository.findUpcomingExportSchedules())
+    when(scheduleRepository.findCurrentSchedulesRequired())
         .thenReturn(
             List.of(
-                scheduleRow(1001L, LocalDate.of(2026, 6, 15)),
-                scheduleRow(1002L, LocalDate.of(2026, 6, 29)),
-                scheduleRow(1003L, LocalDate.of(2026, 7, 13)),
-                scheduleRow(1004L, LocalDate.of(2026, 7, 27)),
-                scheduleRow(null, LocalDate.of(2026, 8, 10))));
+                new LexisReportScheduleRepository.CurrentScheduleRow(
+                    1001L, LocalDate.of(2026, 6, 15)),
+                new LexisReportScheduleRepository.CurrentScheduleRow(
+                    1002L, LocalDate.of(2026, 6, 29))));
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(
             List.of(
@@ -98,7 +97,8 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadReportPortOfExportOptions())
         .thenReturn(List.of(new CodeNameDto("", "All"), new CodeNameDto("PAC", "Pacific")));
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
@@ -107,9 +107,8 @@ class LexisReportOptionsControllerTest {
     assertThat(response.getBody().currentSchedules())
         .extracting("code", "name")
         .containsExactly(
-            org.assertj.core.groups.Tuple.tuple("1002", "2026-06-29"),
-            org.assertj.core.groups.Tuple.tuple("1003", "2026-07-13"),
-            org.assertj.core.groups.Tuple.tuple("", "Blank"));
+            org.assertj.core.groups.Tuple.tuple("1001", "2026-06-15"),
+            org.assertj.core.groups.Tuple.tuple("1002", "2026-06-29"));
     assertThat(response.getBody().defaultRegion()).isNull();
     assertThat(response.getBody().regions())
         .extracting("code", "name")
@@ -178,7 +177,7 @@ class LexisReportOptionsControllerTest {
         .containsExactly(
             org.assertj.core.groups.Tuple.tuple("", "All"),
             org.assertj.core.groups.Tuple.tuple("PAC", "Pacific"));
-    verify(scheduleRepository).findUpcomingExportSchedules();
+    verify(scheduleRepository).findCurrentSchedulesRequired();
     verify(scheduleRepository).loadRegionOptions();
     verify(scheduleRepository).loadReportJurisdictionOptions();
     verify(scheduleRepository).loadBiweeklyJurisdictionOptions();
@@ -195,9 +194,75 @@ class LexisReportOptionsControllerTest {
   }
 
   @Test
+  void optionsShouldPropagateCurrentScheduleLookupFailure() {
+    when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
+    when(scheduleRepository.findCurrentSchedulesRequired())
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    LexisReportOptionsController controller =
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
+
+    assertThatThrownBy(() -> controller.options(authentication))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void optionsShouldPropagateCodeLookupFailureForProblemDetail503Handling() {
+    when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
+    when(scheduleRepository.loadReportJurisdictionOptions())
+        .thenThrow(new DataAccessResourceFailureException("Jurisdictions unavailable"));
+    LexisReportOptionsController controller =
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
+
+    assertThatThrownBy(() -> controller.options(authentication))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Jurisdictions unavailable");
+  }
+
+  @Test
+  void optionsShouldPreferAvailableIdirOrgUnitRegion() {
+    when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
+    when(scheduleRepository.loadRegionOptions())
+        .thenReturn(
+            List.of(
+                new CodeNameDto("12", "Coast"),
+                new CodeNameDto("24", "Skeena")));
+    when(principalService.resolveOrgUnitNo(authentication)).thenReturn("24");
+    LexisReportOptionsController controller =
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
+
+    ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().defaultRegion()).isEqualTo("24");
+    verifyNoInteractions(sessionService);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"99", "not-an-org-unit"})
+  void optionsShouldIgnoreUnavailableOrMalformedOrgUnitRegion(String orgUnitNo) {
+    when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
+    when(scheduleRepository.loadRegionOptions())
+        .thenReturn(List.of(new CodeNameDto("12", "Coast")));
+    when(principalService.resolveOrgUnitNo(authentication)).thenReturn(orgUnitNo);
+    LexisReportOptionsController controller =
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
+
+    ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().defaultRegion()).isEqualTo("12");
+  }
+
+  @Test
   void optionsShouldExposeDefaultRegionWhenOnlyOneConcreteRegionIsAvailable() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
-    when(scheduleRepository.findUpcomingExportSchedules()).thenReturn(List.of());
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(List.of(new CodeNameDto("12", "Coast")));
     when(scheduleRepository.loadReportExemptionTypeOptions()).thenReturn(List.of());
@@ -209,7 +274,8 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadReportDestinationCountryOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportPortOfExportOptions()).thenReturn(List.of());
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
@@ -219,14 +285,14 @@ class LexisReportOptionsControllerTest {
   }
 
   @Test
-  void optionsShouldExposeLegacyForestClientDefaultRegionWhenResolvedRegionIsAvailable() {
+  void optionsShouldUseForestClientDefaultRegionForIndustryUserWithoutOrgUnitClaim() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
-    when(scheduleRepository.findUpcomingExportSchedules()).thenReturn(List.of());
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(
             List.of(
                 new CodeNameDto("12", "Coast"),
                 new CodeNameDto("24", "Skeena")));
+    when(principalService.resolveOrgUnitNo(authentication)).thenReturn(null);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(scheduleRepository.findDefaultRegionForForestClientNumber("00077881"))
         .thenReturn(java.util.Optional.of("24"));
@@ -239,7 +305,8 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadReportDestinationCountryOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportPortOfExportOptions()).thenReturn(List.of());
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
@@ -251,7 +318,6 @@ class LexisReportOptionsControllerTest {
   @Test
   void optionsShouldIgnoreLegacyForestClientDefaultRegionWhenRegionIsUnavailable() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
-    when(scheduleRepository.findUpcomingExportSchedules()).thenReturn(List.of());
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(
             List.of(
@@ -269,16 +335,13 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadReportDestinationCountryOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportPortOfExportOptions()).thenReturn(List.of());
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().defaultRegion()).isNull();
-  }
-
-  private static ExportScheduleRowDto scheduleRow(Long exportScheduleId, LocalDate advertisingDate) {
-    return new ExportScheduleRowDto(exportScheduleId, advertisingDate, null, null, null, null, null);
   }
 }

@@ -14,6 +14,7 @@ import {
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
+import { RECORD_VERSION_HEADER } from '@/service/optimistic-conflict'
 
 type BackendApplicationReviewSearchResult = {
   applicationNumber: number
@@ -148,11 +149,14 @@ export const previewApplicationReviews = async (
 
 export const approveApplicationReview = async (
   applicationNumber: string,
+  recordVersion?: string,
 ): Promise<ApplicationReviewStatusUpdateResult> => {
   const response = await apiService
     .getAxiosInstance()
     .post<ApplicationReviewStatusUpdateResult>(
       `/lexis/application-reviews/${applicationNumber}/approve`,
+      undefined,
+      recordVersion ? { headers: { [RECORD_VERSION_HEADER]: recordVersion } } : undefined,
     )
 
   return response.data
@@ -161,12 +165,14 @@ export const approveApplicationReview = async (
 export const updateApplicationReviewStatus = async (
   applicationNumber: string,
   payload: ApplicationReviewStatusUpdateRequest,
+  recordVersion?: string,
 ): Promise<ApplicationReviewStatusUpdateResult> => {
   const response = await apiService
     .getAxiosInstance()
     .post<ApplicationReviewStatusUpdateResult>(
       `/lexis/application-reviews/${applicationNumber}/status`,
       payload,
+      recordVersion ? { headers: { [RECORD_VERSION_HEADER]: recordVersion } } : undefined,
     )
 
   return response.data

@@ -5,6 +5,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import java.util.Optional;
+import java.util.List;
 
 public interface ExemptionService {
 
@@ -19,4 +20,8 @@ public interface ExemptionService {
   int count(ExemptionSearchCriteria criteria);
 
   Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber);
+
+  default List<Long> findOrgUnitNumbers(String exemptionNumber) {
+    return List.of();
+  }
 }

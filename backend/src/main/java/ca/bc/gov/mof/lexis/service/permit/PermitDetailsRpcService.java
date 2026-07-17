@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
@@ -29,6 +31,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public interface PermitDetailsRpcService {
 
@@ -48,6 +51,8 @@ public interface PermitDetailsRpcService {
       String packageNumber,
       Long permitNumber,
       boolean ministryUser);
+
+  PermitEditContext getEditContext(Long permitNumber);
 
   PermitScalesForPackageRpcResponseDto getScalesForPackage(String packageNumber);
 
@@ -69,13 +74,18 @@ public interface PermitDetailsRpcService {
 
   PermitNumberAvailabilityRpcResponseDto checkPermitNumber(Long permitNumber);
 
-  PermitApplicationListRpcResponseDto getApplicationList(Long permitNumber);
+  PermitApplicationListRpcResponseDto getApplicationList(
+      Long permitNumber, Predicate<Long> applicationAccess);
 
   PermitAvailableApplicationListRpcResponseDto getAvailableApplicationList(
-      String exemptionNumber, String selectedApplicationsCsv);
+      String exemptionNumber,
+      String selectedApplicationsCsv,
+      Predicate<Long> applicationAccess);
 
   PermitAvailablePackageListRpcResponseDto getAvailablePackageList(
-      String exemptionNumber, String selectedPackagesCsv);
+      String exemptionNumber,
+      String selectedPackagesCsv,
+      Predicate<Long> applicationAccess);
 
   PermitApprovedExemptionVolumeRpcResponseDto getApprovedExemptionVolume(String exemptionNumber);
 
@@ -92,11 +102,29 @@ public interface PermitDetailsRpcService {
       BigDecimal invoiceFeeInLieu,
       String userId);
 
+  PermitMutationRpcResponseDto createPermitFromExemption(
+      String exemptionNumber, String userId);
+
   PermitMutationRpcResponseDto addPermit(PermitMutationRequestDto request, String userId);
 
   PermitMutationRpcResponseDto updatePermit(PermitMutationRequestDto request, String userId);
 
   PermitMutationRpcResponseDto updateShipping(PermitMutationRequestDto request, String userId);
+
+  String getExemptionNumberForPermitMutation(Long permitNumber);
+
+  List<Long> getApplicationNumbersForPermitMutation(Long permitNumber);
+
+  List<Long> getApplicationNumbersForExemptionMutation(String exemptionNumber);
+
+  Optional<Long> getApplicationNumberForScaleMutation(String scaleDetailId);
+
+  PermitEmailResult sendRequestPermitEmail(
+      Long permitNumber, String copyToAddress, String userId);
+
+  Optional<String> getApprovalPermitEmailDefault(Long permitNumber);
+
+  PermitEmailResult sendApprovalPermitEmail(Long permitNumber, String clientEmailAddress);
 
   PermitPersistenceRpcResponseDto updateScaleAttachment(
       String scaleDetailId, Long permitNumber, boolean attachInd, String userId);
@@ -132,13 +160,63 @@ public interface PermitDetailsRpcService {
 
   List<PermitDocumentItemRpcResponseDto> getDocumentDetails(Long permitNumber);
 
-  Optional<DocumentContent> getDocument(Long fileId);
+  Optional<DocumentStreamer> streamDocument(Long fileId);
+
+  default boolean documentBelongsToPermit(Long documentId, Long permitNumber) {
+    return findDocumentForPermit(documentId, permitNumber).isPresent();
+  }
+
+  default Optional<PermitDocumentItemRpcResponseDto> findDocumentForPermit(
+      Long documentId, Long permitNumber) {
+    if (documentId == null || documentId < 1 || permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+    List<PermitDocumentItemRpcResponseDto> matches = getDocumentDetails(permitNumber).stream()
+        .filter(item -> documentId.equals(item.id()))
+        .limit(2)
+        .toList();
+    return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+  }
+
+  default boolean packageBelongsToPermit(String packageNumber, Long permitNumber) {
+    if (packageNumber == null
+        || packageNumber.isBlank()
+        || permitNumber == null
+        || permitNumber < 1) {
+      return false;
+    }
+    String normalized = packageNumber.trim();
+    PermitPackageListRpcResponseDto packages = getPackageList(permitNumber);
+    if (packages != null
+        && packages.packageList() != null
+        && packages.packageList().stream().anyMatch(normalized::equals)) {
+      return true;
+    }
+    PermitPackageListRpcResponseDto oicPackages = getOicPackageList(permitNumber);
+    return oicPackages != null
+        && oicPackages.packageList() != null
+        && oicPackages.packageList().stream().anyMatch(normalized::equals);
+  }
 
   boolean removePermitDocument(Long documentId);
+
+  Optional<Long> getApplicationNumberForDocumentMutation(
+      Long documentId, Long permitNumber);
 
   boolean removeApplicationDocument(Long documentId);
 
   boolean removeInvoiceDocument(Long documentId);
 
-  record DocumentContent(byte[] bytes) {}
+  record PermitEditContext(boolean overrideEnabled, String overrideFee, String overrideComment) {}
+
+  @FunctionalInterface
+  interface DocumentStreamer {
+    void writeTo(OutputStream outputStream) throws IOException;
+  }
+
+  record PermitEmailResult(boolean success, String message, String permitRequestDate) {
+    public PermitEmailResult(boolean success, String message) {
+      this(success, message, null);
+    }
+  }
 }

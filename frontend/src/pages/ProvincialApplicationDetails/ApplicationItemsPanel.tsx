@@ -13,6 +13,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '../../components/ConfirmationModal'
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
@@ -112,10 +113,16 @@ type PackageSelectionAction =
 
 export type ProvincialApplicationItemsPanelProps = {
   detail: ProvincialApplicationDetail
-  canManageItems: boolean
+  canEditPackages: boolean
+  canAddPackages: boolean
+  canAddScales: boolean
+  canUpdatePackageNumber: boolean
+  authoritativeOptionsAvailability: 'loading' | 'available' | 'unavailable'
   productTypeOptions: ApplicationCodeOption[]
   growthTypeOptions: ApplicationCodeOption[]
   onDetailChanged: () => Promise<void>
+  onDirtyChange?: (dirty: boolean) => void
+  onBusyChange?: (busy: boolean) => void
   focusedPackageNumber?: string
   focusedPackageRequestId?: number
 }
@@ -295,10 +302,16 @@ const toPackageForm = (
 
 function ProvincialApplicationItemsPanel({
   detail,
-  canManageItems,
+  canEditPackages,
+  canAddPackages,
+  canAddScales,
+  canUpdatePackageNumber,
+  authoritativeOptionsAvailability,
   productTypeOptions,
   growthTypeOptions,
   onDetailChanged,
+  onDirtyChange,
+  onBusyChange,
   focusedPackageNumber,
   focusedPackageRequestId,
 }: ProvincialApplicationItemsPanelProps) {
@@ -316,11 +329,15 @@ function ProvincialApplicationItemsPanel({
   const [packageForm, setPackageForm] = useState<PackageFormState>(() =>
     emptyPackageForm(productTypeCode),
   )
+  const [packageBaselineForm, setPackageBaselineForm] = useState<PackageFormState>(() =>
+    emptyPackageForm(productTypeCode),
+  )
   const [createPackageForm, setCreatePackageForm] = useState<PackageFormState>(() =>
     emptyPackageForm(productTypeCode),
   )
   const [packageSpeciesRows, setPackageSpeciesRows] = useState<ApplicationPackageSpeciesRow[]>([])
   const [speciesDraft, setSpeciesDraft] = useState<string[]>([])
+  const [packageSpeciesBaseline, setPackageSpeciesBaseline] = useState<string[]>([])
   const [createSpeciesDraft, setCreateSpeciesDraft] = useState<string[]>([])
   const [scales, setScales] = useState<ApplicationPackageScaleRow[]>([])
   const [applicationScaleRows, setApplicationScaleRows] = useState<ApplicationScaleSummaryRow[]>([])
@@ -341,7 +358,13 @@ function ProvincialApplicationItemsPanel({
   const [scaleLookupId, setScaleLookupId] = useState('')
   const [scaleLookupResult, setScaleLookupResult] = useState('')
   const [scaleActionErrorMessage, setScaleActionErrorMessage] = useState('')
+  const [baseReferenceOptionsAvailability, setBaseReferenceOptionsAvailability] = useState<
+    'loading' | 'available' | 'unavailable'
+  >('loading')
+  const [dependentReferenceOptionsUnavailable, setDependentReferenceOptionsUnavailable] =
+    useState(false)
   const [itemsLoading, setItemsLoading] = useState(false)
+  const [packageDataLoaded, setPackageDataLoaded] = useState(false)
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
   const [itemsInfoMessage, setItemsInfoMessage] = useState('')
   const [isSavingPackage, setIsSavingPackage] = useState(false)
@@ -353,7 +376,39 @@ function ProvincialApplicationItemsPanel({
   const [showPackageValidationErrors, setShowPackageValidationErrors] = useState(false)
   const [showCreatePackageValidationErrors, setShowCreatePackageValidationErrors] = useState(false)
   const [showScaleValidationErrors, setShowScaleValidationErrors] = useState(false)
+  const [packageDraftTouched, setPackageDraftTouched] = useState(false)
+  const [createPackageDraftTouched, setCreatePackageDraftTouched] = useState(false)
+  const [scaleDraftTouched, setScaleDraftTouched] = useState(false)
+  const [pendingPackageSelection, setPendingPackageSelection] = useState('')
   const beginItemsRequest = useLatestRequestGuard()
+  const selectedPackageDraftDirty =
+    packageDraftTouched &&
+    (JSON.stringify(packageForm) !== JSON.stringify(packageBaselineForm) ||
+      JSON.stringify(speciesDraft) !== JSON.stringify(packageSpeciesBaseline))
+  const createPackageDraftDirty =
+    createPackageDraftTouched &&
+    (JSON.stringify(createPackageForm) !== JSON.stringify(emptyPackageForm(productTypeCode)) ||
+      createSpeciesDraft.length > 0)
+  const scaleDraftDirty =
+    scaleDraftTouched && JSON.stringify(scaleForm) !== JSON.stringify(emptyScaleForm)
+  const itemsDirty = selectedPackageDraftDirty || createPackageDraftDirty || scaleDraftDirty
+  const itemsBusy = isSavingPackage || isSavingScale || !!deletingScaleId
+
+  useEffect(() => {
+    onDirtyChange?.(itemsDirty)
+  }, [itemsDirty, onDirtyChange])
+
+  useEffect(() => {
+    onBusyChange?.(itemsBusy)
+  }, [itemsBusy, onBusyChange])
+
+  useEffect(
+    () => () => {
+      onDirtyChange?.(false)
+      onBusyChange?.(false)
+    },
+    [onBusyChange, onDirtyChange],
+  )
   const selectedPackageScaleVolume = scales.reduce(
     (total, row) => total + (parseNonNegativeDecimalFieldValue(row.volume) ?? 0),
     0,
@@ -504,19 +559,32 @@ function ProvincialApplicationItemsPanel({
     }
   }, [applicationNumber])
 
+  const requestPackageSelection = useCallback(
+    (packageNumber: string) => {
+      if (packageNumber === selectedPackageNumber) return
+      if (selectedPackageDraftDirty || scaleDraftDirty) {
+        setPendingPackageSelection(packageNumber)
+        return
+      }
+      dispatchPackageSelection({ type: 'select', packageNumber })
+    },
+    [scaleDraftDirty, selectedPackageDraftDirty, selectedPackageNumber],
+  )
+
   useEffect(() => {
     dispatchPackageSelection({ type: 'sync', packageNumbers: packageNumbersFromDetail })
   }, [packageNumbersFromDetail])
 
   useEffect(() => {
     if (focusedPackageNumber && packageNumbers.includes(focusedPackageNumber)) {
-      dispatchPackageSelection({ type: 'select', packageNumber: focusedPackageNumber })
+      queueMicrotask(() => requestPackageSelection(focusedPackageNumber))
     }
-  }, [focusedPackageNumber, focusedPackageRequestId, packageNumbers])
+  }, [focusedPackageNumber, focusedPackageRequestId, packageNumbers, requestPackageSelection])
 
   useEffect(() => {
     let cancelled = false
     const loadCodeOptions = async () => {
+      setBaseReferenceOptionsAvailability('loading')
       try {
         const [species, packageStatuses] = await Promise.all([
           fetchApplicationSpeciesCodes(),
@@ -525,9 +593,13 @@ function ProvincialApplicationItemsPanel({
         if (!cancelled) {
           setSpeciesOptions(species)
           setPackageStatusOptions(packageStatuses)
+          setBaseReferenceOptionsAvailability(
+            species.length > 0 && packageStatuses.length > 0 ? 'available' : 'unavailable',
+          )
         }
       } catch {
         if (!cancelled) {
+          setBaseReferenceOptionsAvailability('unavailable')
           setItemsErrorMessage('Unable to load application item code lists.')
         }
       }
@@ -547,9 +619,17 @@ function ProvincialApplicationItemsPanel({
     async (packageNumber: string) => {
       const isLatestRequest = beginItemsRequest()
       if (!packageNumber) {
-        setPackageForm(emptyPackageForm(productTypeCode))
+        setItemsLoading(false)
+        setPackageDataLoaded(false)
+        const emptyForm = emptyPackageForm(productTypeCode)
+        setPackageForm(emptyForm)
+        setPackageBaselineForm(emptyForm)
         setPackageSpeciesRows([])
         setSpeciesDraft([])
+        setPackageSpeciesBaseline([])
+        setPackageDraftTouched(false)
+        setScaleForm(emptyScaleForm)
+        setScaleDraftTouched(false)
         setScales([])
         setRemainingSpeciesOptions([])
         setEndUseOptions([])
@@ -557,7 +637,21 @@ function ProvincialApplicationItemsPanel({
       }
 
       setItemsLoading(true)
+      setPackageDataLoaded(false)
       setItemsErrorMessage('')
+      const emptyForm = emptyPackageForm(productTypeCode)
+      setPackageForm(emptyForm)
+      setPackageBaselineForm(emptyForm)
+      setPackageSpeciesRows([])
+      setSpeciesDraft([])
+      setPackageSpeciesBaseline([])
+      setPackageDraftTouched(false)
+      setScaleForm(emptyScaleForm)
+      setScaleDraftTouched(false)
+      setSpeciesToAdd('')
+      setScales([])
+      setRemainingSpeciesOptions([])
+      setEndUseOptions([])
       try {
         const detailsResult = await fetchApplicationPackageDetails(packageNumber)
         if (!isLatestRequest()) {
@@ -572,13 +666,29 @@ function ProvincialApplicationItemsPanel({
           return
         }
         const nextSpeciesDraft = uniqueCodes(speciesResult)
-        setPackageForm(toPackageForm(productTypeCode, detailsResult, speciesResult))
+        const loadedPackageForm = toPackageForm(productTypeCode, detailsResult, speciesResult)
+        setPackageForm(loadedPackageForm)
+        setPackageBaselineForm(loadedPackageForm)
         setShowPackageValidationErrors(false)
         setPackageSpeciesRows(speciesResult)
         setSpeciesDraft(nextSpeciesDraft)
+        setPackageSpeciesBaseline(nextSpeciesDraft)
+        setPackageDraftTouched(false)
         setScales(scalesResult)
+        setPackageDataLoaded(true)
       } catch {
         if (isLatestRequest()) {
+          setPackageDataLoaded(false)
+          const failedForm = emptyPackageForm(productTypeCode)
+          setPackageForm(failedForm)
+          setPackageBaselineForm(failedForm)
+          setPackageSpeciesRows([])
+          setSpeciesDraft([])
+          setPackageSpeciesBaseline([])
+          setPackageDraftTouched(false)
+          setScaleForm(emptyScaleForm)
+          setScaleDraftTouched(false)
+          setScales([])
           setItemsErrorMessage('Unable to retrieve application item details.')
         }
       } finally {
@@ -611,6 +721,7 @@ function ProvincialApplicationItemsPanel({
         }
       } catch {
         if (!cancelled) {
+          setDependentReferenceOptionsUnavailable(true)
           setRemainingSpeciesOptions(speciesOptions)
         }
       }
@@ -643,6 +754,7 @@ function ProvincialApplicationItemsPanel({
         }
       } catch {
         if (!cancelled) {
+          setDependentReferenceOptionsUnavailable(true)
           setCreateRemainingSpeciesOptions(speciesOptions)
         }
       }
@@ -683,6 +795,7 @@ function ProvincialApplicationItemsPanel({
         }
       } catch {
         if (!cancelled) {
+          setDependentReferenceOptionsUnavailable(true)
           setEndUseOptions([])
         }
       }
@@ -717,6 +830,7 @@ function ProvincialApplicationItemsPanel({
         }
       } catch {
         if (!cancelled) {
+          setDependentReferenceOptionsUnavailable(true)
           setCreateEndUseOptions([])
         }
       }
@@ -751,6 +865,7 @@ function ProvincialApplicationItemsPanel({
         }
       } catch {
         if (!cancelled) {
+          setDependentReferenceOptionsUnavailable(true)
           setGradeOptions([])
         }
       }
@@ -763,6 +878,7 @@ function ProvincialApplicationItemsPanel({
   }, [detail.orgUnitNumber, scaleForm.speciesCode])
 
   const setPackageField = (field: keyof PackageFormState, value: string) => {
+    setPackageDraftTouched(true)
     setPackageForm((current) => ({
       ...current,
       [field]: field === 'newPackageNumber' ? normalizePackageNumberInput(value) : value,
@@ -770,6 +886,7 @@ function ProvincialApplicationItemsPanel({
   }
 
   const setCreatePackageField = (field: keyof PackageFormState, value: string) => {
+    setCreatePackageDraftTouched(true)
     setCreatePackageForm((current) => ({
       ...current,
       [field]: field === 'packageNumber' ? normalizePackageNumberInput(value) : value,
@@ -777,6 +894,7 @@ function ProvincialApplicationItemsPanel({
   }
 
   const setScaleField = (field: keyof ScaleFormState, value: string) => {
+    setScaleDraftTouched(true)
     setScaleForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -784,11 +902,13 @@ function ProvincialApplicationItemsPanel({
     if (!speciesToAdd || speciesDraft.includes(speciesToAdd)) {
       return
     }
+    setPackageDraftTouched(true)
     setSpeciesDraft((current) => [...current, speciesToAdd])
     setSpeciesToAdd('')
   }
 
   const onRemoveSpecies = (species: string) => {
+    setPackageDraftTouched(true)
     setSpeciesDraft((current) => current.filter((item) => item !== species))
   }
 
@@ -796,25 +916,69 @@ function ProvincialApplicationItemsPanel({
     if (!createSpeciesToAdd || createSpeciesDraft.includes(createSpeciesToAdd)) {
       return
     }
+    setCreatePackageDraftTouched(true)
     setCreateSpeciesDraft((current) => [...current, createSpeciesToAdd])
     setCreateSpeciesToAdd('')
   }
 
   const onRemoveCreateSpecies = (species: string) => {
+    setCreatePackageDraftTouched(true)
     setCreateSpeciesDraft((current) => current.filter((item) => item !== species))
+  }
+
+  const resetSelectedPackageDrafts = () => {
+    setPackageForm(packageBaselineForm)
+    setSpeciesDraft(packageSpeciesBaseline)
+    setSpeciesToAdd('')
+    setPackageDraftTouched(false)
+    setScaleForm(emptyScaleForm)
+    setScaleActionErrorMessage('')
+    setShowScaleValidationErrors(false)
+    setScaleDraftTouched(false)
+    setTouchedItemFields({})
+    setShowPackageValidationErrors(false)
+  }
+
+  const resetCreatePackageDraft = () => {
+    setCreatePackageForm(emptyPackageForm(productTypeCode))
+    setCreateSpeciesDraft([])
+    setCreateSpeciesToAdd('')
+    setCreatePackageDraftTouched(false)
+    setShowCreatePackageValidationErrors(false)
+  }
+
+  const resetScaleDraft = () => {
+    setScaleForm(emptyScaleForm)
+    setScaleActionErrorMessage('')
+    setScaleDraftTouched(false)
+    setShowScaleValidationErrors(false)
   }
 
   const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
   const selectedPackageHasPermittedScale = scales.some((row) => row.permitted)
+  const referenceOptionsLoading =
+    authoritativeOptionsAvailability === 'loading' || baseReferenceOptionsAvailability === 'loading'
+  const referenceOptionsUnavailable =
+    authoritativeOptionsAvailability === 'unavailable' ||
+    baseReferenceOptionsAvailability === 'unavailable' ||
+    dependentReferenceOptionsUnavailable
+  const referenceOptionsAvailable = !referenceOptionsLoading && !referenceOptionsUnavailable
   const canSaveSelectedPackage =
-    canManageItems &&
+    canEditPackages &&
+    referenceOptionsAvailable &&
+    packageDataLoaded &&
     !!selectedPackageNumber &&
     !isSavingPackage &&
     !selectedPackageHasPermittedScale
+  const canCreatePackages = canAddPackages && referenceOptionsAvailable
+  const canAddScalesWithReferenceOptions = canAddScales && referenceOptionsAvailable
   const canDeleteSelectedPackage =
-    canManageItems &&
+    canAddPackages &&
+    packageDataLoaded &&
     !!selectedPackageNumber &&
     !isSavingPackage &&
+    !selectedPackageDraftDirty &&
+    !scaleDraftDirty &&
     !selectedPackageHasPermittedScale &&
     selectedPackageTotalPieces === 0
 
@@ -835,7 +999,15 @@ function ProvincialApplicationItemsPanel({
   })
 
   const onSaveSelectedPackage = async () => {
-    if (!selectedPackageNumber) {
+    if (!canSaveSelectedPackage) {
+      return
+    }
+
+    if (
+      packageForm.newPackageNumber.trim() !== selectedPackageNumber.trim() &&
+      !canUpdatePackageNumber
+    ) {
+      setItemsErrorMessage('Package number changes are not allowed for this application.')
       return
     }
 
@@ -891,6 +1063,10 @@ function ProvincialApplicationItemsPanel({
   }
 
   const onCreatePackage = async () => {
+    if (!canCreatePackages) {
+      return
+    }
+
     if (hasCreatePackageValidationError) {
       setShowCreatePackageValidationErrors(true)
       setItemsErrorMessage(
@@ -934,6 +1110,7 @@ function ProvincialApplicationItemsPanel({
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
       setCreatePackageForm(emptyPackageForm(productTypeCode))
       setCreateSpeciesDraft([])
+      setCreatePackageDraftTouched(false)
       setCreateSpeciesToAdd('')
       setShowCreatePackageValidationErrors(false)
       setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
@@ -948,7 +1125,7 @@ function ProvincialApplicationItemsPanel({
   }
 
   const onDeleteSelectedPackage = async () => {
-    if (!selectedPackageNumber) {
+    if (!canAddPackages || !packageDataLoaded || !selectedPackageNumber) {
       return
     }
 
@@ -985,7 +1162,7 @@ function ProvincialApplicationItemsPanel({
   }
 
   const onAddScale = async () => {
-    if (!selectedPackageNumber) {
+    if (!canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber) {
       return
     }
 
@@ -1027,6 +1204,7 @@ function ProvincialApplicationItemsPanel({
 
       setScales((current) => [...current, result.result as ApplicationPackageScaleRow])
       setScaleForm(emptyScaleForm)
+      setScaleDraftTouched(false)
       setScaleActionErrorMessage('')
       setShowScaleValidationErrors(false)
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
@@ -1042,6 +1220,10 @@ function ProvincialApplicationItemsPanel({
   }
 
   const onDeleteScale = async (scaleId: string) => {
+    if (!canAddScales || !packageDataLoaded) {
+      return
+    }
+
     setDeletingScaleId(scaleId)
     setItemsErrorMessage('')
     setItemsInfoMessage('')
@@ -1148,6 +1330,17 @@ function ProvincialApplicationItemsPanel({
     <Tile id="application-items" className="application-detail-section application-items-panel">
       <h2 className="detail-tile-title">Items</h2>
       {itemsLoading && <InlineLoading description="Loading item data..." />}
+      {referenceOptionsLoading && (canEditPackages || canAddPackages || canAddScales) && (
+        <InlineLoading description="Loading authoritative item options..." />
+      )}
+      {referenceOptionsUnavailable && (canEditPackages || canAddPackages || canAddScales) && (
+        <AppNotification
+          kind="warning"
+          title="Item options unavailable"
+          subtitle="Package saves, package creation, and scale additions are disabled because authoritative Oracle options could not be verified."
+          lowContrast
+        />
+      )}
       {!!itemsErrorMessage && (
         <AppNotification
           kind="error"
@@ -1194,9 +1387,7 @@ function ProvincialApplicationItemsPanel({
                 value: packageNumber,
                 label: packageNumber,
               }))}
-              onChange={(value) =>
-                dispatchPackageSelection({ type: 'select', packageNumber: value })
-              }
+              onChange={requestPackageSelection}
             />
           </div>
           <dl className="detail-field-grid application-items-summary">
@@ -1219,7 +1410,7 @@ function ProvincialApplicationItemsPanel({
                   id="applicationItemsPackageNumber"
                   labelText="Package Number"
                   value={packageForm.newPackageNumber}
-                  disabled={!canSaveSelectedPackage}
+                  disabled={!canSaveSelectedPackage || !canUpdatePackageNumber}
                   invalid={!!packageFieldError('packageNewPackageNumber')}
                   invalidText={packageFieldError('packageNewPackageNumber')}
                   onBlur={() => markItemFieldTouched('packageNewPackageNumber')}
@@ -1278,6 +1469,7 @@ function ProvincialApplicationItemsPanel({
                   options={selectedPackageProductTypeOptions.map(toSearchableOption)}
                   onBlur={() => markItemFieldTouched('packageProductType')}
                   onChange={(value) => {
+                    setPackageDraftTouched(true)
                     setPackageForm((current) => ({
                       ...current,
                       productType: value,
@@ -1345,6 +1537,14 @@ function ProvincialApplicationItemsPanel({
                   onClick={() => void onSaveSelectedPackage()}
                 >
                   Save Package
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!selectedPackageDraftDirty && !scaleDraftDirty}
+                  onClick={resetSelectedPackageDrafts}
+                >
+                  Reset package drafts
                 </Button>
                 <Button
                   kind="danger--ghost"
@@ -1455,7 +1655,7 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreatePackageNumber"
               labelText="Package Number"
               value={createPackageForm.packageNumber}
-              disabled={!canManageItems}
+              disabled={!canCreatePackages}
               invalid={!!createPackageFieldError('createPackageNumber')}
               invalidText={createPackageFieldError('createPackageNumber')}
               onBlur={() => markItemFieldTouched('createPackageNumber')}
@@ -1465,7 +1665,7 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreatePackageVolume"
               labelText="Package Volume"
               value={createPackageForm.volume}
-              disabled={!canManageItems}
+              disabled={!canCreatePackages}
               invalid={!!createPackageFieldError('createPackageVolume')}
               invalidText={createPackageFieldError('createPackageVolume')}
               onBlur={() => markItemFieldTouched('createPackageVolume')}
@@ -1475,7 +1675,7 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreatePackageLength"
               labelText="Average Length"
               value={createPackageForm.averageLength}
-              disabled={!canManageItems}
+              disabled={!canCreatePackages}
               invalid={!!createPackageFieldError('createPackageAverageLength')}
               invalidText={createPackageFieldError('createPackageAverageLength')}
               onBlur={() => markItemFieldTouched('createPackageAverageLength')}
@@ -1485,7 +1685,7 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreatePackageDiameter"
               labelText="Average Diameter"
               value={createPackageForm.averageDiameter}
-              disabled={!canManageItems}
+              disabled={!canCreatePackages}
               invalid={!!createPackageFieldError('createPackageAverageDiameter')}
               invalidText={createPackageFieldError('createPackageAverageDiameter')}
               onBlur={() => markItemFieldTouched('createPackageAverageDiameter')}
@@ -1495,7 +1695,7 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreatePackageStatus"
               labelText="Status Code"
               value={createPackageForm.status}
-              disabled={!canManageItems}
+              disabled={!canCreatePackages}
               invalid={!!createPackageFieldError('createPackageStatus')}
               invalidText={createPackageFieldError('createPackageStatus')}
               placeholder="Select package status"
@@ -1507,13 +1707,14 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreatePackageProductType"
               labelText="Product Type"
               value={createPackageForm.productType}
-              disabled={!canManageItems}
+              disabled={!canCreatePackages}
               invalid={!!createPackageFieldError('createPackageProductType')}
               invalidText={createPackageFieldError('createPackageProductType')}
               placeholder="Select product type"
               options={createPackageProductTypeOptions.map(toSearchableOption)}
               onBlur={() => markItemFieldTouched('createPackageProductType')}
               onChange={(value) => {
+                setCreatePackageDraftTouched(true)
                 setCreatePackageForm((current) => ({
                   ...current,
                   productType: value,
@@ -1525,7 +1726,9 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreatePackageAgeClass"
               labelText="Age Class"
               value={createPackageForm.ageClass}
-              disabled={!canManageItems || !packageRequiresAgeClass(createPackageForm.productType)}
+              disabled={
+                !canCreatePackages || !packageRequiresAgeClass(createPackageForm.productType)
+              }
               invalid={!!createPackageFieldError('createPackageAgeClass')}
               invalidText={createPackageFieldError('createPackageAgeClass')}
               placeholder="Select age class"
@@ -1537,7 +1740,7 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreatePackageEndUse"
               labelText="End Use"
               value={createPackageForm.endUseCode}
-              disabled={!canManageItems || createEndUseOptions.length > 0}
+              disabled={!canCreatePackages || createEndUseOptions.length > 0}
               onChange={(event) => setCreatePackageField('endUseCode', event.target.value)}
             />
             {createEndUseOptions.length > 0 && (
@@ -1545,7 +1748,7 @@ function ProvincialApplicationItemsPanel({
                 id="applicationItemsCreatePackageEndUseSelect"
                 labelText="End Use Options"
                 value={createPackageForm.endUseCode}
-                disabled={!canManageItems}
+                disabled={!canCreatePackages}
                 placeholder="Select end use"
                 options={createEndUseOptions.map(toSearchableOption)}
                 onChange={(value) => setCreatePackageField('endUseCode', value)}
@@ -1557,7 +1760,7 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsCreateSpeciesToAdd"
               labelText="Create Package Species"
               value={createSpeciesToAdd}
-              disabled={!canManageItems}
+              disabled={!canCreatePackages}
               placeholder="Select species"
               options={createRemainingSpeciesOptions
                 .filter((option) => !createSpeciesDraft.includes(option.code))
@@ -1568,7 +1771,7 @@ function ProvincialApplicationItemsPanel({
               kind="secondary"
               size="sm"
               aria-label="Add species to new package"
-              disabled={!canManageItems || !createSpeciesToAdd}
+              disabled={!canCreatePackages || !createSpeciesToAdd}
               onClick={onAddCreateSpecies}
             >
               Add Species
@@ -1590,7 +1793,7 @@ function ProvincialApplicationItemsPanel({
                       <Button
                         kind="ghost"
                         size="sm"
-                        disabled={!canManageItems}
+                        disabled={!canCreatePackages}
                         onClick={() => onRemoveCreateSpecies(row.code)}
                       >
                         Remove
@@ -1610,10 +1813,18 @@ function ProvincialApplicationItemsPanel({
             <Button
               kind="secondary"
               size="sm"
-              disabled={!canManageItems || isSavingPackage}
+              disabled={!canCreatePackages || isSavingPackage}
               onClick={() => void onCreatePackage()}
             >
               Create Package
+            </Button>
+            <Button
+              kind="ghost"
+              size="sm"
+              disabled={!createPackageDraftDirty}
+              onClick={resetCreatePackageDraft}
+            >
+              Reset new package
             </Button>
           </div>
         </section>
@@ -1625,7 +1836,9 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsScaleTimberMark"
               labelText="Timber Mark"
               value={scaleForm.timberMark}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={
+                !canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber
+              }
               invalid={!!scaleFieldError('scaleTimberMark')}
               invalidText={scaleFieldError('scaleTimberMark')}
               onBlur={() => markItemFieldTouched('scaleTimberMark')}
@@ -1635,7 +1848,9 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsScaleSpecies"
               labelText="Species"
               value={scaleForm.speciesCode}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={
+                !canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber
+              }
               invalid={!!scaleFieldError('scaleSpeciesCode')}
               invalidText={scaleFieldError('scaleSpeciesCode')}
               placeholder="Select species"
@@ -1647,7 +1862,9 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsScaleGrade"
               labelText="Grade"
               value={scaleForm.gradeCode}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={
+                !canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber
+              }
               invalid={!!scaleFieldError('scaleGradeCode')}
               invalidText={scaleFieldError('scaleGradeCode')}
               placeholder="Select grade"
@@ -1659,7 +1876,9 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsScalePieces"
               labelText="Pieces"
               value={scaleForm.pieces}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={
+                !canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber
+              }
               invalid={!!scaleFieldError('scalePieces')}
               invalidText={scaleFieldError('scalePieces')}
               onBlur={() => markItemFieldTouched('scalePieces')}
@@ -1669,7 +1888,9 @@ function ProvincialApplicationItemsPanel({
               id="applicationItemsScaleVolume"
               labelText="Scale Volume"
               value={scaleForm.volume}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={
+                !canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber
+              }
               invalid={!!scaleFieldError('scaleVolume')}
               invalidText={scaleFieldError('scaleVolume')}
               onBlur={() => markItemFieldTouched('scaleVolume')}
@@ -1681,10 +1902,18 @@ function ProvincialApplicationItemsPanel({
               type="button"
               kind="secondary"
               size="sm"
-              disabled={!canManageItems || !selectedPackageNumber || isSavingScale}
+              disabled={
+                !canAddScalesWithReferenceOptions ||
+                !packageDataLoaded ||
+                !selectedPackageNumber ||
+                isSavingScale
+              }
               onClick={() => void onAddScale()}
             >
               Add Scale
+            </Button>
+            <Button kind="ghost" size="sm" disabled={!scaleDraftDirty} onClick={resetScaleDraft}>
+              Reset scale
             </Button>
           </div>
           {!!scaleActionErrorMessage && (
@@ -1734,7 +1963,12 @@ function ProvincialApplicationItemsPanel({
                         type="button"
                         kind="danger--ghost"
                         size="sm"
-                        disabled={!canManageItems || deletingScaleId === row.id || row.permitted}
+                        disabled={
+                          !canAddScales ||
+                          !packageDataLoaded ||
+                          deletingScaleId === row.id ||
+                          row.permitted
+                        }
                         onClick={() => void onDeleteScale(row.id)}
                       >
                         {deletingScaleId === row.id ? 'Deleting...' : 'Delete'}
@@ -1752,6 +1986,20 @@ function ProvincialApplicationItemsPanel({
           </div>
         </section>
       </div>
+      <ConfirmationModal
+        open={!!pendingPackageSelection}
+        title="Discard package drafts?"
+        description="Changing packages will discard unsaved package, species, and scale values for the current package."
+        confirmLabel="Discard and switch"
+        danger
+        onConfirm={() => {
+          const nextPackageNumber = pendingPackageSelection
+          resetSelectedPackageDrafts()
+          setPendingPackageSelection('')
+          dispatchPackageSelection({ type: 'select', packageNumber: nextPackageNumber })
+        }}
+        onClose={() => setPendingPackageSelection('')}
+      />
     </Tile>
   )
 }

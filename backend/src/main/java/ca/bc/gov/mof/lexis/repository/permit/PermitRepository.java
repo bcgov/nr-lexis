@@ -35,11 +35,11 @@ public class PermitRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadPermitStatusOptions() {
-    return loadCodeNameOptions(FIND_ALL_PERMIT_STATUS_CODES);
+    return loadCodeNameOptionsRequired(FIND_ALL_PERMIT_STATUS_CODES);
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return loadOrgUnitOptions(true);
+    return loadOrgUnitOptionsRequired(true);
   }
 
   public Page<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
@@ -86,10 +86,10 @@ public class PermitRepository extends OracleRepositorySupport {
     where.addDateLte("EPD.EXPORT_PERMIT_ISSUE_DATE", criteria.issuedToDate());
     where.addLike("EPD.EXPORT_PERMIT_STATUS_CODE", criteria.permitStatus());
     where.addLike("ESI.EXPORT_SALES_INVOICE_NUMBER", criteria.invoiceNumber());
-    where.addLike("CLIENT_NUMBER", criteria.applicantClientNumber());
+    where.addLike("CLIENT_NUMBER", criteria.ownerClientNumber());
 
-    String ownerClientNumber = trim(criteria.ownerClientNumber());
-    if (ownerClientNumber != null) {
+    String applicantClientNumber = trim(criteria.applicantClientNumber());
+    if (applicantClientNumber != null) {
       int idx1 = where.nextBindIndex();
       int idx2 = idx1 + 1;
       where.addRawWithBinds(
@@ -98,8 +98,38 @@ public class PermitRepository extends OracleRepositorySupport {
               + " || '%' OR (CLIENT_NUMBER LIKE '%' || :"
               + idx2
               + " || '%' AND EPD.AGENT_NUMBER IS NULL))",
-          ownerClientNumber,
-          ownerClientNumber);
+          applicantClientNumber,
+          applicantClientNumber);
+    }
+
+    String accessClientNumber = trim(criteria.accessClientNumber());
+    if (accessClientNumber != null) {
+      int permitOwnerBind = where.nextBindIndex();
+      int permitAgentBind = permitOwnerBind + 1;
+      int applicationOwnerBind = permitOwnerBind + 2;
+      int applicationAgentBind = permitOwnerBind + 3;
+      where.addRawWithBinds(
+          " AND (EPD.CLIENT_NUMBER = :"
+              + permitOwnerBind
+              + " OR EPD.AGENT_NUMBER = :"
+              + permitAgentBind
+              + " OR EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ACCESS_ESD"
+              + " INNER JOIN EXPORT_PACKAGE ACCESS_EP"
+              + " ON ACCESS_EP.PACKAGE_NUMBER = ACCESS_ESD.PACKAGE_NUMBER"
+              + " INNER JOIN EXPORT_EXEMPTION_APPLICATION ACCESS_EEA"
+              + " ON ACCESS_EEA.APPLICATION_NUMBER = ACCESS_EP.APPLICATION_NUMBER"
+              + " WHERE ACCESS_ESD.EXPORT_PERMIT_DETAIL_NUMBER ="
+              + " EPD.EXPORT_PERMIT_DETAIL_NUMBER"
+              + " AND ACCESS_EEA.EXPORT_JURISDICTION_CODE = 'P'"
+              + " AND (ACCESS_EEA.OWNER_CLIENT_NUMBER = :"
+              + applicationOwnerBind
+              + " OR ACCESS_EEA.AGENT_CLIENT_NUMBER = :"
+              + applicationAgentBind
+              + ")))",
+          accessClientNumber,
+          accessClientNumber,
+          accessClientNumber,
+          accessClientNumber);
     }
 
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
@@ -135,7 +165,7 @@ public class PermitRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingle(
+    return queryCursorSingleFailClosed(
         FIND_PERMIT_DETAIL_BY_ID,
         cs -> cs.setString(1, permitNumber.toString()),
         2,
@@ -157,6 +187,7 @@ public class PermitRepository extends OracleRepositorySupport {
                 getString(rs, "TRANSPORT_NAME"),
                 getString(rs, "EXPORT_PORT_OF_EXPORT_CODE"),
                 getString(rs, "OTHER_PORT_OF_EXPORT"),
+                getLocalDate(rs, "APPLICATION_DATE"),
                 getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
                 getLocalDate(rs, "EXPIRY_DATE"),
                 getLocalDate(rs, "RECEIVED_DATE"),
@@ -168,6 +199,9 @@ public class PermitRepository extends OracleRepositorySupport {
                 getString(rs, "EXPORT_SALES_INVOICE_NUMBER"),
                 getString(rs, "REMARKS"),
                 getLong(rs, "OIC_APPLICATION_NUMBER"),
+                getLong(rs, "OIC_REQUEST_PIECES"),
+                getDouble(rs, "OIC_REQUEST_VOLUME"),
+                getLong(rs, "ORG_UNIT_NO"),
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
   }
 

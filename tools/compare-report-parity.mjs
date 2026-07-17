@@ -6,6 +6,34 @@ import { join, resolve } from 'node:path'
 const DEFAULT_CASES_FILE = 'tools/report-parity-cases.json'
 const DEFAULT_MODERN_BASE = 'http://localhost:8080/api/lexis/reports'
 const DEFAULT_TIMEOUT_MS = 120_000
+const RETIRED_ACTION_MAPPINGS = new Set(['generateIndustryCSV', 'generateIndustryPDF'])
+const TRANSPORT_EXPECTATIONS = {
+  CSV: {
+    contentTypes: ['application/vnd.ms-excel'],
+    extension: 'csv',
+    magicDescription: 'comma-delimited text',
+    matchesMagic: (body) => looksLikeCsv(body),
+  },
+  PDF: {
+    contentTypes: ['application/pdf'],
+    extension: 'pdf',
+    magicDescription: '%PDF-',
+    matchesMagic: (body) => startsWithBytes(body, Buffer.from('%PDF-', 'ascii')),
+  },
+  XLS: {
+    contentTypes: ['application/vnd.ms-excel'],
+    extension: 'xls',
+    magicDescription: 'D0CF11E0A1B11AE1',
+    matchesMagic: (body) =>
+      startsWithBytes(body, Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])),
+  },
+  XLSX: {
+    contentTypes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    extension: 'xlsx',
+    magicDescription: 'PK\\x03\\x04',
+    matchesMagic: (body) => startsWithBytes(body, Buffer.from([0x50, 0x4b, 0x03, 0x04])),
+  },
+}
 
 const args = process.argv.slice(2)
 
@@ -22,6 +50,7 @@ Options:
   --out-dir <path>         Save modern/legacy report bytes and metadata for each executed case.
   --timeout-ms <ms>        Per-request timeout. Default: ${DEFAULT_TIMEOUT_MS}.
   --list                   List available cases and exit.
+  --validate               Validate the case manifest and exit without making requests.
   --strict-env             Fail instead of skipping cases with missing \${ENV_VAR} placeholders.
   --exact-binary           Compare every case by exact bytes, including PDF/XLS metadata outputs.
   --help                   Show this help.
@@ -48,6 +77,7 @@ function parseArgs(rawArgs) {
     timeoutMs: process.env.REPORT_PARITY_TIMEOUT_MS ?? `${DEFAULT_TIMEOUT_MS}`,
     caseIds: new Set(),
     list: false,
+    validate: false,
     strictEnv: false,
     exactBinary: false,
   }
@@ -84,6 +114,10 @@ function parseArgs(rawArgs) {
     }
     if (arg === '--list') {
       options.list = true
+      continue
+    }
+    if (arg === '--validate') {
+      options.validate = true
       continue
     }
     if (arg === '--strict-env') {
@@ -277,6 +311,64 @@ function normalizeContentType(contentType) {
   return contentType.split(';')[0].trim().toLowerCase()
 }
 
+function startsWithBytes(body, expectedPrefix) {
+  return body.length >= expectedPrefix.length
+    && body.subarray(0, expectedPrefix.length).equals(expectedPrefix)
+}
+
+function looksLikeCsv(body) {
+  if (body.length === 0) {
+    return false
+  }
+  const sampleBytes = body.subarray(0, Math.min(body.length, 4096))
+  if (sampleBytes.includes(0)) {
+    return false
+  }
+  const sample = sampleBytes.toString('utf8').replace(/^\uFEFF/, '').trimStart()
+  if (/^(?:<!doctype\s+html|<html\b|<\?xml\b|[\[{])/i.test(sample)) {
+    return false
+  }
+  return sample.includes(',')
+}
+
+function expectedFormat(testCase, source) {
+  const requested = source === 'legacy'
+    ? (testCase.parameters?.outputFormat ?? testCase.format)
+    : testCase.format
+  const normalized = String(requested ?? '').trim().toUpperCase()
+  return source === 'modern' && normalized === 'XLS' ? 'XLSX' : normalized
+}
+
+function assertExpectedTransport(testCase, source, result, failures) {
+  const format = expectedFormat(testCase, source)
+  const expectation = TRANSPORT_EXPECTATIONS[format]
+  if (!expectation) {
+    failures.push(`${source} has no transport expectation for format ${format || '-'}`)
+    return
+  }
+
+  const actualType = normalizeContentType(result.contentType)
+  if (!expectation.contentTypes.includes(actualType)) {
+    failures.push(
+      `${source} content-type expected=${expectation.contentTypes.join('|')} actual=${actualType || '-'}`,
+    )
+  }
+
+  const actualExtension = filenameExtension(result.disposition)
+  if (actualExtension !== expectation.extension) {
+    failures.push(
+      `${source} filename extension expected=${expectation.extension} actual=${actualExtension || '-'}`,
+    )
+  }
+
+  if (!expectation.matchesMagic(result.body)) {
+    const actualMagic = result.body.subarray(0, 8).toString('hex').toUpperCase() || '-'
+    failures.push(
+      `${source} magic bytes expected=${expectation.magicDescription} actual=${actualMagic}`,
+    )
+  }
+}
+
 function compareResults(testCase, modern, legacy, exactBinary) {
   const failures = []
   if (modern.status !== legacy.status) {
@@ -295,21 +387,13 @@ function compareResults(testCase, modern, legacy, exactBinary) {
     failures.push('legacy body is empty')
   }
 
+  assertExpectedTransport(testCase, 'modern', modern, failures)
+  assertExpectedTransport(testCase, 'legacy', legacy, failures)
+
   const compareMode = exactBinary ? 'exact' : (testCase.compare ?? 'metadata')
   if (compareMode === 'exact') {
     if (modern.sha256 !== legacy.sha256) {
       failures.push(`sha256 modern=${modern.sha256} legacy=${legacy.sha256}`)
-    }
-  } else {
-    const modernType = normalizeContentType(modern.contentType)
-    const legacyType = normalizeContentType(legacy.contentType)
-    if (modernType && legacyType && modernType !== legacyType) {
-      failures.push(`content-type modern=${modernType} legacy=${legacyType}`)
-    }
-    const modernExtension = filenameExtension(modern.disposition)
-    const legacyExtension = filenameExtension(legacy.disposition)
-    if (modernExtension && legacyExtension && modernExtension !== legacyExtension) {
-      failures.push(`filename extension modern=${modernExtension} legacy=${legacyExtension}`)
     }
   }
 
@@ -376,9 +460,58 @@ async function loadCases(casesFile) {
   return JSON.parse(content)
 }
 
+function validateCases(cases) {
+  if (!Array.isArray(cases)) {
+    return ['manifest root must be an array']
+  }
+
+  const failures = []
+  const ids = new Set()
+  cases.forEach((testCase, index) => {
+    const label = testCase?.id || `case[${index}]`
+    for (const field of ['id', 'description', 'reportId', 'legacyPath', 'format', 'compare']) {
+      if (typeof testCase?.[field] !== 'string' || testCase[field].trim() === '') {
+        failures.push(`${label}: ${field} must be a non-blank string`)
+      }
+    }
+    if (ids.has(testCase?.id)) {
+      failures.push(`${label}: duplicate id`)
+    }
+    ids.add(testCase?.id)
+    if (!['exact', 'metadata'].includes(testCase?.compare)) {
+      failures.push(`${label}: compare must be exact or metadata`)
+    }
+    if (testCase?.parameters !== undefined
+        && (testCase.parameters === null
+          || Array.isArray(testCase.parameters)
+          || typeof testCase.parameters !== 'object')) {
+      failures.push(`${label}: parameters must be an object`)
+    }
+    if (RETIRED_ACTION_MAPPINGS.has(testCase?.actionMapping)) {
+      failures.push(`${label}: actionMapping ${testCase.actionMapping} is retired`)
+    }
+    for (const source of ['modern', 'legacy']) {
+      const format = expectedFormat(testCase ?? {}, source)
+      if (!TRANSPORT_EXPECTATIONS[format]) {
+        failures.push(`${label}: unsupported ${source} transport format ${format || '-'}`)
+      }
+    }
+  })
+  return failures
+}
+
 async function main() {
   const options = parseArgs(args)
   const cases = await loadCases(options.casesFile)
+  const validationFailures = validateCases(cases)
+  if (validationFailures.length > 0) {
+    throw new Error(`Invalid report parity manifest:\n- ${validationFailures.join('\n- ')}`)
+  }
+
+  if (options.validate) {
+    console.log(`Validated ${cases.length} report parity cases`)
+    return
+  }
 
   if (options.list) {
     cases.forEach((testCase) => {

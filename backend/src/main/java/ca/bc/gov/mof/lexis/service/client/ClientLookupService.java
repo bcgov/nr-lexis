@@ -7,6 +7,9 @@ public interface ClientLookupService {
 
   Optional<ClientData> getClientData(String clientNumber, String locationCode);
 
+  /** Uses a required backing lookup so dependency failures cannot look like an unknown client. */
+  Optional<ClientData> getClientDataRequired(String clientNumber, String locationCode);
+
   List<ClientLocation> getClientLocations(String clientNumber);
 
   List<ClientContact> getContactsForLocation(String clientNumber, String locationCode);

@@ -1,28 +1,50 @@
-import type { AxiosRequestConfig } from 'axios'
+import type { AxiosRequestConfig, AxiosResponse } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_EXPIRED_EVENT } from '@/context/auth/session-expiry'
+import {
+  buildPageDataCacheKey,
+  clearAllPageDataCache,
+  getPageDataCache,
+  getPageDataCacheGeneration,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
 import apiService from '@/service/api-service'
+import {
+  OPTIMISTIC_CONFLICT_EVENT,
+  RECORD_VERSION_HEADER,
+  type OptimisticConflictEvent,
+} from '@/service/optimistic-conflict'
 
 type RequestInterceptor = (
   config: AxiosRequestConfig,
 ) => AxiosRequestConfig | Promise<AxiosRequestConfig>
-type ResponseRejectedInterceptor = (error: unknown) => Promise<never>
+type ResponseRejectedInterceptor = (error: unknown) => Promise<AxiosResponse<unknown>>
 
 const {
   axiosClientMock,
   fetchAuthSessionMock,
   getRegisteredRequestInterceptor,
+  getRegisteredResponseResolvedInterceptor,
   getRegisteredResponseRejectedInterceptor,
   getMock,
+  requestMock,
 } = vi.hoisted(() => {
   const getMock = vi.fn()
+  const requestMock = vi.fn()
   let registeredRequestInterceptor: RequestInterceptor | undefined
+  let registeredResponseResolvedInterceptor:
+    | ((response: AxiosResponse<unknown>) => AxiosResponse<unknown>)
+    | undefined
   let registeredResponseRejectedInterceptor: ResponseRejectedInterceptor | undefined
   const requestInterceptorUseMock = vi.fn((interceptor: RequestInterceptor) => {
     registeredRequestInterceptor = interceptor
   })
   const responseInterceptorUseMock = vi.fn(
-    (_resolved: unknown, rejected: ResponseRejectedInterceptor) => {
+    (
+      resolved: (response: AxiosResponse<unknown>) => AxiosResponse<unknown>,
+      rejected: ResponseRejectedInterceptor,
+    ) => {
+      registeredResponseResolvedInterceptor = resolved
       registeredResponseRejectedInterceptor = rejected
     },
   )
@@ -30,10 +52,13 @@ const {
   return {
     fetchAuthSessionMock: vi.fn(),
     getRegisteredRequestInterceptor: () => registeredRequestInterceptor,
+    getRegisteredResponseResolvedInterceptor: () => registeredResponseResolvedInterceptor,
     getRegisteredResponseRejectedInterceptor: () => registeredResponseRejectedInterceptor,
     getMock,
+    requestMock,
     axiosClientMock: {
       get: getMock,
+      request: requestMock,
       interceptors: {
         request: {
           use: requestInterceptorUseMock,
@@ -107,12 +132,26 @@ const registeredResponseRejectedInterceptor = (): ResponseRejectedInterceptor =>
   return responseRejectedInterceptor
 }
 
+const registeredResponseResolvedInterceptor = () => {
+  const responseResolvedInterceptor = getRegisteredResponseResolvedInterceptor()
+  expect(responseResolvedInterceptor).toBeInstanceOf(Function)
+
+  if (!responseResolvedInterceptor) {
+    throw new Error('Expected API service to register a response interceptor.')
+  }
+
+  return responseResolvedInterceptor
+}
+
 describe('api-service cached GET support', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getMock.mockReset()
+    requestMock.mockReset()
     fetchAuthSessionMock.mockReset()
     apiService.clearCachedGetData()
+    apiService.clearRecordVersions()
+    clearAllPageDataCache()
     fetchAuthSessionMock.mockResolvedValue(buildSession())
   })
 
@@ -362,10 +401,12 @@ describe('api-service cached GET support', () => {
   })
 
   it.each(['post', 'put', 'patch', 'delete'])(
-    'clears cached GET data when a %s request goes through the shared client',
+    'clears cached GET and page data when a %s request starts',
     async (method) => {
       apiService.clearCachedGetData()
       getMock.mockReset()
+      const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+      setPageDataCache(pageCacheKey, { rows: ['cached'] }, getPageDataCacheGeneration())
       getMock
         .mockResolvedValueOnce(buildResponse({ count: 1 }))
         .mockResolvedValueOnce(buildResponse({ count: 2 }))
@@ -379,11 +420,384 @@ describe('api-service cached GET support', () => {
         headers: {},
       })
 
+      expect(getPageDataCache(pageCacheKey)).toBeNull()
       await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
         count: 2,
       })
 
       expect(getMock).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('attaches the active detail record version only to a matching mutation request', async () => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    apiService.registerRecordVersion(
+      'application',
+      '999000001',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'version-2' },
+        data: { applicationNumber: '999000001', remarks: 'Original remarks' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/applications/999000001',
+    )
+
+    const result = await registeredRequestInterceptor()({
+      method: 'put',
+      url: '/lexis/rpc/application-details/application-summary',
+      data: new URLSearchParams({ applicationNumber: '999000001' }),
+      headers: {},
+    })
+
+    expect(result.headers).toEqual(
+      expect.objectContaining({ [RECORD_VERSION_HEADER]: 'version-2' }),
+    )
+    window.history.replaceState({}, '', previousPath)
+  })
+
+  it('does not attach a detail version to unrelated writes or another record', async () => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    apiService.registerRecordVersion(
+      'application',
+      '999000001',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'version-2' },
+        data: { applicationNumber: '999000001' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/applications/999000001',
+    )
+
+    const unrelated = await registeredRequestInterceptor()({
+      method: 'post',
+      url: '/lexis/reports/application-report',
+      data: { applicationNumber: '99999' },
+      headers: {},
+    })
+    const anotherApplication = await registeredRequestInterceptor()({
+      method: 'post',
+      url: '/lexis/rpc/application-details/remark',
+      data: new URLSearchParams({ applicationNumber: '999000002' }),
+      headers: {},
+    })
+
+    expect(unrelated.headers).not.toEqual(
+      expect.objectContaining({ [RECORD_VERSION_HEADER]: expect.anything() }),
+    )
+    expect(anotherApplication.headers).not.toEqual(
+      expect.objectContaining({ [RECORD_VERSION_HEADER]: expect.anything() }),
+    )
+    window.history.replaceState({}, '', previousPath)
+  })
+
+  it.each([
+    {
+      route: '/federal/application/700123',
+      recordType: 'federal-application' as const,
+      recordId: '700123',
+      request: { method: 'post', url: '/lexis/federal/applications/700123/status' },
+    },
+    {
+      route: '/provincial/exemption/EX-9',
+      recordType: 'exemption' as const,
+      recordId: 'EX-9',
+      request: {
+        method: 'post',
+        url: '/lexis/rpc/exemption-details/exemption/update',
+        data: new URLSearchParams({ legacyExemptionNumber: 'EX-9' }),
+      },
+    },
+    {
+      route: '/provincial/permit/777',
+      recordType: 'permit' as const,
+      recordId: '777',
+      request: {
+        method: 'post',
+        url: '/lexis/rpc/permit-details/update-shipping',
+        data: new URLSearchParams({ permitNumber: '777' }),
+      },
+    },
+    {
+      route: '/provincial/offers/81001',
+      recordType: 'offer' as const,
+      recordId: '81001',
+      request: {
+        method: 'post',
+        url: '/lexis/rpc/offer-details/offer/update',
+        data: new URLSearchParams({ exportPurchaseOfferNumber: '81001' }),
+      },
+    },
+  ])('attaches the $recordType detail version to its matching mutation', async (testCase) => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', testCase.route)
+    apiService.registerRecordVersion(
+      testCase.recordType,
+      testCase.recordId,
+      {
+        headers: { [RECORD_VERSION_HEADER]: `${testCase.recordType}-version` },
+        data: {},
+      } as unknown as AxiosResponse<unknown>,
+      '/detail',
+    )
+
+    const result = await registeredRequestInterceptor()({
+      ...testCase.request,
+      headers: {},
+    })
+
+    expect(result.headers).toEqual(
+      expect.objectContaining({
+        [RECORD_VERSION_HEADER]: `${testCase.recordType}-version`,
+      }),
+    )
+    window.history.replaceState({}, '', previousPath)
+  })
+
+  it('keeps the primary detail version when a supplemental source is newer', async () => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/permit/777')
+    const mutation = {
+      method: 'post',
+      url: '/lexis/rpc/permit-details/update-permit',
+      data: new URLSearchParams({ permitNumber: '777' }),
+      headers: {},
+    }
+
+    apiService.registerRecordVersion(
+      'permit',
+      '777',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'primary-version-1' },
+        data: { permitNumber: '777', permitStatus: 'ACT' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/permits/777',
+    )
+    apiService.registerRecordVersion(
+      'permit',
+      '777',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'supplemental-version-2' },
+        data: { overrideEnabled: true },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/rpc/permit-details/edit-context',
+      { params: { permitNumber: '777' } },
+    )
+
+    const staleMainFormMutation = await registeredRequestInterceptor()(mutation)
+    expect(staleMainFormMutation.headers).toEqual(
+      expect.objectContaining({ [RECORD_VERSION_HEADER]: 'primary-version-1' }),
+    )
+
+    apiService.registerRecordVersion(
+      'permit',
+      '777',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'primary-version-3' },
+        data: { permitNumber: '777', permitStatus: 'COM' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/permits/777',
+    )
+    apiService.registerRecordVersion(
+      'permit',
+      '777',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'supplemental-version-4' },
+        data: { overrideEnabled: false },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/rpc/permit-details/edit-context',
+      { params: { permitNumber: '777' } },
+    )
+
+    const refreshedMainFormMutation = await registeredRequestInterceptor()({
+      ...mutation,
+      headers: {},
+    })
+    expect(refreshedMainFormMutation.headers).toEqual(
+      expect.objectContaining({ [RECORD_VERSION_HEADER]: 'primary-version-3' }),
+    )
+
+    window.history.replaceState({}, '', previousPath)
+  })
+
+  it('updates a snapshot only from a successful matching mutation response', async () => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/permit/777')
+    apiService.registerRecordVersion(
+      'permit',
+      '777',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'permit-version-1' },
+        data: { permitNumber: '777' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/permits/777',
+    )
+
+    registeredResponseResolvedInterceptor()({
+      ...buildResponse({ exemptionNumber: 'EX-9' }),
+      headers: { [RECORD_VERSION_HEADER]: 'exemption-version-9' },
+      config: { method: 'get', url: '/lexis/exemptions/EX-9' },
+    } as unknown as AxiosResponse<unknown>)
+
+    const firstMutation = await registeredRequestInterceptor()({
+      method: 'post',
+      url: '/lexis/rpc/permit-details/update-permit',
+      data: new URLSearchParams({ permitNumber: '777' }),
+      headers: {},
+    })
+    expect(firstMutation.headers).toEqual(
+      expect.objectContaining({ [RECORD_VERSION_HEADER]: 'permit-version-1' }),
+    )
+
+    registeredResponseResolvedInterceptor()({
+      ...buildResponse({ success: true }),
+      headers: { [RECORD_VERSION_HEADER]: 'permit-version-2' },
+      config: {
+        method: 'post',
+        url: '/lexis/rpc/permit-details/update-permit',
+        data: 'permitNumber=777',
+      },
+    } as unknown as AxiosResponse<unknown>)
+
+    const secondMutation = await registeredRequestInterceptor()({
+      method: 'post',
+      url: '/lexis/rpc/permit-details/update-shipping',
+      data: new URLSearchParams({ permitNumber: '777' }),
+      headers: {},
+    })
+    expect(secondMutation.headers).toEqual(
+      expect.objectContaining({ [RECORD_VERSION_HEADER]: 'permit-version-2' }),
+    )
+    window.history.replaceState({}, '', previousPath)
+  })
+
+  it('refetches cached status-filtered page data after a write starts', async () => {
+    type StatusSearchResponse = { rows: Array<{ applicationNumber: string; status: string }> }
+
+    const pageCacheKey = buildPageDataCacheKey('federal-application-search', 'user-1', {
+      applicationStatus: 'APP',
+    })
+    const search = vi
+      .fn<() => Promise<StatusSearchResponse>>()
+      .mockResolvedValueOnce({ rows: [{ applicationNumber: '1001', status: 'APP' }] })
+      .mockResolvedValueOnce({ rows: [] })
+    const loadStatusSearch = async (): Promise<StatusSearchResponse> => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
+      const cached = getPageDataCache<StatusSearchResponse>(pageCacheKey)
+      if (cached) {
+        return cached
+      }
+      const response = await search()
+      setPageDataCache(pageCacheKey, response, pageCacheGeneration)
+      return response
+    }
+
+    await expect(loadStatusSearch()).resolves.toEqual({
+      rows: [{ applicationNumber: '1001', status: 'APP' }],
+    })
+    await expect(loadStatusSearch()).resolves.toEqual({
+      rows: [{ applicationNumber: '1001', status: 'APP' }],
+    })
+    expect(search).toHaveBeenCalledTimes(1)
+
+    await registeredRequestInterceptor()({ method: 'post', headers: {} })
+
+    await expect(loadStatusSearch()).resolves.toEqual({ rows: [] })
+    expect(search).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not let an in-flight search repopulate page data after a write starts', async () => {
+    type StatusSearchResponse = { rows: Array<{ applicationNumber: string; status: string }> }
+
+    const pageCacheKey = buildPageDataCacheKey('federal-application-search', 'user-1', {
+      applicationStatus: 'APP',
+    })
+    const pageCacheGeneration = getPageDataCacheGeneration()
+    let resolveSearch: (response: StatusSearchResponse) => void = () => {}
+    const search = new Promise<StatusSearchResponse>((resolve) => {
+      resolveSearch = resolve
+    })
+    const commitResults = vi.fn()
+    const cacheSearchResult = search.then((response) => {
+      if (pageCacheGeneration !== getPageDataCacheGeneration()) {
+        return false
+      }
+      const cacheUpdated = setPageDataCache(pageCacheKey, response, pageCacheGeneration)
+      if (cacheUpdated) {
+        commitResults(response)
+      }
+      return cacheUpdated
+    })
+
+    await registeredRequestInterceptor()({ method: 'post', headers: {} })
+    resolveSearch({ rows: [{ applicationNumber: '1001', status: 'APP' }] })
+
+    await expect(cacheSearchResult).resolves.toBe(false)
+    expect(getPageDataCache(pageCacheKey)).toBeNull()
+    expect(commitResults).not.toHaveBeenCalled()
+  })
+
+  it('refetches status-filtered page data when its 30-second TTL expires', async () => {
+    type StatusSearchResponse = { rows: Array<{ applicationNumber: string; status: string }> }
+
+    const pageCacheKey = buildPageDataCacheKey('federal-application-search', 'user-1', {
+      applicationStatus: 'APP',
+    })
+    const search = vi
+      .fn<() => Promise<StatusSearchResponse>>()
+      .mockResolvedValueOnce({ rows: [{ applicationNumber: '1001', status: 'APP' }] })
+      .mockResolvedValueOnce({ rows: [] })
+    const loadStatusSearch = async (currentTime: number): Promise<StatusSearchResponse> => {
+      const pageCacheGeneration = getPageDataCacheGeneration()
+      const cached = getPageDataCache<StatusSearchResponse>(pageCacheKey, currentTime)
+      if (cached) {
+        return cached
+      }
+      const response = await search()
+      setPageDataCache(pageCacheKey, response, pageCacheGeneration, currentTime)
+      return response
+    }
+
+    await expect(loadStatusSearch(1_000)).resolves.toEqual({
+      rows: [{ applicationNumber: '1001', status: 'APP' }],
+    })
+    await expect(loadStatusSearch(30_999)).resolves.toEqual({
+      rows: [{ applicationNumber: '1001', status: 'APP' }],
+    })
+    await expect(loadStatusSearch(31_000)).resolves.toEqual({ rows: [] })
+    expect(search).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not restore stale cached data when a dispatched write fails ambiguously', async () => {
+    const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+    setPageDataCache(pageCacheKey, { rows: ['cached'] }, getPageDataCacheGeneration())
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+    await registeredRequestInterceptor()({ method: 'post', headers: {} })
+
+    const failedWrite = { config: { method: 'post' }, response: { status: 500 } }
+    await expect(registeredResponseRejectedInterceptor()(failedWrite)).rejects.toBe(failedWrite)
+
+    expect(getPageDataCache(pageCacheKey)).toBeNull()
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['get', 'head', 'options'])(
+    'preserves page data when a %s request starts',
+    async (method) => {
+      const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+      setPageDataCache(pageCacheKey, { rows: ['cached'] }, getPageDataCacheGeneration())
+
+      await registeredRequestInterceptor()({ method, headers: {} })
+
+      expect(getPageDataCache(pageCacheKey)).toEqual({ rows: ['cached'] })
     },
   )
 
@@ -420,37 +834,305 @@ describe('api-service cached GET support', () => {
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
   })
 
-  it.each([401, 403])(
-    'emits a session-expired event and clears cached GETs on API %s responses',
-    async (status) => {
-      const listener = vi.fn()
-      window.addEventListener(SESSION_EXPIRED_EVENT, listener)
-      getMock
-        .mockResolvedValueOnce(buildResponse({ count: 1 }))
-        .mockResolvedValueOnce(buildResponse({ count: 2 }))
+  it('emits a session-expired event and clears cached GETs on API 401 responses', async () => {
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
 
-      await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
-        count: 1,
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+
+    const unauthorizedError = { response: { status: 401 } }
+    await expect(registeredResponseRejectedInterceptor()(unauthorizedError)).rejects.toBe(
+      unauthorizedError,
+    )
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        detail: { reason: 'api-unauthorized' },
+      }),
+    )
+
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+  })
+
+  it('preserves the authenticated session and cached GETs on API 403 responses', async () => {
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    getMock.mockResolvedValueOnce(buildResponse({ count: 1 }))
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+
+    const forbiddenError = { response: { status: 403 } }
+    await expect(registeredResponseRejectedInterceptor()(forbiddenError)).rejects.toBe(
+      forbiddenError,
+    )
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+    expect(getMock).toHaveBeenCalledTimes(1)
+    expect(listener).not.toHaveBeenCalled()
+
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+  })
+
+  it('requires refresh for stale-record conflicts and never resubmits the stale request', async () => {
+    let receivedConflict: OptimisticConflictEvent['detail'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedConflict = conflictEvent.detail
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+    const staleError = {
+      config: {
+        method: 'put',
+        url: '/lexis/applications/999000001',
+        data: { remarks: 'My saved draft' },
+        headers: { 'If-Match': 'v1' },
+      },
+      response: {
+        status: 409,
+        data: {
+          code: 'STALE_RECORD',
+          detail: 'This application was changed by another user.',
+          currentVersion: 'v2',
+          changedFields: [{ field: 'remarks', currentValue: 'Newer remarks' }],
+        },
+      },
+    }
+
+    void registeredResponseRejectedInterceptor()(staleError)
+
+    await vi.waitFor(() => expect(receivedConflict).toBeDefined())
+    expect(receivedConflict?.problem).toEqual(
+      expect.objectContaining({
+        code: 'STALE_RECORD',
+        currentVersion: 'v2',
+      }),
+    )
+    expect(receivedConflict).not.toHaveProperty('overwrite')
+    expect(receivedConflict?.refresh).toBeTypeOf('function')
+    expect(requestMock).not.toHaveBeenCalled()
+
+    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+  })
+
+  it('requires refresh when an existing mutation is missing its record version', async () => {
+    let receivedConflict: OptimisticConflictEvent['detail'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedConflict = conflictEvent.detail
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    void registeredResponseRejectedInterceptor()({
+      config: {
+        method: 'put',
+        url: '/lexis/applications/999000001',
+        data: { remarks: 'Unsaved draft' },
+      },
+      response: {
+        status: 428,
+        data: {
+          code: 'RECORD_VERSION_REQUIRED',
+          detail: 'A current record version is required before saving.',
+        },
+      },
+    })
+
+    await vi.waitFor(() => expect(receivedConflict).toBeDefined())
+    expect(receivedConflict?.problem).toEqual({
+      code: 'RECORD_VERSION_REQUIRED',
+      detail: 'A current record version is required before saving.',
+      currentVersion: undefined,
+      changedFields: undefined,
+      savedAt: undefined,
+      updatedBy: undefined,
+    })
+    expect(receivedConflict).not.toHaveProperty('overwrite')
+    expect(requestMock).not.toHaveBeenCalled()
+
+    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+  })
+
+  it('compares the retained detail snapshot with a fresh detail response on conflict', async () => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    apiService.registerRecordVersion(
+      'application',
+      '999000001',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        data: {
+          applicationNumber: '999000001',
+          remarks: 'Original remarks',
+          updateTimestamp: '2026-07-15T09:00:00-07:00',
+          updateUserId: 'IDIR\\FIRST',
+        },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/applications/999000001',
+    )
+    getMock.mockResolvedValueOnce({
+      ...buildResponse({
+        applicationNumber: '999000001',
+        remarks: 'Newer remarks',
+        updateTimestamp: '2026-07-15T09:10:00-07:00',
+        updateUserId: 'IDIR\\SECOND',
+      }),
+      headers: { [RECORD_VERSION_HEADER]: 'version-2' },
+    })
+    let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedProblem = conflictEvent.detail.problem
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    void registeredResponseRejectedInterceptor()({
+      config: {
+        method: 'put',
+        url: '/lexis/applications/999000001',
+        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+      },
+      response: {
+        status: 409,
+        data: { code: 'STALE_RECORD', currentVersion: 'version-1.5' },
+      },
+    })
+
+    await vi.waitFor(() => expect(receivedProblem).toBeDefined())
+
+    expect(getMock).toHaveBeenCalledWith('/lexis/applications/999000001', {
+      headers: { 'Cache-Control': 'no-cache' },
+    })
+    expect(receivedProblem).toEqual(
+      expect.objectContaining({
+        currentVersion: 'version-2',
+        savedAt: '2026-07-15T09:10:00-07:00',
+        updatedBy: 'IDIR\\SECOND',
+        changedFields: expect.arrayContaining([
+          { field: 'remarks', currentValue: 'Newer remarks' },
+        ]),
+      }),
+    )
+
+    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+    window.history.replaceState({}, '', previousPath)
+  })
+
+  it('includes newer values from a supplemental edit-context snapshot', async () => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/permit/777')
+    apiService.registerRecordVersion(
+      'permit',
+      '777',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        data: { permitNumber: '777', permitStatus: 'ACT' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/permits/777',
+    )
+    apiService.registerRecordVersion(
+      'permit',
+      '777',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        data: { overrideEnabled: false, overrideComment: '' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/rpc/permit-details/edit-context',
+      { params: { permitNumber: '777' } },
+    )
+    apiService.registerRecordVersion(
+      'permit',
+      '777',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        data: { permitNumber: '777', permitStatus: 'ACT' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/permits/777',
+    )
+    getMock.mockImplementation((url: string) => {
+      if (url === '/lexis/permits/777') {
+        return Promise.resolve({
+          ...buildResponse({ permitNumber: '777', permitStatus: 'COM' }),
+          headers: { [RECORD_VERSION_HEADER]: 'primary-version-2' },
+        })
+      }
+      return Promise.resolve({
+        ...buildResponse({ overrideEnabled: true, overrideComment: 'Reviewed' }),
+        headers: { [RECORD_VERSION_HEADER]: 'supplemental-version-3' },
       })
+    })
+    let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedProblem = conflictEvent.detail.problem
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
 
-      const unauthorizedError = { response: { status } }
-      await expect(registeredResponseRejectedInterceptor()(unauthorizedError)).rejects.toBe(
-        unauthorizedError,
-      )
+    void registeredResponseRejectedInterceptor()({
+      config: {
+        method: 'post',
+        url: '/lexis/rpc/permit-details/update-permit',
+        data: 'permitNumber=777',
+      },
+      response: {
+        status: 409,
+        data: { code: 'STALE_RECORD', currentVersion: 'version-2' },
+      },
+    })
 
-      await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
-        count: 2,
-      })
-      expect(listener).toHaveBeenCalledTimes(1)
-      expect(listener.mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          detail: { reason: 'api-unauthorized' },
-        }),
-      )
+    await vi.waitFor(() => expect(receivedProblem).toBeDefined())
 
-      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
-    },
-  )
+    expect(getMock).toHaveBeenNthCalledWith(1, '/lexis/permits/777', {
+      headers: { 'Cache-Control': 'no-cache' },
+    })
+    expect(getMock).toHaveBeenNthCalledWith(2, '/lexis/rpc/permit-details/edit-context', {
+      params: { permitNumber: '777' },
+      headers: { 'Cache-Control': 'no-cache' },
+    })
+    expect(receivedProblem?.currentVersion).toBe('primary-version-2')
+    expect(receivedProblem?.changedFields).toEqual(
+      expect.arrayContaining([
+        { field: 'overrideEnabled', currentValue: true },
+        { field: 'overrideComment', currentValue: 'Reviewed' },
+      ]),
+    )
+
+    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+    window.history.replaceState({}, '', previousPath)
+  })
+
+  it('leaves ordinary 409 responses on the existing error path', async () => {
+    const listener = vi.fn()
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, listener)
+    const validationConflict = {
+      config: { method: 'put', url: '/lexis/applications/999000001' },
+      response: { status: 409, data: { code: 'DUPLICATE_APPLICATION' } },
+    }
+
+    await expect(registeredResponseRejectedInterceptor()(validationConflict)).rejects.toBe(
+      validationConflict,
+    )
+    expect(listener).not.toHaveBeenCalled()
+    expect(requestMock).not.toHaveBeenCalled()
+
+    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, listener)
+  })
 
   it('adds auth headers through AxiosHeaders-style setters when available', async () => {
     const headerValues: Record<string, string> = {}

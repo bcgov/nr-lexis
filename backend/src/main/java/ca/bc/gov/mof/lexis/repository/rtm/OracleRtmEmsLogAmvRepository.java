@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.rtm;
 
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
+
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.math.BigDecimal;
@@ -13,6 +15,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -27,6 +30,7 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       "RTM_EMS_LOG_AMV_UPDATE(?,?,?,?,?,?,?)";
   private static final String SELECT_PROCEDURE =
       "RTM_EMS_LOG_AMV_SELECT(?,?,?,?,?,?)";
+  private static final String BLANK_GRADE_SENTINEL = "BLANK";
 
   public OracleRtmEmsLogAmvRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -49,8 +53,9 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
    * filters. RTM_EMS_LOG_AMV_SELECT requires exact species and growth-code values, so passing
    * null for either filter cannot produce a usable matrix.
    *
-   * <p>A {@code null} result means neither the public synonym nor the THE schema table was
-   * readable. An empty list is a successful query with no values for the requested date.
+   * An empty list is a successful query with no values for the requested date. Failure to read
+   * both the public synonym and the THE schema table is surfaced as an authoritative data-source
+   * outage.
    */
   public List<RtmEmsLogAmvRowDto> findEffectiveDateRows(
       String species, String growthIndicator, LocalDate effectiveDate) {
@@ -58,17 +63,17 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    List<RtmEmsLogAmvRowDto> rows =
-        queryEffectiveDateRows("EMS_LOG_AMV", species, growthIndicator, effectiveDate);
-    if (rows != null) {
-      return rows;
+    try {
+      return queryEffectiveDateRows("EMS_LOG_AMV", species, growthIndicator, effectiveDate);
+    } catch (DataAccessException synonymFailure) {
+      try {
+        return queryEffectiveDateRows(
+            "THE.EMS_LOG_AMV", species, growthIndicator, effectiveDate);
+      } catch (DataAccessException schemaFailure) {
+        throw authoritativeReadFailure(
+            "find_effective_date", synonymFailure, schemaFailure);
+      }
     }
-
-    rows = queryEffectiveDateRows("THE.EMS_LOG_AMV", species, growthIndicator, effectiveDate);
-    if (rows == null) {
-      logger.warn("RTM AMV effective-date query could not read EMS_LOG_AMV.");
-    }
-    return rows;
   }
 
   public List<RtmEmsLogAmvRowDto> findLatestEffectiveDateRowsBefore(LocalDate effectiveDate) {
@@ -76,17 +81,16 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    List<RtmEmsLogAmvRowDto> rows =
-        queryLatestEffectiveDateRowsBefore("EMS_LOG_AMV", effectiveDate);
-    if (rows != null) {
-      return rows;
+    try {
+      return queryLatestEffectiveDateRowsBefore("EMS_LOG_AMV", effectiveDate);
+    } catch (DataAccessException synonymFailure) {
+      try {
+        return queryLatestEffectiveDateRowsBefore("THE.EMS_LOG_AMV", effectiveDate);
+      } catch (DataAccessException schemaFailure) {
+        throw authoritativeReadFailure(
+            "find_latest_effective_date", synonymFailure, schemaFailure);
+      }
     }
-
-    rows = queryLatestEffectiveDateRowsBefore("THE.EMS_LOG_AMV", effectiveDate);
-    if (rows == null) {
-      logger.warn("RTM AMV latest-effective-date query could not read EMS_LOG_AMV.");
-    }
-    return rows;
   }
 
   public boolean existsExact(
@@ -98,14 +102,18 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       return false;
     }
 
-    Integer count = countExact("EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate);
-    if (count == null) {
-      count = countExact("THE.EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate);
+    try {
+      return exactlyOne(
+          countExact("EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate));
+    } catch (DataAccessException synonymFailure) {
+      try {
+        return exactlyOne(
+            countExact("THE.EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate));
+      } catch (DataAccessException schemaFailure) {
+        throw authoritativeReadFailure(
+            "verify_row_existence", synonymFailure, schemaFailure);
+      }
     }
-    if (count == null) {
-      logger.warn("RTM AMV exact row check could not verify EMS_LOG_AMV.");
-    }
-    return count != null && count > 0;
   }
 
   public boolean hasExactValue(
@@ -118,17 +126,17 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       return false;
     }
 
-    Boolean found =
-        hasExactValue("EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate, expectedValue);
-    if (found == null) {
-      found =
-          hasExactValue(
-              "THE.EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate, expectedValue);
+    try {
+      return hasExactValue(
+          "EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate, expectedValue);
+    } catch (DataAccessException synonymFailure) {
+      try {
+        return hasExactValue(
+            "THE.EMS_LOG_AMV", species, grade, growthIndicator, effectiveDate, expectedValue);
+      } catch (DataAccessException schemaFailure) {
+        throw authoritativeReadFailure("verify_saved_value", synonymFailure, schemaFailure);
+      }
     }
-    if (found == null) {
-      logger.warn("RTM AMV exact value check could not verify EMS_LOG_AMV.");
-    }
-    return Boolean.TRUE.equals(found);
   }
 
   private Integer countExact(
@@ -137,24 +145,20 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       String grade,
       String growthIndicator,
       LocalDate effectiveDate) {
-    try {
-      return jdbcTemplate.queryForObject(
-          """
-          SELECT COUNT(*)
-          FROM %s
-          WHERE SPECIES = UPPER(?)
-            AND GRADE = UPPER(?)
-            AND GROWTH_TYPE_ST = UPPER(?)
-            AND TRUNC(EFFECTIVE_DATE) = ?
-          """.formatted(tableName),
-          Integer.class,
-          trim(species),
-          trim(grade),
-          trim(growthIndicator),
-          java.sql.Date.valueOf(effectiveDate));
-    } catch (DataAccessException ignored) {
-      return null;
-    }
+    return jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*)
+        FROM %s
+        WHERE SPECIES = UPPER(?)
+          AND GRADE = UPPER(?)
+          AND GROWTH_TYPE_ST = UPPER(?)
+          AND EFFECTIVE_DATE = ?
+        """.formatted(tableName),
+        Integer.class,
+        trim(species),
+        gradeForOracle(grade),
+        trim(growthIndicator),
+        java.sql.Date.valueOf(effectiveDate));
   }
 
   private Boolean hasExactValue(
@@ -164,122 +168,135 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       String growthIndicator,
       LocalDate effectiveDate,
       BigDecimal expectedValue) {
-    try {
-      List<BigDecimal> values =
-          jdbcTemplate.queryForList(
-              """
-              SELECT AVG_MARKET_PRICE
-              FROM %s
-              WHERE SPECIES = UPPER(?)
-                AND GRADE = UPPER(?)
-                AND GROWTH_TYPE_ST = UPPER(?)
-                AND TRUNC(EFFECTIVE_DATE) = ?
-              """.formatted(tableName),
-              BigDecimal.class,
-              trim(species),
-              trim(grade),
-              trim(growthIndicator),
-              java.sql.Date.valueOf(effectiveDate));
-      return values.stream()
-          .filter(value -> value != null)
-          .anyMatch(value -> value.compareTo(expectedValue) == 0);
-    } catch (DataAccessException ignored) {
-      return null;
-    }
+    List<BigDecimal> values =
+        jdbcTemplate.queryForList(
+            """
+            SELECT AVG_MARKET_PRICE
+            FROM %s
+            WHERE SPECIES = UPPER(?)
+              AND GRADE = UPPER(?)
+              AND GROWTH_TYPE_ST = UPPER(?)
+              AND EFFECTIVE_DATE = ?
+            """.formatted(tableName),
+            BigDecimal.class,
+            trim(species),
+            gradeForOracle(grade),
+            trim(growthIndicator),
+            java.sql.Date.valueOf(effectiveDate));
+    return values != null
+        && values.size() == 1
+        && values.get(0) != null
+        && values.get(0).compareTo(expectedValue) == 0;
+  }
+
+  private boolean exactlyOne(Integer count) {
+    return count != null && count == 1;
+  }
+
+  private DataAccessResourceFailureException authoritativeReadFailure(
+      String operation, RuntimeException synonymFailure, RuntimeException schemaFailure) {
+    logger.warn(
+        "event=lexis_rtm_amv operation={} outcome=database_unavailable failureType={}",
+        operation,
+        exceptionType(schemaFailure));
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException(
+            "Authoritative RTM AMV data is temporarily unavailable.",
+            synonymFailure);
+    failure.addSuppressed(schemaFailure);
+    return failure;
   }
 
   private List<RtmEmsLogAmvRowDto> queryEffectiveDateRows(
       String tableName, String species, String growthIndicator, LocalDate effectiveDate) {
-    try {
-      StringBuilder query =
-          new StringBuilder(
-              """
-              SELECT SPECIES,
-                     DECODE(GRADE, ' ', 'BLANK', GRADE),
-                     GROWTH_TYPE_ST,
-                     EFFECTIVE_DATE,
-                     EFFECTIVE_DATE,
-                     AVG_MARKET_PRICE,
-                     AVG_MARKET_PRICE
-              FROM %s
-              WHERE EFFECTIVE_DATE >= ?
-                AND EFFECTIVE_DATE < ?
-              """.formatted(tableName));
-      List<Object> parameters = new ArrayList<>();
-      parameters.add(java.sql.Date.valueOf(effectiveDate));
-      parameters.add(java.sql.Date.valueOf(effectiveDate.plusDays(1)));
+    StringBuilder query =
+        new StringBuilder(
+            """
+            SELECT SPECIES,
+                   DECODE(GRADE, ' ', 'BLANK', GRADE),
+                   GROWTH_TYPE_ST,
+                   EFFECTIVE_DATE,
+                   EFFECTIVE_DATE,
+                   AVG_MARKET_PRICE,
+                   AVG_MARKET_PRICE
+            FROM %s
+            WHERE EFFECTIVE_DATE >= ?
+              AND EFFECTIVE_DATE < ?
+            """.formatted(tableName));
+    List<Object> parameters = new ArrayList<>();
+    parameters.add(java.sql.Date.valueOf(effectiveDate));
+    parameters.add(java.sql.Date.valueOf(effectiveDate.plusDays(1)));
 
-      String normalizedSpecies = trim(species);
-      if (normalizedSpecies != null) {
-        query.append(" AND SPECIES = UPPER(?)");
-        parameters.add(normalizedSpecies);
-      }
-
-      String normalizedGrowthIndicator = trim(growthIndicator);
-      if (normalizedGrowthIndicator != null) {
-        query.append(" AND GROWTH_TYPE_ST = UPPER(?)");
-        parameters.add(normalizedGrowthIndicator);
-      }
-
-      query.append(" ORDER BY GRADE, SPECIES, GROWTH_TYPE_ST");
-      return jdbcTemplate.query(
-          query.toString(),
-          (rs, rowNumber) ->
-              new RtmEmsLogAmvRowDto(
-                  getString(rs, 1),
-                  getString(rs, 2),
-                  getString(rs, 3),
-                  formatDateValue(toLocalDate(rs.getDate(4))),
-                  formatDateValue(toLocalDate(rs.getDate(5))),
-                  asBigDecimal(rs, 6),
-                  asBigDecimal(rs, 7),
-                  "0"),
-          parameters.toArray());
-    } catch (DataAccessException ignored) {
-      return null;
+    String normalizedSpecies = trim(species);
+    if (normalizedSpecies != null) {
+      query.append(" AND SPECIES = UPPER(?)");
+      parameters.add(normalizedSpecies);
     }
+
+    String normalizedGrowthIndicator = trim(growthIndicator);
+    if (normalizedGrowthIndicator != null) {
+      query.append(" AND GROWTH_TYPE_ST = UPPER(?)");
+      parameters.add(normalizedGrowthIndicator);
+    }
+
+    query.append(" ORDER BY GRADE, SPECIES, GROWTH_TYPE_ST");
+    return jdbcTemplate.query(
+        query.toString(),
+        (rs, rowNumber) ->
+            new RtmEmsLogAmvRowDto(
+                getString(rs, 1),
+                getString(rs, 2),
+                getString(rs, 3),
+                formatDateValue(toLocalDate(rs.getDate(4))),
+                formatDateValue(toLocalDate(rs.getDate(5))),
+                asBigDecimal(rs, 6),
+                asBigDecimal(rs, 7),
+                "0"),
+        parameters.toArray());
   }
 
   private List<RtmEmsLogAmvRowDto> queryLatestEffectiveDateRowsBefore(
       String tableName, LocalDate effectiveDate) {
-    try {
-      String query =
-          """
-          WITH LATEST_DATE AS (
-            SELECT MAX(TRUNC(EFFECTIVE_DATE)) AS EFFECTIVE_DATE
-            FROM %s
-            WHERE EFFECTIVE_DATE < ?
-          )
-          SELECT VALUE_ROWS.SPECIES,
-                 DECODE(VALUE_ROWS.GRADE, ' ', 'BLANK', VALUE_ROWS.GRADE),
-                 VALUE_ROWS.GROWTH_TYPE_ST,
-                 VALUE_ROWS.EFFECTIVE_DATE,
-                 VALUE_ROWS.EFFECTIVE_DATE,
-                 VALUE_ROWS.AVG_MARKET_PRICE,
-                 VALUE_ROWS.AVG_MARKET_PRICE
-          FROM %s VALUE_ROWS
-          JOIN LATEST_DATE
-            ON VALUE_ROWS.EFFECTIVE_DATE >= LATEST_DATE.EFFECTIVE_DATE
-           AND VALUE_ROWS.EFFECTIVE_DATE < LATEST_DATE.EFFECTIVE_DATE + 1
-          ORDER BY VALUE_ROWS.GRADE, VALUE_ROWS.SPECIES, VALUE_ROWS.GROWTH_TYPE_ST
-          """.formatted(tableName, tableName);
+    String query =
+        """
+        WITH RANKED_VALUES AS (
+          SELECT SPECIES,
+                 GRADE,
+                 GROWTH_TYPE_ST,
+                 EFFECTIVE_DATE,
+                 AVG_MARKET_PRICE,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY SPECIES, GRADE, GROWTH_TYPE_ST
+                   ORDER BY EFFECTIVE_DATE DESC
+                 ) AS VALUE_RANK
+          FROM %s
+          WHERE EFFECTIVE_DATE < ?
+        )
+        SELECT SPECIES,
+               DECODE(GRADE, ' ', 'BLANK', GRADE),
+               GROWTH_TYPE_ST,
+               EFFECTIVE_DATE,
+               EFFECTIVE_DATE,
+               AVG_MARKET_PRICE,
+               AVG_MARKET_PRICE
+        FROM RANKED_VALUES
+        WHERE VALUE_RANK = 1
+        ORDER BY GRADE, SPECIES, GROWTH_TYPE_ST
+        """.formatted(tableName);
 
-      return jdbcTemplate.query(
-          query,
-          (rs, rowNumber) ->
-              new RtmEmsLogAmvRowDto(
-                  getString(rs, 1),
-                  getString(rs, 2),
-                  getString(rs, 3),
-                  formatDateValue(toLocalDate(rs.getDate(4))),
-                  formatDateValue(toLocalDate(rs.getDate(5))),
-                  asBigDecimal(rs, 6),
-                  asBigDecimal(rs, 7),
-                  "0"),
-          java.sql.Date.valueOf(effectiveDate));
-    } catch (DataAccessException ignored) {
-      return null;
-    }
+    return jdbcTemplate.query(
+        query,
+        (rs, rowNumber) ->
+            new RtmEmsLogAmvRowDto(
+                getString(rs, 1),
+                getString(rs, 2),
+                getString(rs, 3),
+                formatDateValue(toLocalDate(rs.getDate(4))),
+                formatDateValue(toLocalDate(rs.getDate(5))),
+                asBigDecimal(rs, 6),
+                asBigDecimal(rs, 7),
+                "0"),
+        java.sql.Date.valueOf(effectiveDate));
   }
 
   private List<RtmEmsLogAmvRowDto> executeFind(
@@ -289,26 +306,31 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       LocalDate updateDate) {
     try {
       String call = "{ call " + SELECT_PROCEDURE + " }";
-      return jdbcTemplate.execute(
-          call,
-          (CallableStatement cs) -> {
-            cs.registerOutParameter(1, Types.VARCHAR);
-            cs.registerOutParameter(2, Types.REF_CURSOR);
-            cs.setString(3, trim(species));
-            cs.setString(4, trim(growthIndicator));
-            bindDateOrNull(cs, 5, retrievalDate);
-            bindDateOrNull(cs, 6, updateDate);
-            cs.execute();
+      List<RtmEmsLogAmvRowDto> rows =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatement cs) -> {
+                cs.registerOutParameter(1, Types.VARCHAR);
+                cs.registerOutParameter(2, Types.REF_CURSOR);
+                cs.setString(3, trim(species));
+                cs.setString(4, trim(growthIndicator));
+                bindDateOrNull(cs, 5, retrievalDate);
+                bindDateOrNull(cs, 6, updateDate);
+                cs.execute();
 
-            String returnCode = trim(cs.getString(1));
+                String returnCode = trim(cs.getString(1));
 
-            try (ResultSet rs = (ResultSet) cs.getObject(2)) {
-              return mapResults(rs, returnCode);
-            }
-          });
-    } catch (Exception ex) {
-      logger.warn("RTM AMV select failed: {}", ex.getMessage());
-      return List.of();
+                try (ResultSet rs = (ResultSet) cs.getObject(2)) {
+                  return mapResults(rs, returnCode);
+                }
+              });
+      if (rows == null) {
+        throw new DataAccessResourceFailureException(
+            "The RTM AMV procedure returned no result contract.");
+      }
+      return rows;
+    } catch (RuntimeException ex) {
+      throw procedureFailure("find", ex);
     }
   }
 
@@ -319,10 +341,10 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       LocalDate retrievalDate,
       BigDecimal newValue) {
     String call = "{ call " + INSERT_PROCEDURE + " }";
-    return executeMutation(call, (cs) -> {
+    return executeMutation("insert", call, (cs) -> {
       cs.registerOutParameter(1, Types.VARCHAR);
       cs.setString(2, trim(species));
-      cs.setString(3, trim(grade));
+      cs.setString(3, gradeForOracle(grade));
       cs.setString(4, trim(growthIndicator));
       bindDateOrNull(cs, 5, retrievalDate);
       if (newValue == null) {
@@ -341,10 +363,10 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       LocalDate updateDate,
       BigDecimal newValue) {
     String call = "{ call " + UPDATE_PROCEDURE + " }";
-    return executeMutation(call, (cs) -> {
+    return executeMutation("update", call, (cs) -> {
       cs.registerOutParameter(1, Types.VARCHAR);
       cs.setString(2, trim(species));
-      cs.setString(3, trim(grade));
+      cs.setString(3, gradeForOracle(grade));
       cs.setString(4, trim(growthIndicator));
       bindDateOrNull(cs, 5, retrievalDate);
       bindDateOrNull(cs, 6, updateDate);
@@ -356,9 +378,7 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
     });
   }
 
-  private String executeMutation(
-      String call,
-      ProcedureCallback callback) {
+  private String executeMutation(String operation, String call, ProcedureCallback callback) {
     try {
       return jdbcTemplate.execute(
           call,
@@ -367,10 +387,19 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
             cs.execute();
             return trim(cs.getString(1));
           });
-    } catch (Exception ex) {
-      logger.warn("RTM AMV procedure execution failed [{}]: {}", call, ex.getMessage());
-      return "EXCEPTION";
+    } catch (RuntimeException ex) {
+      throw procedureFailure(operation, ex);
     }
+  }
+
+  private DataAccessResourceFailureException procedureFailure(
+      String operation, RuntimeException cause) {
+    logger.warn(
+        "event=lexis_rtm_amv operation={} outcome=database_unavailable failureType={}",
+        operation,
+        exceptionType(cause));
+    return new DataAccessResourceFailureException(
+        "The RTM AMV database operation is temporarily unavailable.", cause);
   }
 
   private interface ProcedureCallback {
@@ -385,47 +414,48 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
     }
   }
 
-  private BigDecimal asBigDecimal(ResultSet rs, int index) {
-    try {
-      return rs.getBigDecimal(index);
-    } catch (SQLException ex) {
-      return null;
-    }
+  private BigDecimal asBigDecimal(ResultSet rs, int index) throws SQLException {
+    return rs.getBigDecimal(index);
   }
 
-  private List<RtmEmsLogAmvRowDto> mapResults(ResultSet rs, String returnCode) {
+  private List<RtmEmsLogAmvRowDto> mapResults(ResultSet rs, String returnCode) throws SQLException {
     List<RtmEmsLogAmvRowDto> rows = new ArrayList<>();
     if (rs == null) {
-      return rows;
+      throw new SQLException("RTM AMV procedure did not return its required cursor.");
     }
 
-    try {
-      while (rs.next()) {
-        rows.add(
-            new RtmEmsLogAmvRowDto(
-                getString(rs, 1),
-                getString(rs, 2),
-                getString(rs, 3),
-                formatDateValue(toLocalDate(rs.getDate(4))),
-                formatDateValue(toLocalDate(rs.getDate(5))),
-                asBigDecimal(rs, 6),
-                asBigDecimal(rs, 7),
-                returnCode));
-      }
-    } catch (SQLException ignored) {
-      // Let method return accumulated rows when cursor read fails.
+    while (rs.next()) {
+      rows.add(
+          new RtmEmsLogAmvRowDto(
+              getString(rs, 1),
+              gradeForApi(rs.getString(2)),
+              getString(rs, 3),
+              formatDateValue(toLocalDate(rs.getDate(4))),
+              formatDateValue(toLocalDate(rs.getDate(5))),
+              asBigDecimal(rs, 6),
+              asBigDecimal(rs, 7),
+              returnCode));
     }
 
     return rows;
   }
 
-  private String getString(ResultSet rs, int index) {
-    try {
-      String value = rs.getString(index);
-      return value == null ? null : value.trim();
-    } catch (SQLException ex) {
+  private String getString(ResultSet rs, int index) throws SQLException {
+    String value = rs.getString(index);
+    return value == null ? null : value.trim();
+  }
+
+  private String gradeForOracle(String grade) {
+    String normalizedGrade = trim(grade);
+    return BLANK_GRADE_SENTINEL.equalsIgnoreCase(normalizedGrade) ? " " : normalizedGrade;
+  }
+
+  private String gradeForApi(String grade) {
+    if (grade == null) {
       return null;
     }
+    String normalizedGrade = grade.trim();
+    return normalizedGrade.isEmpty() ? BLANK_GRADE_SENTINEL : normalizedGrade;
   }
 
   private String formatDateValue(LocalDate value) {

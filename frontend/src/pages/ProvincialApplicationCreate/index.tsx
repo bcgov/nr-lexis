@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
+  DismissibleTag,
   Grid,
+  Modal,
   Tab,
   TabList,
   TabPanel,
   TabPanels,
   Tabs,
-  Tag,
   TextArea,
   TextInput,
   Tile,
@@ -17,21 +18,29 @@ import {
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import PageHeader from '@/components/PageHeader'
+import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
+import ApplicationAccuracyConfirmation, {
+  APPLICATION_ACCURACY_ACKNOWLEDGEMENT,
+} from '@/components/ApplicationAccuracyConfirmation'
+import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import {
   calculateApplicationTermDays,
   nonNegativeWholeNumberFieldError,
 } from '@/pages/shared/application-term-utils'
 import {
+  averageLogVolumeFieldError,
   isAgentApplicant,
   isSelectableClientContact,
   isSelectableClientLocation,
   productTypeRequiresGrowthType,
+  productTypeRequiresLogDetails,
   resolveClientContactName,
   resolveClientLocationCode,
   toSearchOption,
 } from '@/pages/shared/application-form-utils'
 import {
-  atMostOneDecimalFieldError,
+  atMostTwoDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
@@ -58,8 +67,10 @@ import {
   fetchApplicationRemainingSpecies,
   type ApplicationCodeOption,
 } from '@/service/provincial-application-items-service'
+import { useAuth } from '@/context/auth/useAuth'
+import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import IsoDatePicker from '../../components/IsoDatePicker'
-import { formatLocalIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
@@ -100,6 +111,9 @@ const APPLICATION_CREATE_TAB_INDEX = {
   remarks: 6,
 } as const
 
+const productTypeSupportsPackages = (productTypeCode: string): boolean =>
+  ['H', 'T'].includes(productTypeCode.trim().toUpperCase())
+
 const APPLICATION_CREATE_FIELD_TAB: Partial<Record<ProvincialApplicationCreateField, number>> = {
   ownerClientNumber: APPLICATION_CREATE_TAB_INDEX.clients,
   ownerClientLocationCode: APPLICATION_CREATE_TAB_INDEX.clients,
@@ -136,9 +150,9 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   productTypeCode: 'H',
   ageClass: '',
   exemptionType: 'S',
-  region: '1903',
+  region: '',
   applicationDate: '',
-  applicationTermDays: '',
+  applicationTermDays: '180',
   applicationTermMonths: '',
   applicationTermYears: '',
   receivedDate: '',
@@ -152,29 +166,49 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   comments: '',
 }
 
-const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicationCreateForm => {
-  const today = formatLocalIsoDate(new Date())
+const buildInitialFormFromQuery = (
+  query: URLSearchParams,
+  provincialSubmitterIdentityLocked: boolean,
+  authoritativeOwnerClientNumber: string,
+  canChangeApplicantType: boolean,
+): ProvincialApplicationCreateForm => {
+  const today = formatBusinessIsoDate()
   return {
     ...INITIAL_FORM,
-    ownerClientNumber: query.get('ownerClientNumber') ?? '',
-    ownerClientLocationCode:
-      query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? '',
+    ownerClientNumber: provincialSubmitterIdentityLocked
+      ? authoritativeOwnerClientNumber
+      : (query.get('ownerClientNumber') ?? ''),
+    ownerClientLocationCode: provincialSubmitterIdentityLocked
+      ? authoritativeOwnerClientNumber
+        ? '00'
+        : ''
+      : (query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? ''),
     ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
-    agentClientNumber: query.get('agentClientNumber') ?? query.get('applicantClientNumber') ?? '',
-    agentClientLocationCode:
-      query.get('agentClientLocationCode') ?? query.get('agentClientLocation') ?? '',
-    agentContactName: query.get('agentContactName') ?? '',
-    applicantTypeCode: query.get('ownerApplicantType') ?? query.get('applicantType') ?? 'O',
+    agentClientNumber: canChangeApplicantType
+      ? (query.get('agentClientNumber') ?? query.get('applicantClientNumber') ?? '')
+      : '',
+    agentClientLocationCode: canChangeApplicantType
+      ? (query.get('agentClientLocationCode') ?? query.get('agentClientLocation') ?? '')
+      : '',
+    agentContactName: canChangeApplicantType ? (query.get('agentContactName') ?? '') : '',
+    applicantTypeCode: canChangeApplicantType
+      ? (query.get('ownerApplicantType') ?? query.get('applicantType') ?? 'O')
+      : 'O',
     productTypeCode: query.get('productTypeCode') ?? INITIAL_FORM.productTypeCode,
     ageClass: query.get('ageClass') ?? query.get('growthTypeCode') ?? '',
     exemptionType:
       query.get('exemptionReason') ??
       query.get('exemptionReasonCode') ??
       INITIAL_FORM.exemptionType,
-    region: query.get('region') ?? query.get('orgUnitNumber') ?? INITIAL_FORM.region,
+    region: provincialSubmitterIdentityLocked
+      ? ''
+      : (query.get('region') ?? query.get('orgUnitNumber') ?? INITIAL_FORM.region),
     applicationDate: query.get('applicationDate') ?? today,
     applicationTermDays:
-      query.get('applicationTermDays') ?? query.get('exemptionTerm') ?? query.get('termDays') ?? '',
+      query.get('applicationTermDays') ??
+      query.get('exemptionTerm') ??
+      query.get('termDays') ??
+      INITIAL_FORM.applicationTermDays,
     applicationTermMonths: query.get('applicationTermMonths') ?? query.get('termMonths') ?? '',
     applicationTermYears: query.get('applicationTermYears') ?? query.get('termYears') ?? '',
     receivedDate: query.get('receivedDate') ?? today,
@@ -231,14 +265,31 @@ type PageStatus = {
 const ProvincialApplicationCreatePage = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { capabilities, canPerform } = useAuth()
+  const canChangeApplicantType = canPerform('/changeApplicantType')
+  const provincialSubmitterIdentityLocked = hasProvincialSubmitterRole(capabilities.roles)
+  const authoritativeOwnerClientNumber = capabilities.forestClientNumber?.trim() ?? ''
+  const authoritativeOrgUnitNo = capabilities.orgUnitNo?.trim() ?? ''
+  const provincialSubmitterScopeUnavailable =
+    provincialSubmitterIdentityLocked && !authoritativeOwnerClientNumber
   const [form, setForm] = useState<ProvincialApplicationCreateForm>(() =>
-    buildInitialFormFromQuery(searchParams),
+    buildInitialFormFromQuery(
+      searchParams,
+      provincialSubmitterIdentityLocked,
+      authoritativeOwnerClientNumber,
+      canChangeApplicantType,
+    ),
   )
+  const draftBaselineRef = useRef(form)
+  const [formEdited, setFormEdited] = useState(false)
+  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
   const [growthTypes, setGrowthTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
   const [regions, setRegions] = useState<SearchOption[]>([])
   const [currentSchedules, setCurrentSchedules] = useState<SearchOption[]>([])
+  const [optionsLoaded, setOptionsLoaded] = useState(false)
+  const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
   const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
@@ -259,27 +310,121 @@ const ProvincialApplicationCreatePage = () => {
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [accuracyConfirmationOpen, setAccuracyConfirmationOpen] = useState(false)
+  const [accuracyConfirmed, setAccuracyConfirmed] = useState(false)
+  const [packageSavePromptOpen, setPackageSavePromptOpen] = useState(false)
+  const createPackageButtonRef = useRef<HTMLButtonElement>(null)
   const [touchedFields, setTouchedFields] = useState<
     TouchedFields<ProvincialApplicationCreateField>
   >({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
-  const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState(
+  const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState<number>(
     APPLICATION_CREATE_TAB_INDEX.summary,
   )
 
   useEffect(() => {
+    if (createdRecordPath) {
+      navigate(createdRecordPath)
+    }
+  }, [createdRecordPath, navigate])
+
+  useEffect(() => {
     const loadOptions = async () => {
-      const options = await fetchProvincialApplicationOptions()
-      setProductTypes(options.productTypes)
-      setGrowthTypes(options.growthTypes)
-      setExemptionReasons(options.exemptionReasons)
-      setRegions(options.regions)
-      setCurrentSchedules(options.currentSchedules)
-      setForm((current) => applyScheduleDefaults(current, options.currentSchedules))
+      try {
+        const options = await fetchProvincialApplicationOptions()
+        setProductTypes(options.productTypes)
+        setGrowthTypes(options.growthTypes)
+        setExemptionReasons(options.exemptionReasons)
+        setRegions(options.regions)
+        setCurrentSchedules(options.currentSchedules)
+        setForm((current) => {
+          const withScheduleDefaults = applyScheduleDefaults(current, options.currentSchedules)
+          if (!provincialSubmitterIdentityLocked) {
+            return withScheduleDefaults
+          }
+
+          const defaultRegion = options.regions.some(
+            (option) => option.value === authoritativeOrgUnitNo,
+          )
+            ? authoritativeOrgUnitNo
+            : ''
+          return withScheduleDefaults.region === defaultRegion
+            ? withScheduleDefaults
+            : { ...withScheduleDefaults, region: defaultRegion }
+        })
+        setOptionsUnavailable(false)
+      } catch {
+        setOptionsUnavailable(true)
+      } finally {
+        setOptionsLoaded(true)
+      }
     }
 
     void loadOptions()
-  }, [])
+  }, [authoritativeOrgUnitNo, provincialSubmitterIdentityLocked])
+
+  useEffect(() => {
+    if (!provincialSubmitterIdentityLocked) {
+      return undefined
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (!isActive) {
+        return
+      }
+
+      setForm((current) => {
+        const ownerClientLocationCode = authoritativeOwnerClientNumber ? '00' : ''
+        if (
+          current.ownerClientNumber === authoritativeOwnerClientNumber &&
+          current.ownerClientLocationCode === ownerClientLocationCode
+        ) {
+          return current
+        }
+        return {
+          ...current,
+          ownerClientNumber: authoritativeOwnerClientNumber,
+          ownerClientLocationCode,
+        }
+      })
+    })
+
+    return () => {
+      isActive = false
+    }
+  }, [authoritativeOwnerClientNumber, provincialSubmitterIdentityLocked])
+
+  useEffect(() => {
+    if (canChangeApplicantType) {
+      return undefined
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (!isActive) {
+        return
+      }
+      setForm((current) =>
+        current.applicantTypeCode === 'O' &&
+        !current.agentClientNumber &&
+        !current.agentClientLocationCode &&
+        !current.agentContactName
+          ? current
+          : {
+              ...current,
+              applicantTypeCode: 'O',
+              agentClientNumber: '',
+              agentClientLocationCode: '',
+              agentContactName: '',
+            },
+      )
+    })
+
+    return () => {
+      isActive = false
+    }
+  }, [canChangeApplicantType])
 
   useEffect(() => {
     if (exemptionReasons.length === 0) {
@@ -753,9 +898,21 @@ const ProvincialApplicationCreatePage = () => {
             ? null
             : 'Applicant type must be Owner or Agent.',
       ),
-      productTypeCode: requiredFieldError(form.productTypeCode, 'Product type') ?? undefined,
+      productTypeCode: firstValidationError(
+        () => requiredFieldError(form.productTypeCode, 'Product type'),
+        () =>
+          productTypes.some((option) => option.value === form.productTypeCode)
+            ? null
+            : 'Select a valid product type.',
+      ),
       ageClass: productTypeRequiresGrowthType(form.productTypeCode)
-        ? (requiredFieldError(form.ageClass, 'Age class') ?? undefined)
+        ? firstValidationError(
+            () => requiredFieldError(form.ageClass, 'Growth type'),
+            () =>
+              growthTypes.some((option) => option.value === form.ageClass)
+                ? null
+                : 'Select a valid growth type.',
+          )
         : undefined,
       speciesCodes:
         form.speciesCodes.length === 0
@@ -767,14 +924,24 @@ const ProvincialApplicationCreatePage = () => {
                 ? 'At least one application species is required, but no species are available for the selected region and product type.'
                 : 'At least one application species is required.'
           : undefined,
-      exemptionType:
-        requiredMaxLengthFieldError(
-          form.exemptionType,
-          1,
-          'Exemption reason code',
-          'Exemption reason',
-        ) ?? undefined,
-      region: requiredFieldError(form.region, 'Region') ?? undefined,
+      exemptionType: firstValidationError(
+        () =>
+          requiredMaxLengthFieldError(
+            form.exemptionType,
+            1,
+            'Exemption reason code',
+            'Exemption reason',
+          ),
+        () =>
+          exemptionReasons.some((option) => option.value === form.exemptionType)
+            ? null
+            : 'Select a valid exemption reason.',
+      ),
+      region: firstValidationError(
+        () => requiredFieldError(form.region, 'Region'),
+        () =>
+          regions.some((option) => option.value === form.region) ? null : 'Select a valid region.',
+      ),
       applicationDate: firstValidationError(
         () => requiredFieldError(form.applicationDate, 'Application date'),
         () => isoDateFieldError(form.applicationDate),
@@ -793,32 +960,48 @@ const ProvincialApplicationCreatePage = () => {
         () => requiredFieldError(form.receivedDate, 'Received date'),
         () => isoDateFieldError(form.receivedDate),
       ),
-      productLocation: requiredFieldError(form.productLocation, 'Location of logs') ?? undefined,
+      exportScheduleId:
+        !form.exportScheduleId ||
+        currentSchedules.some((option) => option.value === form.exportScheduleId)
+          ? undefined
+          : 'Select a valid listing date.',
+      productLocation: productTypeRequiresLogDetails(form.productTypeCode)
+        ? (requiredFieldError(form.productLocation, 'Location of logs') ?? undefined)
+        : undefined,
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
         () => positiveNumericFieldError(form.applicationVolume),
-        () => maxNumericValueFieldError(form.applicationVolume, 9999999.9, 'Application volume'),
-        () => atMostOneDecimalFieldError(form.applicationVolume, 'Application volume'),
+        () => maxNumericValueFieldError(form.applicationVolume, 9999999.99, 'Application volume'),
+        () => atMostTwoDecimalFieldError(form.applicationVolume, 'Application volume'),
       ),
-      averageLogVolume: firstValidationError(
-        () => requiredFieldError(form.averageLogVolume, 'Average log volume'),
-        () => positiveNumericFieldError(form.averageLogVolume),
-        () => maxNumericValueFieldError(form.averageLogVolume, 99.9, 'Average log volume'),
-        () => atMostOneDecimalFieldError(form.averageLogVolume, 'Average log volume'),
-      ),
+      averageLogVolume: productTypeRequiresLogDetails(form.productTypeCode)
+        ? averageLogVolumeFieldError(form.averageLogVolume)
+        : undefined,
     }),
     [
       applicationSpeciesOptions.length,
       calculatedApplicationTermDays,
+      currentSchedules,
+      exemptionReasons,
       form,
+      growthTypes,
       isLoadingApplicationSpecies,
+      productTypes,
+      regions,
     ],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
     [fieldErrors],
   )
-  const missingRequiredOptions = productTypes.length === 0 && showMissingRequiredOptions
+  const requiredApplicationOptionsMissing =
+    optionsLoaded &&
+    !optionsUnavailable &&
+    (productTypes.length === 0 ||
+      exemptionReasons.length === 0 ||
+      regions.length === 0 ||
+      (productTypeRequiresGrowthType(form.productTypeCode) && growthTypes.length === 0))
+  const missingRequiredOptions = requiredApplicationOptionsMissing && showMissingRequiredOptions
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
@@ -884,6 +1067,13 @@ const ProvincialApplicationCreatePage = () => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
   }
 
+  const markFormEdited = (): void => {
+    if (!formEdited) {
+      draftBaselineRef.current = form
+    }
+    setFormEdited(true)
+  }
+
   const onAddApplicationSpecies = (): void => {
     const speciesCode = applicationSpeciesCandidate.trim()
     if (
@@ -894,6 +1084,7 @@ const ProvincialApplicationCreatePage = () => {
       return
     }
 
+    markFormEdited()
     setForm((current) => ({
       ...current,
       speciesCodes: [...current.speciesCodes, speciesCode],
@@ -903,6 +1094,7 @@ const ProvincialApplicationCreatePage = () => {
   }
 
   const onRemoveApplicationSpecies = (speciesCode: string): void => {
+    markFormEdited()
     setForm((current) => ({
       ...current,
       speciesCodes: current.speciesCodes.filter((code) => code !== speciesCode),
@@ -920,7 +1112,23 @@ const ProvincialApplicationCreatePage = () => {
     (field) => !!fieldErrors[field],
   )
 
-  const onSave = async () => {
+  const onSave = async (
+    accuracyAcknowledged = false,
+    navigateToCreatedRecord = true,
+  ): Promise<boolean> => {
+    if (provincialSubmitterIdentityLocked && !accuracyAcknowledged) {
+      return false
+    }
+    if (
+      !optionsLoaded ||
+      optionsUnavailable ||
+      requiredApplicationOptionsMissing ||
+      isLoadingOwnerClientLocations ||
+      isLoadingAgentClientLocations ||
+      provincialSubmitterScopeUnavailable
+    ) {
+      return false
+    }
     if (hasValidationError) {
       if (firstInvalidField) {
         setSelectedApplicationTabIndex(
@@ -933,7 +1141,7 @@ const ProvincialApplicationCreatePage = () => {
         title: 'Validation Error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
       })
-      return
+      return false
     }
 
     setStatus(null)
@@ -944,16 +1152,20 @@ const ProvincialApplicationCreatePage = () => {
         applicationTermDays: calculatedApplicationTermDays,
       })
       if (result.success) {
+        draftBaselineRef.current = form
+        setFormEdited(false)
         if (result.createdId) {
-          navigate(`/provincial/application/${encodeURIComponent(result.createdId)}`)
-          return
+          if (navigateToCreatedRecord) {
+            setCreatedRecordPath(`/provincial/application/${encodeURIComponent(result.createdId)}`)
+          }
+          return true
         }
         setStatus({
           kind: 'success',
           title: 'Application Saved',
           message: 'Application saved successfully.',
         })
-        return
+        return true
       }
 
       setStatus({
@@ -962,6 +1174,7 @@ const ProvincialApplicationCreatePage = () => {
         message:
           'Application save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } catch (error) {
       console.error(error)
       setStatus({
@@ -970,39 +1183,87 @@ const ProvincialApplicationCreatePage = () => {
         message:
           'Application save failed. Please review the form and try again. If the problem persists, contact support.',
       })
+      return false
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  const closeAccuracyConfirmation = () => {
+    setAccuracyConfirmationOpen(false)
+    setAccuracyConfirmed(false)
+  }
+
+  const onRequestSave = () => {
+    if (!provincialSubmitterIdentityLocked) {
+      void onSave(false, true)
+      return
+    }
+    setAccuracyConfirmed(false)
+    setAccuracyConfirmationOpen(true)
+  }
+
+  const onConfirmAccuracy = async () => {
+    if (!accuracyConfirmed || isSubmitting) return
+    await onSave(true, true)
+  }
+
+  const onDiscardCreateDraft = (): void => {
+    setForm(draftBaselineRef.current)
+    setFormEdited(false)
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
+    setStatus(null)
+    closeAccuracyConfirmation()
+  }
+
+  const isCreateDraftDirty = formEdited && !formValuesEqual(form, draftBaselineRef.current)
+
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-application-create-page">
       <Column sm={4} md={8} lg={16}>
-        <div className="application-detail-title-row">
-          <h1>Create provincial application</h1>
-          <dl
-            className="application-detail-header-metrics"
-            role="group"
-            aria-label="New application state"
-          >
-            <div>
-              <dt>Application number</dt>
-              <dd>New</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>New</dd>
-            </div>
-          </dl>
-        </div>
+        <PageHeader
+          title="Create provincial application"
+          subtitle="Enter application details and save a new provincial application."
+          statusPlacement="end"
+          status={
+            <dl
+              className="application-detail-header-metrics"
+              role="group"
+              aria-label="New application state"
+            >
+              <div>
+                <dt>Application number</dt>
+                <dd>New</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>New</dd>
+              </div>
+            </dl>
+          }
+        />
       </Column>
+
+      {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
+
+      {provincialSubmitterScopeUnavailable && (
+        <Column sm={4} md={8} lg={16}>
+          <AppNotification
+            kind="error"
+            title="Forest client scope unavailable"
+            subtitle="Your Provincial Submitter access does not contain one authoritative forest client. Save is disabled."
+            lowContrast
+          />
+        </Column>
+      )}
 
       {missingRequiredOptions && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind="warning"
-            title="Required options unavailable"
-            subtitle="Product type values are unavailable. Save remains disabled until a valid product type is available."
+            title="Required options not configured"
+            subtitle="A required product type, exemption reason, growth type, or region list is empty. Save remains disabled."
             lowContrast
             autoDismissMs={undefined}
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
@@ -1044,8 +1305,14 @@ const ProvincialApplicationCreatePage = () => {
           </TabList>
           <TabPanels>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Application summary</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-summary-heading"
+              >
+                <h2 id="application-create-summary-heading" className="detail-tile-title">
+                  Application summary
+                </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <SearchableSelect
                     id="productTypeCode"
@@ -1055,8 +1322,10 @@ const ProvincialApplicationCreatePage = () => {
                     invalidText={fieldError('productTypeCode')}
                     placeholder="Select product type"
                     options={productTypes}
+                    disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('productTypeCode')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => {
                         if (current.productTypeCode === value) {
                           return current
@@ -1069,20 +1338,25 @@ const ProvincialApplicationCreatePage = () => {
                           endUseCode: '',
                         }
                       })
-                    }
+                    }}
                   />
-                  <SearchableSelect
-                    id="ageClass"
-                    labelText="Age class"
-                    value={form.ageClass}
-                    disabled={!productTypeRequiresGrowthType(form.productTypeCode)}
-                    invalid={!!fieldError('ageClass')}
-                    invalidText={fieldError('ageClass')}
-                    placeholder="Select age class"
-                    options={growthTypes}
-                    onBlur={() => markFieldTouched('ageClass')}
-                    onChange={(value) => setForm((current) => ({ ...current, ageClass: value }))}
-                  />
+                  {productTypeRequiresGrowthType(form.productTypeCode) && (
+                    <SearchableSelect
+                      id="ageClass"
+                      labelText="Growth type"
+                      value={form.ageClass}
+                      disabled={!optionsLoaded || optionsUnavailable}
+                      invalid={!!fieldError('ageClass')}
+                      invalidText={fieldError('ageClass')}
+                      placeholder="Select growth type"
+                      options={growthTypes}
+                      onBlur={() => markFieldTouched('ageClass')}
+                      onChange={(value) => {
+                        markFormEdited()
+                        setForm((current) => ({ ...current, ageClass: value }))
+                      }}
+                    />
+                  )}
                   <SearchableSelect
                     id="exemptionType"
                     labelText="Exemption reason"
@@ -1091,10 +1365,12 @@ const ProvincialApplicationCreatePage = () => {
                     invalidText={fieldError('exemptionType')}
                     placeholder="Select exemption reason"
                     options={exemptionReasons}
+                    disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('exemptionType')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, exemptionType: value }))
-                    }
+                    }}
                   />
                   <SearchableSelect
                     id="region"
@@ -1104,8 +1380,10 @@ const ProvincialApplicationCreatePage = () => {
                     invalidText={fieldError('region')}
                     placeholder="Select region"
                     options={regions}
+                    disabled={!optionsLoaded || optionsUnavailable}
                     onBlur={() => markFieldTouched('region')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => {
                         if (current.region === value) {
                           return current
@@ -1117,7 +1395,7 @@ const ProvincialApplicationCreatePage = () => {
                           endUseCode: '',
                         }
                       })
-                    }
+                    }}
                   />
                   <IsoDatePicker
                     id="applicationDate"
@@ -1126,9 +1404,10 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationDate')}
                     invalidText={fieldError('applicationDate')}
                     onBlur={() => markFieldTouched('applicationDate')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, applicationDate: value }))
-                    }
+                    }}
                   />
                   <TextInput
                     id="applicationTermDays"
@@ -1137,12 +1416,13 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationTermDays')}
                     invalidText={fieldError('applicationTermDays')}
                     onBlur={() => markFieldTouched('applicationTermDays')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         applicationTermDays: event.target.value,
                       }))
-                    }
+                    }}
                   />
                   <TextInput
                     id="applicationTermMonths"
@@ -1151,12 +1431,13 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationTermMonths')}
                     invalidText={fieldError('applicationTermMonths')}
                     onBlur={() => markFieldTouched('applicationTermMonths')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         applicationTermMonths: event.target.value,
                       }))
-                    }
+                    }}
                   />
                   <TextInput
                     id="applicationTermYears"
@@ -1165,12 +1446,13 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationTermYears')}
                     invalidText={fieldError('applicationTermYears')}
                     onBlur={() => markFieldTouched('applicationTermYears')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         applicationTermYears: event.target.value,
                       }))
-                    }
+                    }}
                   />
                   <IsoDatePicker
                     id="receivedDate"
@@ -1179,18 +1461,21 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('receivedDate')}
                     invalidText={fieldError('receivedDate')}
                     onBlur={() => markFieldTouched('receivedDate')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, receivedDate: value }))
-                    }
+                    }}
                   />
                   <SearchableSelect
                     id="exportScheduleId"
                     labelText="Listing date"
                     value={form.exportScheduleId}
                     options={currentSchedules}
+                    disabled={!optionsLoaded || optionsUnavailable}
                     placeholder="Search listing date"
                     onBlur={() => markFieldTouched('exportScheduleId')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         exportScheduleId: value,
@@ -1198,20 +1483,23 @@ const ProvincialApplicationCreatePage = () => {
                           ? (currentSchedules.find((option) => option.value === value)?.label ?? '')
                           : '',
                       }))
-                    }
+                    }}
                   />
-                  <TextArea
-                    id="productLocation"
-                    labelText="Location of logs"
-                    maxCount={250}
-                    value={form.productLocation}
-                    invalid={!!fieldError('productLocation')}
-                    invalidText={fieldError('productLocation')}
-                    onBlur={() => markFieldTouched('productLocation')}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, productLocation: event.target.value }))
-                    }
-                  />
+                  {productTypeRequiresLogDetails(form.productTypeCode) && (
+                    <TextArea
+                      id="productLocation"
+                      labelText="Location of logs"
+                      maxCount={250}
+                      value={form.productLocation}
+                      invalid={!!fieldError('productLocation')}
+                      invalidText={fieldError('productLocation')}
+                      onBlur={() => markFieldTouched('productLocation')}
+                      onChange={(event) => {
+                        markFormEdited()
+                        setForm((current) => ({ ...current, productLocation: event.target.value }))
+                      }}
+                    />
+                  )}
                   <TextInput
                     id="applicationVolume"
                     labelText="Application volume"
@@ -1219,41 +1507,62 @@ const ProvincialApplicationCreatePage = () => {
                     invalid={!!fieldError('applicationVolume')}
                     invalidText={fieldError('applicationVolume')}
                     onBlur={() => markFieldTouched('applicationVolume')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, applicationVolume: event.target.value }))
-                    }
+                    }}
                   />
-                  <TextInput
-                    id="averageLogVolume"
-                    labelText="Average log volume"
-                    value={form.averageLogVolume}
-                    invalid={!!fieldError('averageLogVolume')}
-                    invalidText={fieldError('averageLogVolume')}
-                    onBlur={() => markFieldTouched('averageLogVolume')}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, averageLogVolume: event.target.value }))
-                    }
-                  />
+                  {productTypeRequiresLogDetails(form.productTypeCode) && (
+                    <TextInput
+                      id="averageLogVolume"
+                      labelText="Average log volume"
+                      type="number"
+                      min={0}
+                      max={99.9}
+                      step="0.1"
+                      value={form.averageLogVolume}
+                      invalid={!!fieldError('averageLogVolume')}
+                      invalidText={fieldError('averageLogVolume')}
+                      onBlur={() => markFieldTouched('averageLogVolume')}
+                      onChange={(event) => {
+                        markFormEdited()
+                        setForm((current) => ({ ...current, averageLogVolume: event.target.value }))
+                      }}
+                    />
+                  )}
                 </div>
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Clients</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-clients-heading"
+              >
+                <h2 id="application-create-clients-heading" className="detail-tile-title">
+                  Clients
+                </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <TextInput
                     id="ownerClientNumber"
                     labelText="Owner client number"
                     value={form.ownerClientNumber}
+                    readOnly={provincialSubmitterIdentityLocked}
+                    helperText={
+                      provincialSubmitterIdentityLocked
+                        ? 'Loaded from your authenticated forest client access.'
+                        : undefined
+                    }
                     invalid={!!fieldError('ownerClientNumber')}
                     invalidText={fieldError('ownerClientNumber')}
                     onBlur={() => markFieldTouched('ownerClientNumber')}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         ownerClientNumber: event.target.value,
                       }))
-                    }
+                    }}
                   />
                   <SearchableSelect
                     id="ownerClientLocationCode"
@@ -1270,12 +1579,13 @@ const ProvincialApplicationCreatePage = () => {
                         label: location.locationName,
                       }))}
                     onBlur={() => markFieldTouched('ownerClientLocationCode')}
-                    onChange={(value) =>
+                    onChange={(value) => {
+                      markFormEdited()
                       setForm((current) => ({
                         ...current,
                         ownerClientLocationCode: value,
                       }))
-                    }
+                    }}
                   />
                   {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
                     <SearchableSelect
@@ -1295,9 +1605,10 @@ const ProvincialApplicationCreatePage = () => {
                           label: contact.contactName,
                         }))}
                       onBlur={() => markFieldTouched('ownerContactName')}
-                      onChange={(value) =>
+                      onChange={(value) => {
+                        markFormEdited()
                         setForm((current) => ({ ...current, ownerContactName: value }))
-                      }
+                      }}
                     />
                   ) : (
                     <TextInput
@@ -1309,42 +1620,53 @@ const ProvincialApplicationCreatePage = () => {
                       invalid={!!fieldError('ownerContactName')}
                       invalidText={fieldError('ownerContactName')}
                       onBlur={() => markFieldTouched('ownerContactName')}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        markFormEdited()
                         setForm((current) => ({
                           ...current,
                           ownerContactName: event.target.value,
                         }))
-                      }
+                      }}
                     />
                   )}
-                  <SearchableSelect
-                    id="applicantTypeCode"
-                    labelText="Applicant type"
-                    value={form.applicantTypeCode}
-                    placeholder="Select applicant type"
-                    options={[
-                      { value: 'O', label: 'Owner' },
-                      { value: 'A', label: 'Agent' },
-                    ]}
-                    invalid={!!fieldError('applicantTypeCode')}
-                    invalidText={fieldError('applicantTypeCode')}
-                    onBlur={() => markFieldTouched('applicantTypeCode')}
-                    onChange={(applicantTypeCode) => {
-                      setForm((current) => ({
-                        ...current,
-                        applicantTypeCode,
-                        agentClientNumber: isAgentApplicant(applicantTypeCode)
-                          ? current.agentClientNumber
-                          : '',
-                        agentClientLocationCode: isAgentApplicant(applicantTypeCode)
-                          ? current.agentClientLocationCode
-                          : '',
-                        agentContactName: isAgentApplicant(applicantTypeCode)
-                          ? current.agentContactName
-                          : '',
-                      }))
-                    }}
-                  />
+                  {canChangeApplicantType ? (
+                    <SearchableSelect
+                      id="applicantTypeCode"
+                      labelText="Applicant type"
+                      value={form.applicantTypeCode}
+                      placeholder="Select applicant type"
+                      options={[
+                        { value: 'O', label: 'Owner' },
+                        { value: 'A', label: 'Agent' },
+                      ]}
+                      invalid={!!fieldError('applicantTypeCode')}
+                      invalidText={fieldError('applicantTypeCode')}
+                      onBlur={() => markFieldTouched('applicantTypeCode')}
+                      onChange={(applicantTypeCode) => {
+                        markFormEdited()
+                        setForm((current) => ({
+                          ...current,
+                          applicantTypeCode,
+                          agentClientNumber: isAgentApplicant(applicantTypeCode)
+                            ? current.agentClientNumber
+                            : '',
+                          agentClientLocationCode: isAgentApplicant(applicantTypeCode)
+                            ? current.agentClientLocationCode
+                            : '',
+                          agentContactName: isAgentApplicant(applicantTypeCode)
+                            ? current.agentContactName
+                            : '',
+                        }))
+                      }}
+                    />
+                  ) : (
+                    <TextInput
+                      id="applicantTypeCode"
+                      labelText="Applicant type"
+                      value="Owner"
+                      readOnly
+                    />
+                  )}
                   {isAgentApplicant(form.applicantTypeCode) && (
                     <>
                       <TextInput
@@ -1354,12 +1676,13 @@ const ProvincialApplicationCreatePage = () => {
                         invalid={!!fieldError('agentClientNumber')}
                         invalidText={fieldError('agentClientNumber')}
                         onBlur={() => markFieldTouched('agentClientNumber')}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          markFormEdited()
                           setForm((current) => ({
                             ...current,
                             agentClientNumber: event.target.value,
                           }))
-                        }
+                        }}
                       />
                       <SearchableSelect
                         id="agentClientLocationCode"
@@ -1376,12 +1699,13 @@ const ProvincialApplicationCreatePage = () => {
                             label: location.locationName,
                           }))}
                         onBlur={() => markFieldTouched('agentClientLocationCode')}
-                        onChange={(value) =>
+                        onChange={(value) => {
+                          markFormEdited()
                           setForm((current) => ({
                             ...current,
                             agentClientLocationCode: value,
                           }))
-                        }
+                        }}
                       />
                       {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
                         <SearchableSelect
@@ -1401,9 +1725,10 @@ const ProvincialApplicationCreatePage = () => {
                               label: contact.contactName,
                             }))}
                           onBlur={() => markFieldTouched('agentContactName')}
-                          onChange={(value) =>
+                          onChange={(value) => {
+                            markFormEdited()
                             setForm((current) => ({ ...current, agentContactName: value }))
-                          }
+                          }}
                         />
                       ) : (
                         <TextInput
@@ -1415,12 +1740,13 @@ const ProvincialApplicationCreatePage = () => {
                           invalid={!!fieldError('agentContactName')}
                           invalidText={fieldError('agentContactName')}
                           onBlur={() => markFieldTouched('agentContactName')}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            markFormEdited()
                             setForm((current) => ({
                               ...current,
                               agentContactName: event.target.value,
                             }))
-                          }
+                          }}
                         />
                       )}
                     </>
@@ -1429,8 +1755,14 @@ const ProvincialApplicationCreatePage = () => {
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Packages / Scales</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-packages-heading"
+              >
+                <h2 id="application-create-packages-heading" className="detail-tile-title">
+                  Packages / Scales
+                </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <div className="legacy-field-stack">
                     <SearchableSelect
@@ -1450,6 +1782,38 @@ const ProvincialApplicationCreatePage = () => {
                         {fieldError('speciesCodes')}
                       </p>
                     )}
+                    <div className="application-species-actions">
+                      <Button
+                        type="button"
+                        kind="secondary"
+                        size="sm"
+                        disabled={
+                          !applicationSpeciesCandidate ||
+                          !availableApplicationSpeciesOptions.some(
+                            (option) => option.code === applicationSpeciesCandidate,
+                          )
+                        }
+                        onClick={onAddApplicationSpecies}
+                      >
+                        Add application species
+                      </Button>
+                      <ul
+                        className="application-species-list"
+                        aria-label="Selected application species"
+                      >
+                        {form.speciesCodes.map((speciesCode) => (
+                          <li key={speciesCode}>
+                            <DismissibleTag
+                              type="blue"
+                              text={speciesCode}
+                              title={`Remove ${speciesCode} from application`}
+                              dismissTooltipLabel={`Remove ${speciesCode} from application`}
+                              onClose={() => onRemoveApplicationSpecies(speciesCode)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                   <SearchableSelect
                     id="applicationEndUse"
@@ -1462,57 +1826,95 @@ const ProvincialApplicationCreatePage = () => {
                     }
                     placeholder={endUsePlaceholder}
                     options={applicationEndUseSelectOptions}
-                    onChange={(value) => setForm((current) => ({ ...current, endUseCode: value }))}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => ({ ...current, endUseCode: value }))
+                    }}
                   />
                 </div>
-                <div className="legacy-search-actions">
-                  <Button
-                    kind="secondary"
-                    size="sm"
-                    disabled={
-                      !applicationSpeciesCandidate ||
-                      !availableApplicationSpeciesOptions.some(
-                        (option) => option.code === applicationSpeciesCandidate,
-                      )
-                    }
-                    onClick={onAddApplicationSpecies}
-                  >
-                    Add Application species
-                  </Button>
-                  {form.speciesCodes.map((speciesCode) => (
-                    <span key={speciesCode} className="legacy-search-actions">
-                      <Tag type="blue">{speciesCode}</Tag>
+                {productTypeSupportsPackages(form.productTypeCode) && (
+                  <section className="application-items-section application-items-section--package-details application-create-package-shell">
+                    <div className="application-items-section-header">
+                      <h3>Package Details</h3>
+                      <SearchableSelect
+                        id="applicationCreatePackageSelect"
+                        labelText="Selected Package"
+                        value=""
+                        disabled
+                        placeholder="No packages"
+                        options={[]}
+                        onChange={() => undefined}
+                      />
+                    </div>
+                    <dl className="detail-field-grid application-items-summary">
+                      {[
+                        ['Package Number', 'None selected'],
+                        ['Package Volume', 'Not provided'],
+                        ['Total Scale Volume', 'Not provided'],
+                        ['Total Pieces', '0'],
+                        ['Average Length', 'Not provided'],
+                        ['Average Top Diameter', 'Not provided'],
+                        ['Package Status', 'Not provided'],
+                        ['Reprocessed', 'Not provided'],
+                      ].map(([label, value]) => (
+                        <div key={label} className="detail-field-item">
+                          <dt className="detail-field-label">{label}</dt>
+                          <dd className="detail-field-value">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <div className="application-create-package-actions">
                       <Button
-                        kind="ghost"
+                        ref={createPackageButtonRef}
+                        type="button"
+                        kind="secondary"
                         size="sm"
-                        onClick={() => onRemoveApplicationSpecies(speciesCode)}
+                        onClick={() => setPackageSavePromptOpen(true)}
                       >
-                        Remove
+                        Create New Package
                       </Button>
-                    </span>
-                  ))}
-                </div>
+                    </div>
+                  </section>
+                )}
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Permits</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-permits-heading"
+              >
+                <h2 id="application-create-permits-heading" className="detail-tile-title">
+                  Permits
+                </h2>
                 <p className="detail-empty-message">
                   Permits are available after the application is saved.
                 </p>
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Offers</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-offers-heading"
+              >
+                <h2 id="application-create-offers-heading" className="detail-tile-title">
+                  Offers
+                </h2>
                 <p className="detail-empty-message">
                   Offers are available after the application is saved.
                 </p>
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Documents</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-documents-heading"
+              >
+                <h2 id="application-create-documents-heading" className="detail-tile-title">
+                  Documents
+                </h2>
                 <DetailDocumentUploadPanel
                   workflowType="application"
                   targetNumber=""
@@ -1523,40 +1925,104 @@ const ProvincialApplicationCreatePage = () => {
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile className="create-form-tile application-detail-section">
-                <h2 className="detail-tile-title">Remarks</h2>
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-remarks-heading"
+              >
+                <h2 id="application-create-remarks-heading" className="detail-tile-title">
+                  Remarks
+                </h2>
                 <div className="legacy-search-actions create-form-comments">
                   <TextArea
                     id="applicationComments"
                     labelText="Comments"
                     value={form.comments}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      markFormEdited()
                       setForm((current) => ({ ...current, comments: event.target.value }))
-                    }
+                    }}
                   />
                 </div>
               </Tile>
             </TabPanel>
           </TabPanels>
         </Tabs>
-        <div className="legacy-search-actions application-create-actions">
+        <div
+          className="legacy-search-actions application-create-actions"
+          role="group"
+          aria-label="Application form actions"
+        >
           <Button
+            type="button"
+            kind="secondary"
+            onClick={() => {
+              closeAccuracyConfirmation()
+              navigate('/provincial/application')
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
             kind="primary"
-            onClick={() => void onSave()}
+            onClick={onRequestSave}
             disabled={
-              missingRequiredOptions ||
+              !optionsLoaded ||
+              optionsUnavailable ||
+              requiredApplicationOptionsMissing ||
               isSubmitting ||
               isLoadingOwnerClientLocations ||
-              isLoadingAgentClientLocations
+              isLoadingAgentClientLocations ||
+              provincialSubmitterScopeUnavailable
             }
           >
             Save
           </Button>
-          <Button kind="secondary" onClick={() => navigate('/provincial/application')}>
-            Cancel
-          </Button>
         </div>
       </Column>
+      {accuracyConfirmationOpen && (
+        <ApplicationAccuracyConfirmation
+          open
+          confirmed={accuracyConfirmed}
+          busy={isSubmitting}
+          confirmLabel="Save application"
+          pendingLabel="Saving application…"
+          onConfirmedChange={setAccuracyConfirmed}
+          onConfirm={onConfirmAccuracy}
+          onClose={closeAccuracyConfirmation}
+        />
+      )}
+      <Modal
+        open={packageSavePromptOpen}
+        size="xs"
+        modalHeading="Application not saved"
+        primaryButtonText="OK"
+        launcherButtonRef={createPackageButtonRef}
+        onRequestClose={() => setPackageSavePromptOpen(false)}
+        onRequestSubmit={() => setPackageSavePromptOpen(false)}
+      >
+        <p>Please save this application before adding packages.</p>
+      </Modal>
+      <UnsavedChangesGuard
+        isDirty={isCreateDraftDirty}
+        isBusy={isSubmitting}
+        onSave={() => onSave(provincialSubmitterIdentityLocked, false)}
+        onDiscard={onDiscardCreateDraft}
+        subject="this new application"
+        saveAcknowledgement={
+          provincialSubmitterIdentityLocked ? APPLICATION_ACCURACY_ACKNOWLEDGEMENT : undefined
+        }
+        saveUnavailableReason={
+          !optionsLoaded || optionsUnavailable || requiredApplicationOptionsMissing
+            ? 'Authoritative application options must load before this application can be saved.'
+            : isLoadingOwnerClientLocations || isLoadingAgentClientLocations
+              ? 'Client locations must finish loading before this application can be saved.'
+              : provincialSubmitterScopeUnavailable
+                ? 'An authenticated forest client is required before this application can be saved.'
+                : undefined
+        }
+      />
     </Grid>
   )
 }

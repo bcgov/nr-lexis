@@ -5,6 +5,7 @@ import {
   type LegacyFormPayload,
 } from '@/service/legacy-form-utils'
 import {
+  parsePayloadArray,
   parsePayloadArrayOrEmpty,
   payloadValueAsBoolean as asBoolean,
   payloadValueAsNumber as asNumber,
@@ -12,7 +13,7 @@ import {
   payloadValueAsTrimmedString as asString,
 } from '@/service/payload-utils'
 import { toSearchServiceError } from '@/service/search-service-fallback'
-import { recordOrEmpty } from '@/utils/record'
+import { isRecord, recordOrEmpty } from '@/utils/record'
 
 export type ApplicationCodeOption = {
   code: string
@@ -136,11 +137,9 @@ export type ApplicationSummaryMutation = {
   agentClientLocationCode: string
   ownerClientNumber: string
   ownerClientLocationCode: string
-  applicationStatusCode: string
-  applicantTypeCode: string
+  applicantTypeCode?: string
   orgUnitNumber: string
   productTypeCode: string
-  jurisdictionCode: string
   growthTypeCode: string
   agentContactName: string
   ownerContactName: string
@@ -170,9 +169,12 @@ export type ApplicationVolumeUsageResult = {
   volumeUsed: boolean
 }
 
-export type ApplicationSummarySnapshot = ApplicationSummaryMutation & {
+export type ApplicationSummarySnapshot = Omit<ApplicationSummaryMutation, 'applicantTypeCode'> & {
   federalApplicationNumber: string
   exemptionNumber: string
+  applicationStatusCode: string
+  applicantTypeCode: string
+  jurisdictionCode: string
 }
 
 const ITEMS_CACHE_TTL_MS = 30_000
@@ -200,6 +202,30 @@ const normalizeCodeOption = (row: unknown): ApplicationCodeOption => {
     code,
     description: asString(source.description || source.label || source.name) || code,
   }
+}
+
+const parseRequiredCodeOptions = (payload: unknown): ApplicationCodeOption[] => {
+  const rows = parsePayloadArray(payload)
+  if (rows === null) {
+    throw new Error('Authoritative code options are unavailable.')
+  }
+
+  const options = rows.map((row) => {
+    if (!isRecord(row)) {
+      throw new Error('Authoritative code options are invalid.')
+    }
+    const rawCode = row.code ?? row.value
+    if (typeof rawCode !== 'string' || !rawCode.trim()) {
+      throw new Error('Authoritative code options are incomplete.')
+    }
+    const option = normalizeCodeOption(row)
+    return option
+  })
+
+  if (new Set(options.map((option) => option.code.toUpperCase())).size !== options.length) {
+    throw new Error('Authoritative code options contain duplicate codes.')
+  }
+  return options
 }
 
 const normalizePackageDetails = (payload: unknown): ApplicationPackageDetails => {
@@ -483,7 +509,7 @@ export const fetchApplicationSpeciesCodes = async (): Promise<ApplicationCodeOpt
       undefined,
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
+    return parseRequiredCodeOptions(response.data)
   } catch (error) {
     throw toSearchServiceError('Unable to load application species codes.', error)
   }
@@ -496,7 +522,7 @@ export const fetchApplicationPackageStatusCodes = async (): Promise<ApplicationC
       undefined,
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
+    return parseRequiredCodeOptions(response.data)
   } catch (error) {
     throw toSearchServiceError('Unable to load application package status codes.', error)
   }
@@ -517,7 +543,7 @@ export const fetchApplicationGradeCodes = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
+    return parseRequiredCodeOptions(response.data)
   } catch (error) {
     throw toSearchServiceError('Unable to load application grade codes.', error)
   }
@@ -540,7 +566,7 @@ export const fetchApplicationRemainingSpecies = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
+    return parseRequiredCodeOptions(response.data)
   } catch (error) {
     throw toSearchServiceError('Unable to load remaining package species.', error)
   }
@@ -561,7 +587,7 @@ export const fetchApplicationEndUsesForSpeciesRegion = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
+    return parseRequiredCodeOptions(response.data)
   } catch (error) {
     throw toSearchServiceError('Unable to load package end-use codes.', error)
   }
@@ -709,11 +735,9 @@ export const updateApplicationSummary = async (
         agentClientLocationCode: request.agentClientLocationCode,
         ownerClientNumber: request.ownerClientNumber,
         ownerClientLocationCode: request.ownerClientLocationCode,
-        applicationStatusCode: request.applicationStatusCode,
         applicantType: request.applicantTypeCode,
         orgUnitNumber: request.orgUnitNumber,
         productTypeCode: request.productTypeCode,
-        jurisdictionCode: request.jurisdictionCode,
         growthTypeCode: request.growthTypeCode,
         agentContactName: request.agentContactName,
         ownerContactName: request.ownerContactName,
@@ -741,8 +765,11 @@ export const deleteApplicationScale = async (
           applicationNumber,
         },
       })
+    if (response.status !== 200) {
+      throw new Error('Unexpected application scale deletion response.')
+    }
     const source = asRecord(response.data)
-    return { success: response.status === 204 || asBoolean(source.success) }
+    return { success: asBoolean(source.success) }
   } catch (error) {
     throw toSearchServiceError('Unable to delete application scale.', error)
   }
@@ -761,8 +788,11 @@ export const deleteApplicationPackage = async (
           applicationNumber,
         },
       })
+    if (response.status !== 200) {
+      throw new Error('Unexpected application package deletion response.')
+    }
     const source = asRecord(response.data)
-    return { success: response.status === 204 || asBoolean(source.success) }
+    return { success: asBoolean(source.success) }
   } catch (error) {
     throw toSearchServiceError('Unable to delete application package.', error)
   }

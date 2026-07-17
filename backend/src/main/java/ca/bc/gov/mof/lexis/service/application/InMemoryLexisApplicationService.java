@@ -20,7 +20,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile("!oracle")
+@Profile("stub-services & !oracle")
 public class InMemoryLexisApplicationService implements LexisApplicationService {
 
   private static final String APPLICANT_TYPE_AGENT = "A";
@@ -391,7 +391,8 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         null,
         record.packages(),
         record.remarks(),
-        record.offers());
+        record.offers(),
+        "system");
   }
 
   private String regionName(Long regionNumber) {

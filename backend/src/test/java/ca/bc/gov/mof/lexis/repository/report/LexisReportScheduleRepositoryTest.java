@@ -1,15 +1,18 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import java.sql.CallableStatement;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Types;
@@ -20,7 +23,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.RowMapper;
@@ -34,16 +39,36 @@ class LexisReportScheduleRepositoryTest {
   @Mock private ResultSet clientResultSet;
   @Mock private ResultSet orgUnitResultSet;
   @Mock private PreparedStatement preparedStatement;
+  @Mock private Connection connection;
 
   @Test
-  void loadRegionOptionsShouldUseOrgUnitNameLabelsLikeLegacyReportSelects() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_ORG_UNITS(?) }");
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L, 1904L);
+  void loadRegionOptionsShouldResolveEachLegacyConfiguredRegionByNumber() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_ORG_UNIT_BY_NUMBER(?,?) }", 2);
+    when(resultSet.next())
+        .thenReturn(
+            true, false,
+            true, false,
+            true, false,
+            true, false,
+            true, false,
+            true, false,
+            true, false,
+            true, false);
+    when(resultSet.getLong("ORG_UNIT_NO"))
+        .thenReturn(1903L, 1904L, 1905L, 1906L, 1907L, 1908L, 1909L, 1910L);
     when(resultSet.wasNull()).thenReturn(false);
-    when(resultSet.getString("ORG_UNIT_CODE")).thenReturn("RCB", "RKB");
+    when(resultSet.getString("ORG_UNIT_CODE"))
+        .thenReturn("RCB", "RKB", "RNO", "ROM", "RTO", "RSK", "RSC", "RWC");
     when(resultSet.getString("ORG_UNIT_NAME"))
-        .thenReturn("Cariboo Natural Resource Region", "Kootenay-Boundary Natural Resource Region");
+        .thenReturn(
+            "Cariboo Natural Resource Region",
+            "Kootenay-Boundary Natural Resource Region",
+            "Northeast Natural Resource Region",
+            "Omineca Natural Resource Region",
+            "Thompson-Okanagan Natural Resource Region",
+            "Skeena Natural Resource Region",
+            "South Coast Natural Resource Region",
+            "West Coast Natural Resource Region");
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
@@ -53,8 +78,43 @@ class LexisReportScheduleRepositoryTest {
         .extracting("code", "name")
         .containsExactly(
             tuple("1903", "Cariboo Natural Resource Region"),
-            tuple("1904", "Kootenay-Boundary Natural Resource Region"));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+            tuple("1904", "Kootenay-Boundary Natural Resource Region"),
+            tuple("1905", "Northeast Natural Resource Region"),
+            tuple("1906", "Omineca Natural Resource Region"),
+            tuple("1907", "Thompson-Okanagan Natural Resource Region"),
+            tuple("1908", "Skeena Natural Resource Region"),
+            tuple("1909", "South Coast Natural Resource Region"),
+            tuple("1910", "West Coast Natural Resource Region"));
+    verify(callableStatement, times(8)).registerOutParameter(2, Types.REF_CURSOR);
+    for (long orgUnitNumber = 1903L; orgUnitNumber <= 1910L; orgUnitNumber++) {
+      verify(callableStatement).setString(1, Long.toString(orgUnitNumber));
+    }
+  }
+
+  @Test
+  void loadRegionOptionsShouldNotSynthesizeAnUnresolvedRegion() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_ORG_UNIT_BY_NUMBER(?,?) }", 2);
+    when(resultSet.next())
+        .thenReturn(
+            true, false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false);
+    when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("ORG_UNIT_CODE")).thenReturn("RCB");
+    when(resultSet.getString("ORG_UNIT_NAME")).thenReturn("Cariboo Natural Resource Region");
+
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.loadRegionOptions())
+        .extracting("code", "name")
+        .containsExactly(tuple("1903", "Cariboo Natural Resource Region"));
+    verify(callableStatement, times(8)).registerOutParameter(2, Types.REF_CURSOR);
   }
 
   @Test
@@ -164,7 +224,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void destinationCountryOptionsShouldFallbackWhenCodePackageReturnsEmpty() throws Exception {
+  void destinationCountryOptionsShouldPreserveEmptyCodePackageResultWithoutStaticCountries()
+      throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_GROUP(?,?) }", 2);
     when(resultSet.next()).thenReturn(false);
 
@@ -174,14 +235,33 @@ class LexisReportScheduleRepositoryTest {
 
     assertThat(options)
         .extracting("code", "name")
-        .containsExactly(
-            tuple("", "All"),
-            tuple("US", "United States"),
-            tuple("JP", "Japan"),
-            tuple("CN", "China"),
-            tuple("NZ", "New Zealand"));
+        .containsExactly(tuple("", "All"));
     verify(callableStatement).setInt(1, 1);
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void reportCodeOptionsShouldPropagateOracleFailureInsteadOfReturningStaticChoices() {
+    when(jdbcTemplate.execute(
+            eq("{ call LEXIS_CODES.FIND_ALL_EXEMPTION_TYPE_CODES(?) }"),
+            any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadReportExemptionTypeOptions)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void reportCodeOptionsShouldPreserveLegitimatelyEmptyCursor() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
+    when(resultSet.next()).thenReturn(false);
+
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.loadTeacJurisdictionOptions()).isEmpty();
   }
 
   @Test
@@ -255,7 +335,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void findCurrentSchedulesShouldUseLegacyCursorProcedureForReportListDates() throws Exception {
+  void findCurrentSchedulesRequiredShouldUseLegacyCursorProcedureForReportListDates()
+      throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_CURRENT_SCHEDULES(?) }");
     when(resultSet.next()).thenReturn(true, true, false);
     when(resultSet.getLong("EXPORT_SCHEDULE_ID")).thenReturn(1001L, 1002L);
@@ -265,7 +346,7 @@ class LexisReportScheduleRepositoryTest {
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
-    var schedules = repository.findCurrentSchedules();
+    var schedules = repository.findCurrentSchedulesRequired();
 
     assertThat(schedules)
         .extracting("exportScheduleId", "advertisingDate")
@@ -273,6 +354,20 @@ class LexisReportScheduleRepositoryTest {
             tuple(1001L, LocalDate.of(2026, 7, 2)),
             tuple(1002L, LocalDate.of(2026, 7, 8)));
     verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void findCurrentSchedulesRequiredShouldPropagateOracleFailure() {
+    when(jdbcTemplate.execute(
+            eq("{ call LEXIS_CODES.FIND_CURRENT_SCHEDULES(?) }"),
+            any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::findCurrentSchedulesRequired)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
   }
 
   @Test
@@ -296,11 +391,64 @@ class LexisReportScheduleRepositoryTest {
     verify(jdbcTemplate)
         .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sqlCaptor.getValue())
-        .contains("WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)")
+        .contains("SYSTIMESTAMP AT TIME ZONE 'America/Vancouver'")
         .contains("ORDER BY ES.ADVERTISING_DATE ASC")
         .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
     verify(preparedStatement).setInt(1, 100);
     verify(preparedStatement).setInt(2, 50);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void findExportSchedulesPageShouldIncludeAllDatesAndUseWhitelistedSorting() throws Exception {
+    when(jdbcTemplate.query(
+            any(String.class),
+            any(PreparedStatementSetter.class),
+            any(RowMapper.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return List.of();
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    repository.findExportSchedules(0, 50, "teacMeetingDate", "desc");
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
+    assertThat(sqlCaptor.getValue())
+        .contains("ORDER BY ES.TEAC_MEETING_DATE DESC, ES.EXPORT_SCHEDULE_ID ASC")
+        .doesNotContain("WHERE ES.ADVERTISING_DATE")
+        .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+    verify(preparedStatement).setInt(1, 0);
+    verify(preparedStatement).setInt(2, 50);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void findExportSchedulesPageShouldFallbackForUnknownSortValues() throws Exception {
+    when(jdbcTemplate.query(
+            any(String.class),
+            any(PreparedStatementSetter.class),
+            any(RowMapper.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return List.of();
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    repository.findExportSchedules(0, 50, "ADVERTISING_DATE; DELETE", "DESC; DELETE");
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
+    assertThat(sqlCaptor.getValue())
+        .contains("ORDER BY ES.ADVERTISING_DATE ASC, ES.EXPORT_SCHEDULE_ID ASC")
+        .doesNotContain("DELETE");
   }
 
   @Test
@@ -332,15 +480,16 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void insertExportScheduleShouldUseLegacySequenceAndBindScheduleDates() throws Exception {
-    when(jdbcTemplate.queryForObject("SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL", Long.class))
-        .thenReturn(1002L);
-    when(jdbcTemplate.update(any(String.class), any(PreparedStatementSetter.class)))
+  @SuppressWarnings("unchecked")
+  void insertExportScheduleShouldUseLegacyInlineSequenceAndBindScheduleDates() throws Exception {
+    when(connection.prepareCall(any(String.class))).thenReturn(callableStatement);
+    when(callableStatement.getLong(7)).thenReturn(1002L);
+    when(callableStatement.wasNull()).thenReturn(false);
+    when(jdbcTemplate.execute(any(ConnectionCallback.class)))
         .thenAnswer(
             invocation -> {
-              PreparedStatementSetter setter = invocation.getArgument(1);
-              setter.setValues(preparedStatement);
-              return 1;
+              ConnectionCallback<Long> callback = invocation.getArgument(0);
+              return callback.doInConnection(connection);
             });
     ExportScheduleCreateRequestDto request =
         new ExportScheduleCreateRequestDto(
@@ -357,13 +506,18 @@ class LexisReportScheduleRepositoryTest {
     assertThat(row.exportScheduleId()).isEqualTo(1002L);
     assertThat(row.advertisingDate()).isEqualTo(LocalDate.of(2026, 7, 15));
     verify(jdbcTemplate, never()).execute("LOCK TABLE EXPORT_SCHEDULE IN EXCLUSIVE MODE");
-    verify(preparedStatement).setLong(1, 1002L);
-    verify(preparedStatement).setDate(2, java.sql.Date.valueOf("2026-07-15"));
-    verify(preparedStatement).setDate(3, java.sql.Date.valueOf("2026-07-15"));
-    verify(preparedStatement).setDate(4, java.sql.Date.valueOf("2026-07-29"));
-    verify(preparedStatement).setDate(5, java.sql.Date.valueOf("2026-08-07"));
-    verify(preparedStatement).setDate(6, java.sql.Date.valueOf("2026-08-14"));
-    verify(preparedStatement).setDate(7, java.sql.Date.valueOf("2026-08-04"));
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(connection).prepareCall(sqlCaptor.capture());
+    assertThat(sqlCaptor.getValue())
+        .contains("EXPORT_SCHEDULE_SEQ.NEXTVAL")
+        .doesNotContain("SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL");
+    verify(callableStatement).setDate(1, java.sql.Date.valueOf("2026-07-15"));
+    verify(callableStatement).setDate(2, java.sql.Date.valueOf("2026-07-15"));
+    verify(callableStatement).setDate(3, java.sql.Date.valueOf("2026-07-29"));
+    verify(callableStatement).setDate(4, java.sql.Date.valueOf("2026-08-07"));
+    verify(callableStatement).setDate(5, java.sql.Date.valueOf("2026-08-14"));
+    verify(callableStatement).setDate(6, java.sql.Date.valueOf("2026-08-04"));
+    verify(callableStatement).registerOutParameter(7, Types.NUMERIC);
   }
 
   @Test

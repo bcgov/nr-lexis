@@ -49,10 +49,10 @@ describe('rtm-emslogamv-service', () => {
   it('requests the latest average monthly values before a date', async () => {
     getMock.mockResolvedValue({ data: [] })
 
-    await searchLatestRtmEmsLogAmv(' 2026-07-10 ')
+    await searchLatestRtmEmsLogAmv(' 2026-07-01 ')
 
     expect(getMock).toHaveBeenCalledWith('/lexis/rtm/emslogamv', {
-      params: { latestBeforeDate: '2026-07-10' },
+      params: { latestBeforeDate: '2026-07-01' },
     })
   })
 

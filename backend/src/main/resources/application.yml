@@ -1,6 +1,11 @@
 spring:
   application:
     name: lexis-backend
+  lifecycle:
+    timeout-per-shutdown-phase: ${LEXIS_SHUTDOWN_PHASE_TIMEOUT:60s}
+  mvc:
+    async:
+      request-timeout: ${LEXIS_ASYNC_REQUEST_TIMEOUT:5m}
   # Keep bootstrap runnable before Oracle config is introduced.
   autoconfigure:
     exclude:
@@ -19,12 +24,26 @@ spring:
       mail:
         smtp:
           auth: false
+          connectiontimeout: ${SMTP_CONNECTION_TIMEOUT_MS:10000}
+          timeout: ${SMTP_READ_TIMEOUT_MS:10000}
+          writetimeout: ${SMTP_WRITE_TIMEOUT_MS:10000}
           starttls:
             enable: false
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
 
 server:
   port: 8080
   forward-headers-strategy: framework
+  shutdown: graceful
+
+logging:
+  level:
+    ca.bc.gov.mof.lexis: ${APP_LOG_LEVEL:INFO}
+    ca.bc.gov.mof.lexis.audit.report: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}
+    ca.bc.gov.mof.lexis.service.report.OracleLexisReportService: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}
 
 management:
   endpoint:
@@ -44,6 +63,22 @@ ca:
           base-url: ${IDENTITY_LOOKUP_BASE_URL:}
 
 lexis:
+  runtime:
+    require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}
+  reports:
+    max-output-bytes: ${LEXIS_REPORT_MAX_OUTPUT_BYTES:26214400}
+    query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}
+    virtualizer-directory: ${LEXIS_REPORT_VIRTUALIZER_DIRECTORY:/tmp/lexis-jasper}
+    virtualizer-max-pages: ${LEXIS_REPORT_VIRTUALIZER_MAX_PAGES:50}
+  expiry:
+    enabled: ${LEXIS_EXPIRY_ENABLED:false}
+    cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}
+    zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}
+    lock-at-most-for: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR:PT6H}
+    lock-at-least-for: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR:PT5M}
+  permit-invoice:
+    mode: ${LEXIS_PERMIT_INVOICE_MODE:legacy-best-effort}
+    gbms-timeout-seconds: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS:60}
   virus-scan:
     enabled: ${LEXIS_VIRUS_SCAN_ENABLED:false}
     host: ${LEXIS_VIRUS_SCAN_HOST:localhost}
@@ -53,7 +88,14 @@ lexis:
   features:
     prod-rtm-only: ${LEXIS_PROD_RTM_ONLY:false}
   mail:
-    from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
+    non-production: ${LEXIS_MAIL_NON_PRODUCTION:true}
+    environment: ${LEXIS_MAIL_ENVIRONMENT:non-prod}
+    from: ${LEXIS_MAIL_FROM:}
+    override-recipients: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS:}
+    region-rco-recipients: ${LEXIS_MAIL_REGION_RCO_RECIPIENTS:}
+    region-rni-recipients: ${LEXIS_MAIL_REGION_RNI_RECIPIENTS:}
+    region-rsi-recipients: ${LEXIS_MAIL_REGION_RSI_RECIPIENTS:}
+    permit-request-recipients: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS:}
   auth:
     cognito:
       userinfo-uri: ${COGNITO_USERINFO_URI:}
@@ -85,6 +127,7 @@ lexis:
         - "viewFederalApplication"
       LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
+        - "/changeApplicantType"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/applicationRemarks"
@@ -95,9 +138,11 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/permitsReview"
         - "/federalApplicationSearch"
         - "/federalApplicationDetails"
         - "viewFederalApplication"
+        - "manageFederalApplication"
         - "/applicationReport"
         - "/offerReport"
         - "/teacReport"
@@ -113,16 +158,18 @@ lexis:
         - "approveExemption"
         - "createApplication"
         - "createOffer"
+        - "createPermit"
         - "saveExemption"
         - "savePermit"
         - "uploadApplicationSubmission"
+        - "/fileApplicationUpload"
+        - "/fileExemptionUpload"
+        - "/filePermitUpload"
+        - "/fileInvoiceUpload"
       LEXIS_EXEMPTION_APPROVER:
         - "/createExemption"
         - "/exemptionSearch"
         - "/exemptionDetails"
-        - "/federalApplicationSearch"
-        - "/federalApplicationDetails"
-        - "viewFederalApplication"
         - "approveExemption"
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
@@ -134,13 +181,17 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/fileApplicationUpload"
+        - "/fileExemptionUpload"
+        - "/filePermitUpload"
+        - "/fileInvoiceUpload"
         - "createApplication"
+        - "createOffer"
         - "uploadApplicationSubmission"
       LEXIS_DELEGATED_ADMIN: []
   federal-submission:
     require-request-id: false
     require-user-reference: false
-    require-idempotency-key: false
     require-source-system: false
     # Retry guidance returned on dedicated federal endpoint 503 responses.
     retry-after-seconds: 60

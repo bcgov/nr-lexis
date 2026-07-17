@@ -13,8 +13,19 @@ Full-stack LEXIS application for log export workflows.
 | Frontend | React 19, TypeScript, Carbon Design System |
 | Backend | Spring Boot 3.5, Java 21 |
 | Database | Oracle (shared, BC Gov-managed) |
+| Concurrency | Optimistic stale-save checks and Oracle transaction locks |
 | Auth | AWS Cognito (FAM) for interactive users; Keycloak scopes for NEXCOL service-client submission |
 | Reports | JasperReports library |
+
+## Architecture
+
+LEXIS runs as separate frontend and backend workloads on OpenShift while retaining Oracle as its
+system of record. Uploaded content is scanned through a shared ClamAV service in a dedicated
+namespace. Interactive access uses FAM/Cognito; NEXCOL federal submissions use a dedicated
+Keycloak service client through the API gateway.
+
+See [docs/architecture.md](docs/architecture.md) for the runtime architecture, component boundaries,
+deployment constraints, and the major legacy-to-modern shifts.
 
 ## Local Development
 
@@ -24,7 +35,7 @@ Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 |---|---|---|
 | **Backend hot reload** | Manual restart | Manual restart |
 | **Frontend hot reload (Vite HMR)** | Yes | Yes |
-| **First-time setup cost** | Install Java 21 + Node 22 on host | Just Docker Desktop |
+| **First-time setup cost** | Install Java 21 + Node 24 on host | Just Docker Desktop |
 | **Best for** | Day-to-day backend/frontend work | Quick smoke tests, frontend-only work, and container parity |
 
 Both options share the same prerequisites and property files below. Reports use the checked-in JRXML templates in the Spring Boot backend.
@@ -38,7 +49,7 @@ ownership.
 
 1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
 2. **Maven 3.9+ and Java 21** (Option A only). The repo has no Maven wrapper.
-3. **Node 22+** (Option A only).
+3. **Node 24+** (Option A only).
 4. **Docker Desktop** (Option B only).
 
 ### Property files you create once
@@ -99,7 +110,7 @@ docker compose logs -f backend
 Services:
 
 - `backend` -> `localhost:8080` (Spring Boot via `mvn spring-boot:run` inside `maven:3.9.9-amazoncorretto-21-alpine`).
-- `frontend` -> `localhost:3000` (Vite via `npm run dev` inside `node:22-alpine`).
+- `frontend` -> `localhost:3000` (Vite via `npm run dev` inside `node:24-alpine`).
 
 First `up` downloads Maven dependencies into the `maven-cache` named volume. Subsequent starts are faster.
 
@@ -130,7 +141,8 @@ If the backend starts but authenticated API calls fail, check network access, `a
 
 NEXCOL uses a dedicated Keycloak client and the `lexis:federal-submission:submit` OAuth scope to
 validate or submit federal XML through the API gateway. CI manages the client, scope and default
-scope assignment for configured environments.
+scope assignment in TEST and PROD. Those deployments require the Keycloak provisioner settings and
+fail if the scope/client contract or exclusive assignment is not valid.
 
 See [docs/nexcol-keycloak-service-client.md](docs/nexcol-keycloak-service-client.md) for the API
 contract and [gateway/README.md](gateway/README.md) for gateway responsibilities.
@@ -155,7 +167,9 @@ default URL from `VITE_ZONE`.
 
 ## Component docs
 
+- [docs/architecture.md](docs/architecture.md) - Runtime architecture and legacy-to-modern shifts.
+- [docs/shared-clamav-service.md](docs/shared-clamav-service.md) - Shared scanner deployment, policy, verification, and ownership.
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
 - [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.
-- [docs/shared-clamav-service.md](docs/shared-clamav-service.md) - Shared scanner deployment, policy, verification, and ownership.
+- [docs/permit-invoicing.md](docs/permit-invoicing.md) - Canadian and GBMS permit invoicing modes, consistency limits, and recovery.
 - [docs/rtm-amv-ui-and-procedure-contract.md](docs/rtm-amv-ui-and-procedure-contract.md) - RTM AMV UI rules and Oracle procedure constraints.

@@ -78,6 +78,7 @@ describe('AuthProvider logout', () => {
       legacyPath: null,
       grantedActions: ['/lexisAgentAdmin'],
       orgUnitNo: null,
+      forestClientNumber: null,
     })
   })
 

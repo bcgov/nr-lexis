@@ -10,6 +10,7 @@ import {
   type RtmEmsLogAmvRow,
 } from '@/service/rtm-emslogamv-service'
 import { createTestAuthContext } from '@/test-utils/auth'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -26,19 +27,14 @@ const mockedSearchLatest = vi.mocked(searchLatestRtmEmsLogAmv)
 const mockedSearch = vi.mocked(searchRtmEmsLogAmv)
 const mockedSave = vi.mocked(saveRtmEmsLogAmv)
 
-const toLocalIsoDate = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+const CURRENT_MONTH = `${formatBusinessIsoDate().slice(0, 7)}-01`
 
-const dateOffsetFromToday = (offset: number) => {
-  const date = new Date()
-  date.setDate(date.getDate() + offset)
-  return toLocalIsoDate(date)
+const monthOffset = (dateValue: string, offset: number) => {
+  const [year, month] = dateValue.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1 + offset, 1)).toISOString().slice(0, 10)
 }
 
-const TARGET_DATE = dateOffsetFromToday(0)
-const PREVIOUS_DAY_DATE = dateOffsetFromToday(-1)
-const FUTURE_DATE = dateOffsetFromToday(1)
-const SECOND_FUTURE_DATE = dateOffsetFromToday(2)
+const PREVIOUS_MONTH = monthOffset(CURRENT_MONTH, -1)
 
 const row = (
   species: string,
@@ -57,57 +53,40 @@ const row = (
   returnCode: '0',
 })
 
-const previousRows: RtmEmsLogAmvRow[] = [
-  row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
-  row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
-  row('WH', 'A', 'O', PREVIOUS_DAY_DATE, 30.75),
-  row('LO', 'A', 'O', PREVIOUS_DAY_DATE, 30.75),
-  row('YE', 'A', 'O', PREVIOUS_DAY_DATE, 30.75),
-  row('WH', 'A', 'S', PREVIOUS_DAY_DATE, 30.75),
-  row('LO', 'A', 'S', PREVIOUS_DAY_DATE, 30.75),
-  row('YE', 'A', 'S', PREVIOUS_DAY_DATE, 30.75),
-]
-
-const currentRows: RtmEmsLogAmvRow[] = [
-  row('HE', 'A', 'O', TARGET_DATE, 20.5),
-  row('HE', 'A', 'S', TARGET_DATE, 20.5),
-]
-
-const mockSearchRows = ({
-  current = currentRows,
-  previous = previousRows,
-}: {
-  current?: RtmEmsLogAmvRow[]
-  previous?: RtmEmsLogAmvRow[]
-} = {}) => {
+const mockRows = (
+  currentRows: RtmEmsLogAmvRow[] = [],
+  previousRows: RtmEmsLogAmvRow[] = [],
+  currentDate = CURRENT_MONTH,
+) => {
+  const previousDate = monthOffset(currentDate, -1)
   mockedSearch.mockImplementation(async (filters) => {
-    if (filters.retrievalDate === TARGET_DATE) {
-      return current
+    if (filters.retrievalDate === currentDate) {
+      return currentRows
     }
-    if (filters.retrievalDate === PREVIOUS_DAY_DATE) {
-      return previous
+    if (filters.retrievalDate === previousDate) {
+      return previousRows
     }
     return []
   })
 }
 
-const selectTargetDate = async (date = TARGET_DATE) => {
-  fireEvent.change(await screen.findByLabelText('Effective date'), {
-    target: { value: date },
-  })
+const waitForMonthLoad = async (date = CURRENT_MONTH) => {
   await waitFor(() =>
-    expect(mockedSearch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        retrievalDate: date,
-        updateDate: date,
-      }),
-    ),
+    expect(mockedSearch).toHaveBeenCalledWith({
+      species: '',
+      growthIndicator: '',
+      retrievalDate: date,
+      updateDate: date,
+    }),
   )
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled())
 }
 
-const confirmAmvSave = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByRole('button', { name: 'Confirm and save' }))
-}
+const oldGrowthCell = (speciesLabel: string, grade: string) =>
+  screen.getByLabelText(`${speciesLabel} grade ${grade}, Old growth`)
+
+const secondGrowthCell = (speciesLabel: string, grade: string) =>
+  screen.getByLabelText(`${speciesLabel} grade ${grade}, Second growth`)
 
 describe('RTM EMS Log AMV actions', () => {
   beforeEach(() => {
@@ -121,177 +100,416 @@ describe('RTM EMS Log AMV actions', () => {
       rows: [],
     })
     mockedSearchLatest.mockResolvedValue([])
-    mockSearchRows()
+    mockRows()
   })
 
-  it('renders the editable average monthly value table without upload controls', async () => {
+  it('renders the monthly physical-key matrix with legacy grades and explicit growth selection', async () => {
     render(<RTMEmsLogAmvPage />)
-    await selectTargetDate()
+    await waitForMonthLoad()
 
-    await screen.findByRole('heading', { name: 'Average Monthly Values' })
+    expect(screen.getByLabelText('Effective month')).toHaveAttribute('type', 'month')
+    expect(screen.getByLabelText('Effective month')).toHaveValue(CURRENT_MONTH.slice(0, 7))
+    expect(screen.getByRole('radio', { name: 'Old growth' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Second growth' })).not.toBeChecked()
     expect(
       screen.getByText(
-        'Maintain average monthly values directly in the table. Each saved value is persisted for old and second growth.',
+        'Maintain one monthly value for each physical species, grade, and growth type.',
       ),
     ).toBeVisible()
-    expect(screen.queryByRole('heading', { name: 'Upload' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
-    ).not.toBeInTheDocument()
 
-    const table = screen.getByRole('table', { name: 'Average monthly value table' })
-    expect(within(table).getByRole('columnheader', { name: 'Balsam' })).toBeVisible()
-    expect(within(table).getByRole('columnheader', { name: 'Pine' })).toBeVisible()
-    expect(within(table).getAllByRole('row')).toHaveLength(24)
-    expect(screen.getByLabelText('Hemlock grade A')).toHaveValue('20.5')
-    expect(screen.getByLabelText('Balsam grade A')).toHaveValue('')
-    expect(screen.getByLabelText('Balsam grade A')).toHaveAttribute('placeholder', '-')
-    expect(screen.getByText(/Balsam grade A had a value yesterday/)).toBeVisible()
-    expect(
-      screen.getByText(/Hemlock grade A is newly populated; it was blank yesterday/),
-    ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    const table = screen.getByRole('table', {
+      name: 'Old growth average monthly value table',
+    })
+    ;[
+      'Balsam (BA)',
+      'Hemlock (HE)',
+      'Cedar (CE)',
+      'Cypress (CY)',
+      'Fir (FI)',
+      'Spruce (SP)',
+      'Western white pine (WH)',
+      'Lodgepole pine (LO)',
+      'Yellow pine (YE)',
+    ].forEach((label) => {
+      expect(within(table).getByRole('columnheader', { name: label })).toBeVisible()
+    })
+    expect(within(table).queryByRole('columnheader', { name: 'Pine' })).not.toBeInTheDocument()
+    expect(within(table).getAllByRole('row')).toHaveLength(26)
+    expect(oldGrowthCell('Balsam (BA)', 'W')).toBeVisible()
+    expect(oldGrowthCell('Balsam (BA)', 'BLANK')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Upload' })).not.toBeInTheDocument()
+
+    expect(mockedSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ retrievalDate: PREVIOUS_MONTH, updateDate: PREVIOUS_MONTH }),
+    )
+    expect(mockedSearchLatest).toHaveBeenCalledWith(CURRENT_MONTH)
   })
 
-  it("saves daily cells for both growth types using yesterday's row when available", async () => {
+  it('saves one selected physical old-growth key without collapsing pine or overwriting growth', async () => {
     const user = userEvent.setup()
-    mockSearchRows({
-      current: [],
-      previous: [
-        row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
-        row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
-      ],
-    })
+    mockRows([
+      row('WH', 'A', 'O', CURRENT_MONTH, 10),
+      row('WH', 'A', 'S', CURRENT_MONTH, 11),
+      row('LO', 'A', 'O', CURRENT_MONTH, 20),
+      row('LO', 'A', 'S', CURRENT_MONTH, 21),
+      row('YE', 'A', 'O', CURRENT_MONTH, 30),
+      row('YE', 'A', 'S', CURRENT_MONTH, 31),
+    ])
 
     render(<RTMEmsLogAmvPage />)
-    await selectTargetDate()
+    await waitForMonthLoad()
 
-    await user.type(screen.getByLabelText('Balsam grade A'), '11')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
+    const westernWhitePine = oldGrowthCell('Western white pine (WH)', 'A')
+    expect(westernWhitePine).toHaveValue('10')
+    expect(oldGrowthCell('Lodgepole pine (LO)', 'A')).toHaveValue('20')
+    expect(oldGrowthCell('Yellow pine (YE)', 'A')).toHaveValue('30')
+    await user.clear(westernWhitePine)
+    await user.type(westernWhitePine, '12.5')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
-    expect(mockedSave).toHaveBeenNthCalledWith(1, {
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
+    expect(mockedSave).toHaveBeenCalledWith({
+      species: 'WH',
+      grade: 'A',
+      growthIndicator: 'O',
+      retrievalDate: CURRENT_MONTH,
+      updateDate: CURRENT_MONTH,
+      newValue: 12.5,
+      saveMode: 'update',
+    })
+  })
+
+  it('shows and saves the independent second-growth value only after it is selected', async () => {
+    const user = userEvent.setup()
+    mockRows([
+      row('WH', 'A', 'O', CURRENT_MONTH, 10),
+      row('WH', 'A', 'S', CURRENT_MONTH, 17),
+      row('LO', 'A', 'O', CURRENT_MONTH, 20),
+      row('LO', 'A', 'S', CURRENT_MONTH, 27),
+      row('YE', 'A', 'O', CURRENT_MONTH, 30),
+      row('YE', 'A', 'S', CURRENT_MONTH, 37),
+    ])
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+    await user.click(screen.getByRole('radio', { name: 'Second growth' }))
+
+    expect(secondGrowthCell('Western white pine (WH)', 'A')).toHaveValue('17')
+    expect(secondGrowthCell('Lodgepole pine (LO)', 'A')).toHaveValue('27')
+    expect(secondGrowthCell('Yellow pine (YE)', 'A')).toHaveValue('37')
+    const westernWhitePine = secondGrowthCell('Western white pine (WH)', 'A')
+    await user.clear(westernWhitePine)
+    await user.type(westernWhitePine, '18')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
+    expect(mockedSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        species: 'WH',
+        grade: 'A',
+        growthIndicator: 'S',
+        newValue: 18,
+      }),
+    )
+  })
+
+  it('keeps an explicit edit on its growth view until it is saved or reset', async () => {
+    const user = userEvent.setup()
+    mockRows([row('WH', 'A', 'O', CURRENT_MONTH, 10), row('WH', 'A', 'S', CURRENT_MONTH, 17)])
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+    const oldGrowthValue = oldGrowthCell('Western white pine (WH)', 'A')
+    await user.clear(oldGrowthValue)
+    await user.type(oldGrowthValue, '12')
+    expect(screen.getByRole('radio', { name: 'Second growth' })).toBeDisabled()
+    expect(screen.getByLabelText('Effective month')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Previous month' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(oldGrowthValue).toHaveValue('10')
+    expect(screen.getByRole('radio', { name: 'Second growth' })).toBeEnabled()
+    expect(screen.getByLabelText('Effective month')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Previous month' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled()
+    await user.click(screen.getByRole('radio', { name: 'Second growth' }))
+    expect(secondGrowthCell('Western white pine (WH)', 'A')).toHaveValue('17')
+  })
+
+  it('uses month-only navigation and sends the first day for every query', async () => {
+    const user = userEvent.setup()
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    await user.click(screen.getByRole('button', { name: 'Previous month' }))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Effective month')).toHaveValue(PREVIOUS_MONTH.slice(0, 7)),
+    )
+    await waitFor(() =>
+      expect(mockedSearch).toHaveBeenCalledWith(
+        expect.objectContaining({ retrievalDate: PREVIOUS_MONTH, updateDate: PREVIOUS_MONTH }),
+      ),
+    )
+
+    fireEvent.change(screen.getByLabelText('Effective month'), { target: { value: '2000-02' } })
+    await waitFor(() =>
+      expect(mockedSearch).toHaveBeenCalledWith(
+        expect.objectContaining({ retrievalDate: '2000-02-01', updateDate: '2000-02-01' }),
+      ),
+    )
+    expect(mockedSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ retrievalDate: '2000-01-01', updateDate: '2000-01-01' }),
+    )
+    expect(mockedSearchLatest).toHaveBeenCalledWith('2000-02-01')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Current month' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Current month' }))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Effective month')).toHaveValue(CURRENT_MONTH.slice(0, 7)),
+    )
+  })
+
+  it('uses the legacy historical grade set before the April 2006 rollover', async () => {
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    fireEvent.change(screen.getByLabelText('Effective month'), { target: { value: '2006-03' } })
+    await waitForMonthLoad('2006-03-01')
+
+    const historicTable = screen.getByRole('table', {
+      name: 'Old growth average monthly value table',
+    })
+    expect(within(historicTable).getAllByRole('row')).toHaveLength(22)
+    expect(oldGrowthCell('Balsam (BA)', 'X')).toBeVisible()
+    expect(oldGrowthCell('Balsam (BA)', 'Y')).toBeVisible()
+    expect(oldGrowthCell('Balsam (BA)', '3')).toBeVisible()
+    expect(oldGrowthCell('Balsam (BA)', 'BLANK')).toBeVisible()
+    ;['W', 'Z', '1', '2'].forEach((grade) => {
+      expect(
+        screen.queryByLabelText(`Balsam (BA) grade ${grade}, Old growth`),
+      ).not.toBeInTheDocument()
+    })
+    expect(screen.getByText(/The historical grade set applies before April 2006/)).toBeVisible()
+
+    fireEvent.change(screen.getByLabelText('Effective month'), { target: { value: '2006-04' } })
+    await waitForMonthLoad('2006-04-01')
+    ;['W', 'Z', '1', '2'].forEach((grade) => {
+      expect(oldGrowthCell('Balsam (BA)', grade)).toBeVisible()
+    })
+  })
+
+  it('round-trips legacy W and blank grades through explicit API grade values', async () => {
+    const user = userEvent.setup()
+    mockRows([row('BA', 'W', 'O', CURRENT_MONTH, 4), row('BA', ' ', 'O', CURRENT_MONTH, 5)])
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+    expect(oldGrowthCell('Balsam (BA)', 'W')).toHaveValue('4')
+    const blankGrade = oldGrowthCell('Balsam (BA)', 'BLANK')
+    expect(blankGrade).toHaveValue('5')
+    await user.clear(blankGrade)
+    await user.type(blankGrade, '6')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
+    expect(mockedSave).toHaveBeenCalledWith({
+      species: 'BA',
+      grade: 'BLANK',
+      growthIndicator: 'O',
+      retrievalDate: CURRENT_MONTH,
+      updateDate: CURRENT_MONTH,
+      newValue: 6,
+      saveMode: 'update',
+    })
+  })
+
+  it('updates from the selected previous-month physical row without growth fan-out', async () => {
+    const user = userEvent.setup()
+    mockRows([], [row('BA', 'A', 'O', PREVIOUS_MONTH, 10.25)])
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+    const input = oldGrowthCell('Balsam (BA)', 'A')
+    expect(input).toHaveValue('')
+    await user.type(input, '11')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
+    expect(mockedSave).toHaveBeenCalledWith({
       species: 'BA',
       grade: 'A',
       growthIndicator: 'O',
-      retrievalDate: PREVIOUS_DAY_DATE,
-      updateDate: TARGET_DATE,
-      newValue: 11,
-      saveMode: 'update',
-    })
-    expect(mockedSave).toHaveBeenNthCalledWith(2, {
-      species: 'BA',
-      grade: 'A',
-      growthIndicator: 'S',
-      retrievalDate: PREVIOUS_DAY_DATE,
-      updateDate: TARGET_DATE,
+      retrievalDate: PREVIOUS_MONTH,
+      updateDate: CURRENT_MONTH,
       newValue: 11,
       saveMode: 'update',
     })
   })
 
-  it('fans pine edits out to WH, LO and YE for old and second growth', async () => {
+  it('carries forward only visible selected-growth keys', async () => {
     const user = userEvent.setup()
-    mockSearchRows({ current: [], previous: [] })
+    const sourceMonth = monthOffset(CURRENT_MONTH, -2)
+    mockedSearchLatest.mockResolvedValue([
+      row('WH', 'A', 'O', sourceMonth, 10),
+      row('WH', 'A', 'S', sourceMonth, 40),
+    ])
 
     render(<RTMEmsLogAmvPage />)
-    await selectTargetDate()
-
-    await user.type(screen.getByLabelText('Pine grade A'), '30.75')
-    expect(screen.getByText(/Pine grade A is newly populated/)).toBeVisible()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
+    await waitForMonthLoad()
+    expect(oldGrowthCell('Western white pine (WH)', 'A')).toHaveValue('10')
+    expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
+    expect(
+      screen.getByText(/latest available earlier value for each species, grade, and growth key/i),
+    ).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(6))
-    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
-    expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
-      {
-        species: 'WH',
-        grade: 'A',
-        growthIndicator: 'O',
-        retrievalDate: TARGET_DATE,
-        updateDate: TARGET_DATE,
-        newValue: 30.75,
-        saveMode: 'create',
-      },
-      {
-        species: 'WH',
-        grade: 'A',
-        growthIndicator: 'S',
-        retrievalDate: TARGET_DATE,
-        updateDate: TARGET_DATE,
-        newValue: 30.75,
-        saveMode: 'create',
-      },
-      {
-        species: 'LO',
-        grade: 'A',
-        growthIndicator: 'O',
-        retrievalDate: TARGET_DATE,
-        updateDate: TARGET_DATE,
-        newValue: 30.75,
-        saveMode: 'create',
-      },
-      {
-        species: 'LO',
-        grade: 'A',
-        growthIndicator: 'S',
-        retrievalDate: TARGET_DATE,
-        updateDate: TARGET_DATE,
-        newValue: 30.75,
-        saveMode: 'create',
-      },
-      {
-        species: 'YE',
-        grade: 'A',
-        growthIndicator: 'O',
-        retrievalDate: TARGET_DATE,
-        updateDate: TARGET_DATE,
-        newValue: 30.75,
-        saveMode: 'create',
-      },
-      {
-        species: 'YE',
-        grade: 'A',
-        growthIndicator: 'S',
-        retrievalDate: TARGET_DATE,
-        updateDate: TARGET_DATE,
-        newValue: 30.75,
-        saveMode: 'create',
-      },
-    ])
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
+    expect(mockedSave).toHaveBeenCalledWith({
+      species: 'WH',
+      grade: 'A',
+      growthIndicator: 'O',
+      retrievalDate: CURRENT_MONTH,
+      updateDate: CURRENT_MONTH,
+      newValue: 10,
+      saveMode: 'create',
+    })
   })
 
-  it('shows save failures in the table notification', async () => {
+  it('blocks blank, over-precise, and out-of-range edits before save', async () => {
     const user = userEvent.setup()
-    mockSearchRows({ current: [], previous: [] })
+    mockRows([row('BA', 'A', 'O', CURRENT_MONTH, 10.25)])
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+    const input = oldGrowthCell('Balsam (BA)', 'A')
+    await user.clear(input)
+    expect(screen.getByText('Balsam (BA) grade A is required.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+
+    await user.type(input, '10.123')
+    expect(screen.getByText(/must be a number from 0 to 9999.99/)).toBeVisible()
+    await user.clear(input)
+    await user.type(input, '10000')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    expect(mockedSave).not.toHaveBeenCalled()
+  })
+
+  it('requires confirmation before updating a past month', async () => {
+    const user = userEvent.setup()
+    mockRows([], [], '2000-01-01')
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    fireEvent.change(screen.getByLabelText('Effective month'), { target: { value: '2000-01' } })
+    await waitForMonthLoad('2000-01-01')
+    expect(screen.getByRole('heading', { name: 'Past month selected' })).toBeVisible()
+    await user.type(oldGrowthCell('Balsam (BA)', 'A'), '11')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(mockedSave).not.toHaveBeenCalled()
+    expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Confirm and save' }))
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
+    expect(mockedSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrievalDate: '2000-01-01',
+        updateDate: '2000-01-01',
+        growthIndicator: 'O',
+      }),
+    )
+  })
+
+  it('keeps the matrix read-only without the admin authority', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    mockRows([row('BA', 'A', 'O', CURRENT_MONTH, 10.25)])
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+    expect(oldGrowthCell('Balsam (BA)', 'A')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+
+  it('fails closed when the selected month cannot be loaded authoritatively', async () => {
+    const user = userEvent.setup()
+    mockedSearch.mockRejectedValue(new Error('Oracle unavailable'))
+
+    render(<RTMEmsLogAmvPage />)
+
+    expect(await screen.findByText('Unable to load average monthly values.')).toBeVisible()
+    const input = oldGrowthCell('Balsam (BA)', 'A')
+    expect(input).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    await user.click(input)
+    await user.keyboard('11')
+    expect(input).toHaveValue('')
+    expect(mockedSave).not.toHaveBeenCalled()
+  })
+
+  it('ignores an older month response that arrives after a newer load', async () => {
+    let resolveOlderMonth: (rows: RtmEmsLogAmvRow[]) => void = () => undefined
+    const olderMonthRows = new Promise<RtmEmsLogAmvRow[]>((resolve) => {
+      resolveOlderMonth = resolve
+    })
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    mockedSearch.mockImplementation(async (filters) => {
+      if (filters.retrievalDate === '2020-01-01') {
+        return olderMonthRows
+      }
+      if (filters.retrievalDate === '2020-03-01') {
+        return [row('BA', 'A', 'O', '2020-03-01', 22)]
+      }
+      return []
+    })
+
+    const effectiveMonth = screen.getByLabelText('Effective month')
+    fireEvent.change(effectiveMonth, { target: { value: '2020-01' } })
+    fireEvent.change(screen.getByLabelText('Effective month'), { target: { value: '2020-03' } })
+
+    await waitForMonthLoad('2020-03-01')
+    await waitFor(() => expect(oldGrowthCell('Balsam (BA)', 'A')).toHaveValue('22'))
+
+    resolveOlderMonth([row('BA', 'A', 'O', '2020-01-01', 11)])
+    await waitFor(() => expect(screen.getByLabelText('Effective month')).toHaveValue('2020-03'))
+    expect(oldGrowthCell('Balsam (BA)', 'A')).toHaveValue('22')
+  })
+
+  it('surfaces rejected physical-key saves without reporting success', async () => {
+    const user = userEvent.setup()
     mockedSave.mockResolvedValue({
       status: 'validation_failed',
       message: 'Average monthly value validation failed.',
-      errors: ['Average monthly value validation failed.'],
+      errors: ['The exact physical key was rejected.'],
       rows: [],
     })
 
     render(<RTMEmsLogAmvPage />)
-    await selectTargetDate()
-
-    await user.type(screen.getByLabelText('Balsam grade A'), '11')
+    await waitForMonthLoad()
+    await user.type(oldGrowthCell('Balsam (BA)', 'A'), '11')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText(/Average monthly value validation failed/)).toBeVisible()
+    expect(await screen.findByText(/The exact physical key was rejected/)).toBeVisible()
+    expect(mockedSave).toHaveBeenCalledTimes(1)
   })
 
-  it('reloads partial saves and keeps failed cells ready to retry', async () => {
+  it('reloads accepted exact keys while retaining only failed keys for retry', async () => {
     const user = userEvent.setup()
-    let savedCurrentRows = [row('BA', 'A', 'O', TARGET_DATE, 11)]
+    let persistedRows = [
+      row('BA', 'A', 'O', CURRENT_MONTH, 10),
+      row('HE', 'A', 'O', CURRENT_MONTH, 20),
+    ]
     mockedSearch.mockImplementation(async (filters) =>
-      filters.retrievalDate === TARGET_DATE ? savedCurrentRows : [],
+      filters.retrievalDate === CURRENT_MONTH ? persistedRows : [],
     )
     mockedSave
       .mockImplementationOnce(async () => {
-        savedCurrentRows = [row('BA', 'A', 'O', TARGET_DATE, 12)]
+        persistedRows = [
+          row('BA', 'A', 'O', CURRENT_MONTH, 11),
+          row('HE', 'A', 'O', CURRENT_MONTH, 20),
+        ]
         return {
           status: 'accepted',
           message: 'Average monthly value row saved.',
@@ -301,338 +519,77 @@ describe('RTM EMS Log AMV actions', () => {
       })
       .mockResolvedValueOnce({
         status: 'validation_failed',
-        message: 'Second growth row could not be saved.',
-        errors: ['Second growth row could not be saved.'],
+        message: 'Hemlock key could not be saved.',
+        errors: ['Hemlock key could not be saved.'],
         rows: [],
       })
 
     render(<RTMEmsLogAmvPage />)
-    await selectTargetDate()
-
-    const input = screen.getByLabelText('Balsam grade A')
-    expect(input).toHaveValue('11')
-    await user.clear(input)
-    await user.type(input, '12')
+    await waitForMonthLoad()
+    const balsam = oldGrowthCell('Balsam (BA)', 'A')
+    const hemlock = oldGrowthCell('Hemlock (HE)', 'A')
+    await user.clear(balsam)
+    await user.type(balsam, '11')
+    await user.clear(hemlock)
+    await user.type(hemlock, '21')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Second growth row could not be saved.')).toBeVisible()
+    expect(await screen.findByText('Hemlock key could not be saved.')).toBeVisible()
     await waitFor(() => {
-      expect(input).toHaveValue('12')
+      expect(balsam).toHaveValue('11')
+      expect(hemlock).toHaveValue('21')
       expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
     })
     expect(mockedSave).toHaveBeenCalledTimes(2)
   })
 
-  it('warns without confirmation when a future-date value is added to an empty cell', async () => {
+  it('serializes physical-key saves to avoid flooding Oracle connections', async () => {
     const user = userEvent.setup()
-    mockSearchRows({ current: [], previous: [] })
-
-    render(<RTMEmsLogAmvPage />)
-    await selectTargetDate(FUTURE_DATE)
-
-    const input = screen.getByLabelText('Balsam grade A')
-    await user.type(input, '11')
-    expect(screen.getByRole('heading', { name: 'Warnings' })).toBeVisible()
-    expect(screen.getByText(/was blank in the starting values and is now populated/)).toBeVisible()
-    expect(input.closest('td')).toHaveClass('has-warning', 'is-added')
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-
-    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
-    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
-  })
-
-  it('keeps ordinary value-to-value edits as standard unsaved changes', async () => {
-    const user = userEvent.setup()
-    mockSearchRows({
-      current: [row('BA', 'A', 'O', TARGET_DATE, 10.25), row('BA', 'A', 'S', TARGET_DATE, 10.25)],
-      previous: [
-        row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
-        row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
-      ],
+    let activeSaves = 0
+    let maximumActiveSaves = 0
+    mockRows([row('BA', 'A', 'O', CURRENT_MONTH, 1), row('HE', 'A', 'O', CURRENT_MONTH, 2)])
+    mockedSave.mockImplementation(async () => {
+      activeSaves++
+      maximumActiveSaves = Math.max(maximumActiveSaves, activeSaves)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      activeSaves--
+      return {
+        status: 'accepted',
+        message: 'Average monthly value row saved.',
+        errors: [],
+        rows: [],
+      }
     })
 
     render(<RTMEmsLogAmvPage />)
-    await selectTargetDate()
-
-    const input = screen.getByLabelText('Balsam grade A')
-    await user.clear(input)
-    await user.type(input, '11')
-
-    expect(input.closest('td')).toHaveClass('is-dirty', 'is-changed')
-    expect(input.closest('td')).not.toHaveClass('has-warning')
-    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
-
+    await waitForMonthLoad()
+    await user.clear(oldGrowthCell('Balsam (BA)', 'A'))
+    await user.type(oldGrowthCell('Balsam (BA)', 'A'), '11')
+    await user.clear(oldGrowthCell('Hemlock (HE)', 'A'))
+    await user.type(oldGrowthCell('Hemlock (HE)', 'A'), '12')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
-    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Saved 2 table cells.')).toBeVisible())
+    expect(maximumActiveSaves).toBe(1)
   })
 
-  it('warns on additions and removals when today already has saved values', async () => {
+  it('stops the remaining save queue after a transport failure', async () => {
     const user = userEvent.setup()
-    const savedTodayRows = [
-      row('BA', 'A', 'O', TARGET_DATE, 10.25),
-      row('BA', 'A', 'S', TARGET_DATE, 10.25),
-    ]
-    mockSearchRows({
-      current: savedTodayRows,
-      previous: [
-        row('BA', 'A', 'O', PREVIOUS_DAY_DATE, 10.25),
-        row('BA', 'A', 'S', PREVIOUS_DAY_DATE, 10.25),
-      ],
-    })
+    mockedSave.mockRejectedValueOnce(new Error('Oracle unavailable'))
 
     render(<RTMEmsLogAmvPage />)
-    await selectTargetDate()
+    await waitForMonthLoad()
+    await user.type(oldGrowthCell('Balsam (BA)', 'A'), '11')
+    await user.type(oldGrowthCell('Hemlock (HE)', 'A'), '12')
+    await user.type(oldGrowthCell('Cedar (CE)', 'A'), '13')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    const balsamInput = screen.getByLabelText('Balsam grade A')
-    const cedarInput = screen.getByLabelText('Cedar grade A')
-    expect(
-      screen.queryByRole('heading', { name: 'Starting values copied' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
-    expect(mockedSearchLatest).not.toHaveBeenCalledWith(TARGET_DATE)
-
-    await user.clear(balsamInput)
-    expect(balsamInput.closest('td')).toHaveClass('has-warning', 'is-removed')
-    expect(screen.getByText(/had a value yesterday and is blank for today/)).toBeVisible()
-
-    await user.click(screen.getByRole('button', { name: 'Reset' }))
-    expect(balsamInput).toHaveValue('10.25')
-    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
-
-    await user.type(cedarInput, '5')
-    expect(cedarInput.closest('td')).toHaveClass('has-warning', 'is-added')
-    expect(screen.getByText(/is newly populated; it was blank yesterday/)).toBeVisible()
-  })
-
-  it.each([
-    ['today', TARGET_DATE, dateOffsetFromToday(-8)],
-    ['an intervening past date', '2000-01-02', '2000-01-01'],
-  ])(
-    'prefills empty values for %s without warning on untouched copied values',
-    async (_, date, sourceDate) => {
-      mockSearchRows({ current: [], previous: [] })
-      mockedSearchLatest.mockResolvedValue([
-        row('BA', 'A', 'O', sourceDate, 10.25),
-        row('BA', 'A', 'S', sourceDate, 10.25),
-      ])
-
-      render(<RTMEmsLogAmvPage />)
-      await selectTargetDate(date)
-
-      await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(date))
-      expect(screen.getByLabelText('Balsam grade A')).toHaveValue('10.25')
-      expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
-      expect(screen.getByText(/These values are not saved/)).toBeVisible()
-      expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
-      expect(screen.getByLabelText('Balsam grade A').closest('td')).not.toHaveClass('has-warning')
-      expect(mockedSave).not.toHaveBeenCalled()
-    },
-  )
-
-  it('prefills an empty future date from the latest values without saving automatically', async () => {
-    const user = userEvent.setup()
-    const sourceDate = dateOffsetFromToday(-7)
-    mockSearchRows({ current: [], previous: [] })
-    mockedSearchLatest.mockResolvedValue([
-      row('BA', 'A', 'O', sourceDate, 10.25),
-      row('BA', 'A', 'S', sourceDate, 10.25),
-      row('HE', 'A', 'O', sourceDate, 20.5),
-      row('HE', 'A', 'S', sourceDate, 20.5),
-    ])
-
-    render(<RTMEmsLogAmvPage />)
-    await selectTargetDate(FUTURE_DATE)
-
-    await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(FUTURE_DATE))
-    const balsamInput = screen.getByLabelText('Balsam grade A')
-    const cedarInput = screen.getByLabelText('Cedar grade A')
-    expect(balsamInput).toHaveValue('10.25')
-    expect(screen.getByLabelText('Hemlock grade A')).toHaveValue('20.5')
-    expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
-    expect(screen.getByText(/These values are not saved/)).toBeVisible()
-    expect(balsamInput.closest('td')).toHaveClass('is-dirty')
-    expect(balsamInput.closest('td')).not.toHaveClass('has-warning')
-    expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
-    expect(mockedSave).not.toHaveBeenCalled()
+    expect(await screen.findByText('Unable to save average monthly values.')).toBeVisible()
+    expect(mockedSave).toHaveBeenCalledTimes(1)
+    expect(oldGrowthCell('Balsam (BA)', 'A')).toHaveValue('11')
+    expect(oldGrowthCell('Hemlock (HE)', 'A')).toHaveValue('12')
+    expect(oldGrowthCell('Cedar (CE)', 'A')).toHaveValue('13')
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
-
-    await user.clear(balsamInput)
-    expect(balsamInput.closest('td')).toHaveClass('has-warning', 'is-removed')
-    expect(screen.getByText(/had a value in the starting values and is now blank/)).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Reset' }))
-
-    await user.clear(balsamInput)
-    await user.type(balsamInput, '11')
-    expect(balsamInput.closest('td')).toHaveClass('is-changed')
-    expect(balsamInput.closest('td')).not.toHaveClass('has-warning')
-    await user.click(screen.getByRole('button', { name: 'Reset' }))
-
-    await user.type(cedarInput, '5')
-    expect(cedarInput.closest('td')).toHaveClass('has-warning', 'is-added')
-    expect(screen.getByText(/was blank in the starting values and is now populated/)).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Reset' }))
-
-    expect(balsamInput).toHaveValue('10.25')
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
-
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-
-    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(4))
-    expect(screen.queryByText('Confirm AMV changes')).not.toBeInTheDocument()
-    expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
-      {
-        species: 'BA',
-        grade: 'A',
-        growthIndicator: 'O',
-        retrievalDate: FUTURE_DATE,
-        updateDate: FUTURE_DATE,
-        newValue: 10.25,
-        saveMode: 'create',
-      },
-      {
-        species: 'BA',
-        grade: 'A',
-        growthIndicator: 'S',
-        retrievalDate: FUTURE_DATE,
-        updateDate: FUTURE_DATE,
-        newValue: 10.25,
-        saveMode: 'create',
-      },
-      {
-        species: 'HE',
-        grade: 'A',
-        growthIndicator: 'O',
-        retrievalDate: FUTURE_DATE,
-        updateDate: FUTURE_DATE,
-        newValue: 20.5,
-        saveMode: 'create',
-      },
-      {
-        species: 'HE',
-        grade: 'A',
-        growthIndicator: 'S',
-        retrievalDate: FUTURE_DATE,
-        updateDate: FUTURE_DATE,
-        newValue: 20.5,
-        saveMode: 'create',
-      },
-    ])
-  })
-
-  it('clears warning cell state when a different date finishes loading', async () => {
-    const user = userEvent.setup()
-    const sourceDate = dateOffsetFromToday(-7)
-    mockSearchRows({ current: [], previous: [] })
-    mockedSearchLatest.mockResolvedValue([
-      row('BA', 'A', 'O', sourceDate, 10.25),
-      row('BA', 'A', 'S', sourceDate, 10.25),
-    ])
-
-    render(<RTMEmsLogAmvPage />)
-    await selectTargetDate(FUTURE_DATE)
-
-    const warnedInput = screen.getByLabelText('Cedar grade A')
-    await user.type(warnedInput, '5')
-    expect(warnedInput.closest('td')).toHaveClass('has-warning', 'is-added')
-
-    await selectTargetDate(SECOND_FUTURE_DATE)
-    await waitFor(() => expect(mockedSearchLatest).toHaveBeenCalledWith(SECOND_FUTURE_DATE))
-
-    const reloadedInput = screen.getByLabelText('Cedar grade A')
-    await waitFor(() => {
-      expect(reloadedInput).toHaveValue('')
-      expect(reloadedInput.closest('td')).not.toHaveClass('has-warning', 'is-added')
-      expect(screen.queryByRole('heading', { name: 'Warnings' })).not.toBeInTheDocument()
-    })
-    expect(reloadedInput).not.toBe(warnedInput)
-  })
-
-  it('blocks blank, over-precise and out-of-range table values before save', async () => {
-    const user = userEvent.setup()
-    mockSearchRows({
-      current: [row('BA', 'A', 'O', TARGET_DATE, 10.25), row('BA', 'A', 'S', TARGET_DATE, 10.25)],
-      previous: [],
-    })
-
-    render(<RTMEmsLogAmvPage />)
-    await selectTargetDate()
-
-    const input = screen.getByLabelText('Balsam grade A')
-    await user.clear(input)
-    expect(input.closest('td')).toHaveClass('has-warning', 'is-removed')
-    expect(screen.getByText(/had a value in the starting values and is now blank/)).toBeVisible()
-    expect(screen.getByText('Balsam grade A is required.')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
-
-    await user.type(input, '10.123')
-    expect(
-      screen.getByText(
-        'Balsam grade A must be a number from 0 to 9999.99 with no more than two decimal places.',
-      ),
-    ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
-
-    await user.clear(input)
-    await user.type(input, '10000')
-    expect(
-      screen.getByText(
-        'Balsam grade A must be a number from 0 to 9999.99 with no more than two decimal places.',
-      ),
-    ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
-    expect(mockedSave).not.toHaveBeenCalled()
-  })
-
-  it('allows past-date edits after explicit confirmation', async () => {
-    const user = userEvent.setup()
-    mockSearchRows({ current: [], previous: [] })
-    render(<RTMEmsLogAmvPage />)
-
-    fireEvent.change(await screen.findByLabelText('Effective date'), {
-      target: { value: '2000-01-01' },
-    })
-
-    await waitFor(() =>
-      expect(mockedSearch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          retrievalDate: '2000-01-01',
-          updateDate: '2000-01-01',
-        }),
-      ),
-    )
-    expect(screen.getByRole('heading', { name: 'Past date selected' })).toBeVisible()
-    const input = screen.getByLabelText('Balsam grade A')
-    expect(input).toBeEnabled()
-    await user.type(input, '11')
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(mockedSave).not.toHaveBeenCalled()
-    expect(await screen.findByText('Confirm AMV changes')).toBeVisible()
-    expect(screen.getByText('Review the following before saving 1 changed cell.')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
-    expect(screen.getByText(/which is in the past/)).toBeVisible()
-    await confirmAmvSave(user)
-
-    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(2))
-    expect(mockedSave.mock.calls.map(([request]) => request)).toEqual([
-      {
-        species: 'BA',
-        grade: 'A',
-        growthIndicator: 'O',
-        retrievalDate: '2000-01-01',
-        updateDate: '2000-01-01',
-        newValue: 11,
-        saveMode: 'create',
-      },
-      {
-        species: 'BA',
-        grade: 'A',
-        growthIndicator: 'S',
-        retrievalDate: '2000-01-01',
-        updateDate: '2000-01-01',
-        newValue: 11,
-        saveMode: 'create',
-      },
-    ])
   })
 })

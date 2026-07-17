@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -45,20 +47,77 @@ public interface ApplicationDetailsRpcService {
 
   List<DocumentItem> getDocumentDetails(Long applicationNumber);
 
-  Optional<DocumentContent> getDocument(Long fileId);
+  Optional<DocumentStreamer> streamDocument(Long fileId);
 
   boolean removeDocument(Long documentId);
 
   Optional<String> getRemark(Long remarkId);
+
+  default Optional<Long> findApplicationNumberForRemark(Long remarkId) {
+    return Optional.empty();
+  }
+
+  default Optional<Long> findApplicationNumberForPackage(String packageNumber) {
+    return Optional.empty();
+  }
+
+  default Optional<Long> findApplicationNumberForScale(String scaleDetailId) {
+    return Optional.empty();
+  }
+
+  default boolean documentBelongsToApplication(Long documentId, Long applicationNumber) {
+    return findDocumentForApplication(documentId, applicationNumber).isPresent();
+  }
+
+  default Optional<DocumentItem> findDocumentForApplication(
+      Long documentId, Long applicationNumber) {
+    if (documentId == null || documentId < 1 || applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    List<DocumentItem> matches = getDocumentDetails(applicationNumber).stream()
+        .filter(item -> documentId.equals(item.id()))
+        .limit(2)
+        .toList();
+    return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+  }
 
   Optional<PersistedRemark> persistRemark(
       String remarkId, Long applicationNumber, String remarkBody, String userId);
 
   CreateApplicationResult addApplication(CreateApplicationRequest request, String userId);
 
+  /**
+   * Creates a federal application from the authenticated, dedicated federal submission ingress.
+   * This trusted boundary is deliberately separate from user-facing provincial creation so source
+   * workflow status and the external federal application number cannot be injected through the
+   * public application RPC.
+   */
+  CreateApplicationResult addFederalImportedApplication(
+      CreateApplicationRequest request, String userId);
+
+  /** Creates the internal application used to store Blanket OIC packages. */
+  CreateApplicationResult addHiddenBlanketOicApplication(
+      CreateApplicationRequest request, String userId);
+
   CreateApplicationResult updateApplicationSummary(ApplicationSummaryUpdateRequest request, String userId);
 
+  /** Keeps the hidden Blanket OIC application owner aligned with its permit. */
+  boolean synchronizeApplicationOwner(
+      Long applicationNumber,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String userId);
+
   Optional<ApplicationSummarySnapshot> getApplicationSummarySnapshot(Long applicationNumber);
+
+  /**
+   * Loads the database facts used by the legacy application edit policy. Implementations must
+   * return an empty result, or propagate a lookup failure, rather than substituting permissive
+   * defaults.
+   */
+  default Optional<ApplicationEditContext> getApplicationEditContext(Long applicationNumber) {
+    return Optional.empty();
+  }
 
   boolean isApplicationVolumeUsed(Long applicationNumber);
 
@@ -87,6 +146,9 @@ public interface ApplicationDetailsRpcService {
 
   List<ApplicationPermitItem> findPermits(Long applicationNumber);
 
+  /** Loads every permit key that must be serialized before mutating application children. */
+  List<Long> getPermitNumbersForApplicationMutation(Long applicationNumber);
+
   List<ApplicationPackageScaleItem> getScalesForPackage(String packageNumber);
 
   PackageDetailsItem getPackageDetails(String packageNumber);
@@ -104,7 +166,34 @@ public interface ApplicationDetailsRpcService {
 
   PackagePersistenceResult addPackage(PackageMutationRequest request, String userId);
 
+  /**
+   * Adds a package to the system-owned application backing a Blanket OIC permit. This trusted
+   * service-to-service path must not be exposed as a generic application endpoint.
+   */
+  PackagePersistenceResult addHiddenBlanketOicPackage(
+      PackageMutationRequest request, String userId);
+
   PackagePersistenceResult updatePackage(PackageMutationRequest request, String userId);
+
+  /** Updates a package through the trusted Blanket OIC workflow only. */
+  PackagePersistenceResult updateHiddenBlanketOicPackage(
+      PackageMutationRequest request, String userId);
+
+  /**
+   * Synchronizes package fields derived during a permit transition. Existing growth and product
+   * codes win; supplied codes only fill missing values. Implementations must preserve every other
+   * package field and all package end-use rows.
+   */
+  boolean synchronizePackageForPermitTransition(
+      String packageNumber,
+      Double volume,
+      String growthTypeCode,
+      String productTypeCode,
+      String userId);
+
+  /** Updates only permit-derived package volume while preserving classification and end uses. */
+  boolean synchronizePackageVolumeForPermitTransition(
+      String packageNumber, Double volume, String userId);
 
   ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId);
 
@@ -112,9 +201,29 @@ public interface ApplicationDetailsRpcService {
 
   boolean deletePackageById(String packageNumber, String userId);
 
-  record DocumentItem(long id, String name, String description, String type) {}
+  /** Deletes an empty package from the expected system-owned Blanket OIC application. */
+  boolean deleteHiddenBlanketOicPackageById(
+      String packageNumber, Long applicationNumber, String userId);
 
-  record DocumentContent(byte[] bytes) {}
+  record DocumentItem(
+      long id,
+      String name,
+      String description,
+      String type,
+      String source,
+      Long sourceApplicationNumber,
+      Long sourcePermitNumber,
+      boolean deletable) {
+
+    public DocumentItem(long id, String name, String description, String type) {
+      this(id, name, description, type, "application", null, null, true);
+    }
+  }
+
+  @FunctionalInterface
+  interface DocumentStreamer {
+    void writeTo(OutputStream outputStream) throws IOException;
+  }
 
   record PersistedRemark(
       long remarkId, String remark, String displayRemark, String user, Instant date) {}
@@ -279,6 +388,18 @@ public interface ApplicationDetailsRpcService {
       String agentContactName,
       String ownerContactName,
       String oicIndicator) {}
+
+  record ApplicationEditContext(
+      Long applicationNumber,
+      String applicationStatusCode,
+      String jurisdictionCode,
+      Long exportScheduleId,
+      LocalDate advertisingDate,
+      boolean hasPackageBeforeApproval,
+      boolean hasScaleBeforeApproval,
+      boolean hasCompletePermit,
+      String oicIndicator,
+      boolean interiorMinisterialItemOverrideEligible) {}
 
   record CreateApplicationRequest(
       Long federalApplicationNumber,
@@ -561,4 +682,5 @@ public interface ApplicationDetailsRpcService {
       Long applicationNumber,
       List<String> errors,
       List<String> warnings) {}
+
 }

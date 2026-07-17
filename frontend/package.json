@@ -12,9 +12,10 @@
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,scss}\" \"e2e/*smoke.spec.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "vitest --mode test",
-    "test:cov": "vitest run --mode test --coverage",
+    "test:cov": "vitest run --mode test --coverage --maxWorkers=2",
     "build": "vite build",
     "pree2e": "playwright install chromium",
     "e2e": "playwright test --project=chromium",
@@ -24,7 +25,6 @@
     "e2e:report": "playwright show-report"
   },
   "dependencies": {
-    "@bcgov-nr/nr-theme": "^1.8.9",
     "@carbon/icons-react": "^11.64.0",
     "@carbon/react": "^1.88.0",
     "@types/node": "^24.0.0",
@@ -38,7 +38,7 @@
     "vite": "^8.0.0"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "devDependencies": {
     "@eslint-react/eslint-plugin": "^5.0.0",

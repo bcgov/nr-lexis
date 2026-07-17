@@ -72,7 +72,7 @@ P_JURISDICTION => $P{P_JURISDICTION}
 	</title>
 	<detail>
 		<band height="14" splitType="Prevent">
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="57d0d674-cf4e-4ebd-8b1f-452982479356" x="28" y="1" width="125" height="13" forecolor="#000000"/>
 				<textElement>
 					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
@@ -86,7 +86,7 @@ P_JURISDICTION => $P{P_JURISDICTION}
 				</textElement>
 				<textFieldExpression><![CDATA[$F{PACKAGE_VOLUME}]]></textFieldExpression>
 			</textField>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="5d67066b-936b-4c54-b0a6-4518c6fe7ee1" x="206" y="1" width="86" height="13" forecolor="#000000"/>
 				<textElement textAlignment="Right">
 					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>

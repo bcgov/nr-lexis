@@ -1,0 +1,5 @@
+Permit #{{permitNumber}} {{approvalDescription}}
+
+Package(s): {{packageNumbers}}
+
+This is an automated notification; do not reply.

@@ -2,7 +2,7 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { env } from '@/env'
 import apiService from '@/service/api-service'
 import { extractResponseFilename, getResponseHeaderValue } from '@/service/http-response-utils'
-import { getConfiguredBasePath, isEnabledConfig } from '@/service/service-config-utils'
+import { getConfiguredBasePath } from '@/service/service-config-utils'
 
 export type RunReportRequest = {
   reportId: string
@@ -58,6 +58,20 @@ const shouldNormalizeLegacyUppercase = (reportId: string, key: string): boolean 
 
 const LEGACY_TENURE_FIELD_LIMIT = 6
 const PDF_ONLY_PROMPT_REPORT_IDS = new Set(['approvedExemptionReport', 'permitReport'])
+const REPORT_FILENAME_BASES: Readonly<Record<string, string>> = {
+  applicationReport: 'application-report',
+  approvedExemptionReport: 'approved-exemption',
+  biweeklyListing: 'advertising-list',
+  exemptionReport: 'exemption-report',
+  feeReport: 'fee-report',
+  offerReport: 'offer-report',
+  permitLedgerReport: 'permit-ledger-report',
+  permitReport: 'permit',
+  speciesGradeReport: 'species-and-grade-report',
+  teacReport: 'teac-package-report',
+  tenureReport: 'tenure-analysis-report',
+  transportReport: 'transport-report',
+}
 
 const compactLegacyIndexedValues = (
   values: Record<string, string>,
@@ -109,13 +123,13 @@ const resolveReportFormat = (
 
   const outputFormat = values.outputFormat?.trim().toUpperCase()
   if (reportId === 'tenureReport' && outputFormat === 'CSV') {
-    return 'XLS'
+    return 'XLSX'
   }
   if (outputFormat === 'CSV') {
     return 'CSV'
   }
   if (outputFormat === 'XLS' || outputFormat === 'XLSX') {
-    return 'XLS'
+    return 'XLSX'
   }
   if (outputFormat === 'PDF') {
     return 'PDF'
@@ -129,7 +143,7 @@ const resolveReportExtension = (
   actionMapping?: string,
 ): string => {
   const format = resolveReportFormat(reportId, values, actionMapping)
-  return format === 'XLS' ? 'xlsx' : format.toLowerCase()
+  return format.toLowerCase()
 }
 
 const buildReportPayload = (
@@ -139,11 +153,7 @@ const buildReportPayload = (
 ): ReportApiPayload => {
   const parameters: Record<string, string> = {}
 
-  if (
-    isEnabledConfig(env.VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING) &&
-    actionMapping &&
-    actionMapping.trim().length > 0
-  ) {
+  if (actionMapping && actionMapping.trim().length > 0) {
     parameters.legacyActionMapping = actionMapping.trim()
   }
 
@@ -200,21 +210,71 @@ const getDefaultFilename = (
   values: Record<string, string>,
   actionMapping?: string,
 ): string => {
-  return `lexis-${reportId}.${resolveReportExtension(reportId, values, actionMapping)}`
+  const filenameBase = REPORT_FILENAME_BASES[reportId] ?? `lexis-${reportId}`
+  return `${filenameBase}.${resolveReportExtension(reportId, values, actionMapping)}`
 }
 
-const readErrorPayload = async (payload: unknown): Promise<string> => {
-  if (payload instanceof Blob) {
-    return (await payload.text()).trim()
+const extractErrorMessage = (payload: unknown): string => {
+  if (!payload || typeof payload !== 'object') {
+    return ''
   }
-  if (typeof payload === 'string') {
-    return payload.trim()
-  }
-  if (payload && typeof payload === 'object' && 'message' in payload) {
-    const message = (payload as { message?: unknown }).message
-    return typeof message === 'string' ? message.trim() : ''
+
+  const problem = payload as Record<string, unknown>
+  for (const field of ['detail', 'message', 'title']) {
+    const value = problem[field]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
   }
   return ''
+}
+
+const isJsonContentType = (contentType: string | undefined): boolean => {
+  const normalized = contentType?.split(';', 1)[0]?.trim().toLowerCase() ?? ''
+  return normalized === 'application/json' || normalized.endsWith('+json')
+}
+
+const readErrorPayload = async (
+  payload: unknown,
+  responseContentType?: string,
+): Promise<string> => {
+  if (payload && typeof payload === 'object' && !(payload instanceof Blob)) {
+    return extractErrorMessage(payload)
+  }
+
+  let text: string
+  let blobContentType: string | undefined
+  try {
+    if (payload instanceof Blob) {
+      text = (await payload.text()).trim()
+      blobContentType = payload.type
+    } else if (typeof payload === 'string') {
+      text = payload.trim()
+    } else {
+      return ''
+    }
+  } catch {
+    return ''
+  }
+
+  if (!text) {
+    return ''
+  }
+
+  const looksLikeJson = text.startsWith('{') || text.startsWith('[')
+  if (
+    isJsonContentType(responseContentType) ||
+    isJsonContentType(blobContentType) ||
+    looksLikeJson
+  ) {
+    try {
+      return extractErrorMessage(JSON.parse(text))
+    } catch {
+      return ''
+    }
+  }
+
+  return text
 }
 
 export const runReport = async (request: RunReportRequest): Promise<RunReportResult> => {
@@ -237,10 +297,17 @@ export const runReport = async (request: RunReportRequest): Promise<RunReportRes
       )
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      const message = await readErrorPayload(error.response?.data)
+      const responseContentType = error.response?.headers
+        ? (getResponseHeaderValue(error.response.headers, 'content-type') ?? undefined)
+        : undefined
+      const message = await readErrorPayload(error.response?.data, responseContentType)
       throw new ReportRequestError(message || DEFAULT_REPORT_ERROR_MESSAGE)
     }
     throw error
+  }
+
+  if (response.status === 204 || response.data.size === 0) {
+    throw new ReportRequestError('No report data matched the selected criteria.')
   }
 
   const contentType =

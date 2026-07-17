@@ -246,7 +246,6 @@ describe('Admin upload workflow smoke', () => {
         ownerClientNumber: '00001012',
         region: 'RSC',
         listingDate: '2026-06-10',
-        applicationNumber: '45963',
       },
     ])
 
@@ -355,6 +354,21 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.queryByText('No data uploaded yet')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     expect(screen.queryByRole('columnheader', { name: 'File' })).not.toBeInTheDocument()
+  })
+
+  it('rejects oversized application submissions before validation', async () => {
+    mockUploadAccess('uploadApplicationSubmission')
+
+    renderPage('/provincial/application/upload')
+
+    const oversized = new File([new Uint8Array(20 * 1024 * 1024 + 1)], 'oversized-submission.xml', {
+      type: 'application/xml',
+    })
+    await userEvent.upload(screen.getByLabelText('Application submission file'), oversized)
+
+    expect(screen.getAllByText('File must be 20 MiB or smaller.')).not.toHaveLength(0)
+    expect(mockedValidateApplicationSubmissionUpload).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /Review submissions?/ })).toBeDisabled()
   })
 
   it('keeps application submissions out of the generic document upload route', () => {
@@ -1141,16 +1155,17 @@ describe('Admin upload workflow smoke', () => {
 
   it('blocks document uploads without a file extension', async () => {
     mockUploadAccess('/filePermitUpload')
+    const user = userEvent.setup({ applyAccept: false })
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
     const file = new File(['permit upload'], 'permit', { type: 'application/pdf' })
-    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await user.upload(screen.getByLabelText('Document File'), file)
 
     expect(screen.getAllByText('Invalid').length).toBeGreaterThan(0)
     expect(
       screen.getAllByText(
-        'Document uploads need a file extension so LEXIS can resolve the file type.',
+        'File type is not supported. Choose BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, or ZIP.',
       ).length,
     ).toBeGreaterThan(0)
 
@@ -1205,6 +1220,11 @@ describe('Admin upload workflow smoke', () => {
     expect(
       screen.getByRole('heading', { name: 'Upload Application Submission' }),
     ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Upload LEXIS XML or GeoJSON application submissions and review validated data before submitting.',
+      ),
+    ).toBeVisible()
     expect(screen.queryByLabelText('Upload type')).not.toBeInTheDocument()
     expect(screen.getByText('Upload application submissions')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()

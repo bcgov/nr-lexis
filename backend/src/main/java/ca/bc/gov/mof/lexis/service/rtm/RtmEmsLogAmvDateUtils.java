@@ -1,6 +1,5 @@
 package ca.bc.gov.mof.lexis.service.rtm;
 
-import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import java.time.LocalDate;
@@ -11,18 +10,13 @@ import java.time.format.DateTimeParseException;
 public final class RtmEmsLogAmvDateUtils {
 
   private static final DateTimeFormatter MONTH_WITHOUT_DAY_FORMATTER =
-      DateTimeFormatter.ofPattern("yyyyMM");
+      DateTimeFormatter.ofPattern("uuuuMM");
   private static final DateTimeFormatter MONTH_WITHOUT_DAY_DASHED_FORMATTER =
-      DateTimeFormatter.ofPattern("yyyy-MM");
+      DateTimeFormatter.ofPattern("uuuu-MM");
 
   private RtmEmsLogAmvDateUtils() {}
 
   public static LocalDate parseRetrievalDate(String value) {
-    LocalDate parsed = parseIsoOrLegacyDate(value);
-    if (parsed != null) {
-      return parsed;
-    }
-
     String normalized = trimToNull(value);
     if (normalized == null) {
       return null;
@@ -37,7 +31,18 @@ public final class RtmEmsLogAmvDateUtils {
     try {
       return YearMonth.parse(normalized, MONTH_WITHOUT_DAY_DASHED_FORMATTER).atDay(1);
     } catch (DateTimeParseException ignored) {
+      // Fall through to the explicit month-start ISO date.
+    }
+
+    try {
+      LocalDate parsed = LocalDate.parse(normalized, DateTimeFormatter.ISO_LOCAL_DATE);
+      return isFirstOfMonth(parsed) ? parsed : null;
+    } catch (DateTimeParseException ignored) {
       return null;
     }
+  }
+
+  public static boolean isFirstOfMonth(LocalDate value) {
+    return value != null && value.getDayOfMonth() == 1;
   }
 }

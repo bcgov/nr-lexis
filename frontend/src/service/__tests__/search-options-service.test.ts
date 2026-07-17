@@ -7,6 +7,7 @@ import {
   fetchProvincialOfferOptions,
   fetchProvincialPermitOptions,
   fetchReportOptions,
+  SearchOptionsUnavailableError,
 } from '@/service/search-options-service'
 
 const { getCachedDataMock } = vi.hoisted(() => ({
@@ -24,25 +25,26 @@ describe('search-options-service', () => {
     vi.clearAllMocks()
   })
 
-  it('parses provincial application options and ignores invalid entries', async () => {
+  it('parses provincial application options', async () => {
     getCachedDataMock.mockResolvedValue({
       exemptionTypes: [
         { code: 'A', name: 'Type A' },
-        { code: '   ', name: 'Bad Code' },
         { code: 'B', name: 'Type B' },
       ],
-      exemptionReasons: [
-        { code: 'U', name: 'Unadvertised' },
-        { code: ' ', name: 'Bad Reason' },
+      exemptionReasons: [{ code: 'U', name: 'Unadvertised' }],
+      applicationStatuses: [
+        { code: '', name: 'All' },
+        { code: 'NEW', name: 'New' },
       ],
-      applicationStatuses: [{ code: 'NEW', name: 'New' }],
-      productTypes: [{ code: 'LOG', name: 'Logs' }],
+      productTypes: [
+        { code: '', name: 'All' },
+        { code: 'LOG', name: 'Logs' },
+      ],
       growthTypes: [{ code: 'O', name: 'Old Growth' }],
       regions: [
         { code: '11', name: 'District' },
         { code: '1903', name: 'Cariboo Natural Resource Region' },
         { code: '1911', name: 'Not Natural Resource Region' },
-        { code: '12' },
       ],
       currentSchedules: [
         { code: '987', name: '2026-01-11' },
@@ -77,20 +79,29 @@ describe('search-options-service', () => {
     })
   })
 
-  it('returns empty option lists for non-object payloads', async () => {
+  it('accepts and removes the legacy All product type from review options', async () => {
+    getCachedDataMock.mockResolvedValue({
+      productTypes: [
+        { code: '', name: 'All' },
+        { code: 'LOG', name: 'Logs' },
+      ],
+      regions: [{ code: '1903', name: 'Cariboo Natural Resource Region' }],
+      reviewStatuses: [{ code: 'REJ', name: 'Rejected' }],
+    })
+
+    await expect(fetchApplicationReviewOptions()).resolves.toEqual({
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
+      reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
+    })
+  })
+
+  it('rejects non-object payloads with the public-safe unavailable error', async () => {
     getCachedDataMock.mockResolvedValue('unexpected')
 
-    const result = await fetchFederalApplicationOptions()
-
-    expect(getCachedDataMock).toHaveBeenCalledWith(
-      '/lexis/federal/applications/search/options',
-      undefined,
-      {
-        cacheKey: 'search-options:/lexis/federal/applications/search/options',
-        ttlMs: 300000,
-      },
+    await expect(fetchFederalApplicationOptions()).rejects.toBeInstanceOf(
+      SearchOptionsUnavailableError,
     )
-    expect(result).toEqual({ applicationStatuses: [] })
   })
 
   it('filters disallowed application status options like legacy', async () => {
@@ -115,7 +126,6 @@ describe('search-options-service', () => {
       currentSchedules: [
         { code: '1001', name: '2026-06-15' },
         { code: '1002', name: '2026-06-29' },
-        { code: '', name: 'Blank' },
       ],
       defaultRegion: '12',
       regions: [
@@ -185,7 +195,6 @@ describe('search-options-service', () => {
       currentSchedules: [
         { value: '1001', label: '2026-06-15' },
         { value: '1002', label: '2026-06-29' },
-        { value: '', label: 'Blank' },
       ],
       defaultRegion: '',
       regions: [
@@ -245,11 +254,33 @@ describe('search-options-service', () => {
     })
   })
 
-  it('returns empty option lists when options endpoint throws', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it('propagates report option request failures instead of returning empty choices', async () => {
+    const failure = new Error('503 Service Unavailable')
+    getCachedDataMock.mockRejectedValue(failure)
+
+    await expect(fetchReportOptions()).rejects.toBe(failure)
+  })
+
+  it('rejects malformed report option payloads instead of treating them as empty data', async () => {
+    getCachedDataMock.mockResolvedValue('unexpected')
+
+    await expect(fetchReportOptions()).rejects.toThrow(
+      'Search options response from /lexis/reports/options is unavailable.',
+    )
+  })
+
+  it('rejects partial report option objects instead of treating missing arrays as empty data', async () => {
+    getCachedDataMock.mockResolvedValue({ regions: [] })
+
+    await expect(fetchReportOptions()).rejects.toThrow(
+      'Search options response from /lexis/reports/options is unavailable.',
+    )
+  })
+
+  it('maps non-report request failures to one public-safe unavailable error', async () => {
     getCachedDataMock.mockRejectedValue(new Error('network'))
 
-    const result = await fetchApplicationReviewOptions()
+    const request = fetchApplicationReviewOptions()
 
     expect(getCachedDataMock).toHaveBeenCalledWith(
       '/lexis/application-reviews/search/options',
@@ -259,14 +290,63 @@ describe('search-options-service', () => {
         ttlMs: 300000,
       },
     )
-    expect(result).toEqual({
-      productTypes: [],
-      regions: [],
-      reviewStatuses: [],
-    })
-    expect(warnSpy).toHaveBeenCalledTimes(1)
+    await expect(request).rejects.toEqual(
+      expect.objectContaining({
+        name: 'SearchOptionsUnavailableError',
+        message:
+          'Authoritative options are temporarily unavailable. Fields that require those options are disabled.',
+      }),
+    )
+  })
 
-    warnSpy.mockRestore()
+  it('rejects missing arrays and malformed option rows instead of parsing them as empty', async () => {
+    getCachedDataMock
+      .mockResolvedValueOnce({ applicationStatuses: [] })
+      .mockResolvedValueOnce({
+        permitStatuses: [{ code: 'ACT' }],
+        regions: [],
+      })
+      .mockResolvedValueOnce({
+        permitStatuses: [{ code: '   ', name: 'Invalid' }],
+        regions: [],
+      })
+
+    await expect(fetchProvincialApplicationOptions()).rejects.toBeInstanceOf(
+      SearchOptionsUnavailableError,
+    )
+    await expect(fetchProvincialPermitOptions()).rejects.toBeInstanceOf(
+      SearchOptionsUnavailableError,
+    )
+    await expect(fetchProvincialPermitOptions()).rejects.toBeInstanceOf(
+      SearchOptionsUnavailableError,
+    )
+  })
+
+  it('preserves legitimate empty option arrays and endpoint empty-code allowances', async () => {
+    getCachedDataMock
+      .mockResolvedValueOnce({
+        exemptionTypes: [],
+        exemptionStatuses: [],
+        regions: [],
+      })
+      .mockResolvedValueOnce({
+        exemptionTypes: [],
+        exemptionReasons: [],
+        applicationStatuses: [],
+        productTypes: [],
+        growthTypes: [],
+        regions: [],
+        currentSchedules: [{ code: '', name: 'No current schedule' }],
+      })
+
+    await expect(fetchProvincialExemptionOptions()).resolves.toEqual({
+      exemptionTypes: [],
+      exemptionStatuses: [],
+      regions: [],
+    })
+    await expect(fetchProvincialApplicationOptions()).resolves.toMatchObject({
+      currentSchedules: [{ value: '', label: 'No current schedule' }],
+    })
   })
 
   it('filters all region option payloads to natural resource regions', async () => {

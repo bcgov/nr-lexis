@@ -537,7 +537,7 @@ BRITISH COLUMBIA]]></text>
 					<pen lineWidth="1.0" lineStyle="Solid"/>
 				</graphicElement>
 			</line>
-			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+			<textField textAdjust="StretchHeight" isBlankWhenNull="true">
 				<reportElement uuid="483deb44-32f4-444e-857d-2d56a266cb56" x="12" y="12" width="732" height="29" forecolor="#000000"/>
 				<textElement textAlignment="Left">
 					<font fontName="Arial" size="9" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>

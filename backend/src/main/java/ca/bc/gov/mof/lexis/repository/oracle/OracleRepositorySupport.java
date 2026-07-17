@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.repository.oracle;
 
+import static ca.bc.gov.mof.lexis.configuration.OracleLegacyDynamicFetchExecutorConfiguration.MAX_PARALLEL_FETCHES;
+import static ca.bc.gov.mof.lexis.util.OracleAuditUserId.encode;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import java.sql.Array;
 import java.sql.CallableStatement;
@@ -20,15 +24,17 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.Executor;
 import java.util.regex.Pattern;
 import oracle.jdbc.OracleConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -52,31 +58,26 @@ public abstract class OracleRepositorySupport {
 
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
   private static final int LEGACY_DYNAMIC_PAGE_SIZE = 10;
-  private static final int LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES = 4;
-  private static final int AUDIT_USER_MAX_LENGTH = 30;
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
+  private static final String FIND_ORG_UNIT_BY_NUMBER =
+      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
   private static final List<String> NATURAL_RESOURCE_REGION_CODES =
       List.of("1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910");
-  private static final AtomicInteger LEGACY_DYNAMIC_FETCH_THREAD_ID = new AtomicInteger();
-  // Legacy dynamic searches page in 10-row chunks; keep larger UI pages fast without flooding Oracle.
-  private static final ExecutorService LEGACY_DYNAMIC_FETCH_EXECUTOR =
-      Executors.newFixedThreadPool(
-          LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES,
-          runnable -> {
-            Thread thread =
-                new Thread(
-                    runnable,
-                    "lexis-legacy-page-fetcher-"
-                        + LEGACY_DYNAMIC_FETCH_THREAD_ID.incrementAndGet());
-            thread.setDaemon(true);
-            return thread;
-          });
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final JdbcTemplate jdbcTemplate;
+  private final ThreadLocal<Integer> requiredCursorMappingDepth = new ThreadLocal<>();
+  // Directly constructed unit fixtures remain deterministic; Spring repositories must inject the bean.
+  private Executor legacyDynamicFetchExecutor = new SyncTaskExecutor();
 
   protected OracleRepositorySupport(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     this.jdbcTemplate = jdbcTemplate;
+  }
+
+  @Autowired
+  protected final void setLegacyDynamicFetchExecutor(
+      @Qualifier("oracleLegacyDynamicFetchExecutor") Executor legacyDynamicFetchExecutor) {
+    this.legacyDynamicFetchExecutor = legacyDynamicFetchExecutor;
   }
 
   @FunctionalInterface
@@ -99,6 +100,18 @@ public abstract class OracleRepositorySupport {
       return options;
     }
     return fallbackCodeNameOptions(procedureSignature);
+  }
+
+  /**
+   * Loads an authoritative code list without treating an Oracle failure as an empty result or
+   * replacing a legitimately empty result with static values.
+   */
+  protected List<CodeNameDto> loadCodeNameOptionsRequired(String procedureSignature) {
+    return queryCursorProcedureFailClosed(
+        procedureSignature,
+        null,
+        1,
+        rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
   }
 
   protected Optional<String> fallbackCodeDescription(String procedureSignature, String code) {
@@ -132,33 +145,38 @@ public abstract class OracleRepositorySupport {
         });
   }
 
-  protected List<CodeNameDto> loadOrgUnitOptions(boolean displayName) {
-    List<CodeNameDto> options =
-        queryCursorProcedure(
-            LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)",
-            null,
-            1,
-            rs -> {
-              Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-              String regionCode = getString(rs, "ORG_UNIT_CODE");
-              String regionName = getString(rs, "ORG_UNIT_NAME");
-              return new CodeNameDto(
-                  orgUnitNo == null ? null : orgUnitNo.toString(),
-                  displayName
-                      ? firstPresent(regionName, regionCode)
-                      : firstPresent(regionCode, regionName));
-            });
-    List<CodeNameDto> naturalResourceRegions = naturalResourceRegions(options);
-    if (!naturalResourceRegions.isEmpty()) {
-      return naturalResourceRegions;
-    }
-    return naturalResourceRegions(fallbackOrgUnitOptions(displayName));
+  /**
+   * Loads the legacy configured natural-resource regions without production fallback data.
+   * Oracle and cursor failures propagate to the API boundary.
+   */
+  protected List<CodeNameDto> loadOrgUnitOptionsRequired(boolean displayName) {
+    return loadNaturalResourceRegions(displayName);
   }
 
-  private List<CodeNameDto> naturalResourceRegions(List<CodeNameDto> options) {
-    return options.stream()
-        .filter(option -> NATURAL_RESOURCE_REGION_CODES.contains(option.code()))
-        .toList();
+  private List<CodeNameDto> loadNaturalResourceRegions(boolean displayName) {
+    List<CodeNameDto> regions = new ArrayList<>();
+    for (String orgUnitNumber : NATURAL_RESOURCE_REGION_CODES) {
+      SqlConsumer<CallableStatement> binder = cs -> cs.setString(1, orgUnitNumber);
+      SqlRowMapper<CodeNameDto> mapper = rs -> mapOrgUnitOption(rs, displayName);
+      List<CodeNameDto> rows =
+          queryCursorProcedureFailClosed(FIND_ORG_UNIT_BY_NUMBER, binder, 2, mapper);
+      rows.stream()
+          .filter(option -> orgUnitNumber.equals(option.code()))
+          .findFirst()
+          .ifPresent(regions::add);
+    }
+    return List.copyOf(regions);
+  }
+
+  private CodeNameDto mapOrgUnitOption(ResultSet rs, boolean displayName) throws SQLException {
+    Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
+    String regionCode = getString(rs, "ORG_UNIT_CODE");
+    String regionName = getString(rs, "ORG_UNIT_NAME");
+    return new CodeNameDto(
+        orgUnitNo == null ? null : orgUnitNo.toString(),
+        displayName
+            ? firstPresent(regionName, regionCode)
+            : firstPresent(regionCode, regionName));
   }
 
   protected <T> List<T> queryCursorProcedure(
@@ -166,36 +184,94 @@ public abstract class OracleRepositorySupport {
       SqlConsumer<CallableStatement> binder,
       int cursorOutIndex,
       SqlRowMapper<T> rowMapper) {
-    String call = "{ call " + procedureSignature + " }";
-
     try {
-      return jdbcTemplate.execute(
-          call,
-          (CallableStatementCallback<List<T>>) cs -> {
-            if (binder != null) {
-              binder.accept(cs);
-            }
-            cs.registerOutParameter(cursorOutIndex, Types.REF_CURSOR);
-            cs.execute();
-
-            List<T> results = new ArrayList<>();
-            try (ResultSet rs = (ResultSet) cs.getObject(cursorOutIndex)) {
-              if (rs == null) {
-                return results;
-              }
-              while (rs.next()) {
-                results.add(rowMapper.map(rs));
-              }
-            }
-            return results;
-          });
+      return queryCursorProcedureInternal(
+          procedureSignature, binder, cursorOutIndex, rowMapper, false);
     } catch (DataAccessException ex) {
       logger.warn(
-          "Oracle procedure call failed [{}]: {}; root cause: {}",
-          procedureSignature,
-          ex.getMessage(),
-          rootCauseMessage(ex));
+          "event=lexis_oracle_repository operation=cursor_query outcome=failed failureType={}",
+          exceptionType(ex));
       return List.of();
+    }
+  }
+
+  protected <T> List<T> queryCursorProcedureRequired(
+      String procedureSignature,
+      SqlConsumer<CallableStatement> binder,
+      int cursorOutIndex,
+      SqlRowMapper<T> rowMapper) {
+    return queryCursorProcedureInternal(
+        procedureSignature, binder, cursorOutIndex, rowMapper, true);
+  }
+
+  /**
+   * Executes an authoritative cursor read without converting an Oracle failure into an empty
+   * result. Unlike {@link #queryCursorProcedureRequired}, this preserves the legacy cursor
+   * compatibility behavior where unavailable optional columns map to {@code null}.
+   */
+  protected <T> List<T> queryCursorProcedureFailClosed(
+      String procedureSignature,
+      SqlConsumer<CallableStatement> binder,
+      int cursorOutIndex,
+      SqlRowMapper<T> rowMapper) {
+    return queryCursorProcedureInternal(
+        procedureSignature, binder, cursorOutIndex, rowMapper, false);
+  }
+
+  private <T> List<T> queryCursorProcedureInternal(
+      String procedureSignature,
+      SqlConsumer<CallableStatement> binder,
+      int cursorOutIndex,
+      SqlRowMapper<T> rowMapper,
+      boolean strictColumnAccess) {
+    String call = "{ call " + procedureSignature + " }";
+
+    List<T> results = jdbcTemplate.execute(
+        call,
+        (CallableStatementCallback<List<T>>) cs -> {
+          if (binder != null) {
+            binder.accept(cs);
+          }
+          cs.registerOutParameter(cursorOutIndex, Types.REF_CURSOR);
+          cs.execute();
+
+          Object cursor = cs.getObject(cursorOutIndex);
+          if (!(cursor instanceof ResultSet rs)) {
+            throw new DataAccessResourceFailureException(
+                "Oracle procedure returned no cursor [" + procedureSignature + "]");
+          }
+
+          List<T> cursorRows = new ArrayList<>();
+          try (rs) {
+            while (rs.next()) {
+              cursorRows.add(
+                  strictColumnAccess
+                      ? mapRequiredCursorRow(rowMapper, rs)
+                      : rowMapper.map(rs));
+            }
+          }
+          return cursorRows;
+        });
+    if (results == null) {
+      throw new DataAccessResourceFailureException(
+          "Oracle procedure returned no cursor result [" + procedureSignature + "]");
+    }
+    return results;
+  }
+
+  private <T> T mapRequiredCursorRow(SqlRowMapper<T> rowMapper, ResultSet rs)
+      throws SQLException {
+    Integer previous = requiredCursorMappingDepth.get();
+    int previousDepth = previous == null ? 0 : previous;
+    requiredCursorMappingDepth.set(previousDepth + 1);
+    try {
+      return rowMapper.map(rs);
+    } finally {
+      if (previousDepth == 0) {
+        requiredCursorMappingDepth.remove();
+      } else {
+        requiredCursorMappingDepth.set(previousDepth);
+      }
     }
   }
 
@@ -205,6 +281,30 @@ public abstract class OracleRepositorySupport {
       int cursorOutIndex,
       SqlRowMapper<T> rowMapper) {
     List<T> results = queryCursorProcedure(procedureSignature, binder, cursorOutIndex, rowMapper);
+    return firstResult(results);
+  }
+
+  protected <T> Optional<T> queryCursorSingleRequired(
+      String procedureSignature,
+      SqlConsumer<CallableStatement> binder,
+      int cursorOutIndex,
+      SqlRowMapper<T> rowMapper) {
+    List<T> results =
+        queryCursorProcedureRequired(procedureSignature, binder, cursorOutIndex, rowMapper);
+    return firstResult(results);
+  }
+
+  protected <T> Optional<T> queryCursorSingleFailClosed(
+      String procedureSignature,
+      SqlConsumer<CallableStatement> binder,
+      int cursorOutIndex,
+      SqlRowMapper<T> rowMapper) {
+    List<T> results =
+        queryCursorProcedureFailClosed(procedureSignature, binder, cursorOutIndex, rowMapper);
+    return firstResult(results);
+  }
+
+  private <T> Optional<T> firstResult(List<T> results) {
     if (results.isEmpty()) {
       return Optional.empty();
     }
@@ -220,48 +320,54 @@ public abstract class OracleRepositorySupport {
     String call = "{ call " + procedureSignature + " }";
 
     try {
-      return jdbcTemplate.execute(
-          call,
-          (CallableStatementCallback<List<T>>) cs -> {
-            cs.setString(1, whereSql);
+      List<T> results =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatementCallback<List<T>>)
+                  cs -> {
+                    cs.setString(1, whereSql);
 
-            Array array = null;
-            if (bindValues != null && !bindValues.isEmpty()) {
-              Connection connection = cs.getConnection();
-              OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
-              array = oracleConnection.createOracleArray(STRING_ARRAY_TYPE, bindValues.toArray(String[]::new));
-              cs.setArray(2, array);
-            } else {
-              cs.setNull(2, Types.ARRAY, STRING_ARRAY_TYPE);
-            }
+                    Array array = null;
+                    if (bindValues != null && !bindValues.isEmpty()) {
+                      Connection connection = cs.getConnection();
+                      OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+                      array =
+                          oracleConnection.createOracleArray(
+                              STRING_ARRAY_TYPE, bindValues.toArray(String[]::new));
+                      cs.setArray(2, array);
+                    } else {
+                      cs.setNull(2, Types.ARRAY, STRING_ARRAY_TYPE);
+                    }
 
-            cs.setInt(3, bindValues == null ? 0 : bindValues.size());
-            cs.setInt(4, Math.max(0, page));
-            cs.registerOutParameter(5, Types.REF_CURSOR);
-            cs.execute();
+                    cs.setInt(3, bindValues == null ? 0 : bindValues.size());
+                    cs.setInt(4, Math.max(0, page));
+                    cs.registerOutParameter(5, Types.REF_CURSOR);
+                    cs.execute();
 
-            List<T> results = new ArrayList<>();
-            try (ResultSet rs = (ResultSet) cs.getObject(5)) {
-              if (rs == null) {
-                return results;
-              }
-              while (rs.next()) {
-                results.add(rowMapper.map(rs));
-              }
-            } finally {
-              if (array != null) {
-                array.free();
-              }
-            }
-            return results;
-          });
+                    List<T> cursorRows = new ArrayList<>();
+                    try (ResultSet rs = (ResultSet) cs.getObject(5)) {
+                      if (rs == null) {
+                        throw missingDynamicResult(procedureSignature, "page cursor");
+                      }
+                      while (rs.next()) {
+                        cursorRows.add(rowMapper.map(rs));
+                      }
+                    } finally {
+                      if (array != null) {
+                        array.free();
+                      }
+                    }
+                    return cursorRows;
+                  });
+      if (results == null) {
+        throw missingDynamicResult(procedureSignature, "page result");
+      }
+      return results;
     } catch (DataAccessException ex) {
       logger.warn(
-          "Oracle dynamic call failed [{}]: {}; root cause: {}",
-          procedureSignature,
-          ex.getMessage(),
-          rootCauseMessage(ex));
-      return List.of();
+          "event=lexis_oracle_repository operation=dynamic_page_query outcome=failed failureType={}",
+          exceptionType(ex));
+      throw ex;
     }
   }
 
@@ -295,10 +401,17 @@ public abstract class OracleRepositorySupport {
                 cs.execute();
 
                 try (ResultSet rs = (ResultSet) cs.getObject(4)) {
-                  if (rs == null || !rs.next()) {
-                    return 0;
+                  if (rs == null) {
+                    throw missingDynamicResult(procedureSignature, "count cursor");
                   }
-                  long resultCount = Math.max(0L, rs.getLong("RESULTS_COUNT"));
+                  if (!rs.next()) {
+                    throw missingDynamicResult(procedureSignature, "count row");
+                  }
+                  long rawResultCount = rs.getLong("RESULTS_COUNT");
+                  if (rs.wasNull()) {
+                    throw missingDynamicResult(procedureSignature, "count value");
+                  }
+                  long resultCount = Math.max(0L, rawResultCount);
                   return (int) Math.min(Integer.MAX_VALUE, resultCount);
                 } finally {
                   if (array != null) {
@@ -306,39 +419,41 @@ public abstract class OracleRepositorySupport {
                   }
                 }
               });
-      return total == null ? 0 : total;
+      if (total == null) {
+        throw missingDynamicResult(procedureSignature, "count result");
+      }
+      return total;
     } catch (DataAccessException ex) {
       logger.warn(
-          "Oracle dynamic count call failed [{}]: {}; root cause: {}",
-          procedureSignature,
-          ex.getMessage(),
-          rootCauseMessage(ex));
-      return 0;
+          "event=lexis_oracle_repository operation=dynamic_count_query outcome=failed failureType={}",
+          exceptionType(ex));
+      throw ex;
     }
   }
 
-  protected boolean executeProcedure(String procedureSignature, SqlConsumer<CallableStatement> binder) {
+  /**
+   * Executes a mutation procedure and propagates dependency failures.
+   *
+   * Propagation allows Spring to roll back the surrounding transaction instead of committing
+   * earlier writes.
+   */
+  protected void executeProcedureRequired(
+      String procedureSignature, SqlConsumer<CallableStatement> binder) {
     String call = "{ call " + procedureSignature + " }";
-    try {
-      Boolean result =
-          jdbcTemplate.execute(
-              call,
-              (CallableStatementCallback<Boolean>)
-                  cs -> {
-                    if (binder != null) {
-                      binder.accept(cs);
-                    }
-                    cs.execute();
-                    return Boolean.TRUE;
-                  });
-      return Boolean.TRUE.equals(result);
-    } catch (DataAccessException ex) {
-      logger.warn(
-          "Oracle procedure execution failed [{}]: {}; root cause: {}",
-          procedureSignature,
-          ex.getMessage(),
-          rootCauseMessage(ex));
-      return false;
+    Boolean result =
+        jdbcTemplate.execute(
+            call,
+            (CallableStatementCallback<Boolean>)
+                cs -> {
+                  if (binder != null) {
+                    binder.accept(cs);
+                  }
+                  cs.execute();
+                  return Boolean.TRUE;
+                });
+    if (!Boolean.TRUE.equals(result)) {
+      throw new DataAccessResourceFailureException(
+          "Oracle procedure returned no execution result [" + procedureSignature + "]");
     }
   }
 
@@ -371,8 +486,7 @@ public abstract class OracleRepositorySupport {
       }
       if (legacyPage > 0 && currentPage.equals(previousPage)) {
         logger.warn(
-            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
-            procedureSignature,
+            "event=lexis_oracle_repository operation=dynamic_pagination outcome=duplicate_page page={}",
             legacyPage);
         break;
       }
@@ -440,8 +554,7 @@ public abstract class OracleRepositorySupport {
       }
       if (legacyPage > firstLegacyPage && currentPage.equals(previousPage)) {
         logger.warn(
-            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
-            procedureSignature,
+            "event=lexis_oracle_repository operation=dynamic_pagination outcome=duplicate_page page={}",
             legacyPage);
         break;
       }
@@ -487,10 +600,9 @@ public abstract class OracleRepositorySupport {
     for (
         int batchStart = normalizedFirstLegacyPage;
         batchStart <= normalizedLastLegacyPage;
-        batchStart += LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES) {
+        batchStart += MAX_PARALLEL_FETCHES) {
       int batchEnd =
-          Math.min(
-              batchStart + LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES - 1, normalizedLastLegacyPage);
+          Math.min(batchStart + MAX_PARALLEL_FETCHES - 1, normalizedLastLegacyPage);
       List<CompletableFuture<List<T>>> futures = new ArrayList<>();
       for (int legacyPage = batchStart; legacyPage <= batchEnd; legacyPage++) {
         int pageToFetch = legacyPage;
@@ -499,7 +611,7 @@ public abstract class OracleRepositorySupport {
                 () ->
                     queryLegacyDynamicPagedProcedure(
                         procedureSignature, whereSql, bindValues, pageToFetch, rowMapper),
-                LEGACY_DYNAMIC_FETCH_EXECUTOR));
+                legacyDynamicFetchExecutor));
       }
 
       for (CompletableFuture<List<T>> future : futures) {
@@ -507,15 +619,32 @@ public abstract class OracleRepositorySupport {
           pages.add(future.join());
         } catch (CompletionException ex) {
           logger.warn(
-              "Oracle dynamic page fetch failed [{}]: {}; root cause: {}",
-              procedureSignature,
-              ex.getMessage(),
-              rootCauseMessage(ex));
-          pages.add(List.of());
+              "event=lexis_oracle_repository operation=parallel_page_query outcome=failed failureType={}",
+              exceptionType(ex));
+          throw dynamicPageFailure(procedureSignature, ex);
         }
       }
     }
     return pages;
+  }
+
+  private DataAccessException dynamicPageFailure(
+      String procedureSignature, CompletionException failure) {
+    Throwable cause = failure;
+    while (cause instanceof CompletionException && cause.getCause() != null) {
+      cause = cause.getCause();
+    }
+    if (cause instanceof DataAccessException dataAccessException) {
+      return dataAccessException;
+    }
+    return new DataAccessResourceFailureException(
+        "Oracle dynamic page fetch failed [" + procedureSignature + "]", cause);
+  }
+
+  private DataAccessResourceFailureException missingDynamicResult(
+      String procedureSignature, String resultType) {
+    return new DataAccessResourceFailureException(
+        "Oracle procedure returned no " + resultType + " [" + procedureSignature + "]");
   }
 
   protected <T> Slice<T> queryLegacyDynamicSlice(
@@ -548,8 +677,7 @@ public abstract class OracleRepositorySupport {
       }
       if (legacyPage > 0 && currentPage.equals(previousPage)) {
         logger.warn(
-            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping slice",
-            procedureSignature,
+            "event=lexis_oracle_repository operation=dynamic_slice outcome=duplicate_page page={}",
             legacyPage);
         break;
       }
@@ -641,25 +769,6 @@ public abstract class OracleRepositorySupport {
     };
   }
 
-  private List<CodeNameDto> fallbackOrgUnitOptions(boolean displayName) {
-    List<CodeNameDto> regions =
-        List.of(
-            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
-            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
-            new CodeNameDto("1905", "Northeast Natural Resource Region"),
-            new CodeNameDto("1906", "Omineca Natural Resource Region"),
-            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
-            new CodeNameDto("1908", "Skeena Natural Resource Region"),
-            new CodeNameDto("1909", "South Coast Natural Resource Region"),
-            new CodeNameDto("1910", "West Coast Natural Resource Region"));
-    if (displayName) {
-      return regions;
-    }
-    return regions.stream()
-        .map(option -> new CodeNameDto(option.code(), option.name().split(" - ", 2)[0]))
-        .toList();
-  }
-
   protected String trim(String value) {
     if (value == null) {
       return null;
@@ -669,13 +778,8 @@ public abstract class OracleRepositorySupport {
   }
 
   protected String auditUserOrDefault(String value) {
-    String normalized = trim(value);
-    if (normalized == null) {
-      return "system";
-    }
-    return normalized.length() <= AUDIT_USER_MAX_LENGTH
-        ? normalized
-        : normalized.substring(0, AUDIT_USER_MAX_LENGTH);
+    String encoded = encode(value);
+    return encoded == null ? "system" : encoded;
   }
 
   protected LocalDate toLocalDate(Date value) {
@@ -686,20 +790,12 @@ public abstract class OracleRepositorySupport {
     return value == null ? null : value.toLocalDateTime().toLocalDate();
   }
 
-  private String rootCauseMessage(Throwable throwable) {
-    Throwable root = throwable;
-    while (root.getCause() != null && root.getCause() != root) {
-      root = root.getCause();
-    }
-    String message = root.getMessage();
-    return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
-  }
-
   protected Long getLong(ResultSet rs, String column) {
     try {
       long value = rs.getLong(column);
       return rs.wasNull() ? null : value;
     } catch (SQLException ex) {
+      throwIfRequiredCursorColumn(column, ex);
       return null;
     }
   }
@@ -709,6 +805,7 @@ public abstract class OracleRepositorySupport {
       double value = rs.getDouble(column);
       return rs.wasNull() ? null : value;
     } catch (SQLException ex) {
+      throwIfRequiredCursorColumn(column, ex);
       return null;
     }
   }
@@ -717,17 +814,20 @@ public abstract class OracleRepositorySupport {
     try {
       return trim(rs.getString(column));
     } catch (SQLException ex) {
+      throwIfRequiredCursorColumn(column, ex);
       return null;
     }
   }
 
   protected LocalDate getLocalDate(ResultSet rs, String column) {
+    SQLException timestampFailure = null;
     try {
       Timestamp timestamp = rs.getTimestamp(column);
       if (timestamp != null) {
         return timestamp.toLocalDateTime().toLocalDate();
       }
-    } catch (SQLException ignored) {
+    } catch (SQLException ex) {
+      timestampFailure = ex;
       // Fall through to DATE attempt below.
     }
 
@@ -735,7 +835,19 @@ public abstract class OracleRepositorySupport {
       Date date = rs.getDate(column);
       return date == null ? null : date.toLocalDate();
     } catch (SQLException ex) {
+      if (timestampFailure != null) {
+        ex.addSuppressed(timestampFailure);
+      }
+      throwIfRequiredCursorColumn(column, ex);
       return null;
+    }
+  }
+
+  private void throwIfRequiredCursorColumn(String column, SQLException cause) {
+    Integer mappingDepth = requiredCursorMappingDepth.get();
+    if (mappingDepth != null && mappingDepth > 0) {
+      throw new DataRetrievalFailureException(
+          "Required Oracle cursor column could not be read [" + column + "]", cause);
     }
   }
 

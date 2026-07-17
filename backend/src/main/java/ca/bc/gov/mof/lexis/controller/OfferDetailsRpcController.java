@@ -1,9 +1,9 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
-import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
@@ -12,13 +12,19 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.OfferWithdrawalPolicy;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -31,9 +37,12 @@ import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,6 +58,7 @@ public class OfferDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OfferDetailsRpcController.class);
   private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
+  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String FAIR_OFFER_DEFAULT = "N";
   private static final String VALID_OFFER_DEFAULT = "Y";
@@ -63,6 +73,11 @@ public class OfferDetailsRpcController {
   private final ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider;
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
+  private final ApplicationPermitOperationCoordinator operationCoordinator;
+  private final ApplicationEditLockService editLockService;
+  private final OfferWithdrawalPolicy offerWithdrawalPolicy;
+  private ProvincialAuthorizationService provincialAuthorizationService;
+  private LexisPrincipalService principalService;
 
   public OfferDetailsRpcController(
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
@@ -71,7 +86,10 @@ public class OfferDetailsRpcController {
       ObjectProvider<ClientLookupService> clientLookupServiceProvider,
       ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider,
       LexisSessionService sessionService,
-      LexisAuthorizationService authorizationService) {
+      LexisAuthorizationService authorizationService,
+      ApplicationPermitOperationCoordinator operationCoordinator,
+      ApplicationEditLockService editLockService,
+      OfferWithdrawalPolicy offerWithdrawalPolicy) {
     this.applicationServiceProvider = applicationServiceProvider;
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.federalApplicationServiceProvider = federalApplicationServiceProvider;
@@ -79,6 +97,20 @@ public class OfferDetailsRpcController {
     this.purchaseOfferServiceProvider = purchaseOfferServiceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
+    this.operationCoordinator = operationCoordinator;
+    this.editLockService = editLockService;
+    this.offerWithdrawalPolicy = offerWithdrawalPolicy;
+  }
+
+  @Autowired
+  void setProvincialAuthorizationService(
+      ProvincialAuthorizationService provincialAuthorizationService) {
+    this.provincialAuthorizationService = provincialAuthorizationService;
+  }
+
+  @Autowired
+  void setLexisPrincipalService(LexisPrincipalService principalService) {
+    this.principalService = principalService;
   }
 
   @GetMapping("/validate-application-number")
@@ -100,38 +132,8 @@ public class OfferDetailsRpcController {
     }
 
     Optional<LexisApplicationDetailDto> detail = applicationService.findByApplicationNumber(parsed);
-    if (detail.isEmpty()) {
-      errors.add("Application " + parsed + " does not exist");
-      return ResponseEntity.ok(new OfferValidationResponseDto(false, errors));
-    }
-
-    if (isFederalApplication(parsed)) {
-      errors.add("Application " + parsed + " does not have a valid jurisdiction to accept offers");
-      return ResponseEntity.ok(new OfferValidationResponseDto(false, errors));
-    }
-
-    String statusCode = trimToNull(detail.get().applicationStatusCode());
-    if (!"APP".equalsIgnoreCase(statusCode)
-        && !"NEW".equalsIgnoreCase(statusCode)
-        && !"PND".equalsIgnoreCase(statusCode)) {
-      errors.add("Application " + parsed + " does not have a valid status to accept offers");
-      return ResponseEntity.ok(new OfferValidationResponseDto(false, errors));
-    }
-
-    if (!detail.get().canCreateOffers()) {
-      LocalDate listingDate = detail.get().listingDate();
-      if (listingDate != null && listingDate.isAfter(LocalDate.now())) {
-        errors.add(
-            "Application "
-                + parsed
-                + " can not accept offers until "
-                + listingDate.format(LEGACY_DATE_FORMATTER));
-      } else if (listingDate != null) {
-        errors.add("Application " + parsed + " is no longer accepting offers");
-      } else {
-        errors.add("Application " + parsed + " does not have a valid listing date");
-      }
-    }
+    requireOfferApplicationAccess(parsed, detail, currentAuthentication(), false);
+    errors.addAll(validateOfferApplication(parsed, detail));
 
     return ResponseEntity.ok(new OfferValidationResponseDto(errors.isEmpty(), errors));
   }
@@ -142,17 +144,17 @@ public class OfferDetailsRpcController {
     LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
     if (applicationService == null) {
       LOGGER.warn("Application service unavailable - returning unsuccessful application detail");
-      return ResponseEntity.ok(new OfferApplicationDetailsResponseDto(false, "", "", ""));
+      return ResponseEntity.ok(new OfferApplicationDetailsResponseDto(false, "", "", "", ""));
     }
 
     Long parsed = parseApplicationNumber(trimToNull(applicationNumber));
     if (parsed == null) {
-      return ResponseEntity.ok(new OfferApplicationDetailsResponseDto(false, "", "", ""));
+      return ResponseEntity.ok(new OfferApplicationDetailsResponseDto(false, "", "", "", ""));
     }
-
     Optional<LexisApplicationDetailDto> detail = applicationService.findByApplicationNumber(parsed);
+    requireOfferApplicationAccess(parsed, detail, currentAuthentication(), true);
     if (detail.isEmpty()) {
-      return ResponseEntity.ok(new OfferApplicationDetailsResponseDto(false, "", "", ""));
+      return ResponseEntity.ok(new OfferApplicationDetailsResponseDto(false, "", "", "", ""));
     }
 
     return ResponseEntity.ok(
@@ -160,7 +162,8 @@ public class OfferDetailsRpcController {
             true,
             resolveApplicationSpeciesGradeCode(parsed),
             formatLegacyDate(detail.get().listingDate()),
-            formatIsoDate(detail.get().teacMeetingDate())));
+            formatIsoDate(detail.get().teacMeetingDate()),
+            applicationRegion(detail.get())));
   }
 
   @GetMapping("/package-list")
@@ -176,8 +179,8 @@ public class OfferDetailsRpcController {
     if (parsed == null) {
       return ResponseEntity.ok(new OfferPackageListResponseDto(List.of("No Packages")));
     }
-
     Optional<LexisApplicationDetailDto> detail = applicationService.findByApplicationNumber(parsed);
+    requireOfferApplicationAccess(parsed, detail, currentAuthentication(), true);
     if (detail.isEmpty() || detail.get().packages() == null || detail.get().packages().isEmpty()) {
       return ResponseEntity.ok(new OfferPackageListResponseDto(List.of("No Packages")));
     }
@@ -199,7 +202,8 @@ public class OfferDetailsRpcController {
 
   @GetMapping("/package-volume")
   public ResponseEntity<OfferVolumeResponseDto> getPackageVolume(
-      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      Authentication authentication) {
     LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
     if (applicationService == null) {
       LOGGER.warn("Application service unavailable - returning zero package volume");
@@ -210,6 +214,7 @@ public class OfferDetailsRpcController {
     if (normalized == null) {
       return ResponseEntity.ok(new OfferVolumeResponseDto("0.0"));
     }
+    requirePackageAccess(normalized, authentication);
 
     Optional<LexisPackageLookupDto> pkg = applicationService.findPackageByPackageNumber(normalized);
     return ResponseEntity.ok(
@@ -230,8 +235,8 @@ public class OfferDetailsRpcController {
     if (parsed == null) {
       return ResponseEntity.ok(new OfferVolumeResponseDto("0.0"));
     }
-
     Optional<LexisApplicationDetailDto> detail = applicationService.findByApplicationNumber(parsed);
+    requireOfferApplicationAccess(parsed, detail, currentAuthentication(), true);
     if (detail.isEmpty()) {
       return ResponseEntity.ok(new OfferVolumeResponseDto("0.0"));
     }
@@ -248,6 +253,7 @@ public class OfferDetailsRpcController {
       LOGGER.warn("Client lookup service unavailable - returning no content for client data");
       return ResponseEntity.noContent().build();
     }
+    requireClientAccess(clientNumber);
 
     return clientLookupService
         .getClientData(clientNumber, clientLocationCode)
@@ -281,6 +287,7 @@ public class OfferDetailsRpcController {
       LOGGER.warn("Client lookup service unavailable - returning no content for client locations");
       return ResponseEntity.noContent().build();
     }
+    requireClientAccess(clientNumber);
 
     List<OfferClientLocationResponseDto> response =
         clientLookupService.getClientLocations(clientNumber).stream()
@@ -313,9 +320,79 @@ public class OfferDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    String userId = authentication == null ? null : authentication.getName();
+    String userId = userId(authentication);
     PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
-    if (!isApplicationApprover(roles)) {
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null
+        && request.offerWithdrawalDate() != null
+        && !LexisBusinessTime.today().equals(request.offerWithdrawalDate())) {
+      return invalidPersistence(
+          request.applicationNumber(), null, false, "Offer withdrawn date must be the current date.");
+    }
+    if (request.applicationNumber() == null || request.applicationNumber() < 1) {
+      return invalidPersistence(
+          request.applicationNumber(), null, false, "A valid application number is required.");
+    }
+
+    return operationCoordinator.executeRootCreateApplicationLocalMutation(
+        request.applicationNumber(),
+        () ->
+            addOfferWhileSerialized(
+                service,
+                request,
+                roles,
+                scopedClientNumber,
+                userId,
+                authentication));
+  }
+
+  private ResponseEntity<OfferPersistenceResponseDto> addOfferWhileSerialized(
+      PurchaseOfferService service,
+      PurchaseOfferService.CreateOfferRequest originalRequest,
+      List<String> roles,
+      String scopedClientNumber,
+      String userId,
+      Authentication authentication) {
+    Optional<LexisApplicationDetailDto> application =
+        findApplication(originalRequest.applicationNumber());
+    requireOfferApplicationAccess(
+        originalRequest.applicationNumber(), application, authentication, true);
+    List<String> applicationErrors =
+        validateOfferApplication(originalRequest.applicationNumber(), application);
+    if (!applicationErrors.isEmpty()) {
+      return invalidPersistence(
+          originalRequest.applicationNumber(), null, false, applicationErrors);
+    }
+    PurchaseOfferService.CreateOfferRequest request = originalRequest;
+    if (scopedClientNumber != null) {
+      if (request.offerWithdrawalDate() != null
+          && !offerWithdrawalPolicy.canWithdraw(request.applicationNumber())) {
+        return invalidPersistence(
+            request.applicationNumber(), null, false, "The offer is no longer eligible for withdrawal.");
+      }
+      ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+      if (clientLookupService == null) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+      }
+      Optional<ClientLookupService.ClientData> bidder =
+          clientLookupService.getClientDataRequired(scopedClientNumber, "00");
+      if (bidder.isEmpty() || trimToNull(bidder.get().companyName()) == null) {
+        return invalidPersistence(
+            request.applicationNumber(),
+            null,
+            false,
+            "The authenticated offering client could not be resolved.");
+      }
+      request =
+          withOfferingClientIdentity(
+              request, scopedClientNumber, bidder.get().companyName());
+    }
+    if (provincialAuthorizationService != null
+        && !provincialAuthorizationService.canCreateForClient(
+            authentication, request.offeringClientNumber(), null)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    if (!isOfferApprover(roles)) {
       request = withLegacyNonApproverCreateDefaults(request);
     }
     PurchaseOfferService.CreateOfferResult result =
@@ -333,31 +410,99 @@ public class OfferDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
+    Long offerNumber =
+        parsePositiveLong(first(parameters, "exportPurchaseOfferNumber", "offerNumber"));
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
     boolean canCreateOffer =
         authorizationService.canPerformAction(roles, LEGACY_ACTION_CREATE_OFFER);
-    boolean applicationApprover = isApplicationApprover(roles);
-    if (!canCreateOffer) {
-      Optional<PurchaseOfferDetailDto> currentOffer =
-          service.findByOfferNumber(request.exportPurchaseOfferNumber());
-      if (currentOffer.isEmpty()
-          || !canScopedOfferingClientUpdate(authentication, currentOffer.get())) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-      }
-      request = restrictOfferingClientUpdate(request, currentOffer.get());
-    } else if (!applicationApprover) {
-      Optional<PurchaseOfferDetailDto> currentOffer =
-          service.findByOfferNumber(request.exportPurchaseOfferNumber());
-      if (currentOffer.isPresent()) {
-        request = preserveLegacyApproverFields(request, currentOffer.get());
-      }
+    boolean offerApprover = isOfferApprover(roles);
+    Optional<PurchaseOfferDetailDto> currentOffer =
+        service.findByOfferNumber(offerNumber);
+    if (currentOffer.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    Long applicationNumber = currentOffer.get().applicationNumber();
+    return operationCoordinator.executeApplicationOfferMutation(
+        applicationNumber,
+        offerNumber,
+        () ->
+            updateOfferWhileSerialized(
+                service,
+                parameters,
+                offerNumber,
+                canCreateOffer,
+                offerApprover,
+                applicationNumber,
+                authentication));
+  }
+
+  private ResponseEntity<OfferPersistenceResponseDto> updateOfferWhileSerialized(
+      PurchaseOfferService service,
+      MultiValueMap<String, String> parameters,
+      Long offerNumber,
+      boolean canCreateOffer,
+      boolean offerApprover,
+      Long expectedApplicationNumber,
+      Authentication authentication) {
+    Optional<PurchaseOfferDetailDto> currentOffer =
+        service.findByOfferNumber(offerNumber);
+    if (currentOffer.isEmpty()
+        || !expectedApplicationNumber.equals(currentOffer.get().applicationNumber())) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    PurchaseOfferService.UpdateOfferRequest request =
+        toUpdateOfferRequest(parameters, currentOffer.get());
+    boolean scopedOfferingClient =
+        isScopedOfferingClient(authentication, currentOffer.get());
+    if (scopedOfferingClient
+        && withdrawalDateChanged(request, currentOffer.get())
+        && !LexisBusinessTime.today().equals(request.offerWithdrawalDate())) {
+      return invalidUpdate(
+          currentOffer.get(), "Offer withdrawn date must be the current date.");
     }
 
-    String userId = authentication == null ? null : authentication.getName();
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      if (!canPerform(authentication, "/offerDetails") || !scopedOfferingClient) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+      }
+      boolean withdrawalChanged = withdrawalDateChanged(request, currentOffer.get());
+      boolean canWithdraw =
+          withdrawalChanged
+              && currentOffer.get().offerWithdrawalDate() == null
+              && offerWithdrawalPolicy.canWithdraw(currentOffer.get().applicationNumber());
+      if (withdrawalChanged && !canWithdraw) {
+        return invalidUpdate(
+            currentOffer.get(), "The offer is no longer eligible for withdrawal.");
+      }
+      request = restrictOfferingClientUpdate(request, currentOffer.get(), canWithdraw);
+    } else if (canCreateOffer) {
+      requireApplicationAccess(currentOffer.get().applicationNumber(), authentication);
+      if (!offerApprover) {
+        request = preserveLegacyApproverFields(request, currentOffer.get());
+      }
+    } else {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    String userId = userId(authentication);
     PurchaseOfferService.CreateOfferResult result =
-        service.updateOffer(request, userId);
+        service.updateOfferSnapshot(request, userId);
     return ResponseEntity.ok(toPersistenceResponse(result));
+  }
+
+  @PostMapping("/release-lock")
+  public ResponseEntity<ReleaseLockResponseDto> releaseLock(
+      @RequestParam(name = "offerNumber", required = false) Long offerNumber,
+      Authentication authentication) {
+    if (offerNumber == null
+        || offerNumber < 1
+        || provincialAuthorizationService == null
+        || !provincialAuthorizationService.canAccessOffer(authentication, offerNumber)) {
+      throw new AccessDeniedException("The purchase offer is outside the authenticated scope.");
+    }
+    editLockService.releaseOffer(offerNumber, userId(authentication));
+    return ResponseEntity.ok(new ReleaseLockResponseDto("ok"));
   }
 
   public ResponseEntity<OfferPersistenceResponseDto> addOfferLegacy(
@@ -385,27 +530,200 @@ public class OfferDetailsRpcController {
         sessionService.parseRolesFromPrincipal(authentication), action);
   }
 
-  private boolean isApplicationApprover(List<String> roles) {
-    return roles != null && roles.contains(ROLE_APPLICATION_APPROVER);
+  private String userId(Authentication authentication) {
+    if (principalService != null) {
+      return principalService.resolvePrincipalName(authentication);
+    }
+    return authentication == null ? null : authentication.getName();
   }
 
-  private boolean canScopedOfferingClientUpdate(
-      Authentication authentication, PurchaseOfferDetailDto currentOffer) {
-    if (!canPerform(authentication, "/offerDetails")) {
-      return false;
+  private Authentication currentAuthentication() {
+    return SecurityContextHolder.getContext().getAuthentication();
+  }
+
+  private void requireApplicationAccess(
+      Long applicationNumber, Authentication authentication) {
+    if (provincialAuthorizationService != null) {
+      provincialAuthorizationService.requireApplication(authentication, applicationNumber);
     }
+  }
+
+  private Optional<LexisApplicationDetailDto> findApplication(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
+    return applicationService == null
+        ? Optional.empty()
+        : applicationService.findByApplicationNumber(applicationNumber);
+  }
+
+  private void requireOfferApplicationAccess(
+      Long applicationNumber,
+      Optional<LexisApplicationDetailDto> application,
+      Authentication authentication,
+      boolean requireAcceptingOffers) {
+    if (!isScopedOfferCreator(authentication)) {
+      requireApplicationAccess(applicationNumber, authentication);
+      return;
+    }
+    if (requireAcceptingOffers
+        && !validateOfferApplication(applicationNumber, application).isEmpty()) {
+      throw new AccessDeniedException(
+          "The application is not currently available to accept offers.");
+    }
+  }
+
+  private boolean isScopedOfferCreator(Authentication authentication) {
+    return currentForestClientNumber(sessionService, authentication) != null
+        && canPerform(authentication, LEGACY_ACTION_CREATE_OFFER);
+  }
+
+  private List<String> validateOfferApplication(
+      Long applicationNumber, Optional<LexisApplicationDetailDto> application) {
+    if (applicationNumber == null || applicationNumber < 1 || application.isEmpty()) {
+      return List.of(
+          "Application " + (applicationNumber == null ? "" : applicationNumber) + " does not exist");
+    }
+
+    LexisApplicationDetailDto detail = application.get();
+    if (!"P".equalsIgnoreCase(trimToNull(detail.jurisdictionCode()))
+        || isFederalApplication(applicationNumber)) {
+      return List.of(
+          "Application "
+              + applicationNumber
+              + " does not have a valid jurisdiction to accept offers");
+    }
+
+    String statusCode = trimToNull(detail.applicationStatusCode());
+    if (!"APP".equalsIgnoreCase(statusCode)
+        && !"NEW".equalsIgnoreCase(statusCode)
+        && !"PND".equalsIgnoreCase(statusCode)) {
+      return List.of(
+          "Application " + applicationNumber + " does not have a valid status to accept offers");
+    }
+
+    if (detail.canCreateOffers()) {
+      return List.of();
+    }
+    LocalDate listingDate = detail.listingDate();
+    if (listingDate != null && listingDate.isAfter(LexisBusinessTime.today())) {
+      return List.of(
+          "Application "
+              + applicationNumber
+              + " can not accept offers until "
+              + listingDate.format(LEGACY_DATE_FORMATTER));
+    }
+    if (listingDate != null) {
+      return List.of("Application " + applicationNumber + " is no longer accepting offers");
+    }
+    return List.of("Application " + applicationNumber + " does not have a valid listing date");
+  }
+
+  private void requirePackageAccess(String packageNumber, Authentication authentication) {
+    ApplicationDetailsRpcService service = applicationDetailsServiceProvider.getIfAvailable();
+    Long applicationNumber =
+        service == null
+            ? null
+            : service.findApplicationNumberForPackage(packageNumber).orElse(null);
+    if (applicationNumber == null) {
+      throw new AccessDeniedException("Package parent application is unavailable.");
+    }
+    requireOfferApplicationAccess(
+        applicationNumber, findApplication(applicationNumber), authentication, true);
+  }
+
+  private void requireClientAccess(String clientNumber) {
+    if (provincialAuthorizationService != null
+        && !provincialAuthorizationService.canCreateForClient(
+            currentAuthentication(), clientNumber, null)) {
+      throw new AccessDeniedException("Client is outside the authenticated client scope.");
+    }
+  }
+
+  private boolean isOfferApprover(List<String> roles) {
+    return roles != null
+        && (roles.contains(ROLE_ADMIN) || roles.contains(ROLE_APPLICATION_APPROVER));
+  }
+
+  private boolean isScopedOfferingClient(
+      Authentication authentication, PurchaseOfferDetailDto currentOffer) {
+    return isScopedOfferingClient(authentication, currentOffer.offeringClientNumber());
+  }
+
+  private boolean isScopedOfferingClient(
+      Authentication authentication, String offeringClientNumber) {
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     return scopedClientNumber != null
-        && matchesScopedClient(scopedClientNumber, currentOffer.offeringClientNumber());
+        && matchesScopedClient(scopedClientNumber, offeringClientNumber);
   }
 
-  private PurchaseOfferService.CreateOfferRequest restrictOfferingClientUpdate(
-      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
-    boolean canWithdraw =
-        currentOffer.offerWithdrawalDate() == null
-            && currentOffer.offerEndDate() != null
-            && !currentOffer.offerEndDate().isBefore(LocalDate.now());
+  private boolean withdrawalDateChanged(
+      PurchaseOfferService.UpdateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+    return requested.offerWithdrawalDate() != null
+        && !requested.offerWithdrawalDate().equals(currentOffer.offerWithdrawalDate());
+  }
+
+  private ResponseEntity<OfferPersistenceResponseDto> invalidUpdate(
+      PurchaseOfferDetailDto currentOffer, String error) {
+    return invalidPersistence(
+        currentOffer.applicationNumber(), currentOffer.offerNumber(), true, error);
+  }
+
+  private ResponseEntity<OfferPersistenceResponseDto> invalidPersistence(
+      Long applicationNumber, Long offerNumber, boolean update, String error) {
+    return invalidPersistence(
+        applicationNumber, offerNumber, update, List.of(error));
+  }
+
+  private ResponseEntity<OfferPersistenceResponseDto> invalidPersistence(
+      Long applicationNumber, Long offerNumber, boolean update, List<String> errors) {
+    return ResponseEntity.ok(
+        new OfferPersistenceResponseDto(
+            false,
+            null,
+            applicationNumber,
+            offerNumber,
+            false,
+            null,
+            false,
+            update,
+            List.copyOf(errors),
+            List.of()));
+  }
+
+  private PurchaseOfferService.CreateOfferRequest withOfferingClientIdentity(
+      PurchaseOfferService.CreateOfferRequest request,
+      String offeringClientNumber,
+      String companyName) {
     return new PurchaseOfferService.CreateOfferRequest(
+        request.applicationNumber(),
+        request.exportPurchaseOfferNumber(),
+        request.packageNumber(),
+        companyName,
+        request.contactName(),
+        request.purchaseOfferAmount(),
+        request.purchaseOfferDate(),
+        request.offerWithdrawalDate(),
+        request.teacReviewDate(),
+        request.fairOfferIndicator(),
+        request.validOfferIndicator(),
+        request.offerRemark(),
+        request.approvalIndicator(),
+        request.withdrawReason(),
+        request.exportJurisdictionCode(),
+        request.manufacturingFacilityInfo(),
+        offeringClientNumber,
+        request.pickupLocation(),
+        request.offerCondition(),
+        request.offerVolume());
+  }
+
+  private PurchaseOfferService.UpdateOfferRequest restrictOfferingClientUpdate(
+      PurchaseOfferService.UpdateOfferRequest requested,
+      PurchaseOfferDetailDto currentOffer,
+      boolean canWithdraw) {
+    return new PurchaseOfferService.UpdateOfferRequest(
         currentOffer.applicationNumber(),
         currentOffer.offerNumber(),
         currentOffer.packageNumber(),
@@ -428,9 +746,9 @@ public class OfferDetailsRpcController {
         requested.offerVolume());
   }
 
-  private PurchaseOfferService.CreateOfferRequest preserveLegacyApproverFields(
-      PurchaseOfferService.CreateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
-    return new PurchaseOfferService.CreateOfferRequest(
+  private PurchaseOfferService.UpdateOfferRequest preserveLegacyApproverFields(
+      PurchaseOfferService.UpdateOfferRequest requested, PurchaseOfferDetailDto currentOffer) {
+    return new PurchaseOfferService.UpdateOfferRequest(
         requested.applicationNumber(),
         requested.exportPurchaseOfferNumber(),
         requested.packageNumber(),
@@ -464,6 +782,77 @@ public class OfferDetailsRpcController {
     }
   }
 
+  private PurchaseOfferService.UpdateOfferRequest toUpdateOfferRequest(
+      MultiValueMap<String, String> parameters, PurchaseOfferDetailDto current) {
+    return new PurchaseOfferService.UpdateOfferRequest(
+        hasAnyParameter(parameters, "applicationNumber")
+            ? parsePositiveLong(firstPresent(parameters, "applicationNumber"))
+            : current.applicationNumber(),
+        current.offerNumber(),
+        hasAnyParameter(parameters, "packageNumber")
+            ? firstPresent(parameters, "packageNumber")
+            : current.packageNumber(),
+        hasAnyParameter(parameters, "companyName")
+            ? firstPresent(parameters, "companyName")
+            : current.companyName(),
+        hasAnyParameter(parameters, "contactName")
+            ? firstPresent(parameters, "contactName")
+            : current.contactName(),
+        hasAnyParameter(parameters, "purchaseOfferAmount")
+            ? parseOfferDecimal(firstPresent(parameters, "purchaseOfferAmount"))
+            : Double.valueOf(current.purchaseOfferAmount()),
+        hasAnyParameter(parameters, "purchaseOfferDate")
+            ? parseDate(firstPresent(parameters, "purchaseOfferDate"))
+            : current.purchaseOfferDate(),
+        hasAnyParameter(parameters, "offerWithdrawalDate", "offerEndDate")
+            ? parseDate(firstPresent(parameters, "offerWithdrawalDate", "offerEndDate"))
+            : current.offerWithdrawalDate(),
+        hasAnyParameter(parameters, "teacReviewDate")
+            ? parseDate(firstPresent(parameters, "teacReviewDate"))
+            : current.teacReviewDate(),
+        hasAnyParameter(parameters, "fairOfferIndicator")
+            ? firstPresent(parameters, "fairOfferIndicator")
+            : current.fairOfferIndicator(),
+        hasAnyParameter(parameters, "validOfferIndicator")
+            ? firstPresent(parameters, "validOfferIndicator")
+            : current.validOfferIndicator(),
+        hasAnyParameter(parameters, "offerRemark")
+            ? firstPresent(parameters, "offerRemark")
+            : current.offerRemark(),
+        hasAnyParameter(parameters, "approvalIndicator")
+            ? firstPresent(parameters, "approvalIndicator")
+            : current.approvalIndicator(),
+        hasAnyParameter(parameters, "withdrawReason")
+            ? firstPresent(parameters, "withdrawReason")
+            : current.withdrawReason(),
+        hasAnyParameter(parameters, "exportJurisdictionCode", "jurisdictionCode")
+            ? firstPresent(parameters, "exportJurisdictionCode", "jurisdictionCode")
+            : current.exportJurisdictionCode(),
+        current.manufacturingFacilityInfo(),
+        hasAnyParameter(parameters, "offeringClientNumber", "clientNumber")
+            ? firstPresent(parameters, "offeringClientNumber", "clientNumber")
+            : current.offeringClientNumber(),
+        hasAnyParameter(parameters, "pickupLocation")
+            ? firstPresent(parameters, "pickupLocation")
+            : current.pickupLocation(),
+        hasAnyParameter(parameters, "offerCondition")
+            ? firstPresent(parameters, "offerCondition")
+            : current.offerCondition(),
+        hasAnyParameter(parameters, "offerVolume")
+            ? parseOfferDecimal(firstPresent(parameters, "offerVolume"))
+            : current.offerVolume());
+  }
+
+  private boolean hasAnyParameter(
+      MultiValueMap<String, String> parameters, String... names) {
+    for (String name : names) {
+      if (parameters.containsKey(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private PurchaseOfferService.CreateOfferRequest toCreateOfferRequest(
       MultiValueMap<String, String> parameters) {
     return new PurchaseOfferService.CreateOfferRequest(
@@ -472,7 +861,7 @@ public class OfferDetailsRpcController {
         first(parameters, "packageNumber"),
         first(parameters, "companyName"),
         first(parameters, "contactName"),
-        parseDouble(first(parameters, "purchaseOfferAmount")),
+        parseOfferDecimal(first(parameters, "purchaseOfferAmount")),
         parseDate(first(parameters, "purchaseOfferDate")),
         parseDate(first(parameters, "offerWithdrawalDate", "offerEndDate")),
         parseDate(first(parameters, "teacReviewDate")),
@@ -486,7 +875,24 @@ public class OfferDetailsRpcController {
         first(parameters, "offeringClientNumber", "clientNumber"),
         first(parameters, "pickupLocation"),
         first(parameters, "offerCondition"),
-        parseDouble(first(parameters, "offerVolume")));
+        parseOfferDecimal(first(parameters, "offerVolume")));
+  }
+
+  private Double parseOfferDecimal(String rawValue) {
+    String normalized = trimToNull(rawValue);
+    if (normalized == null) {
+      return null;
+    }
+    try {
+      BigDecimal decimal = new BigDecimal(normalized);
+      if (decimal.scale() > 2) {
+        return Double.NaN;
+      }
+      double value = decimal.doubleValue();
+      return Double.isFinite(value) ? value : Double.NaN;
+    } catch (NumberFormatException exception) {
+      return Double.NaN;
+    }
   }
 
   private PurchaseOfferService.CreateOfferRequest withLegacyNonApproverCreateDefaults(
@@ -503,7 +909,7 @@ public class OfferDetailsRpcController {
         request.teacReviewDate(),
         FAIR_OFFER_DEFAULT,
         VALID_OFFER_DEFAULT,
-        request.offerRemark(),
+        null,
         APPROVAL_DEFAULT,
         request.withdrawReason(),
         request.exportJurisdictionCode(),
@@ -564,13 +970,22 @@ public class OfferDetailsRpcController {
     return value == null ? "" : value;
   }
 
+  private String applicationRegion(LexisApplicationDetailDto application) {
+    String regionName = trimToNull(application.orgUnitName());
+    if (regionName != null) {
+      return regionName;
+    }
+    return application.orgUnitNumber() == null ? "" : application.orgUnitNumber().toString();
+  }
+
   public record OfferValidationResponseDto(boolean isValid, List<String> errors) {}
 
   public record OfferApplicationDetailsResponseDto(
       boolean success,
       String speciesGradeCode,
       String advertisingDate,
-      String teacReviewDate) {}
+      String teacReviewDate,
+      String region) {}
 
   public record OfferPackageListResponseDto(List<String> packageList) {}
 
@@ -603,4 +1018,6 @@ public class OfferDetailsRpcController {
       boolean isUpdate,
       List<String> errors,
       List<String> warnings) {}
+
+  public record ReleaseLockResponseDto(String release) {}
 }

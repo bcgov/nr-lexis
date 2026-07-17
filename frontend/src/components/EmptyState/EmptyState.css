@@ -1,0 +1,56 @@
+.lexis-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 20rem;
+  padding: 4rem 2rem;
+  color: var(--cds-text-primary, #161616);
+  text-align: center;
+}
+
+.lexis-empty-state__pictogram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-block-end: 1.25rem;
+  color: var(--cds-link-primary, #0f62fe);
+}
+
+.lexis-empty-state__pictogram svg {
+  display: block;
+}
+
+.lexis-empty-state__title {
+  margin: 0 0 0.5rem;
+  color: var(--cds-text-primary, #161616);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+}
+
+.lexis-empty-state__description {
+  max-inline-size: 22.5rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.lexis-empty-state__description > :first-child {
+  margin-block-start: 0;
+}
+
+.lexis-empty-state__description > :last-child {
+  margin-block-end: 0;
+}
+
+.lexis-empty-state__action {
+  margin-block-start: 1.5rem;
+}
+
+@media (max-width: 671px) {
+  .lexis-empty-state {
+    min-block-size: 16rem;
+    padding: 3rem 1rem;
+  }
+}

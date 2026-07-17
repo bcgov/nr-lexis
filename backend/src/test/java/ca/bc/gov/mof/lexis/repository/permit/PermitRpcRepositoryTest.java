@@ -1,21 +1,29 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
+import java.io.ByteArrayOutputStream;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class PermitRpcRepositoryTest {
@@ -36,7 +44,7 @@ class PermitRpcRepositoryTest {
 
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
-    var rows = repository.findAllCountryCodes();
+    var rows = repository.findAllCountryCodesRequired();
 
     assertThat(rows)
         .extracting("code", "description", "groupBy", "orderBy")
@@ -47,24 +55,83 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void findAllCountryCodesShouldFallbackWhenCodePackageReturnsEmpty() throws Exception {
+  void findAllCountryCodesShouldPreserveLegitimateEmptyResult() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }");
     when(resultSet.next()).thenReturn(false);
 
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
-    var rows = repository.findAllCountryCodes();
+    var rows = repository.findAllCountryCodesRequired();
 
-    assertThat(rows)
-        .extracting("code", "description", "groupBy", "orderBy")
-        .containsExactly(
-            tuple("CA", "Canada", 1L, 1L),
-            tuple("US", "United States", 2L, 1L),
-            tuple("JP", "Japan", 2L, 2L),
-            tuple("CN", "China", 2L, 3L),
-            tuple("NZ", "New Zealand", 2L, 4L),
-            tuple("GB", "United Kingdom", 2L, 5L));
+    assertThat(rows).isEmpty();
     verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+  }
+
+  @Test
+  void findAllCountryCodesShouldPropagateOracleFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("country lookup unavailable");
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }"),
+                any(CallableStatementCallback.class)))
+        .thenThrow(failure);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::findAllCountryCodesRequired).isSameAs(failure);
+  }
+
+  @Test
+  void invoiceNumbersShouldPreserveLegitimateEmptyResult() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_INVOICES_BY_PERMIT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findInvoiceNumbersByPermitRequired(7000123L)).isEmpty();
+    verify(callableStatement).setString(1, "7000123");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void invoiceNumbersShouldPropagateOracleFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("invoice lookup unavailable");
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_INVOICES_BY_PERMIT(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenThrow(failure);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findInvoiceNumbersByPermitRequired(7000123L))
+        .isSameAs(failure);
+  }
+
+  @Test
+  void contextualEndUseReadsShouldPropagateOracleFailure() {
+    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findEndUsesByApplicationNumber(1000456L))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+    assertThatThrownBy(() -> repository.findEndUsesByPackageNumber("PKG-1"))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+    assertThatThrownBy(() -> repository.findCandidateExcolCodes(1, "HE", "LU", 11L))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  void contextualEndUseReadsShouldPreserveLegitimateEmptyResults() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_END_USE_BY_APP(?,?) }", 2);
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_END_USE_BY_PACK(?,?) }", 2);
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?) }", 5);
+    when(resultSet.next()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findEndUsesByApplicationNumber(1000456L)).isEmpty();
+    assertThat(repository.findEndUsesByPackageNumber("PKG-1")).isEmpty();
+    assertThat(repository.findCandidateExcolCodes(1, "HE", "LU", 11L)).isEmpty();
   }
 
   @Test
@@ -80,6 +147,143 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  void permitAttachmentRelationshipShouldUseSubtypeCursor() throws Exception {
+    stubCursorProcedure(
+        "{ call LEXIS_GROUP_5.FIND_PERMIT_FILE_ATTACHMENT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPermitFileAttachmentRequired(55L)).isTrue();
+    verify(callableStatement).setLong(1, 55L);
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+
+    org.mockito.Mockito.reset(callableStatement, resultSet, jdbcTemplate);
+    stubCursorProcedure(
+        "{ call LEXIS_GROUP_5.FIND_PERMIT_FILE_ATTACHMENT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(false);
+
+    assertThat(repository.isPermitFileAttachmentRequired(56L)).isFalse();
+  }
+
+  @Test
+  void permitAttachmentRelationshipShouldRejectMissingCursor() throws Exception {
+    stubCursorProcedure(
+        "{ call LEXIS_GROUP_5.FIND_PERMIT_FILE_ATTACHMENT(?,?) }", 2);
+    when(callableStatement.getObject(2)).thenReturn(null);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.isPermitFileAttachmentRequired(55L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("no permit attachment cursor");
+  }
+
+  @Test
+  void permitAttachmentRelationshipShouldRejectDuplicateRows() throws Exception {
+    stubCursorProcedure(
+        "{ call LEXIS_GROUP_5.FIND_PERMIT_FILE_ATTACHMENT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, true);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.isPermitFileAttachmentRequired(55L))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("duplicate permit attachment rows");
+  }
+
+  @Test
+  void permitAttachmentRelationshipShouldPropagateOracleFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("permit attachment lookup unavailable");
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_PERMIT_FILE_ATTACHMENT(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenThrow(failure);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.isPermitFileAttachmentRequired(55L)).isSameAs(failure);
+  }
+
+  @Test
+  void requiredScaleCodeAndBoicMarkLookupsShouldUseOracleRows() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_SPECIES_CODE(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isSpeciesCodeValidRequired("HE")).isTrue();
+    verify(callableStatement).setString(1, "HE");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+
+    org.mockito.Mockito.reset(callableStatement, resultSet);
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_VALID_BOIC_TIMBER_MARK(?,?,?) }", 3);
+    when(resultSet.next()).thenReturn(true, false);
+
+    assertThat(repository.isValidBoicTimberMarkRequired("TM-1", "EX-1")).isTrue();
+    verify(callableStatement).setString(1, "TM-1");
+    verify(callableStatement).setString(2, "EX-1");
+    verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
+  }
+
+  @Test
+  void requiredPermitValidationCodesShouldUseLegacyCodeProcedures() throws Exception {
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertRequiredCodeLookup(
+        "{ call LEXIS_CODES.FIND_PERMIT_STATUS_CODE(?,?) }",
+        "ACT",
+        repository::isPermitStatusCodeValidRequired);
+    assertRequiredCodeLookup(
+        "{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }",
+        "US",
+        repository::isCountryCodeValidRequired);
+    assertRequiredCodeLookup(
+        "{ call LEXIS_CODES.FIND_PORT_CODE(?,?) }",
+        "VA",
+        repository::isPortCodeValidRequired);
+    assertRequiredCodeLookup(
+        "{ call LEXIS_CODES.FIND_SCALE_METHOD_CODE(?,?) }",
+        "W",
+        repository::isScaleMethodCodeValidRequired);
+    assertRequiredCodeLookup(
+        "{ call LEXIS_CODES.FIND_TRANSPORT_TYPE_CODE(?,?) }",
+        "TRUCK",
+        repository::isTransportTypeCodeValidRequired);
+  }
+
+  @Test
+  void requiredMu44LookupShouldUseLegacyCountProcedureAndRejectMissingResult()
+      throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.IS_PERMIT_MU44(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getLong("RESULTS_COUNT")).thenReturn(1L);
+    when(resultSet.wasNull()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPermitMu44Required(7000123L)).isTrue();
+    verify(callableStatement).setString(1, "7000123");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+
+    org.mockito.Mockito.reset(callableStatement, resultSet);
+    stubCursorProcedure("{ call LEXIS_GROUP_5.IS_PERMIT_MU44(?,?) }", 2);
+    when(resultSet.next()).thenReturn(false);
+
+    assertThatThrownBy(() -> repository.isPermitMu44Required(7000123L))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("MU44");
+  }
+
+  @Test
+  void requiredPermitValidationCodeLookupShouldPropagateOracleFailure() {
+    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.isPermitStatusCodeValidRequired("ACT"))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
   void findGrowthTypeDescriptionShouldUseOracleRowWhenAvailable() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_GROWTH_TYPE_CODE(?,?) }", 2);
     when(resultSet.next()).thenReturn(true, false);
@@ -90,6 +294,377 @@ class PermitRpcRepositoryTest {
     assertThat(repository.findGrowthTypeDescription("S")).contains("Oracle Second Growth");
     verify(callableStatement).setString(1, "S");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void findApplicationStatusCodeShouldUseRequiredApplicationLookup() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("PMT");
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findApplicationStatusCodeByNumber(1000456L)).contains("PMT");
+    verify(callableStatement).setString(1, "1000456");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void findApplicationInfoShouldMapTheAuthoritativeOicIndicator() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getLong(any(String.class)))
+        .thenAnswer(
+            invocation ->
+                "APPLICATION_NUMBER".equals(invocation.getArgument(0)) ? 1000999L : 1835L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString(any(String.class)))
+        .thenAnswer(
+            invocation ->
+                switch ((String) invocation.getArgument(0)) {
+                  case "EXEMPTION_NUMBER" -> "EX-700";
+                  case "REGION" -> "Cariboo Natural Resource Region";
+                  case "ORG_UNIT_NAME" -> throw new java.sql.SQLException("Column not projected");
+                  case "OIC_INDICATOR" -> "Y";
+                  default -> null;
+                });
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findApplicationInfoByNumber(1000999L))
+        .get()
+        .extracting("applicationNumber", "exemptionNumber", "regionName", "oicIndicator")
+        .containsExactly(1000999L, "EX-700", "Cariboo Natural Resource Region", "Y");
+    verify(callableStatement).setString(1, "1000999");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    verify(resultSet, never()).getString("END_USE_SORT");
+    verify(resultSet, never()).getString("ORG_UNIT_NAME");
+  }
+
+  @Test
+  void insertPermitDetailShouldBindTheCheckedInThirtySevenArgumentContract()
+      throws Exception {
+    String call =
+        "{ call LEXIS_GROUP_9.INSERT_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) }";
+    stubCursorProcedure(call, 37);
+    when(resultSet.next()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+    PermitMutationRow row =
+        new PermitMutationRow(
+            null,
+            "Destination",
+            "Transport",
+            LocalDate.of(2026, 4, 1),
+            "Other port",
+            LocalDate.of(2026, 4, 2),
+            LocalDate.of(2026, 4, 3),
+            null,
+            "R-1",
+            LocalDate.of(2026, 12, 31),
+            12.5d,
+            10L,
+            4L,
+            "FED-1",
+            "Remarks",
+            null,
+            null,
+            "TR",
+            "W",
+            "00000001",
+            "01",
+            "00000002",
+            "02",
+            "EX-700",
+            1835L,
+            "VA",
+            "ACT",
+            "S",
+            "US",
+            1.5d,
+            "Override",
+            99L,
+            100L,
+            20.5d,
+            "T");
+
+    assertThat(repository.insertPermitDetail(row, "idir\\jsmith")).isEmpty();
+
+    verify(callableStatement).setString(1, "Destination");
+    verify(callableStatement).setString(2, "Transport");
+    verify(callableStatement)
+        .setTimestamp(3, Timestamp.valueOf(LocalDate.of(2026, 4, 1).atStartOfDay()));
+    verify(callableStatement).setString(4, "Other port");
+    verify(callableStatement)
+        .setTimestamp(5, Timestamp.valueOf(LocalDate.of(2026, 4, 2).atStartOfDay()));
+    verify(callableStatement)
+        .setTimestamp(6, Timestamp.valueOf(LocalDate.of(2026, 4, 3).atStartOfDay()));
+    verify(callableStatement).setString(8, "R-1");
+    verify(callableStatement)
+        .setTimestamp(9, Timestamp.valueOf(LocalDate.of(2026, 12, 31).atStartOfDay()));
+    verify(callableStatement).setDouble(10, 12.5d);
+    verify(callableStatement).setLong(11, 10L);
+    verify(callableStatement).setLong(12, 4L);
+    verify(callableStatement).setString(13, "FED-1");
+    verify(callableStatement).setString(14, "Remarks");
+    verify(callableStatement).setString(15, "idir\\jsmith");
+    verify(callableStatement).setTimestamp(eq(16), any(Timestamp.class));
+    verify(callableStatement).setNull(17, Types.VARCHAR);
+    verify(callableStatement).setNull(18, Types.TIMESTAMP);
+    verify(callableStatement).setString(19, "TR");
+    verify(callableStatement).setString(20, "W");
+    verify(callableStatement).setString(21, "00000001");
+    verify(callableStatement).setString(22, "01");
+    verify(callableStatement).setString(23, "00000002");
+    verify(callableStatement).setString(24, "02");
+    verify(callableStatement).setString(25, "EX-700");
+    verify(callableStatement).setLong(26, 1835L);
+    verify(callableStatement).setString(27, "VA");
+    verify(callableStatement).setString(28, "ACT");
+    verify(callableStatement).setString(29, "US");
+    verify(callableStatement).setString(30, "S");
+    verify(callableStatement).setDouble(31, 1.5d);
+    verify(callableStatement).setString(32, "Override");
+    verify(callableStatement).setLong(33, 99L);
+    verify(callableStatement).setLong(34, 100L);
+    verify(callableStatement).setDouble(35, 20.5d);
+    verify(callableStatement).setString(36, "T");
+    verify(callableStatement).registerOutParameter(37, Types.REF_CURSOR);
+    verify(callableStatement, never()).setNull(37, Types.TIMESTAMP);
+    verify(callableStatement, never()).registerOutParameter(38, Types.REF_CURSOR);
+  }
+
+  @Test
+  void requiredPermitApplicationRelationshipsShouldRejectMalformedRows() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_PERMIT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(0L);
+    when(resultSet.wasNull()).thenReturn(true);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(
+            () -> repository.findApplicationNumbersByPermitNumberRequired(7000123L))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("invalid application relationship")
+        .hasMessageContaining("permit 7000123");
+  }
+
+  @Test
+  void requiredExemptionApplicationRelationshipsShouldBeSortedAndFailClosed()
+      throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000457L, 1000456L);
+    when(resultSet.wasNull()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .containsExactly(1000456L, 1000457L);
+    verify(callableStatement).setString(1, "EX-700");
+
+    org.mockito.Mockito.reset(callableStatement, resultSet);
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(0L);
+    when(resultSet.wasNull()).thenReturn(true);
+
+    assertThatThrownBy(
+            () -> repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("invalid application relationship")
+        .hasMessageContaining("exemption EX-700");
+  }
+
+  @Test
+  void requiredPackagesByExemptionShouldPropagateOracleFailure() {
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_EXMP(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void requiredPackagesByExemptionShouldPreserveLegitimatelyEmptyCursor() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_EXMP(?,?) }", 2);
+    when(resultSet.next()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPackagesByExemptionNumberRequired("EX-700")).isEmpty();
+    verify(callableStatement).setString(1, "EX-700");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void packagesByExemptionShouldMapRowsWithoutPermitNumberColumns() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_EXMP(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(" PKG-901 ");
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .extracting("applicationNumber", "packageNumber")
+        .containsExactly(tuple(1000456L, "PKG-901"));
+    verify(resultSet, never()).getLong("EXPORT_PERMIT_DETAIL_NUMBER");
+    verify(resultSet, never()).getLong("EXPORT_PERMIT_NUMBER");
+  }
+
+  @Test
+  void attachmentDeletesShouldPropagateOracleFailures() {
+    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.deletePermitFile(11L))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+    assertThatThrownBy(() -> repository.deleteApplicationFile(12L))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+    assertThatThrownBy(() -> repository.deleteInvoiceFile(13L))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  void attachmentOwnershipReadsShouldPropagateOracleFailures() {
+    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findPermitDocumentDetailsByPermitNumber(7000123L))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+    assertThatThrownBy(
+            () -> repository.findApplicationDocumentDetailsByApplicationNumber(1000456L))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+    assertThatThrownBy(repository::findAllAttachmentTypes)
+        .isInstanceOf(DataAccessResourceFailureException.class);
+    assertThatThrownBy(() -> repository.findAttachmentTypeDescription("INV"))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  void attachmentOwnershipReadsShouldPreserveLegitimateEmptyResults() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PERMIT_FILE_DETAILS(?,?) }", 2);
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_ATTACH_CODES(?) }");
+    when(resultSet.next()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPermitDocumentDetailsByPermitNumber(7000123L)).isEmpty();
+    assertThat(repository.findAllAttachmentTypes()).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void attachmentStreamShouldDistinguishOracleFailureFromTrueNotFound() throws Exception {
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_FILE_ATTACHMENT(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(callableStatement));
+    when(callableStatement.getObject(2)).thenReturn(null);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(
+            () -> repository.streamFileAttachment(44L, new ByteArrayOutputStream()))
+        .isInstanceOf(java.io.IOException.class)
+        .hasCauseInstanceOf(DataAccessResourceFailureException.class);
+
+    when(callableStatement.getObject(2)).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(false);
+    assertThat(repository.streamFileAttachment(45L, new ByteArrayOutputStream())).isFalse();
+  }
+
+  @Test
+  void requiredApplicationDocumentsShouldUseTheRequiredCursorLookup()
+      throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPL_FILE_DETAILS(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getLong("EXPORT_ATTACHMENT_ID")).thenReturn(44L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("FILE_NAME")).thenReturn("application.pdf");
+    when(resultSet.getString("DESCRIPTION")).thenReturn("supporting document");
+    when(resultSet.getString("EXPORT_ATTACHMENT_TYPE_CODE")).thenReturn("INS");
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findApplicationDocumentDetailsByApplicationNumberRequired(1000456L))
+        .extracting("id", "fileName", "attachmentTypeCode")
+        .containsExactly(tuple(44L, "application.pdf", "INS"));
+    verify(callableStatement).setLong(1, 1000456L);
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void requiredGbmsHistoryShouldBindPermitAndRejectInvoiceFallbackForAnotherPermit()
+      throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_9.FIND_GBMS_INVOICE_HISTORY(?,?,?) }", 3);
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getString("INVOICE_NUMBER")).thenReturn("A000123", "A000122");
+    when(resultSet.getString("CANCELLED_BY_INVOICE")).thenReturn(null, null);
+    when(resultSet.getString("REPLACED_BY_INVOICE")).thenReturn(null, "A000123");
+    when(resultSet.getLong("LEXIS_PERMIT_NUMBER")).thenReturn(7000123L, 7000999L);
+    when(resultSet.getDouble("INVOICE_AMOUNT")).thenReturn(125.50d, 100.00d);
+    when(resultSet.wasNull()).thenReturn(false);
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    var rows = repository.findGbmsInvoiceHistoryRequired("RN-42", 7000123L);
+
+    assertThat(rows)
+        .extracting("invoiceNumber", "replacedByInvoice", "invoiceAmount")
+        .containsExactly(tuple("A000123", null, 125.50d));
+    verify(callableStatement).setString(1, "RN-42");
+    verify(callableStatement).setString(2, "7000123");
+    verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
+  }
+
+  @Test
+  void requiredGbmsHistoryShouldRejectInvalidPermitAndPropagateOracleFailure() {
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findGbmsInvoiceHistoryRequired(null, 0L))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("positive");
+
+    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+
+    assertThatThrownBy(() -> repository.findGbmsInvoiceHistoryRequired(null, 7000123L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  void requiredReadOnlyGbmsHistoryShouldPreserveGenuinelyEmptyHistory() throws Exception {
+    stubCursorProcedure("{ call LEXIS_READ_ONLY.FIND_GBMS_INVOICE_HISTORY(?,?,?) }", 3);
+    when(resultSet.next()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findGbmsInvoiceHistoryRequired("", 7000123L, true)).isEmpty();
+    verify(callableStatement).setString(1, null);
+    verify(callableStatement).setString(2, "7000123");
+    verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
+  }
+
+  @Test
+  void requiredReadOnlyGbmsHistoryShouldPropagateOracleFailure() {
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_READ_ONLY.FIND_GBMS_INVOICE_HISTORY(?,?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Read-only history unavailable"));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(
+            () -> repository.findGbmsInvoiceHistoryRequired(null, 7000123L, true))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Read-only history unavailable");
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
@@ -106,5 +681,19 @@ class PermitRpcRepositoryTest {
               return callback.doInCallableStatement(callableStatement);
             });
     when(callableStatement.getObject(cursorIndex)).thenReturn(resultSet);
+  }
+
+  private void assertRequiredCodeLookup(
+      String call,
+      String code,
+      java.util.function.Predicate<String> lookup)
+      throws Exception {
+    org.mockito.Mockito.reset(callableStatement, resultSet);
+    stubCursorProcedure(call, 2);
+    when(resultSet.next()).thenReturn(true, false);
+
+    assertThat(lookup.test(code)).isTrue();
+    verify(callableStatement).setString(1, code);
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
   }
 }

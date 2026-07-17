@@ -6,16 +6,23 @@ import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentF
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.OfferWithdrawalPolicy;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
@@ -26,6 +33,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -41,6 +49,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PurchaseOfferController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PurchaseOfferController.class);
+  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
 
   private final ObjectProvider<PurchaseOfferService> serviceProvider;
@@ -48,18 +57,33 @@ public class PurchaseOfferController {
   private final LexisAuthorizationService authorizationService;
   private final LexisApplicationService applicationService;
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
+  private final ProvincialAuthorizationService provincialAuthorizationService;
+  private final ApplicationEditLockService editLockService;
+  private final OfferWithdrawalPolicy offerWithdrawalPolicy;
+  private LexisPrincipalService principalService;
 
   public PurchaseOfferController(
       ObjectProvider<PurchaseOfferService> serviceProvider,
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService,
       LexisApplicationService applicationService,
-      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider) {
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
+      ProvincialAuthorizationService provincialAuthorizationService,
+      ApplicationEditLockService editLockService,
+      OfferWithdrawalPolicy offerWithdrawalPolicy) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
     this.applicationService = applicationService;
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
+    this.provincialAuthorizationService = provincialAuthorizationService;
+    this.editLockService = editLockService;
+    this.offerWithdrawalPolicy = offerWithdrawalPolicy;
+  }
+
+  @Autowired
+  void setLexisPrincipalService(LexisPrincipalService principalService) {
+    this.principalService = principalService;
   }
 
   @GetMapping("/search/options")
@@ -96,9 +120,13 @@ public class PurchaseOfferController {
     }
 
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
-    if (scopedClientNumber != null) {
-      clientNumber = scopedClientNumber;
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.OFFER_SEARCH);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new PurchaseOfferSearchResponseDto(List.of(), 0, page, size));
     }
+    regionNumbers = orgUnits.orgUnitNumbers();
 
     PurchaseOfferSearchCriteria criteria =
         buildCriteria(
@@ -111,6 +139,7 @@ public class PurchaseOfferController {
             withdrawalFromDate,
             withdrawalToDate,
             clientNumber,
+            scopedClientNumber,
             regionNumbers,
             sortField,
             page,
@@ -142,9 +171,13 @@ public class PurchaseOfferController {
     }
 
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
-    if (scopedClientNumber != null) {
-      clientNumber = scopedClientNumber;
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.OFFER_SEARCH);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new SearchCountResponseDto(0));
     }
+    regionNumbers = orgUnits.orgUnitNumbers();
 
     PurchaseOfferSearchCriteria criteria =
         buildCriteria(
@@ -157,6 +190,7 @@ public class PurchaseOfferController {
             withdrawalFromDate,
             withdrawalToDate,
             clientNumber,
+            scopedClientNumber,
             regionNumbers,
             null,
             0,
@@ -176,32 +210,56 @@ public class PurchaseOfferController {
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
     return service.findByOfferNumber(offerNumber)
-        .flatMap(detail -> authorizeAndEnrichOfferDetail(scopedClientNumber, roles, detail))
+        .flatMap(
+            detail ->
+                authorizeAndEnrichOfferDetail(
+                    authentication, scopedClientNumber, roles, detail))
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
   private Optional<PurchaseOfferDetailDto> authorizeAndEnrichOfferDetail(
-      String scopedClientNumber, List<String> roles, PurchaseOfferDetailDto detail) {
+      Authentication authentication,
+      String scopedClientNumber,
+      List<String> roles,
+      PurchaseOfferDetailDto detail) {
     if (detail == null) {
       return Optional.empty();
     }
 
     Optional<LexisApplicationDetailDto> application = findOfferApplication(detail);
-    if (!canAccessOfferDetail(scopedClientNumber, detail, application)) {
+    if (!canAccessOfferDetail(scopedClientNumber, detail, application)
+        || !provincialAuthorizationService.canAccessOffer(authentication, detail)) {
       return Optional.empty();
     }
+    boolean canEditScheduleDates = canEditScheduleDates(roles);
+    boolean canEditOfferRemarks = canEditOfferRemarks(roles);
+    boolean canEditOfferDetails = canEditOfferDetails(scopedClientNumber, roles, detail);
+    boolean canEditWithdrawFields = canEditWithdrawFields(scopedClientNumber, roles, detail);
     PurchaseOfferDetailDto enriched =
         detail
             .withApplicationContext(
                 resolveApplicationPackageVolume(detail, application),
                 resolveApplicationSpeciesGradeCode(detail.applicationNumber()))
             .withEditPermissions(
-                canEditScheduleDates(roles),
-                canEditOfferRemarks(roles),
-                canEditOfferDetails(scopedClientNumber, roles, detail),
-                canEditWithdrawFields(scopedClientNumber, roles, detail));
-    return Optional.of(enriched);
+                canEditScheduleDates,
+                canEditOfferRemarks,
+                canEditOfferDetails,
+                canEditWithdrawFields);
+    boolean canEdit =
+        canEditScheduleDates
+            || canEditOfferRemarks
+            || canEditOfferDetails
+            || canEditWithdrawFields;
+    String userId = auditUser(authentication);
+    ApplicationEditLockDto editLock =
+        canEdit
+            ? editLockService.acquireOffer(
+                detail.offerNumber(), userId, userId, isApplicationApprover(roles))
+            : editLockService.snapshotOffer(
+                detail.offerNumber(), userId, isApplicationApprover(roles));
+    return Optional.of(
+        enriched.withEditLock(editLock.locked(), editLock.lockedBy(), editLock.message()));
   }
 
   private Optional<LexisApplicationDetailDto> findOfferApplication(PurchaseOfferDetailDto detail) {
@@ -290,11 +348,12 @@ public class PurchaseOfferController {
     return isApplicationApprover(roles)
         || (isOfferingClient(scopedClientNumber, detail)
             && detail.offerWithdrawalDate() == null
-            && canWithdrawByDate(detail.offerEndDate()));
+            && offerWithdrawalPolicy.canWithdraw(detail.applicationNumber()));
   }
 
   private boolean isApplicationApprover(List<String> roles) {
-    return roles != null && roles.contains(ROLE_APPLICATION_APPROVER);
+    return roles != null
+        && (roles.contains(ROLE_ADMIN) || roles.contains(ROLE_APPLICATION_APPROVER));
   }
 
   private boolean isOfferingClient(String scopedClientNumber, PurchaseOfferDetailDto detail) {
@@ -304,8 +363,11 @@ public class PurchaseOfferController {
         && matchesScopedClient(scopedClientNumber, detail.offeringClientNumber());
   }
 
-  private boolean canWithdrawByDate(LocalDate offerEndDate) {
-    return offerEndDate != null && !offerEndDate.isBefore(LocalDate.now());
+  private String auditUser(Authentication authentication) {
+    if (principalService != null) {
+      return principalService.resolvePrincipalName(authentication);
+    }
+    return authentication == null ? null : authentication.getName();
   }
 
   private PurchaseOfferSearchCriteria buildCriteria(
@@ -318,6 +380,7 @@ public class PurchaseOfferController {
       String withdrawalFromDate,
       String withdrawalToDate,
       String clientNumber,
+      String accessClientNumber,
       List<Long> regionNumbers,
       String sortField,
       Integer page,
@@ -330,6 +393,10 @@ public class PurchaseOfferController {
         parseSearchDate(withdrawalFromDate),
         parseSearchDate(withdrawalToDate),
         clientNumber,
+        null,
+        accessClientNumber,
+        false,
+        false,
         regionNumbers == null ? List.of() : regionNumbers,
         sortField,
         page,

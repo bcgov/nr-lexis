@@ -3,15 +3,20 @@ package ca.bc.gov.mof.lexis.controller;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
-import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -19,6 +24,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -36,23 +42,43 @@ public class ExemptionController {
   private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionController.class);
 
   private final ObjectProvider<ExemptionService> serviceProvider;
+  private final ApplicationEditLockService editLockService;
   private final LexisSessionService sessionService;
+  private final ProvincialAuthorizationService provincialAuthorizationService;
 
   public ExemptionController(
       ObjectProvider<ExemptionService> serviceProvider,
-      LexisSessionService sessionService) {
+      ApplicationEditLockService editLockService,
+      LexisSessionService sessionService,
+      ProvincialAuthorizationService provincialAuthorizationService) {
     this.serviceProvider = serviceProvider;
+    this.editLockService = editLockService;
     this.sessionService = sessionService;
+    this.provincialAuthorizationService = provincialAuthorizationService;
   }
 
   @GetMapping("/search/options")
-  public ResponseEntity<ExemptionSearchOptionsDto> searchOptions() {
+  public ResponseEntity<ExemptionSearchOptionsDto> searchOptions(Authentication authentication) {
     ExemptionService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption service unavailable - returning no content for options");
       return ResponseEntity.noContent().build();
     }
-    return ResponseEntity.ok(service.searchOptions());
+    ExemptionSearchOptionsDto options = service.searchOptions();
+    if (provincialAuthorizationService.canViewBlanketOic(authentication)) {
+      return ResponseEntity.ok(options);
+    }
+    return ResponseEntity.ok(
+        new ExemptionSearchOptionsDto(
+            options.exemptionTypes().stream()
+                .filter(option -> option.code() == null || !"B".equalsIgnoreCase(option.code()))
+                .toList(),
+            options.exemptionStatuses(),
+            options.regions()));
+  }
+
+  public ResponseEntity<ExemptionSearchOptionsDto> searchOptions() {
+    return searchOptions(null);
   }
 
   @GetMapping("/search")
@@ -73,6 +99,7 @@ public class ExemptionController {
       @RequestParam(name = "applicantClientNumber", required = false) String applicantClientNumber,
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
+      @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
       @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal,
@@ -88,6 +115,13 @@ public class ExemptionController {
       applicantClientNumber = scopedClientNumber;
       ownerClientNumber = null;
     }
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.EXEMPTION_SEARCH);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new ExemptionSearchResponseDto(List.of(), 0, page, size));
+    }
+    regionNumbers = orgUnits.orgUnitNumbers();
 
     ExemptionSearchCriteria criteria =
         buildCriteria(
@@ -107,13 +141,23 @@ public class ExemptionController {
             applicantClientNumber,
             ownerClientNumber,
             regionNumbers,
+            scopedClientNumber != null,
+            !provincialAuthorizationService.canViewBlanketOic(authentication),
+            sortField,
             page,
             size);
 
+    ExemptionSearchResponseDto response;
     if (knownTotal != null) {
-      return ResponseEntity.ok(service.search(criteria, knownTotal));
+      response = service.search(criteria, knownTotal);
+    } else {
+      response = service.search(criteria);
     }
-    return ResponseEntity.ok(service.search(criteria));
+    if (response == null) {
+      throw new DataAccessResourceFailureException(
+          "Oracle exemption search returned no response");
+    }
+    return ResponseEntity.ok(withSearchLocks(response));
   }
 
   @GetMapping("/search/count")
@@ -146,6 +190,13 @@ public class ExemptionController {
       applicantClientNumber = scopedClientNumber;
       ownerClientNumber = null;
     }
+    OrgUnitConstraint orgUnits =
+        provincialAuthorizationService.constrainOrgUnits(
+            authentication, regionNumbers, OrgUnitSurface.EXEMPTION_SEARCH);
+    if (orgUnits.denied()) {
+      return ResponseEntity.ok(new SearchCountResponseDto(0));
+    }
+    regionNumbers = orgUnits.orgUnitNumbers();
 
     ExemptionSearchCriteria criteria =
         buildCriteria(
@@ -165,6 +216,9 @@ public class ExemptionController {
             applicantClientNumber,
             ownerClientNumber,
             regionNumbers,
+            scopedClientNumber != null,
+            !provincialAuthorizationService.canViewBlanketOic(authentication),
+            null,
             0,
             1);
     return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
@@ -179,14 +233,34 @@ public class ExemptionController {
       LOGGER.warn("Exemption service unavailable - returning no content for detail");
       return ResponseEntity.noContent().build();
     }
-    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     return service.findByExemptionNumber(exemptionNumber)
-        .filter(
-            detail ->
-                matchesScopedClient(
-                    scopedClientNumber, detail.ownerClientNumber(), detail.agentClientNumber()))
+        .filter(detail -> provincialAuthorizationService.canAccessExemption(authentication, detail))
+        // Permit identifiers use the dedicated row-level-authorized RPC contract.
+        .map(this::withoutPermitIdentifiers)
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  private ExemptionDetailDto withoutPermitIdentifiers(ExemptionDetailDto detail) {
+    return new ExemptionDetailDto(
+        detail.exemptionNumber(),
+        detail.exemptionTypeCode(),
+        detail.exemptionTypeDescription(),
+        detail.exemptionStatusCode(),
+        detail.exemptionStatusDescription(),
+        detail.ownerClientNumber(),
+        detail.agentClientNumber(),
+        detail.applicationNumber(),
+        detail.applicationStatus(),
+        detail.approvalDate(),
+        detail.expiryDate(),
+        detail.approvedVolume(),
+        detail.usedVolume(),
+        detail.remainingVolume(),
+        detail.otherConditions(),
+        detail.blanketOic(),
+        List.of(),
+        detail.remarks());
   }
 
   private ExemptionSearchCriteria buildCriteria(
@@ -206,6 +280,9 @@ public class ExemptionController {
       String applicantClientNumber,
       String ownerClientNumber,
       List<Long> regionNumbers,
+      boolean includeBlanketOic,
+      boolean excludeBlanketOic,
+      String sortField,
       Integer page,
       Integer size) {
     return new ExemptionSearchCriteria(
@@ -221,7 +298,45 @@ public class ExemptionController {
         parseSearchDate(firstPresent(listingFromDate, listFromDate)),
         parseSearchDate(firstPresent(listingToDate, listToDate)),
         regionNumbers == null ? List.of() : regionNumbers,
+        includeBlanketOic,
+        excludeBlanketOic,
+        sortField,
         page,
         size);
+  }
+
+  private ExemptionSearchResponseDto withSearchLocks(ExemptionSearchResponseDto response) {
+    if (response.results() == null || response.results().isEmpty()) {
+      return response;
+    }
+
+    List<ExemptionSearchResultDto> results =
+        response.results().stream().map(this::withSearchLock).toList();
+    return new ExemptionSearchResponseDto(
+        results, response.total(), response.page(), response.size());
+  }
+
+  private ExemptionSearchResultDto withSearchLock(ExemptionSearchResultDto row) {
+    // Legacy approval search treated an exemption as locked even when held by the current session.
+    ApplicationEditLockDto lock =
+        editLockService.snapshotExemption(row.exemptionNumber(), null, false);
+    boolean locked = lock == null || lock.locked();
+    if (row.locked() == locked) {
+      return row;
+    }
+    return new ExemptionSearchResultDto(
+        row.exemptionNumber(),
+        row.exemptionType(),
+        row.status(),
+        row.applicantClientNumber(),
+        row.ownerClientNumber(),
+        row.applicationNumber(),
+        row.approvalDate(),
+        row.listingDate(),
+        row.expiryDate(),
+        row.region(),
+        row.approvedVolume(),
+        row.balanceRemaining(),
+        locked);
   }
 }

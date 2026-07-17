@@ -16,6 +16,9 @@ parameters:
   - name: IMAGE_TAG
     description: Container image tag (PR number, 'test', or 'prod')
     value: latest
+  - name: ROLLOUT_TRIGGER
+    description: Value placed on pod templates to force rollout when a reused image tag is rebuilt
+    value: ""
   - name: REGISTRY
     description: Image registry path (no tag)
     value: ghcr.io/bcgov/nr-lexis/backend
@@ -24,12 +27,19 @@ parameters:
   - name: MIN_REPLICAS
     value: "1"
   - name: MAX_REPLICAS
-    value: "2"
+    value: "3"
   - name: MIN_CPU
     value: "200m"
   - name: MIN_MEM
     value: "500Mi"
+  - name: MAX_CPU
+    value: "1000m"
+  - name: MAX_MEM
+    value: "800Mi"
   - name: APP_LOG_LEVEL
+    value: INFO
+  - name: LEXIS_REPORT_STATISTICS_LOG_LEVEL
+    description: DEBUG exposes successful report statistics; INFO keeps them hidden
     value: INFO
   - name: SPRING_SECURITY_LOG_LEVEL
     value: INFO
@@ -41,6 +51,54 @@ parameters:
     value: "false"
   - name: LEXIS_PROD_RTM_ONLY
     value: "false"
+  - name: LEXIS_EXPIRY_ENABLED
+    description: Enable the legacy-equivalent daily exemption expiry scheduler
+    value: "false"
+  - name: LEXIS_EXPIRY_CRON
+    description: Daily expiry scheduler cron expression
+    value: "30 0 0 * * *"
+  - name: LEXIS_EXPIRY_ZONE
+    description: Daily expiry scheduler time zone
+    value: America/Vancouver
+  - name: LEXIS_EXPIRY_LOCK_AT_MOST_FOR
+    description: Maximum duration of one Oracle scheduler lock
+    value: PT6H
+  - name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR
+    description: Minimum duration of one Oracle scheduler lock
+    value: PT5M
+  - name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS
+    description: Maximum Oracle/Jasper report query duration before cancellation
+    value: "120"
+  - name: LEXIS_PERMIT_INVOICE_MODE
+    description: Permit invoice coordinator; legacy-best-effort preserves the legacy workflow
+    value: legacy-best-effort
+  - name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS
+    description: Requested timeout for each isolated GBMS transaction
+    value: "60"
+  - name: LEXIS_MAIL_NON_PRODUCTION
+    description: Allow TEST/DEV interception when override recipients are configured
+    value: "true"
+  - name: LEXIS_MAIL_ENVIRONMENT
+    description: Non-secret deployment environment label used on intercepted messages
+    value: non-prod
+  - name: LEXIS_MAIL_FROM
+    description: Approved sender mailbox supplied by the GitHub Environment
+    value: ""
+  - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
+    description: Comma- or semicolon-separated TEST/DEV administrator email addresses
+    value: ""
+  - name: LEXIS_MAIL_REGION_RCO_RECIPIENTS
+    description: Externally managed RCO distribution list recipients
+    value: ""
+  - name: LEXIS_MAIL_REGION_RNI_RECIPIENTS
+    description: Externally managed RNI distribution list recipients
+    value: ""
+  - name: LEXIS_MAIL_REGION_RSI_RECIPIENTS
+    description: Externally managed RSI distribution list recipients
+    value: ""
+  - name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
+    description: Migration fallback for permit review recipients
+    value: ""
   - name: AWS_COGNITO_ISSUER_URI
     required: true
   - name: COGNITO_USERINFO_URI
@@ -86,15 +144,28 @@ objects:
         matchLabels:
           app: ${NAME}-backend-${ZONE}
       strategy:
-        type: Recreate
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
       template:
         metadata:
           labels:
             app: ${NAME}-backend-${ZONE}
             app.kubernetes.io/name: ${NAME}-backend
             app.kubernetes.io/instance: ${ZONE}
+          annotations:
+            app.openshift.io/redeploy-token: ${ROLLOUT_TRIGGER}
         spec:
+          terminationGracePeriodSeconds: 90
           automountServiceAccountToken: false
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  app: ${NAME}-backend-${ZONE}
           securityContext:
             runAsNonRoot: true
           initContainers:
@@ -141,8 +212,14 @@ objects:
               env:
                 - name: SPRING_PROFILES_ACTIVE
                   value: ${SPRING_PROFILES_ACTIVE}
+                - name: LEXIS_REQUIRE_ORACLE_PROFILE
+                  value: "true"
                 - name: SERVER_PORT
                   value: "8080"
+                - name: HOME
+                  value: /tmp
+                - name: XDG_CACHE_HOME
+                  value: /tmp/.cache
                 - name: AWS_COGNITO_ISSUER_URI
                   value: ${AWS_COGNITO_ISSUER_URI}
                 - name: COGNITO_USERINFO_URI
@@ -167,6 +244,8 @@ objects:
                       key: DATABASE_PASSWORD
                 - name: APP_LOG_LEVEL
                   value: ${APP_LOG_LEVEL}
+                - name: LEXIS_REPORT_STATISTICS_LOG_LEVEL
+                  value: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL}
                 - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY
                   value: ${SPRING_SECURITY_LOG_LEVEL}
                 - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB
@@ -177,6 +256,53 @@ objects:
                   value: ${SPRING_JPA_SHOW_SQL}
                 - name: LEXIS_PROD_RTM_ONLY
                   value: ${LEXIS_PROD_RTM_ONLY}
+                - name: LEXIS_EXPIRY_ENABLED
+                  value: ${LEXIS_EXPIRY_ENABLED}
+                - name: LEXIS_EXPIRY_CRON
+                  value: ${LEXIS_EXPIRY_CRON}
+                - name: LEXIS_EXPIRY_ZONE
+                  value: ${LEXIS_EXPIRY_ZONE}
+                - name: LEXIS_EXPIRY_LOCK_AT_MOST_FOR
+                  value: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR}
+                - name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR
+                  value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}
+                - name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS
+                  value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}
+                - name: LEXIS_PERMIT_INVOICE_MODE
+                  value: ${LEXIS_PERMIT_INVOICE_MODE}
+                - name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS
+                  value: ${LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS}
+                - name: LEXIS_MAIL_NON_PRODUCTION
+                  value: ${LEXIS_MAIL_NON_PRODUCTION}
+                - name: LEXIS_MAIL_ENVIRONMENT
+                  value: ${LEXIS_MAIL_ENVIRONMENT}
+                - name: LEXIS_MAIL_FROM
+                  value: ${LEXIS_MAIL_FROM}
+                - name: LEXIS_MAIL_OVERRIDE_RECIPIENTS
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_OVERRIDE_RECIPIENTS
+                - name: LEXIS_MAIL_REGION_RCO_RECIPIENTS
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_REGION_RCO_RECIPIENTS
+                - name: LEXIS_MAIL_REGION_RNI_RECIPIENTS
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_REGION_RNI_RECIPIENTS
+                - name: LEXIS_MAIL_REGION_RSI_RECIPIENTS
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_REGION_RSI_RECIPIENTS
+                - name: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS
                 - name: KEYSTORE_SECRET
                   valueFrom:
                     secretKeyRef:
@@ -194,37 +320,39 @@ objects:
                 requests:
                   cpu: ${MIN_CPU}
                   memory: ${MIN_MEM}
-                  ephemeral-storage: "200Mi"
+                  ephemeral-storage: "512Mi"
                 limits:
-                  cpu: "1000m"
-                  memory: "800Mi"
-                  ephemeral-storage: "500Mi"
-              livenessProbe:
-                tcpSocket:
+                  cpu: ${MAX_CPU}
+                  memory: ${MAX_MEM}
+                  ephemeral-storage: "4Gi"
+              startupProbe:
+                httpGet:
+                  path: /actuator/health/liveness
                   port: 8080
-                initialDelaySeconds: 300
-                periodSeconds: 30
-                timeoutSeconds: 5
-                failureThreshold: 5
+                periodSeconds: 5
+                timeoutSeconds: 3
+                failureThreshold: 60
+                successThreshold: 1
+              livenessProbe:
+                httpGet:
+                  path: /actuator/health/liveness
+                  port: 8080
+                periodSeconds: 15
+                timeoutSeconds: 3
+                failureThreshold: 3
                 successThreshold: 1
               readinessProbe:
-                tcpSocket:
+                httpGet:
+                  path: /actuator/health/readiness
                   port: 8080
-                initialDelaySeconds: 30
                 periodSeconds: 10
                 timeoutSeconds: 5
-                failureThreshold: 20
+                failureThreshold: 3
                 successThreshold: 1
               volumeMounts:
                 - name: api-cert
                   mountPath: /cert
-                - name: tls-certs
-                  mountPath: /etc/tls-certs
                   readOnly: true
-                - name: log-storage
-                  mountPath: /logs
-                - name: app-storage
-                  mountPath: /temp
                 - name: tmp-storage
                   mountPath: /tmp
               securityContext:
@@ -234,13 +362,6 @@ objects:
                 capabilities:
                   drop: ["ALL"]
           volumes:
-            - name: tls-certs
-              secret:
-                secretName: ${NAME}-backend-cert-${ZONE}
-            - name: log-storage
-              emptyDir: {}
-            - name: app-storage
-              emptyDir: {}
             - name: tmp-storage
               emptyDir: {}
             - name: init-tmp-storage
@@ -256,8 +377,6 @@ objects:
       labels:
         app: ${NAME}-backend-${ZONE}
         app.kubernetes.io/instance: ${ZONE}
-      annotations:
-        service.alpha.openshift.io/serving-cert-secret-name: ${NAME}-backend-cert-${ZONE}
     spec:
       selector:
         app: ${NAME}-backend-${ZONE}
@@ -304,7 +423,24 @@ objects:
             name: cpu
             target:
               type: Utilization
-              averageUtilization: 200
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 60
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+          selectPolicy: Max
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Percent
+              value: 25
+              periodSeconds: 60
 
   - apiVersion: v1
     kind: PersistentVolumeClaim
@@ -333,6 +469,11 @@ objects:
       DATABASE_USER: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       KEYSTORE_SECRET: ${KEYSTORE_SECRET}
+      LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${LEXIS_MAIL_OVERRIDE_RECIPIENTS}
+      LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${LEXIS_MAIL_REGION_RCO_RECIPIENTS}
+      LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${LEXIS_MAIL_REGION_RNI_RECIPIENTS}
+      LEXIS_MAIL_REGION_RSI_RECIPIENTS: ${LEXIS_MAIL_REGION_RSI_RECIPIENTS}
+      LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS}
 
   - apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy

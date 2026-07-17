@@ -35,12 +35,14 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Maven verify (unit tests + jacoco coverage)
+      # The default-on coverage profile attaches JaCoCo to Surefire and writes
+      # target/site/jacoco/jacoco.xml during verify for the Sonar scan below.
+      - name: Maven verify (unit tests + JaCoCo coverage)
         working-directory: backend
         run: mvn -B -DskipITs verify
 
       - name: SonarCloud scan
-        if: env.SONAR_TOKEN != ''
+        if: github.event_name == 'push' && env.SONAR_TOKEN != ''
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.sonar_token_backend }}
@@ -58,28 +60,27 @@ jobs:
     name: Frontend Tests
     if: (! github.event.pull_request.draft)
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: bcgov/action-test-and-analyse@8f699e3fd3fadd9a6adf6f4b1f2638ef7ecfefb9 # v2.0.0
-        env:
-          sonar_token: ${{ secrets.sonar_token_frontend }}
         with:
           commands: |
             npm ci
+            npm run typecheck
             npm run lint
             npm run format:check
             npm run test:cov
           dir: frontend
-          node_version: "22"
+          node_version: "24"
           # Keep starter-kit project key until dedicated LEXIS project exists.
           sonar_args: >
-            -Dsonar.exclusions=**/coverage/**,**/node_modules/**,**/*spec.ts,**/*.test.ts,**/*.test.tsx,**/e2e/**
+            -Dsonar.exclusions=**/coverage/**,**/node_modules/**,**/*spec.ts,**/*.test.ts,**/*.test.tsx,**/*.support.ts,**/*.support.tsx,**/e2e/**
             -Dsonar.organization=bcgov-sonarcloud
             -Dsonar.projectKey=quickstart-openshift_frontend
             -Dsonar.sources=src
-            -Dsonar.test.inclusions=**/*spec.ts,**/*.test.ts,**/*.test.tsx
+            -Dsonar.test.inclusions=**/*spec.ts,**/*.test.ts,**/*.test.tsx,**/*.support.ts,**/*.support.tsx
             -Dsonar.javascript.lcov.reportPaths=./coverage/lcov.info
-          sonar_token: ${{ env.sonar_token }}
+          sonar_token: ${{ github.event_name == 'push' && secrets.sonar_token_frontend || '' }}
           dep_scan: warn
           supply_scan: true
           triggers: ('frontend/')
@@ -87,8 +88,8 @@ jobs:
   trivy:
     name: Trivy Security Scan
     if: (! github.event.pull_request.draft)
-    continue-on-error: true
     permissions:
+      contents: read
       security-events: write
     runs-on: ubuntu-slim
     timeout-minutes: 5
@@ -112,21 +113,24 @@ jobs:
           scan-type: "fs"
           scanners: "vuln,secret,misconfig"
           severity: "CRITICAL,HIGH"
+          # Run the scanner and publish findings without failing this workflow.
+          exit-code: "0"
           trivyignores: ".github/.trivyignore"
           cache-dir: .trivycache
           skip-dirs: "**/node_modules,**/coverage,**/dist,.git"
 
       - name: Upload Trivy scan results to GitHub Security tab
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: "trivy-results.sarif"
 
   results:
     name: Analysis Results
-    needs: [backend-tests, frontend-tests]
+    needs: [backend-tests, frontend-tests, trivy]
     if: always() && (! github.event.pull_request.draft)
     runs-on: ubuntu-slim
     steps:
-      - if: contains(needs.*.result, 'failure')||contains(needs.*.result, 'canceled')
+      - if: contains(needs.*.result, 'failure')||contains(needs.*.result, 'cancelled')
         run: echo "At least one job has failed." && exit 1
       - run: echo "Success!"

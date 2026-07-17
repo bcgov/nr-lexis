@@ -14,12 +14,13 @@ permissions: {}
 jobs:
   credentialed-regression:
     name: TEST Regression (${{ matrix.project }})
+    if: github.ref_name == github.event.repository.default_branch
     environment: test
     defaults:
       run:
         working-directory: frontend
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     strategy:
@@ -30,6 +31,10 @@ jobs:
       regression-outcome: ${{ steps.run-regression.outcome }}
     env:
       E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.gold.devops.gov.bc.ca
+      E2E_REGRESSION_CLIENT_NUMBER: ${{ vars.E2E_REGRESSION_CLIENT_NUMBER }}
+      E2E_REGRESSION_CLIENT_LOCATION_CODE: ${{ vars.E2E_REGRESSION_CLIENT_LOCATION_CODE }}
+      E2E_REGRESSION_LEGACY_REGION_CODE: ${{ vars.E2E_REGRESSION_LEGACY_REGION_CODE }}
+      E2E_REGRESSION_TIMBER_MARK: ${{ vars.E2E_REGRESSION_TIMBER_MARK }}
     steps:
       - uses: actions/checkout@v6
 
@@ -39,13 +44,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Check regression secrets
+      - name: Validate and mask regression secrets
         env:
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
         run: |
           test -n "$E2E_IDIR_USER" || (echo "E2E_IDIR_USER test environment secret is required." && exit 1)
           test -n "$E2E_IDIR_PASSWORD" || (echo "E2E_IDIR_PASSWORD test environment secret is required." && exit 1)
+          echo "::add-mask::$E2E_IDIR_USER"
+          echo "::add-mask::$E2E_IDIR_PASSWORD"
 
       - name: Install dependencies
         run: |
@@ -63,19 +70,12 @@ jobs:
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
         run: |
-          npm run e2e:regression -- --reporter=html,list
-
-      - uses: actions/upload-artifact@v7
-        if: (! cancelled())
-        with:
-          name: playwright-regression-${{ matrix.project }}-test
-          path: frontend/playwright-report
-          retention-days: 7
+          npm run e2e:regression -- --reporter=line
 
   regression-result:
     name: TEST Regression Result
     needs: [credentialed-regression]
-    if: ${{ always() }}
+    if: ${{ always() && github.ref_name == github.event.repository.default_branch }}
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
@@ -86,6 +86,6 @@ jobs:
             exit 1
           fi
           if [ "${{ needs.credentialed-regression.outputs.regression-outcome }}" != "success" ]; then
-            echo "TEST regression failed. Check the TEST Regression job logs and uploaded Playwright report."
+            echo "TEST regression failed. Check the redacted TEST Regression job logs."
             exit 1
           fi

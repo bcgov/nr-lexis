@@ -19,6 +19,7 @@ import {
   upsertFeePolicy,
   upsertFilPolicy,
 } from '@/service/admin-policy-service'
+import { fetchReportOptions } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -41,6 +42,10 @@ vi.mock('@/service/admin-schedule-service', () => ({
   deleteExportSchedule: vi.fn(),
 }))
 
+vi.mock('@/service/search-options-service', () => ({
+  fetchReportOptions: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchExportSchedulePage = vi.mocked(fetchExportSchedulePage)
 const mockedCreateExportSchedule = vi.mocked(createExportSchedule)
@@ -52,6 +57,28 @@ const mockedUpsertFeePolicy = vi.mocked(upsertFeePolicy)
 const mockedUpsertFilPolicy = vi.mocked(upsertFilPolicy)
 const mockedDeleteFeePolicy = vi.mocked(deleteFeePolicy)
 const mockedDeleteFilPolicy = vi.mocked(deleteFilPolicy)
+const mockedFetchReportOptions = vi.mocked(fetchReportOptions)
+
+const reportOptions = {
+  currentSchedules: [],
+  defaultRegion: '',
+  regions: [
+    { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+    { value: '1905', label: 'Thompson-Okanagan Natural Resource Region' },
+  ],
+  reportJurisdictions: [],
+  biweeklyJurisdictions: [],
+  teacJurisdictions: [],
+  exemptionTypes: [],
+  tenureExemptionTypes: [],
+  exemptionReasons: [],
+  exemptionStatuses: [],
+  growthTypes: [],
+  permitStatuses: [],
+  destinationCountries: [],
+  allDestinationCountries: [],
+  portsOfExport: [],
+} satisfies Awaited<ReturnType<typeof fetchReportOptions>>
 
 const renderPage = (area: 'fee' | 'fil' | 'schedule' = 'fee') => {
   const path =
@@ -85,9 +112,10 @@ describe('Admin policy action states', () => {
         {
           id: 'fee-1',
           effectiveDate: '2026-01-01',
-          orgUnitCode: '12',
-          orgUnitName: 'Coast',
-          policyPercentage: '3.5',
+          orgUnitNo: '1904',
+          orgUnitCode: 'RCO',
+          orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+          policyPercentage: '4',
           entryUserId: 'idir\\admin',
           entryTimestamp: '2026-01-01T00:00:00.000Z',
           updateUserId: 'idir\\admin',
@@ -104,7 +132,7 @@ describe('Admin policy action states', () => {
         {
           id: 'fil-1',
           effectiveDate: '2026-01-01',
-          filPercentage: '2.0',
+          filPercentage: '2',
           entryUserId: 'idir\\admin',
           entryTimestamp: '2026-01-01T00:00:00.000Z',
           updateUserId: 'idir\\admin',
@@ -134,10 +162,11 @@ describe('Admin policy action states', () => {
       size: 100,
     })
 
-    mockedUpsertFeePolicy.mockResolvedValue([])
-    mockedUpsertFilPolicy.mockResolvedValue([])
-    mockedDeleteFeePolicy.mockResolvedValue([])
-    mockedDeleteFilPolicy.mockResolvedValue([])
+    mockedUpsertFeePolicy.mockResolvedValue(undefined)
+    mockedUpsertFilPolicy.mockResolvedValue(undefined)
+    mockedDeleteFeePolicy.mockResolvedValue(undefined)
+    mockedDeleteFilPolicy.mockResolvedValue(undefined)
+    mockedFetchReportOptions.mockResolvedValue(reportOptions)
     mockedCreateExportSchedule.mockResolvedValue({
       success: true,
       message: 'Export schedule added.',
@@ -176,38 +205,25 @@ describe('Admin policy action states', () => {
   })
 
   it('submits fee policy add when required fields are valid', async () => {
-    mockedUpsertFeePolicy.mockResolvedValue([
-      {
-        id: 'fee-2',
-        effectiveDate: '2026-02-01',
-        orgUnitCode: '11',
-        orgUnitName: 'Cariboo',
-        policyPercentage: '4.2',
-        entryUserId: 'idir\\admin',
-        entryTimestamp: '2026-02-01T00:00:00.000Z',
-        updateUserId: 'idir\\admin',
-        updateTimestamp: '2026-02-01T00:00:00.000Z',
-      },
-    ])
-
     renderPage()
 
     await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('option', {
+      name: 'Thompson-Okanagan Natural Resource Region (1905)',
+    })
 
     const policyDateInputs = screen.getAllByLabelText('Policy effective date')
     fireEvent.change(policyDateInputs[0], { target: { value: '2026-02-01' } })
-    await userEvent.type(screen.getByLabelText('Region code'), '11')
-    await userEvent.type(screen.getByLabelText('Region name'), 'Cariboo')
-    await userEvent.type(screen.getByLabelText('Fee increase percentage'), '4.2')
+    await userEvent.selectOptions(screen.getByLabelText('Region'), '1905')
+    await userEvent.type(screen.getByLabelText('Fee increase percentage'), '4')
     await userEvent.click(screen.getByRole('button', { name: 'Add Fee Policy' }))
 
     await waitFor(() => {
       expect(mockedUpsertFeePolicy).toHaveBeenCalledWith({
         id: null,
         effectiveDate: '2026-02-01',
-        orgUnitCode: '11',
-        orgUnitName: 'Cariboo',
-        policyPercentage: '4.2',
+        orgUnitNo: '1905',
+        policyPercentage: '4',
       })
     })
 
@@ -215,16 +231,153 @@ describe('Admin policy action states', () => {
     expect(screen.getByText('Fee policy added.')).toBeInTheDocument()
   })
 
-  it.each<{
-    area: AdminPolicyArea
-    heading: string
-    absentHeadings: string[]
-    fetchPage: typeof mockedFetchFeePolicyPage
-    untouchedFetches: Array<typeof mockedFetchFeePolicyPage>
-  }>([
+  it('preserves the numeric organization unit when editing an RCO fee policy', async () => {
+    renderPage()
+
+    await screen.findByRole('option', {
+      name: 'RCO — Kootenay-Boundary Natural Resource Region',
+    })
+    const policyRow = screen.getByText('RCO').closest('tr')
+    expect(policyRow).not.toBeNull()
+    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Edit' }))
+
+    expect(screen.getByLabelText('Region')).toHaveValue('1904')
+    await userEvent.clear(screen.getByLabelText('Fee increase percentage'))
+    await userEvent.type(screen.getByLabelText('Fee increase percentage'), '5')
+    await userEvent.click(screen.getByRole('button', { name: 'Update Fee Policy' }))
+
+    await waitFor(() => {
+      expect(mockedUpsertFeePolicy).toHaveBeenCalledWith({
+        id: 'fee-1',
+        effectiveDate: '2026-01-01',
+        orgUnitNo: '1904',
+        policyPercentage: '5',
+      })
+    })
+  })
+
+  it('fails closed when authoritative fee region options are unavailable', async () => {
+    mockedFetchReportOptions.mockResolvedValue({ ...reportOptions, regions: [] })
+
+    renderPage()
+
+    expect(await screen.findByText('Region options unavailable')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Authoritative region options are unavailable. Fee policy saves are disabled.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Region')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Fee Policy' })).toBeDisabled()
+    expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { area: 'fee' as const, value: '0' },
+    { area: 'fee' as const, value: '100' },
+    { area: 'fil' as const, value: '1' },
+    { area: 'fil' as const, value: '99' },
+  ])('accepts the $area integer boundary $value', async ({ area, value }) => {
+    renderPage(area)
+
+    await screen.findByRole('heading', {
+      level: 1,
+      name:
+        area === 'fee' ? 'Fee policy administration' : 'Fee in lieu percent policy administration',
+    })
+    fireEvent.change(screen.getByLabelText('Policy effective date'), {
+      target: { value: '2026-08-01' },
+    })
+
+    if (area === 'fee') {
+      await screen.findByRole('option', {
+        name: 'RCO — Kootenay-Boundary Natural Resource Region',
+      })
+      await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
+      await userEvent.type(screen.getByLabelText('Fee increase percentage'), value)
+      await userEvent.click(screen.getByRole('button', { name: 'Add Fee Policy' }))
+      await waitFor(() => {
+        expect(mockedUpsertFeePolicy).toHaveBeenCalledWith({
+          id: null,
+          effectiveDate: '2026-08-01',
+          orgUnitNo: '1904',
+          policyPercentage: value,
+        })
+      })
+      return
+    }
+
+    await userEvent.type(screen.getByLabelText('Fee in lieu percentage'), value)
+    await userEvent.click(screen.getByRole('button', { name: 'Add fee in lieu policy' }))
+    await waitFor(() => {
+      expect(mockedUpsertFilPolicy).toHaveBeenCalledWith({
+        id: null,
+        effectiveDate: '2026-08-01',
+        filPercentage: value,
+      })
+    })
+  })
+
+  it.each([
+    {
+      area: 'fee' as const,
+      value: '4.2',
+      expectedError: 'Fee increase percentage must be a whole number.',
+    },
+    {
+      area: 'fee' as const,
+      value: '101',
+      expectedError: 'Fee increase percentage must be 100 or less.',
+    },
+    {
+      area: 'fil' as const,
+      value: '2.5',
+      expectedError: 'Fee in lieu percentage must be a whole number.',
+    },
+    {
+      area: 'fil' as const,
+      value: '0',
+      expectedError: 'Fee in lieu percentage must be greater than or equal to 1.',
+    },
+    {
+      area: 'fil' as const,
+      value: '100',
+      expectedError: 'Fee in lieu percentage must be 99 or less.',
+    },
+  ])('rejects $area percentage $value', async ({ area, value, expectedError }) => {
+    renderPage(area)
+
+    await screen.findByRole('heading', {
+      level: 1,
+      name:
+        area === 'fee' ? 'Fee policy administration' : 'Fee in lieu percent policy administration',
+    })
+    fireEvent.change(screen.getByLabelText('Policy effective date'), {
+      target: { value: '2026-08-01' },
+    })
+
+    if (area === 'fee') {
+      await screen.findByRole('option', {
+        name: 'RCO — Kootenay-Boundary Natural Resource Region',
+      })
+      await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
+      await userEvent.type(screen.getByLabelText('Fee increase percentage'), value)
+      await userEvent.click(screen.getByRole('button', { name: 'Add Fee Policy' }))
+      expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
+    } else {
+      await userEvent.type(screen.getByLabelText('Fee in lieu percentage'), value)
+      await userEvent.click(screen.getByRole('button', { name: 'Add fee in lieu policy' }))
+      expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
+    }
+
+    expect(await screen.findByText(expectedError)).toBeInTheDocument()
+  })
+
+  it.each([
     {
       area: 'fee',
       heading: 'Fee policy administration',
+      subtitle: 'Manage regional fee policy percentages and effective dates.',
       absentHeadings: [
         'Fee in lieu percent policy administration',
         'Export schedule administration',
@@ -235,6 +388,7 @@ describe('Admin policy action states', () => {
     {
       area: 'fil',
       heading: 'Fee in lieu percent policy administration',
+      subtitle: 'Manage fee-in-lieu percentages and effective dates.',
       absentHeadings: ['Fee policy administration', 'Export schedule administration'],
       fetchPage: mockedFetchFilPolicyPage,
       untouchedFetches: [mockedFetchFeePolicyPage, mockedFetchExportSchedulePage],
@@ -242,24 +396,36 @@ describe('Admin policy action states', () => {
     {
       area: 'schedule',
       heading: 'Export schedule administration',
+      subtitle: 'Manage advertising, receipt, offer, and TEAC schedule dates.',
       absentHeadings: ['Fee policy administration', 'Fee in lieu percent policy administration'],
       fetchPage: mockedFetchExportSchedulePage,
       untouchedFetches: [mockedFetchFeePolicyPage, mockedFetchFilPolicyPage],
     },
   ])(
     'loads only the selected $area admin area',
-    async ({ area, heading, absentHeadings, fetchPage, untouchedFetches }) => {
-      renderPage(area)
+    async ({ area, heading, subtitle, absentHeadings, fetchPage, untouchedFetches }) => {
+      const { container } = renderPage(area as AdminPolicyArea)
 
       await screen.findByRole('heading', { level: 1, name: heading })
+      expect(screen.getByText(subtitle)).toBeVisible()
       expect(screen.getByRole('heading', { level: 2, name: heading })).toBeInTheDocument()
+      expect(container.querySelectorAll('.cds--tile')).toHaveLength(1)
+      const resultsRegion = await screen.findByRole('region', { name: 'Search results table' })
+      expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveTextContent(
+        '1 result found',
+      )
       for (const absentHeading of absentHeadings) {
         expect(
           screen.queryByRole('heading', { level: 2, name: absentHeading }),
         ).not.toBeInTheDocument()
       }
 
-      expect(fetchPage).toHaveBeenCalledWith(0, 100)
+      expect(fetchPage).toHaveBeenCalledWith(
+        0,
+        100,
+        area === 'schedule' ? 'advertisingDate' : 'effective_date',
+        'desc',
+      )
       for (const untouchedFetch of untouchedFetches) {
         expect(untouchedFetch).not.toHaveBeenCalled()
       }
@@ -283,14 +449,15 @@ describe('Admin policy action states', () => {
             : mockedFetchExportSchedulePage
 
       if (area === 'fee') {
-        mockedFetchFeePolicyPage.mockImplementation(async (page, size) => ({
+        mockedFetchFeePolicyPage.mockImplementation(async (page = 0, size = 100) => ({
           rows: [
             {
               id: `fee-${page}-${size}`,
               effectiveDate: '2026-01-01',
-              orgUnitCode: '12',
-              orgUnitName: 'Coast',
-              policyPercentage: '3.5',
+              orgUnitNo: '1904',
+              orgUnitCode: 'RCO',
+              orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+              policyPercentage: '4',
               entryUserId: 'idir\\admin',
               entryTimestamp: '2026-01-01T00:00:00.000Z',
               updateUserId: 'idir\\admin',
@@ -302,7 +469,7 @@ describe('Admin policy action states', () => {
           size,
         }))
       } else if (area === 'fil') {
-        mockedFetchFilPolicyPage.mockImplementation(async (page, size) => ({
+        mockedFetchFilPolicyPage.mockImplementation(async (page = 0, size = 100) => ({
           rows: [
             {
               id: `fil-${page}-${size}`,
@@ -319,7 +486,7 @@ describe('Admin policy action states', () => {
           size,
         }))
       } else {
-        mockedFetchExportSchedulePage.mockImplementation(async (page, size) => ({
+        mockedFetchExportSchedulePage.mockImplementation(async (page = 0, size = 100) => ({
           rows: [
             {
               exportScheduleId: `schedule-${page}-${size}`,
@@ -343,8 +510,13 @@ describe('Admin policy action states', () => {
 
       await screen.findByRole('heading', { level: 1, name: heading })
 
-      expect(fetchPage).toHaveBeenLastCalledWith(0, 100)
-      expect(screen.getByText('220')).toBeInTheDocument()
+      expect(fetchPage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        area === 'schedule' ? 'advertisingDate' : 'effective_date',
+        'desc',
+      )
+      expect(screen.getByText('220 results found')).toBeInTheDocument()
 
       const rowsPerPage = screen.getByLabelText('Rows per page')
       expect(rowsPerPage).toHaveValue('100')
@@ -357,13 +529,207 @@ describe('Admin policy action states', () => {
       fireEvent.change(rowsPerPage, { target: { value: '20' } })
 
       await waitFor(() => {
-        expect(fetchPage).toHaveBeenLastCalledWith(0, 20)
+        expect(fetchPage).toHaveBeenLastCalledWith(
+          0,
+          20,
+          area === 'schedule' ? 'advertisingDate' : 'effective_date',
+          'desc',
+        )
       })
 
       await userEvent.click(screen.getByLabelText('Next page'))
 
       await waitFor(() => {
-        expect(fetchPage).toHaveBeenLastCalledWith(1, 20)
+        expect(fetchPage).toHaveBeenLastCalledWith(
+          1,
+          20,
+          area === 'schedule' ? 'advertisingDate' : 'effective_date',
+          'desc',
+        )
+      })
+    },
+  )
+
+  it.each([
+    { area: 'fee' as const, title: 'No fee policies found' },
+    { area: 'fil' as const, title: 'No fee-in-lieu policies found' },
+    { area: 'schedule' as const, title: 'No export schedules found' },
+  ])('renders a semantic empty workspace for $area administration', async ({ area, title }) => {
+    if (area === 'fee') {
+      mockedFetchFeePolicyPage.mockResolvedValue({ rows: [], total: 0, page: 0, size: 100 })
+    } else if (area === 'fil') {
+      mockedFetchFilPolicyPage.mockResolvedValue({ rows: [], total: 0, page: 0, size: 100 })
+    } else {
+      mockedFetchExportSchedulePage.mockResolvedValue({ rows: [], total: 0, page: 0, size: 100 })
+    }
+
+    renderPage(area)
+
+    expect(await screen.findByRole('heading', { level: 3, name: title })).toBeVisible()
+    expect(screen.getByText('0 results found')).toBeVisible()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Rows per page')).not.toBeInTheDocument()
+  })
+
+  it('shows policy loading inside the retained results workspace', async () => {
+    let resolvePolicies!: (value: Awaited<ReturnType<typeof fetchFeePolicyPage>>) => void
+    mockedFetchFeePolicyPage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePolicies = resolve
+        }),
+    )
+
+    renderPage('fee')
+
+    const resultsRegion = screen.getByRole('region', { name: 'Search results table' })
+    expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText('Loading fee policies...')).toBeVisible()
+
+    resolvePolicies({ rows: [], total: 0, page: 0, size: 100 })
+    expect(await screen.findByRole('heading', { name: 'No fee policies found' })).toBeVisible()
+    await waitFor(() => {
+      expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveAttribute(
+        'aria-busy',
+        'false',
+      )
+    })
+  })
+
+  it('loads historical schedules in the paginated table and sorts them on the server', async () => {
+    const historicalRow = {
+      exportScheduleId: '17',
+      advertisingDate: '2026-06-24',
+      applicationReceiptDate: '2026-06-24',
+      offerReceiptDate: '2026-07-08',
+      offerEndDate: '2026-08-07',
+      offerWithdrawalDate: '2026-07-28',
+      teacMeetingDate: '2026-07-31',
+      applicationCount: 0,
+      mutable: true,
+    }
+    mockedFetchExportSchedulePage.mockResolvedValue({
+      rows: [historicalRow],
+      total: 2154,
+      page: 0,
+      size: 100,
+    })
+
+    renderPage('schedule')
+
+    await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'advertisingDate',
+        'desc',
+      )
+    })
+    expect(screen.getByLabelText('Advertising date')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting' }))
+
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'teacMeetingDate',
+        'asc',
+      )
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting (ASC)' }))
+
+    await waitFor(() => {
+      expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
+        0,
+        100,
+        'teacMeetingDate',
+        'desc',
+      )
+    })
+  })
+
+  it.each([
+    {
+      area: 'fee' as const,
+      heading: 'Fee policy administration',
+      targetHeader: 'Region',
+      sortField: 'org_unit_no',
+      fetchPage: mockedFetchFeePolicyPage,
+    },
+    {
+      area: 'fil' as const,
+      heading: 'Fee in lieu percent policy administration',
+      targetHeader: 'Fee in lieu %',
+      sortField: 'fil_percent',
+      fetchPage: mockedFetchFilPolicyPage,
+    },
+  ])(
+    'sorts and resets backend pagination for $area policy headers',
+    async ({ area, heading, targetHeader, sortField, fetchPage }) => {
+      if (area === 'fee') {
+        mockedFetchFeePolicyPage.mockImplementation(async (page = 0, size = 100) => ({
+          rows: [
+            {
+              id: `fee-${page}-${size}`,
+              effectiveDate: '2026-01-01',
+              orgUnitNo: '1904',
+              orgUnitCode: 'RCO',
+              orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+              policyPercentage: '4',
+              entryUserId: 'idir\\admin',
+              entryTimestamp: '2026-01-01T00:00:00.000Z',
+              updateUserId: 'idir\\admin',
+              updateTimestamp: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          total: 220,
+          page,
+          size,
+        }))
+      } else {
+        mockedFetchFilPolicyPage.mockImplementation(async (page = 0, size = 100) => ({
+          rows: [
+            {
+              id: `fil-${page}-${size}`,
+              effectiveDate: '2026-01-01',
+              filPercentage: '2.0',
+              entryUserId: 'idir\\admin',
+              entryTimestamp: '2026-01-01T00:00:00.000Z',
+              updateUserId: 'idir\\admin',
+              updateTimestamp: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          total: 220,
+          page,
+          size,
+        }))
+      }
+
+      renderPage(area)
+
+      await screen.findByRole('heading', { level: 1, name: heading })
+      await waitFor(() => {
+        expect(fetchPage).toHaveBeenLastCalledWith(0, 100, 'effective_date', 'desc')
+      })
+
+      await userEvent.click(screen.getByLabelText('Next page'))
+      await waitFor(() => {
+        expect(fetchPage).toHaveBeenLastCalledWith(1, 100, 'effective_date', 'desc')
+      })
+
+      await userEvent.click(screen.getByRole('button', { name: targetHeader }))
+      await waitFor(() => {
+        expect(fetchPage).toHaveBeenLastCalledWith(0, 100, sortField, 'asc')
+      })
+
+      await userEvent.click(screen.getByRole('button', { name: `${targetHeader} (ASC)` }))
+      await waitFor(() => {
+        expect(fetchPage).toHaveBeenLastCalledWith(0, 100, sortField, 'desc')
       })
     },
   )
@@ -460,10 +826,49 @@ describe('Admin policy action states', () => {
     expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
   })
 
+  it('links application counts to an auto-filtered application search', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === '/lexisPolicyAdmin' ||
+          action === '/lexisFILAdmin' ||
+          action === '/applicationSearch',
+      }),
+    )
+    mockedFetchExportSchedulePage.mockResolvedValueOnce({
+      rows: [
+        {
+          exportScheduleId: '1002',
+          advertisingDate: '2026-07-15',
+          applicationReceiptDate: '2026-07-15',
+          offerReceiptDate: '2026-07-29',
+          offerEndDate: '2026-08-14',
+          offerWithdrawalDate: '2026-08-04',
+          teacMeetingDate: '2026-08-07',
+          applicationCount: 3,
+          mutable: false,
+        },
+      ],
+      total: 1,
+      page: 0,
+      size: 100,
+    })
+
+    renderPage('schedule')
+
+    const applicationLink = await screen.findByRole('link', {
+      name: 'View 3 applications advertised on 2026-07-15',
+    })
+    expect(applicationLink).toHaveAttribute(
+      'href',
+      '/provincial/application?listingFromDate=2026-07-15&listingToDate=2026-07-15',
+    )
+  })
+
   it('shows backend schedule guardrail messages without reloading the table', async () => {
     mockedCreateExportSchedule.mockResolvedValueOnce({
       success: false,
-      message: 'A schedule already exists for that advertising date.',
+      message: 'Export schedule is used by existing applications and cannot be changed.',
       schedule: null,
     })
 
@@ -506,23 +911,25 @@ describe('Admin policy action states', () => {
     })
     expect(await screen.findByText('Schedule error')).toBeInTheDocument()
     expect(
-      await screen.findByText('A schedule already exists for that advertising date.'),
+      await screen.findByText(
+        'Export schedule is used by existing applications and cannot be changed.',
+      ),
     ).toBeInTheDocument()
     expect(mockedFetchExportSchedulePage).toHaveBeenCalledTimes(1)
   })
 
-  it('updates and deletes only mutable export schedule rows', async () => {
+  it('updates and deletes unreferenced export schedule rows regardless of date', async () => {
     mockedFetchExportSchedulePage
       .mockResolvedValueOnce({
         rows: [
           {
             exportScheduleId: '1001',
-            advertisingDate: '2026-07-01',
-            applicationReceiptDate: '2026-06-25',
-            offerReceiptDate: '2026-07-08',
+            advertisingDate: '2026-06-24',
+            applicationReceiptDate: '2026-06-20',
+            offerReceiptDate: '2026-06-30',
             offerEndDate: '2026-07-09',
-            offerWithdrawalDate: '2026-07-10',
-            teacMeetingDate: '2026-07-15',
+            offerWithdrawalDate: '2026-07-05',
+            teacMeetingDate: '2026-07-07',
             applicationCount: 0,
             mutable: true,
           },
@@ -546,12 +953,12 @@ describe('Admin policy action states', () => {
         rows: [
           {
             exportScheduleId: '1001',
-            advertisingDate: '2026-07-01',
+            advertisingDate: '2026-06-24',
             applicationReceiptDate: '2026-06-26',
-            offerReceiptDate: '2026-07-08',
+            offerReceiptDate: '2026-06-30',
             offerEndDate: '2026-07-09',
-            offerWithdrawalDate: '2026-07-10',
-            teacMeetingDate: '2026-07-15',
+            offerWithdrawalDate: '2026-07-05',
+            teacMeetingDate: '2026-07-07',
             applicationCount: 0,
             mutable: true,
           },
@@ -580,12 +987,12 @@ describe('Admin policy action states', () => {
 
     await waitFor(() => {
       expect(mockedUpdateExportSchedule).toHaveBeenCalledWith('1001', {
-        advertisingDate: '2026-07-01',
+        advertisingDate: '2026-06-24',
         applicationReceiptDate: '2026-06-26',
-        offerReceiptDate: '2026-07-08',
+        offerReceiptDate: '2026-06-30',
         offerEndDate: '2026-07-09',
-        offerWithdrawalDate: '2026-07-10',
-        teacMeetingDate: '2026-07-15',
+        offerWithdrawalDate: '2026-07-05',
+        teacMeetingDate: '2026-07-07',
       })
     })
     expect(await screen.findByText('Export schedule updated.')).toBeInTheDocument()
@@ -609,11 +1016,11 @@ describe('Admin policy action states', () => {
     await waitFor(() => {
       expect(screen.getByText('Policy error')).toBeInTheDocument()
       expect(
-        screen.getByText('Fee policy requires effective date, region code, and percentage.'),
+        screen.getByText('Fee policy requires effective date, region, and percentage.'),
       ).toBeInTheDocument()
     })
     expect(screen.getByText('Policy effective date is required.')).toBeInTheDocument()
-    expect(screen.getByText('Region code is required.')).toBeInTheDocument()
+    expect(screen.getByText('Region is required.')).toBeInTheDocument()
     expect(screen.getByText('Fee increase percentage is required.')).toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
   })
@@ -626,8 +1033,8 @@ describe('Admin policy action states', () => {
     fireEvent.change(screen.getByLabelText('Policy effective date'), {
       target: { value: '2026-99-99' },
     })
-    await userEvent.type(screen.getByLabelText('Region code'), '11')
-    await userEvent.type(screen.getByLabelText('Fee increase percentage'), '4.2')
+    await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
+    await userEvent.type(screen.getByLabelText('Fee increase percentage'), '4')
     await userEvent.click(screen.getByRole('button', { name: 'Add Fee Policy' }))
 
     expect(await screen.findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
@@ -644,7 +1051,7 @@ describe('Admin policy action states', () => {
     fireEvent.change(screen.getByLabelText('Policy effective date'), {
       target: { value: 'not-a-date' },
     })
-    await userEvent.type(screen.getByLabelText('Fee in lieu percentage'), '2.5')
+    await userEvent.type(screen.getByLabelText('Fee in lieu percentage'), '2')
     await userEvent.click(screen.getByRole('button', { name: 'Add fee in lieu policy' }))
 
     expect(await screen.findAllByText('Date must be YYYY-MM-DD.')).toHaveLength(1)

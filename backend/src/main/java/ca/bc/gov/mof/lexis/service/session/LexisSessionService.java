@@ -12,6 +12,7 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -86,6 +87,27 @@ public class LexisSessionService {
     return normalizeRoles(Arrays.asList(roleHeader.split(",")));
   }
 
+  /**
+   * Converts identity-provider groups to runtime authorities. Concrete forest-client authorities
+   * are retained for data scoping and their base role is added for legacy action authorization.
+   */
+  public List<String> parseGrantedAuthorities(List<String> rawRoles) {
+    if (rawRoles == null || rawRoles.isEmpty()) {
+      return List.of();
+    }
+
+    LinkedHashSet<String> authorities = new LinkedHashSet<>();
+    for (String rawRole : rawRoles) {
+      String concreteRole = canonicalizeRole(rawRole);
+      if (concreteRole == null) {
+        continue;
+      }
+      authorities.add(concreteRole);
+      authorities.add(collapseForestClientScopedIndustryRole(concreteRole));
+    }
+    return List.copyOf(authorities);
+  }
+
   public List<String> parseRolesFromPrincipal(Authentication authentication) {
     if (authentication == null || authentication.getAuthorities() == null) {
       return List.of();
@@ -104,21 +126,60 @@ public class LexisSessionService {
   }
 
   public String resolveForestClientNumber(List<String> rawRoles) {
+    ForestClientScope scope = resolveForestClientScope(rawRoles);
+    if (scope.invalid()) {
+      throw new AccessDeniedException(scope.failureReason());
+    }
+    return scope.clientNumber();
+  }
+
+  public ForestClientScope resolveForestClientScope(Authentication authentication) {
+    if (authentication == null || authentication.getAuthorities() == null) {
+      return ForestClientScope.unrestricted();
+    }
+    return resolveForestClientScope(
+        authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList());
+  }
+
+  public ForestClientScope resolveForestClientScope(List<String> rawRoles) {
     if (rawRoles == null || rawRoles.isEmpty()) {
-      return null;
+      return ForestClientScope.unrestricted();
     }
 
+    LinkedHashSet<String> clientNumbers = new LinkedHashSet<>();
+    boolean provincialSubmitterAuthorityPresent = false;
     for (String rawRole : rawRoles) {
       String normalizedRole = canonicalizeRole(rawRole);
       if (normalizedRole == null) {
         continue;
       }
+      // Administrators have global client access. A concurrent scoped submitter assignment must
+      // not narrow that authority or turn a missing/ambiguous submitter suffix into a denial.
+      if (ROLE_ADMIN.equals(normalizedRole)) {
+        return ForestClientScope.unrestricted();
+      }
+      if (ROLE_PROVINCIAL_SUBMITTER.equals(normalizedRole)
+          || normalizedRole.startsWith(ROLE_PROVINCIAL_SUBMITTER + "_")) {
+        provincialSubmitterAuthorityPresent = true;
+      }
       String forestClientSuffix = extractForestClientSuffix(normalizedRole);
       if (forestClientSuffix != null) {
-        return forestClientSuffix;
+        clientNumbers.add(forestClientSuffix);
       }
     }
-    return null;
+
+    if (!provincialSubmitterAuthorityPresent) {
+      return ForestClientScope.unrestricted();
+    }
+    if (clientNumbers.isEmpty()) {
+      return ForestClientScope.invalid(
+          "Provincial Submitter authority is missing its forest-client scope.");
+    }
+    if (clientNumbers.size() > 1) {
+      return ForestClientScope.invalid(
+          "Provincial Submitter authorities contain multiple forest-client scopes.");
+    }
+    return ForestClientScope.scoped(clientNumbers.iterator().next());
   }
 
   public List<String> parseAuthorities(Collection<? extends GrantedAuthority> authorities) {
@@ -243,6 +304,25 @@ public class LexisSessionService {
 
   private boolean isForestClientScopedRole(String role) {
     return ROLE_PROVINCIAL_SUBMITTER.equals(role);
+  }
+
+  public record ForestClientScope(String clientNumber, boolean invalid, String failureReason) {
+
+    static ForestClientScope unrestricted() {
+      return new ForestClientScope(null, false, null);
+    }
+
+    static ForestClientScope scoped(String clientNumber) {
+      return new ForestClientScope(clientNumber, false, null);
+    }
+
+    static ForestClientScope invalid(String failureReason) {
+      return new ForestClientScope(null, true, failureReason);
+    }
+
+    public boolean scoped() {
+      return clientNumber != null;
+    }
   }
 
   private enum WelcomeTarget {

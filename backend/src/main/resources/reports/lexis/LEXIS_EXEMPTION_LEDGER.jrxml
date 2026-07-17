@@ -316,7 +316,7 @@ $F{EXEMPTION_NUMBER}!=null]]></printWhenExpression>
 				<reportElement uuid="15f59233-0f59-45d8-a578-44b90e45ff7b" x="12" y="6" width="59" height="69"/>
 				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_logo.png" )]]></imageExpression>
 			</image>
-			<textField isStretchWithOverflow="true">
+			<textField textAdjust="StretchHeight">
 				<reportElement uuid="d9046e3f-9594-42d6-9512-4d5e9a1ba1aa" x="72" y="15" width="432" height="56" forecolor="#000000"/>
 				<textElement textAlignment="Center">
 					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
