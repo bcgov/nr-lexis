@@ -14,6 +14,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
@@ -78,6 +82,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -89,6 +94,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -119,9 +125,18 @@ class OraclePermitDetailsRpcServiceTest {
   @Mock private PermitInvoiceOrchestrationService permitInvoiceOrchestrationService;
 
   @InjectMocks private OraclePermitDetailsRpcService service;
+  private Logger permitLogger;
+  private Level originalPermitLogLevel;
+  private ListAppender<ILoggingEvent> permitAppender;
 
   @BeforeEach
   void permitValidationDependenciesAreAvailable() {
+    permitLogger = (Logger) LoggerFactory.getLogger(OraclePermitDetailsRpcService.class);
+    originalPermitLogLevel = permitLogger.getLevel();
+    permitLogger.setLevel(Level.WARN);
+    permitAppender = new ListAppender<>();
+    permitAppender.start();
+    permitLogger.addAppender(permitAppender);
     lenient().when(repository.isPermitStatusCodeValidRequired(any())).thenReturn(true);
     lenient().when(repository.isCountryCodeValidRequired(any())).thenReturn(true);
     lenient().when(repository.isPortCodeValidRequired(any())).thenReturn(true);
@@ -165,6 +180,13 @@ class OraclePermitDetailsRpcServiceTest {
             Optional.of(
                 new ClientData(
                     "00077881", "Client", null, null, null, null, null, null, null, null)));
+  }
+
+  @AfterEach
+  void detachPermitAppender() {
+    permitLogger.detachAppender(permitAppender);
+    permitAppender.stop();
+    permitLogger.setLevel(originalPermitLogLevel);
   }
 
   @Test
@@ -521,6 +543,14 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.message()).contains("could not be queued");
+    assertThat(permitAppender.list)
+        .filteredOn(
+            event ->
+                event
+                    .getFormattedMessage()
+                    .contains("event=lexis_permit_approval_email operation=prepare outcome=not_queued"))
+        .extracting(ILoggingEvent::getLevel)
+        .containsOnly(Level.WARN);
     verify(permitEmailService, never()).sendApproval(any(), any(), any(), any(), any());
     verify(repository, never()).findPackageNumbersByPermitNumberRequired(7000123L);
   }

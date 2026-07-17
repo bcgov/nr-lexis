@@ -349,6 +349,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                       .toList()
                   : List.of());
     } catch (IllegalArgumentException ex) {
+      LOGGER.warn(
+          "event=lexis_permit_approval_email operation=prepare outcome=not_queued permitRef={} failureType={}",
+          fingerprint(permitNumber == null ? null : permitNumber.toString()),
+          exceptionType(ex));
       return new PermitEmailResult(false, "Permit approval email could not be queued.");
     }
     boolean sent =
