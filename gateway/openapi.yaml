@@ -1,0 +1,433 @@
+openapi: 3.0.3
+info:
+  title: LEXIS NEXCOL Federal Submission API
+  version: 1.0.0
+  description: |
+    Machine-to-machine API for validating and submitting federal LEXIS XML through the
+    API Services Gateway. Both operations require a Keycloak access token containing
+    the `lexis:federal-submission:submit` scope.
+  contact:
+    name: LEXIS Development Team
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+externalDocs:
+  description: Integration and XML contract
+  url: https://github.com/bcgov/nr-lexis/blob/main/docs/nexcol-keycloak-service-client.md
+servers:
+  - url: https://{gatewayHost}
+    description: NEXCOL gateway for the target environment.
+    variables:
+      gatewayHost:
+        default: gateway.example.gov.bc.ca
+        description: Assigned TEST or PROD gateway hostname, without a scheme or path.
+tags:
+  - name: Federal submissions
+    description: Validate or persist a federal LEXIS submission.
+security:
+  - bearerAuth: []
+paths:
+  /api/lexis/federal/submissions/validation:
+    post:
+      tags: [Federal submissions]
+      summary: Validate a federal submission
+      description: |
+        Validates the XML and LEXIS business rules without writing application, package,
+        or scale records.
+      operationId: validateFederalSubmission
+      parameters:
+        - $ref: "#/components/parameters/UserReference"
+        - $ref: "#/components/parameters/OriginalFileName"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceSystem"
+      requestBody:
+        $ref: "#/components/requestBodies/FederalSubmissionXml"
+      responses:
+        "200":
+          description: The submission passed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FederalSubmissionResponse"
+              example:
+                uploadType: applicationSubmission
+                fileName: federal-submission.xml
+                fileSize: 3452
+                status: validated
+                message: LEXIS application submission validated for package FED26-700123 with 1 scale rows.
+                applicationNumber: null
+                packageNumber: FED26-700123
+                scaleRows: 1
+                errors: []
+                warnings: []
+                userReference: NEXCOL-700123
+                submissionSummary: null
+                requestId: 77b166a5-c8d0-4d17-bfc2-55f91fc298b4
+                payloadSha256: e0c58c76fdd2f3ba480a45f2809accadc9261007bacc528640d2e2617a4247da
+                sourceSystem: NEXCOL
+                payloadRootType: esf-submission
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/RejectedSubmission"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/lexis/federal/submissions:
+    post:
+      tags: [Federal submissions]
+      summary: Submit a federal application
+      description: |
+        Validates the XML and LEXIS business rules, then writes the federal application,
+        package, and scale records. Reuse the same idempotency key when retrying the same
+        logical submission.
+      operationId: submitFederalApplication
+      parameters:
+        - $ref: "#/components/parameters/UserReference"
+        - $ref: "#/components/parameters/OriginalFileName"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceSystem"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/FederalSubmissionXml"
+      responses:
+        "201":
+          description: The submission was accepted and persisted.
+          headers:
+            Location:
+              description: Relative URL of the created federal application when available.
+              schema:
+                type: string
+              example: /api/lexis/federal/applications/1000123
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FederalSubmissionResponse"
+              example:
+                uploadType: applicationSubmission
+                fileName: federal-submission.xml
+                fileSize: 3452
+                status: accepted
+                message: LEXIS application submission created application 1000123 with package FED26-700123 and 1 scale rows.
+                applicationNumber: 1000123
+                packageNumber: FED26-700123
+                scaleRows: 1
+                errors: []
+                warnings: []
+                userReference: NEXCOL-700123
+                submissionSummary:
+                  jurisdictionCode: F
+                  federalApplicationNumber: 700123
+                  packageNumber: FED26-700123
+                  scaleRows: 1
+                requestId: 77b166a5-c8d0-4d17-bfc2-55f91fc298b4
+                idempotencyKey: NEXCOL-700123
+                payloadSha256: e0c58c76fdd2f3ba480a45f2809accadc9261007bacc528640d2e2617a4247da
+                sourceSystem: NEXCOL
+                payloadRootType: esf-submission
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/RejectedSubmission"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Keycloak access token obtained with the client-credentials grant. The token must
+        contain `lexis:federal-submission:submit` in its `scope` claim.
+  parameters:
+    UserReference:
+      name: userReference
+      in: query
+      required: false
+      description: Stable NEXCOL business reference for the submission.
+      schema:
+        type: string
+        maxLength: 50
+      example: NEXCOL-700123
+    OriginalFileName:
+      name: originalFileName
+      in: query
+      required: false
+      description: Source filename used in diagnostics.
+      schema:
+        type: string
+        default: federal-submission.xml
+      example: federal-submission.xml
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Correlation identifier for this HTTP attempt.
+      schema:
+        type: string
+        maxLength: 200
+      example: 77b166a5-c8d0-4d17-bfc2-55f91fc298b4
+    SourceSystem:
+      name: X-Source-System
+      in: header
+      required: false
+      description: Calling system identifier.
+      schema:
+        type: string
+        maxLength: 200
+      example: NEXCOL
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: true
+      description: Stable identifier for the logical submission, reused for retries.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+      example: NEXCOL-700123
+  requestBodies:
+    FederalSubmissionXml:
+      required: true
+      description: |
+        Legacy ESF submission envelope containing one LEXIS schema-version-2
+        `LexisSubmission`, or the inner `LexisSubmission` XML document.
+      content:
+        application/xml:
+          schema:
+            type: string
+          examples:
+            federalSubmission:
+              summary: Synthetic federal ESF submission
+              externalValue: https://raw.githubusercontent.com/bcgov/nr-lexis/main/backend/src/test/resources/lexis-upload-samples/pass-federal-application.xml
+  responses:
+    BadRequest:
+      description: Required request metadata or the XML request body is missing or malformed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FederalSubmissionResponse"
+    Unauthorized:
+      description: The bearer token is missing, expired, or invalid.
+    Forbidden:
+      description: The bearer token does not contain `lexis:federal-submission:submit`.
+    Conflict:
+      description: |
+        The idempotency key conflicts, the request is already processing on this replica,
+        or the package already exists.
+      headers:
+        Retry-After:
+          description: Suggested delay in seconds when the same request is still processing.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FederalSubmissionResponse"
+    RejectedSubmission:
+      description: XML schema or LEXIS business validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FederalSubmissionResponse"
+          example:
+            uploadType: applicationSubmission
+            fileName: federal-submission.xml
+            fileSize: 3452
+            status: rejected
+            message: LEXIS application submission rejected.
+            applicationNumber: null
+            packageNumber: null
+            scaleRows: 0
+            errors:
+              - Federal submission validation failed.
+            warnings: []
+            userReference: NEXCOL-700123
+            submissionSummary: null
+            requestId: 77b166a5-c8d0-4d17-bfc2-55f91fc298b4
+            payloadSha256: e0c58c76fdd2f3ba480a45f2809accadc9261007bacc528640d2e2617a4247da
+            sourceSystem: NEXCOL
+            payloadRootType: esf-submission
+    ServiceUnavailable:
+      description: LEXIS cannot process the request at this time.
+      headers:
+        Retry-After:
+          description: Suggested delay in seconds before a retry.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          example: 60
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FederalSubmissionResponse"
+  schemas:
+    FederalSubmissionResponse:
+      type: object
+      required:
+        - uploadType
+        - fileName
+        - fileSize
+        - status
+        - message
+        - applicationNumber
+        - packageNumber
+        - scaleRows
+        - errors
+        - warnings
+        - userReference
+        - submissionSummary
+      properties:
+        uploadType:
+          type: string
+          example: applicationSubmission
+        fileName:
+          type: string
+          nullable: true
+        fileSize:
+          type: integer
+          format: int64
+          minimum: 0
+        status:
+          type: string
+          enum: [validated, accepted, rejected]
+        message:
+          type: string
+        applicationNumber:
+          type: integer
+          format: int64
+          nullable: true
+          description: Generated internal LEXIS application identifier.
+        packageNumber:
+          type: string
+          nullable: true
+        federalPermitNumber:
+          type: integer
+          format: int64
+          nullable: true
+          description: Included when a federal permit number is available.
+        scaleRows:
+          type: integer
+          format: int32
+          minimum: 0
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        userReference:
+          type: string
+          maxLength: 50
+          nullable: true
+        submissionSummary:
+          $ref: "#/components/schemas/FederalSubmissionSummary"
+        requestId:
+          type: string
+          maxLength: 200
+          nullable: true
+        idempotencyKey:
+          type: string
+          maxLength: 200
+          nullable: true
+        payloadSha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          nullable: true
+        sourceSystem:
+          type: string
+          maxLength: 200
+          nullable: true
+        payloadRootType:
+          type: string
+          nullable: true
+          description: Classification of the accepted XML envelope or root element.
+    FederalSubmissionSummary:
+      type: object
+      nullable: true
+      properties:
+        ownerClientNumber:
+          type: string
+          nullable: true
+        ownerClientLocationCode:
+          type: string
+          nullable: true
+        ownerContactName:
+          type: string
+          nullable: true
+        jurisdictionCode:
+          type: string
+          nullable: true
+          example: F
+        federalApplicationNumber:
+          type: integer
+          format: int64
+          nullable: true
+          description: Submitted federal reference number; not the internal LEXIS identifier.
+        orgUnitNumber:
+          type: integer
+          format: int64
+          nullable: true
+        sourceApplicationStatusCode:
+          type: string
+          nullable: true
+        exemptionReasonCode:
+          type: string
+          nullable: true
+        applicantTypeCode:
+          type: string
+          nullable: true
+        productTypeCode:
+          type: string
+          nullable: true
+        packageNumber:
+          type: string
+          nullable: true
+        productLocation:
+          type: string
+          nullable: true
+        ageClass:
+          type: string
+          nullable: true
+        averageLength:
+          type: number
+          format: double
+          nullable: true
+        averageDiameter:
+          type: number
+          format: double
+          nullable: true
+        applicationVolume:
+          type: number
+          format: double
+          nullable: true
+        averageLogVolume:
+          type: number
+          format: double
+          nullable: true
+        endUseCode:
+          type: string
+          nullable: true
+        speciesCodes:
+          type: array
+          items:
+            type: string
+        scaleRows:
+          type: integer
+          format: int32
+          minimum: 0

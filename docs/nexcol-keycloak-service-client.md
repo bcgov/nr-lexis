@@ -66,6 +66,10 @@ represented in `aud`.
 Both endpoints are live in every backend environment. TEST and PROD provide the supported NEXCOL
 gateway and service-client integration; DEV has no supported NEXCOL gateway/client configuration.
 
+The machine-readable gateway contract is available in
+[`gateway/openapi.yaml`](../gateway/openapi.yaml). Configure its server URL for the target
+environment before loading it into Swagger UI, Postman, or client-generation tooling.
+
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|
 | Validate | `POST /api/lexis/federal/submissions/validation` | `200` | None |

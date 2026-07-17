@@ -18,6 +18,18 @@ NEXCOL -> Keycloak token -> API gateway -> LEXIS backend
 Consumer credentials are provisioned in Keycloak rather than through an API Services Portal
 application.
 
+## API contract
+
+[`openapi.yaml`](openapi.yaml) is the machine-readable external contract for the two gateway
+operations. It can be loaded into Swagger UI, Swagger Editor, Postman, or client-generation tools.
+Set the server URL to the assigned environment gateway and authorize with a Keycloak access token.
+
+After the specification is merged, it can be rendered in the
+[BC Government OpenAPI console](https://openapi.apps.gov.bc.ca?url=https://raw.githubusercontent.com/bcgov/nr-lexis/main/gateway/openapi.yaml).
+
+The specification is maintained separately from generated backend documentation because the LEXIS
+backend contains additional UI and administrative endpoints that are not part of the NEXCOL API.
+
 ## Configuration
 
 Gateway configuration is maintained per environment through API Services tooling. It defines:
@@ -31,7 +43,7 @@ Gateway configuration is maintained per environment through API Services tooling
 TEST and PROD use independent gateway and Keycloak client configurations. DEV uses ephemeral
 application deployments and has no long-lived NEXCOL gateway.
 
-The request, payload and response contract is documented in
+The integration flow and XML contract are documented in
 [`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).
 
 ## Verification
