@@ -1,9 +1,10 @@
 # RTM AMV UI And Persistence Contract
 
 This note records the active RTM Average Monthly Values contract at
-`/admin/rtm/emslogamv`. It aligns the page with the approved single-table workflow while
+`/admin/rtm/emslogamv`. It documents the current single-table implementation while
 preserving the legacy `THE.EMS_LOG_AMV` schema and its downstream synchronization trigger.
-The former workbook upload endpoints are not authorized and are not part of this workflow.
+The legacy workbook upload controller is disabled unless
+`lexis.rtm.amv.upload.enabled=true`; it is not part of the active workflow.
 
 ## Unified AMV table
 
@@ -54,26 +55,42 @@ applied, the transaction is rolled back. An incomplete batch is reported as reje
 failure uses the API's normal service-unavailable response. A successful response is therefore
 the confirmation that the complete grid submission was accepted.
 
-`SYNC_EMSLA_EXPLA` still propagates each successful table mutation to `EXPORT_LOG_AMV`, so existing
-downstream consumers continue to receive the legacy physical rows.
+`SYNC_EMSLA_EXPLA` remains the configured mechanism that mirrors successful table mutations to
+`EXPORT_LOG_AMV`. Live downstream-consumer compatibility still needs verification before this
+change can claim that every report, integration, and query is unaffected.
 
 ## Legacy procedure boundary
 
 `RTM_EMS_LOG_AMV_INSERT` and `RTM_EMS_LOG_AMV_UPDATE` are retained in the database for legacy
 compatibility. Both issue `COMMIT`, which makes them unsuitable for the active multi-row UI save.
-The UI does not expose a single-row or workbook mutation route. The read path can still use the
-direct effective-date query because the legacy select procedure requires an exact species and
-growth type.
+The active UI does not expose a single-row or workbook mutation route. The optional legacy upload
+controller is disabled by default. The read path can still use the direct effective-date query
+because the legacy select procedure requires an exact species and growth type.
 
 The table has no user/timestamp audit columns. This change preserves the schema and trigger; it
 does not claim to add audit metadata that the legacy data model cannot store.
 
+## Verification coverage
+
+Focused service and UI tests cover the two-growth fan-out, Pine expansion, transaction rollback,
+month normalization, the one-table UI, numeric validation, and rejected-batch feedback. The
+relevant suites are `OracleRtmEmsLogAmvServiceTest`, `OracleRtmEmsLogAmvRepositoryTest`,
+`RtmEmsLogAmvControllerTest`, `RTMEmsLogAmvActions.test.tsx`, and
+`rtm-emslogamv-service.test.ts`.
+
+Those tests do not replace live Oracle/TEST verification of direct-`MERGE` grants, rollback,
+trigger behavior, or downstream exports.
+
 ## Outstanding legacy data decisions
 
-The approved UI behavior is implemented against the existing data model. The following Confluence
+The implemented UI behavior is constrained by the existing data model. The following Confluence
 requirements need a data-owner decision and an approved persistence design before they can be
 implemented without changing legacy semantics:
 
+- Confluence describes separate old-growth and second-growth tables, while the existing schema has
+  one `EMS_LOG_AMV` table partitioned by `GROWTH_TYPE_ST` values `O` and `S`. A data owner must
+  confirm that those two logical partitions satisfy the requirement before any physical-table
+  change is considered.
 - `EMS_LOG_AMV` has no `blank` (or equivalent) column, so the system cannot persist `blank = 1`
   for both growth partitions.
 - It has no submitting-user, submission-timestamp, or update-timestamp column. A new audit table
