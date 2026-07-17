@@ -720,7 +720,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
   })
 
-  it('starts permit edit context and core tables together', async () => {
+  it('shows the permit detail while core tables continue loading', async () => {
+    configureActivePermit()
     let resolveFeeContext:
       | ((value: Awaited<ReturnType<typeof fetchPermitFeeOverrideContext>>) => void)
       | undefined
@@ -760,11 +761,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
     })
 
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(screen.queryByText('Loading provincial permit detail...')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading associated permit applications...')).toBeInTheDocument()
+
     await act(async () => {
       resolveTabs?.(tabsResult)
     })
 
-    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
     await waitFor(() => expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalledTimes(1))
     expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
 
@@ -1215,6 +1219,109 @@ describe('Provincial Permit Detail Action Smoke', () => {
         applicationNumber: '1000456',
       })
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  it('keeps table-dependent permit actions unavailable while application links reload', async () => {
+    const submitterAuth = createTestAuthContext()
+    mockedUseAuth.mockReturnValue({
+      ...submitterAuth,
+      capabilities: {
+        ...submitterAuth.capabilities,
+        roles: ['ADMIN', 'PROVINCIAL_SUBMITTER_00067890'],
+      },
+      canPerform: () => true,
+    })
+    configureActivePermit()
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['1000457'],
+      errorMessage: '',
+    })
+
+    const initialTabs: ProvincialPermitDetailTabsData = {
+      ...tabsResult,
+      applications: ['1000456'],
+      packages: [
+        {
+          packageNumber: 'PKG-9',
+          region: 'Coast',
+          speciesEndUseSort: 'HE/PL',
+          ageClass: 'Second growth',
+          packageVolume: '120.5',
+          averageLength: '7.1',
+          averageTopDiameter: '16.2',
+          productType: 'Unmanufactured',
+          currentPackageVolume: '',
+          status: '',
+          reprocessed: '',
+          comments: '',
+        },
+      ],
+      items: [
+        {
+          id: 'SCALE-1',
+          timberMark: 'TM-1',
+          species: 'Fir',
+          grade: 'A',
+          pieces: 12,
+          volume: 34.5,
+          packageNumber: 'PKG-9',
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    }
+    let resolveReload:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>) => void)
+      | undefined
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValueOnce(initialTabs).mockImplementationOnce(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>>((resolve) => {
+          resolveReload = resolve
+        }),
+    )
+
+    renderPermitDetails()
+
+    const applicationsTile = (
+      await screen.findByRole('heading', { name: 'Associated applications' })
+    ).closest('.cds--tile') as HTMLElement
+    await waitFor(() => {
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-9', ['1000456'])
+    })
+    const addApplicationButton = within(applicationsTile).getByRole('button', {
+      name: 'Add application',
+    })
+    await chooseComboBoxOption(
+      within(applicationsTile).getByRole('combobox', { name: 'Available application' }),
+      '1000457',
+    )
+    await waitFor(() => expect(addApplicationButton).toBeEnabled())
+    expect(screen.getByRole('button', { name: 'Email review request' })).toBeEnabled()
+
+    await userEvent.click(addApplicationButton)
+
+    await waitFor(() => {
+      expect(mockedAddApplicationsToPermit).toHaveBeenCalledWith({
+        permitNumber: '777',
+        selectedApplications: ['1000457'],
+      })
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+    })
+    expect(screen.getByText('Loading associated permit applications...')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Email review request' })).toBeDisabled()
+
+    await act(async () => {
+      resolveReload?.({
+        ...initialTabs,
+        applications: ['1000456', '1000457'],
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Add application' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Email review request' })).toBeEnabled()
     })
   })
 

@@ -11,7 +11,8 @@ FROM eclipse-temurin:21.0.9_10-jdk-alpine-3.23
 ENV HOME=/tmp \
     XDG_CACHE_HOME=/tmp/.cache
 
-RUN adduser -D -s /bin/sh spring
+RUN apk add --no-cache font-dejavu \
+    && adduser -D -s /bin/sh spring
 RUN mkdir -p /logs
 RUN chown -R spring:spring /logs
 RUN chmod 755 /logs

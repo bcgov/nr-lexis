@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sql.DataSource;
 import net.sf.jasperreports.engine.JRException;
+import net.sf.jasperreports.engine.JRRuntimeException;
 import net.sf.jasperreports.engine.JasperCompileManager;
 import net.sf.jasperreports.engine.JasperExportManager;
 import net.sf.jasperreports.engine.JasperFillManager;
@@ -240,7 +241,7 @@ public class OracleLexisReportService implements LexisReportService {
               definition.resolveFilename(effectiveFormat),
               effectiveFormat.mediaType(),
               reportBytes));
-    } catch (JRException ex) {
+    } catch (JRException | JRRuntimeException ex) {
       reportResources.rethrowOutputLimit(ex);
       LOGGER.error(
           "event=lexis_report operation=jasper_render outcome=failed action={} durationMs={} failureType={}",

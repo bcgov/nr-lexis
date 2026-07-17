@@ -12,18 +12,22 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.sql.DataSource;
+import net.sf.jasperreports.engine.JRRuntimeException;
+import net.sf.jasperreports.engine.JasperCompileManager;
 import net.sf.jasperreports.engine.JasperPrint;
 import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.base.JRBasePrintPage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -217,6 +221,52 @@ class OracleLexisReportServiceFormatSupportTest {
         .isInstanceOf(LexisReportGenerationException.class)
         .hasMessage("The report data could not be loaded for feeReport")
         .hasCauseInstanceOf(SQLException.class);
+  }
+
+  @Test
+  void shouldTranslateJasperRuntimeFailuresDuringReportRender() throws Exception {
+    DataSource dataSource = Mockito.mock(DataSource.class);
+    Connection connection = Mockito.mock(Connection.class);
+    OracleLegacyCsvReportService legacyCsvReportService =
+        Mockito.mock(OracleLegacyCsvReportService.class);
+    OracleLegacyJasperTableReportService legacyJasperTableReportService =
+        Mockito.mock(OracleLegacyJasperTableReportService.class);
+    Mockito.when(dataSource.getConnection()).thenReturn(connection);
+    OracleLexisReportService service =
+        new OracleLexisReportService(
+            dataSource,
+            new LexisJasperReportParameterProvider(),
+            legacyCsvReportService,
+            legacyJasperTableReportService,
+            Mockito.mock(PermitRpcRepository.class),
+            Mockito.mock(LexisReportScheduleRepository.class),
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER")) {
+          @Override
+          JasperReport compileTemplate(LexisJasperReportDefinition definition) {
+            try (var input =
+                new ClassPathResource("reports/lexis/LEXIS_DYNAMIC_TABLE.jrxml").getInputStream()) {
+              return JasperCompileManager.compileReport(input);
+            } catch (Exception ex) {
+              throw new IllegalStateException("test template could not be compiled", ex);
+            }
+          }
+
+          @Override
+          byte[] exportTemplateReport(
+              JasperPrint print,
+              LexisReportFormat format,
+              LexisJasperReportDefinition definition) {
+            throw new JRRuntimeException("font unavailable");
+          }
+        };
+
+    assertThatThrownBy(
+            () ->
+                service.generateReport(
+                    "feeReport", new LexisReportRequestDto(Map.of(), "PDF")))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessage("The report could not be rendered for feeReport")
+        .hasCauseInstanceOf(JRRuntimeException.class);
   }
 
   @Test

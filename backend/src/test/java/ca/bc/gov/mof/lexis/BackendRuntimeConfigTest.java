@@ -174,6 +174,7 @@ class BackendRuntimeConfigTest {
         Files.readString(resolve(Path.of("frontend", "openshift.deploy.yml")));
 
     assertThat(dockerfile)
+        .contains("apk add --no-cache font-dejavu")
         .contains("ENV HOME=/tmp")
         .contains("XDG_CACHE_HOME=/tmp/.cache")
         .contains("-Duser.home=/tmp")
