@@ -16,7 +16,9 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
@@ -154,6 +156,23 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_PERMIT,
         cs -> cs.setString(1, permitNumber.toString()),
+        2,
+        this::mapPermitScaleDetailRow);
+  }
+
+  /**
+   * Returns all scale rows for an application using the same cursor as the legacy application
+   * scale lookup. Core permit tabs group these rows by package so they do not issue one cursor
+   * call per package.
+   */
+  public List<PermitScaleDetailRow> findPermitScaleDetailsByApplicationNumber(
+      Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_SCALE_DETAIL_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
         2,
         this::mapPermitScaleDetailRow);
   }
@@ -365,6 +384,55 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .distinct()
         .sorted()
         .toList();
+  }
+
+  /**
+   * Reads the complete package cursor once for the normal permit core-tab response. It preserves
+   * the same package relationship, package ordering, and invalid-application guard as the
+   * existing package/application list methods.
+   */
+  public List<PermitCorePackageRow> findCorePackageRowsByPermitNumberRequired(Long permitNumber) {
+    return findCorePackageRows(
+        permitNumber, FIND_PACKAGES_BY_PERMIT, true, "permit " + permitNumber);
+  }
+
+  /** Reads the complete package cursor once for the Blanket OIC core-tab response. */
+  public List<PermitCorePackageRow> findCorePackageRowsByOicPermitNumber(Long permitNumber) {
+    return findCorePackageRows(
+        permitNumber, FIND_PACKAGES_BY_OIC_PERMIT, false, "Blanket OIC permit " + permitNumber);
+  }
+
+  private List<PermitCorePackageRow> findCorePackageRows(
+      Long permitNumber,
+      String procedure,
+      boolean requireValidApplicationRelationship,
+      String aggregateDescription) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    List<PermitCorePackageRow> rows =
+        queryCursorProcedureRequired(
+            procedure,
+            cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            this::mapPermitCorePackageRow);
+    if (requireValidApplicationRelationship
+        && rows.stream()
+            .anyMatch(row -> row.applicationNumber() == null || row.applicationNumber() < 1)) {
+      throw new DataRetrievalFailureException(
+          "An invalid application relationship was returned for " + aggregateDescription + ".");
+    }
+
+    Map<String, PermitCorePackageRow> packagesByNumber = new TreeMap<>();
+    for (PermitCorePackageRow row : rows) {
+      String packageNumber = trim(row.packageNumber());
+      if (packageNumber == null) {
+        continue;
+      }
+      packagesByNumber.putIfAbsent(packageNumber, row.withPackageNumber(packageNumber));
+    }
+    return List.copyOf(packagesByNumber.values());
   }
 
   /**
@@ -1474,6 +1542,20 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         getString(rs, "MF"));
   }
 
+  private PermitCorePackageRow mapPermitCorePackageRow(ResultSet rs) {
+    return new PermitCorePackageRow(
+        getString(rs, "PACKAGE_NUMBER"),
+        getLong(rs, "APPLICATION_NUMBER"),
+        coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
+        coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
+        coalesce(getDouble(rs, "AVERAGE_DIAMETER"), 0.0d),
+        getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
+        getString(rs, "COMMENTS"),
+        getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
+        getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
+  }
+
   private Timestamp getTimestamp(ResultSet rs, String column) {
     try {
       return rs.getTimestamp(column);
@@ -1624,6 +1706,34 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       double averageDiameter,
       String growthTypeCode,
       String productTypeCode) {}
+
+  /** Complete package projection returned by the existing permit package cursors. */
+  public record PermitCorePackageRow(
+      String packageNumber,
+      Long applicationNumber,
+      double packageVolume,
+      double averageLength,
+      double averageDiameter,
+      String packageStatusCode,
+      String comments,
+      String reprocessedIndicator,
+      String growthTypeCode,
+      String productTypeCode) {
+
+    PermitCorePackageRow withPackageNumber(String value) {
+      return new PermitCorePackageRow(
+          value,
+          applicationNumber,
+          packageVolume,
+          averageLength,
+          averageDiameter,
+          packageStatusCode,
+          comments,
+          reprocessedIndicator,
+          growthTypeCode,
+          productTypeCode);
+    }
+  }
 
   public record ApplicationInfoRow(
       Long applicationNumber,

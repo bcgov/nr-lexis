@@ -137,57 +137,17 @@ export const releaseOfferEditLock = async (offerNumber: string): Promise<void> =
   }
 }
 
-const fetchPermitApprovedExemptionVolume = async (
-  exemptionNumber: string,
-): Promise<number | null> => {
-  const path = '/lexis/rpc/permit-details/approved-exemption-volume'
-  const response = await apiService.getCachedResponse<{ approvedExemptionVolume?: unknown }>(
-    path,
-    {
-      params: {
-        exemptionNumber,
-      },
-    },
-    { ttlMs: DETAIL_CACHE_TTL_MS },
-  )
-  if (response.status === 204) {
-    throw new Error(`Permit approved exemption volume service unavailable at ${path}`)
-  }
-
-  const volume = valueAsNumberOrNull(response.data?.approvedExemptionVolume)
-  if (volume === null) {
-    throw new Error(`Invalid approved exemption volume response from ${path}`)
-  }
-  return volume
-}
-
-const fetchPermitExemptionVolumeRemaining = async (
-  exemptionNumber: string,
-): Promise<number | null> => {
-  const path = '/lexis/rpc/permit-details/exemption-volume-remaining'
-  const response = await apiService.getCachedResponse<{ exemptionVolumeRemaining?: unknown }>(
-    path,
-    {
-      params: {
-        exemptionNumber,
-      },
-    },
-    { ttlMs: DETAIL_CACHE_TTL_MS },
-  )
-  if (response.status === 204) {
-    throw new Error(`Permit exemption volume remaining service unavailable at ${path}`)
-  }
-
-  const volume = valueAsNumberOrNull(response.data?.exemptionVolumeRemaining)
-  if (volume === null) {
-    throw new Error(`Invalid exemption volume remaining response from ${path}`)
-  }
-  return volume
-}
-
 const fetchPermitExemptionContext = async (
   exemptionNumber: string,
-): Promise<Pick<ProvincialPermitDetail, 'exemptionTypeDescription' | 'blanketOic'>> => {
+): Promise<
+  Pick<
+    ProvincialPermitDetail,
+    | 'approvedExemptionVolume'
+    | 'exemptionVolumeRemaining'
+    | 'exemptionTypeDescription'
+    | 'blanketOic'
+  >
+> => {
   const path = `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`
   const response = await apiService.getCachedResponse<ProvincialExemptionDetail>(path, undefined, {
     ttlMs: DETAIL_CACHE_TTL_MS,
@@ -199,7 +159,19 @@ const fetchPermitExemptionContext = async (
     throw new Error(`Invalid permit exemption context response from ${path}`)
   }
 
+  const approvedExemptionVolume = valueAsNumberOrNull(response.data.approvedVolume)
+  if (approvedExemptionVolume === null) {
+    throw new Error(`Invalid approved exemption volume response from ${path}`)
+  }
+
+  const exemptionVolumeRemaining = valueAsNumberOrNull(response.data.remainingVolume)
+  if (exemptionVolumeRemaining === null) {
+    throw new Error(`Invalid exemption volume remaining response from ${path}`)
+  }
+
   return {
+    approvedExemptionVolume,
+    exemptionVolumeRemaining,
     exemptionTypeDescription: response.data.exemptionTypeDescription ?? null,
     blanketOic: response.data.blanketOic,
   }
@@ -225,18 +197,11 @@ export const fetchProvincialPermitDetail = async (
       }
     }
 
-    const [approvedVolume, remainingVolume, exemptionContext] = await Promise.all([
-      fetchPermitApprovedExemptionVolume(permitDetail.exemptionNumber),
-      fetchPermitExemptionVolumeRemaining(permitDetail.exemptionNumber),
-      fetchPermitExemptionContext(permitDetail.exemptionNumber),
-    ])
+    const exemptionContext = await fetchPermitExemptionContext(permitDetail.exemptionNumber)
 
     return {
       ...permitDetail,
-      approvedExemptionVolume: approvedVolume,
-      exemptionVolumeRemaining: remainingVolume,
-      exemptionTypeDescription: exemptionContext.exemptionTypeDescription,
-      blanketOic: exemptionContext.blanketOic,
+      ...exemptionContext,
     }
   } catch (error) {
     if (isNotFound(error)) {

@@ -65,10 +65,14 @@ scope.
   the backend and streamed to clients.
 - Permit detail pages render the permit summary first, then load associated applications and
   package tables. The core-table endpoint returns the authorized applications, packages, and scales
-  in one response; fee and GBMS history remain deferred. Table-dependent edits and review requests
-  remain unavailable while those tables load or refresh, preventing actions against stale data.
-  Package-scoped endpoints verify a direct Oracle relationship rather than reloading normal and
-  Blanket OIC package lists for every request. The
+  in one response; the initial permit exemption context reuses the exemption-detail response, and
+  fee and GBMS history remain deferred. For normal permits, the backend consumes the existing
+  package cursor once, derives application relationships from that same result, and groups the
+  existing scale-by-application cursor in a request-scoped lookup. This avoids browser fan-out and
+  repeated per-package Oracle reads without bypassing application authorization. Table-dependent
+  edits and review requests remain unavailable while those tables load or refresh, preventing
+  actions against stale data. Package-scoped endpoints verify a direct Oracle relationship rather
+  than reloading normal and Blanket OIC package lists for every request. The
   [TEST validation guide](permit-package-membership-test-validation.md) identifies both
   relationship paths and denial cases without writing data.
 - Canadian permit invoicing remains internal to LEXIS. Non-Canadian invoicing uses the established

@@ -81,6 +81,75 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  void corePackageRowsShouldReuseTheCompletePermitPackageCursor() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_PERMIT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getString(anyString())).thenReturn(null);
+    when(resultSet.getDouble(anyString())).thenReturn(0.0d);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(" PKG-200 ", "PKG-100");
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L, 1000457L);
+    when(resultSet.getDouble("PACKAGE_VOLUME")).thenReturn(20.0d, 10.0d);
+    when(resultSet.getString("EXPORT_PACKAGE_STATUS_CODE")).thenReturn("ACT", "COM");
+    when(resultSet.getString("EXPORT_GROWTH_TYPE_CODE")).thenReturn("S", "O");
+    when(resultSet.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("T", "T");
+    when(resultSet.wasNull()).thenReturn(false);
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    var rows = repository.findCorePackageRowsByPermitNumberRequired(7000123L);
+
+    assertThat(rows)
+        .extracting(
+            "packageNumber",
+            "applicationNumber",
+            "packageVolume",
+            "packageStatusCode",
+            "growthTypeCode")
+        .containsExactly(
+            tuple("PKG-100", 1000457L, 10.0d, "COM", "O"),
+            tuple("PKG-200", 1000456L, 20.0d, "ACT", "S"));
+    verify(callableStatement).setString(1, "7000123");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void permitScaleRowsByApplicationShouldUseTheExistingApplicationCursor() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_SCALE_DETAIL_BY_APP(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString("EXPORT_SCALE_DETAIL_ID")).thenReturn("101");
+    when(resultSet.getString("TIMBER_MARK")).thenReturn("TM-1");
+    when(resultSet.getString("EXPORT_SPECIES_CODE")).thenReturn("HE");
+    when(resultSet.getString("EXPORT_GRADE_CODE")).thenReturn("A");
+    when(resultSet.getDouble("SPECIES_GRADE_VOLUME")).thenReturn(7.5d);
+    when(resultSet.getLong("PIECES_COUNT")).thenReturn(12L);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(resultSet.getString("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn("7000123");
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn("PKG-100");
+    when(resultSet.getString("CASCADE_SPLIT_CODE")).thenReturn("C");
+    when(resultSet.wasNull()).thenReturn(false);
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    var rows = repository.findPermitScaleDetailsByApplicationNumber(1000456L);
+
+    assertThat(rows)
+        .extracting(
+            "exportScaleDetailId",
+            "timberMark",
+            "exportSpeciesCode",
+            "exportGradeCode",
+            "speciesGradeVolume",
+            "piecesCount",
+            "applicationNumber",
+            "exportPermitDetailNumber",
+            "packageNumber")
+        .containsExactly(
+            tuple("101", "TM-1", "HE", "A", 7.5d, 12L, 1000456L, "7000123", "PKG-100"));
+    verify(callableStatement).setString(1, "1000456");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
   void findAllCountryCodesShouldUseOracleRowsWhenAvailable() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, false);
