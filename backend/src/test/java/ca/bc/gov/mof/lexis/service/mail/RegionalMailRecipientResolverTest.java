@@ -25,63 +25,48 @@ class RegionalMailRecipientResolverTest {
   }
 
   @Test
-  void shouldParseTrimAndDeduplicateRecipientLists() {
+  void shouldTrimConfiguredPositionalMailboxAddress() {
     RegionalMailRecipientResolver resolver =
-        new RegionalMailRecipientResolver(
-            " first@test.ca;second@test.ca, first@test.ca ; ; ", "", "", "fallback@test.ca");
+        new RegionalMailRecipientResolver(" rco@test.ca ", "", "");
 
     List<String> recipients = resolver.resolveGroup(1835L).recipients();
 
-    assertThat(recipients).containsExactly("first@test.ca", "second@test.ca");
+    assertThat(recipients).containsExactly("rco@test.ca");
     assertThatThrownBy(() -> recipients.add("other@test.ca"))
         .isInstanceOf(UnsupportedOperationException.class);
   }
 
   @Test
-  void shouldUseMigrationFallbackWhenARegionIsNotConfigured() {
+  void shouldRetainKnownRouteWhenItsMailboxIsNotConfigured() {
     RegionalMailRecipientResolver resolver =
-        new RegionalMailRecipientResolver(
-            "rco@test.ca", " ", "rsi@test.ca", " fallback@test.ca; fallback@test.ca ");
+        new RegionalMailRecipientResolver("rco@test.ca", " ", "rsi@test.ca");
 
     RegionalMailRecipientResolver.RecipientGroup group = resolver.resolveGroup(1906L);
 
-    assertThat(group.label()).isEqualTo("PERMIT_REQUEST");
-    assertThat(group.recipients()).containsExactly("fallback@test.ca");
-  }
-
-  @Test
-  void shouldUseMigrationFallbackWhenTheOrgUnitIsUnknownOrMissing() {
-    RegionalMailRecipientResolver resolver =
-        new RegionalMailRecipientResolver("", "", "", "fallback@test.ca");
-
-    assertThat(resolver.resolveGroup(9999L).label()).isEqualTo("PERMIT_REQUEST");
-    assertThat(resolver.resolveGroup(null).label()).isEqualTo("PERMIT_REQUEST");
-  }
-
-  @Test
-  void shouldRetainKnownRegionWhenNeitherRegionalNorFallbackRecipientsAreConfigured() {
-    RegionalMailRecipientResolver resolver =
-        new RegionalMailRecipientResolver("", "", "", "");
-
-    RegionalMailRecipientResolver.RecipientGroup group = resolver.resolveGroup(1835L);
-
-    assertThat(group.label()).isEqualTo("REGION_RCO");
+    assertThat(group.label()).isEqualTo("REGION_RNI");
     assertThat(group.recipients()).isEmpty();
   }
 
   @Test
-  void shouldRemainUnroutableForUnknownOrgUnitWithoutFallbackRecipients() {
-    RegionalMailRecipientResolver resolver =
-        new RegionalMailRecipientResolver("", "", "", "");
+  void shouldRemainUnroutableForUnknownOrMissingOrgUnit() {
+    RegionalMailRecipientResolver resolver = new RegionalMailRecipientResolver("", "", "");
 
-    RegionalMailRecipientResolver.RecipientGroup group = resolver.resolveGroup(9999L);
+    assertThat(resolver.resolveGroup(9999L).label()).isNull();
+    assertThat(resolver.resolveGroup(null).label()).isNull();
+  }
 
-    assertThat(group.label()).isNull();
-    assertThat(group.recipients()).isEmpty();
+  @Test
+  void shouldResolveAnAddressByRoute() {
+    RegionalMailRecipientResolver resolver = resolver("rco@test.ca", "rni@test.ca", "rsi@test.ca");
+
+    assertThat(resolver.addressFor(RegionalMailRoute.RCO)).contains("rco@test.ca");
+    assertThat(resolver.addressFor(RegionalMailRoute.RNI)).contains("rni@test.ca");
+    assertThat(resolver.addressFor(RegionalMailRoute.RSI)).contains("rsi@test.ca");
+    assertThat(resolver.addressFor(null)).isEmpty();
   }
 
   private static RegionalMailRecipientResolver resolver(String rco, String rni, String rsi) {
-    return new RegionalMailRecipientResolver(rco, rni, rsi, "fallback@test.ca");
+    return new RegionalMailRecipientResolver(rco, rni, rsi);
   }
 
   private static Stream<Arguments> regionalOrgUnits() {

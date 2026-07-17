@@ -20,47 +20,30 @@ public class MailNotificationConfigurationValidator {
       @Value("${lexis.mail.non-production:true}") boolean nonProduction,
       @Value("${lexis.mail.from:}") String fromAddress,
       @Value("${lexis.mail.override-recipients:}") String overrideRecipients,
-      @Value("${lexis.mail.permit-request-recipients:}") String permitRequestRecipients,
-      @Value("${lexis.mail.region-rco-recipients:}") String rcoRecipients,
-      @Value("${lexis.mail.region-rni-recipients:}") String rniRecipients,
-      @Value("${lexis.mail.region-rsi-recipients:}") String rsiRecipients) {
+      @Value("${lexis.mail.region-rco-address:}") String rcoAddress,
+      @Value("${lexis.mail.region-rni-address:}") String rniAddress,
+      @Value("${lexis.mail.region-rsi-address:}") String rsiAddress) {
     if (!nonProduction && trimToNull(overrideRecipients) != null) {
       throw new IllegalStateException(
           "Production mail must not configure override recipients.");
     }
 
     requireSingleAddress(fromAddress, "Mail requires one valid from address.");
+    requireSingleAddress(rcoAddress, "Mail requires one valid RCO positional mailbox address.");
+    requireSingleAddress(rniAddress, "Mail requires one valid RNI positional mailbox address.");
+    requireSingleAddress(rsiAddress, "Mail requires one valid RSI positional mailbox address.");
     if (nonProduction) {
       validateOptionalAddressList(
           overrideRecipients,
           "Non-production mail override recipients must be valid when configured.");
     }
-    boolean hasFallback =
-        validateOptionalAddressList(
-            permitRequestRecipients,
-            "Mail requires valid fallback permit-review recipients when configured.");
-    boolean hasRco =
-        validateOptionalAddressList(
-            rcoRecipients, "Mail requires valid RCO recipients when configured.");
-    boolean hasRni =
-        validateOptionalAddressList(
-            rniRecipients, "Mail requires valid RNI recipients when configured.");
-    boolean hasRsi =
-        validateOptionalAddressList(
-            rsiRecipients, "Mail requires valid RSI recipients when configured.");
-
-    if (!nonProduction && !hasFallback && !(hasRco && hasRni && hasRsi)) {
-      throw new IllegalStateException(
-          "Production mail requires all regional recipient lists or fallback permit-review recipients.");
-    }
   }
 
-  private boolean validateOptionalAddressList(String csv, String failureMessage) {
+  private void validateOptionalAddressList(String csv, String failureMessage) {
     if (trimToNull(csv) == null) {
-      return false;
+      return;
     }
     requireAddressList(csv, failureMessage);
-    return true;
   }
 
   private void requireAddressList(String csv, String failureMessage) {

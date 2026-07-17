@@ -528,11 +528,17 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Application status email could not be prepared.");
     }
 
-    emailSender.sendStatusEmail(
-        applicationNumber,
-        statusCode,
-        clientEmail,
-        persistedRemark);
+    boolean queued =
+        emailSender.sendStatusEmail(
+            applicationNumber,
+            statusCode,
+            clientEmail,
+            persistedRemark,
+            confirmedContext.orgUnitNumber());
+    if (!queued) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false, "Application status email could not be prepared.");
+    }
     return new ApplicationReviewStatusEmailResultDto(
         true,
         "Application status email queued.");

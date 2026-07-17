@@ -114,18 +114,18 @@ on:
       lexis_mail_override_recipients:
         description: Non-production recipient override
         required: false
-      lexis_mail_region_rco_recipients:
-        description: RCO workflow distribution list
-        required: false
-      lexis_mail_region_rni_recipients:
-        description: RNI workflow distribution list
-        required: false
-      lexis_mail_region_rsi_recipients:
-        description: RSI workflow distribution list
-        required: false
-      lexis_mail_permit_request_recipients:
-        description: Permit-review migration fallback recipients
-        required: false
+      lexis_mail_from:
+        description: Provincial Log Export Analyst positional mailbox
+        required: true
+      lexis_mail_region_rco_address:
+        description: RCO positional mailbox
+        required: true
+      lexis_mail_region_rni_address:
+        description: RNI positional mailbox
+        required: true
+      lexis_mail_region_rsi_address:
+        description: RSI positional mailbox
+        required: true
 
     outputs:
       triggered:
@@ -179,10 +179,9 @@ jobs:
           LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}
           LEXIS_MAIL_FROM: ${{ secrets.lexis_mail_from }}
           LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}
-          LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${{ secrets.lexis_mail_region_rco_recipients }}
-          LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${{ secrets.lexis_mail_region_rni_recipients }}
-          LEXIS_MAIL_REGION_RSI_RECIPIENTS: ${{ secrets.lexis_mail_region_rsi_recipients }}
-          LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${{ secrets.lexis_mail_permit_request_recipients }}
+          LEXIS_MAIL_REGION_RCO_ADDRESS: ${{ secrets.lexis_mail_region_rco_address }}
+          LEXIS_MAIL_REGION_RNI_ADDRESS: ${{ secrets.lexis_mail_region_rni_address }}
+          LEXIS_MAIL_REGION_RSI_ADDRESS: ${{ secrets.lexis_mail_region_rsi_address }}
         with:
           file: backend/openshift.deploy.yml
           # PR lite mode produces an invalid strategy for this RollingUpdate deployment.
@@ -228,10 +227,9 @@ jobs:
             -p LEXIS_MAIL_ENVIRONMENT="$LEXIS_MAIL_ENVIRONMENT"
             -p LEXIS_MAIL_FROM="$LEXIS_MAIL_FROM"
             -p LEXIS_MAIL_OVERRIDE_RECIPIENTS="$LEXIS_MAIL_OVERRIDE_RECIPIENTS"
-            -p LEXIS_MAIL_REGION_RCO_RECIPIENTS="$LEXIS_MAIL_REGION_RCO_RECIPIENTS"
-            -p LEXIS_MAIL_REGION_RNI_RECIPIENTS="$LEXIS_MAIL_REGION_RNI_RECIPIENTS"
-            -p LEXIS_MAIL_REGION_RSI_RECIPIENTS="$LEXIS_MAIL_REGION_RSI_RECIPIENTS"
-            -p LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS="$LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS"
+            -p LEXIS_MAIL_REGION_RCO_ADDRESS="$LEXIS_MAIL_REGION_RCO_ADDRESS"
+            -p LEXIS_MAIL_REGION_RNI_ADDRESS="$LEXIS_MAIL_REGION_RNI_ADDRESS"
+            -p LEXIS_MAIL_REGION_RSI_ADDRESS="$LEXIS_MAIL_REGION_RSI_ADDRESS"
           triggers: ${{ inputs.triggers }}
 
   frontend:

@@ -193,7 +193,7 @@ class ApplicationReviewRepositoryTest {
     assertThat(repository.findAuthoritativeApplicantStatusContext(900101L))
         .contains(
             new ApplicationReviewRepository.AuthoritativeApplicantStatusContext(
-                "REJ", "A", "00055667", "02"));
+                "REJ", "A", "00055667", "02", 1835L));
   }
 
   @Test
@@ -395,6 +395,7 @@ class ApplicationReviewRepositoryTest {
         when(resultSet.getString("OWNER_CLIENT_LOCATION_CODE")).thenReturn(ownerLocation);
         when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("REJ");
         when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("F");
+        when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1835L);
         return Optional.ofNullable(rowMapper.map(resultSet));
       } catch (SQLException ex) {
         throw new AssertionError(ex);
