@@ -2579,8 +2579,22 @@ legend.cds--label {
   border-block-end: 0;
 }
 
+.admin-upload-validation-table tbody tr:nth-child(odd) td {
+  background: var(--fds-layer-01, #ffffff);
+}
+
 .admin-upload-validation-table tbody tr:nth-child(even) td {
   background: var(--fds-table-zebra, #f3f3f5);
+}
+
+.admin-upload-validation-table tbody tr:hover td,
+.admin-upload-validation-table tbody tr:focus-within td {
+  background: #dfeaf8;
+}
+
+:root[data-carbon-theme='g100'] .admin-upload-validation-table tbody tr:hover td,
+:root[data-carbon-theme='g100'] .admin-upload-validation-table tbody tr:focus-within td {
+  background: var(--fds-interactive-light);
 }
 
 .admin-upload-validation-table__issue,

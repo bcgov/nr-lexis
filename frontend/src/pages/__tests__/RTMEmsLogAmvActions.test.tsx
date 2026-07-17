@@ -194,6 +194,9 @@ describe('RTM EMS Log AMV actions', () => {
     expect(mockedSearch).toHaveBeenCalledWith(
       expect.objectContaining({ retrievalDate: '2000-01-01', updateDate: '2000-01-01' }),
     )
+    expect(amvCell('Balsam (BA)', 'Z')).toBeVisible()
+    expect(amvCell('Balsam (BA)', '1')).toBeVisible()
+    expect(amvCell('Balsam (BA)', '2')).toBeVisible()
   })
 
   it('blocks invalid values before a batch is sent', async () => {

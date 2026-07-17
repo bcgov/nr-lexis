@@ -90,6 +90,7 @@ import {
   deleteBlanketOicScale,
   fetchBlanketOicPackageEditContext,
   fetchAvailablePermitApplications,
+  fetchProvincialPermitGbmsEvents,
   fetchProvincialPermitDetailCoreTabs,
   fetchProvincialPermitFees,
   removeApplicationFromPermit,
@@ -97,6 +98,7 @@ import {
   updatePermitScaleAttachment,
   type BlanketOicPackageMutationRequest,
   type ProvincialPermitDetailTabsData,
+  type ProvincialPermitDetailTabsRequest,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import {
@@ -586,6 +588,7 @@ const ProvincialPermitDetailsPage = () => {
   const beginPermitFeesRequest = useLatestRequestGuard()
   const beginPermitDocumentsRequest = useLatestRequestGuard()
   const beginPermitInvoicesRequest = useLatestRequestGuard()
+  const beginPermitGbmsRequest = useLatestRequestGuard()
   const beginPermitMutationRequest = useLatestRequestGuard()
   const beginBoicPackageEditRequest = useLatestRequestGuard()
   const beginAvailablePermitApplicationsRequest = useLatestRequestGuard()
@@ -623,6 +626,7 @@ const ProvincialPermitDetailsPage = () => {
     beginPermitFeesRequest()
     beginPermitDocumentsRequest()
     beginPermitInvoicesRequest()
+    beginPermitGbmsRequest()
     deferredPermitTabLoadsRef.current.clear()
     loadedDeferredPermitTabsRef.current.clear()
     setDeferredPermitTabLoaded(EMPTY_DEFERRED_PERMIT_TAB_STATE)
@@ -658,8 +662,22 @@ const ProvincialPermitDetailsPage = () => {
     beginBoicPackageEditRequest,
     beginPermitDocumentsRequest,
     beginPermitFeesRequest,
+    beginPermitGbmsRequest,
     beginPermitInvoicesRequest,
   ])
+
+  const loadPermitGbmsEvents = useCallback(
+    (request: ProvincialPermitDetailTabsRequest) => {
+      const isLatestRequest = beginPermitGbmsRequest()
+      void fetchProvincialPermitGbmsEvents(request).then((gbmsEvents) => {
+        if (!isLatestRequest()) {
+          return
+        }
+        setTabsData((current) => (current ? { ...current, gbmsEvents } : current))
+      })
+    },
+    [beginPermitGbmsRequest],
+  )
 
   useEffect(() => {
     let active = true
@@ -779,15 +797,19 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
 
-        try {
-          const feeContext = await fetchPermitFeeOverrideContext(permitNumber)
-          if (isLatestRequest()) {
+        void fetchPermitFeeOverrideContext(permitNumber)
+          .then((feeContext) => {
+            if (!isLatestRequest()) {
+              return
+            }
             setFeeOverrideContext(feeContext)
             setFeeOverrideForm(feeContext)
             setEditContextLoaded(true)
-          }
-        } catch (error) {
-          if (isLatestRequest()) {
+          })
+          .catch((error) => {
+            if (!isLatestRequest()) {
+              return
+            }
             console.error(error)
             setFeeOverrideContext(null)
             setFeeOverrideForm(null)
@@ -795,8 +817,7 @@ const ProvincialPermitDetailsPage = () => {
             setIsEditingFeeOverride(false)
             setIsEditingPermit(false)
             setIsEditingShipping(false)
-          }
-        }
+          })
 
         try {
           const tabsResult = await fetchProvincialPermitDetailCoreTabs({
@@ -807,6 +828,11 @@ const ProvincialPermitDetailsPage = () => {
           if (isLatestRequest()) {
             setTabsData(tabsResult)
             setPermitTablesErrorMessage('')
+            loadPermitGbmsEvents({
+              permitNumber,
+              receiptNumber: response.receiptNumber,
+              blanketOic: response.blanketOic,
+            })
           }
         } catch (error) {
           if (isLatestRequest()) {
@@ -843,7 +869,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     void load()
-  }, [permitNumber, beginDetailRequest, resetPermitRouteDrafts])
+  }, [permitNumber, beginDetailRequest, loadPermitGbmsEvents, resetPermitRouteDrafts])
 
   useEffect(() => {
     return () => {
@@ -1302,6 +1328,14 @@ const ProvincialPermitDetailsPage = () => {
   const totalFeeVolume = (tabsData?.fees ?? []).reduce((total, row) => total + row.volume, 0)
   const calculatedPermitFee = (tabsData?.fees ?? []).reduce((total, row) => total + row.amount, 0)
   const permitFeesMasked = (tabsData?.fees ?? []).some((row) => row.amountDisplay.trim() === '$')
+  const feeSummaryStatus =
+    permitTablesErrorMessage || permitFeesErrorMessage
+      ? 'Unavailable'
+      : deferredPermitTabLoading.fees
+        ? 'Loading…'
+        : deferredPermitTabLoaded.fees
+          ? null
+          : '—'
   const reloadPermitTabs = useCallback(async () => {
     const resolvedPermitNumber = detail?.permitNumber
       ? String(detail.permitNumber)
@@ -1310,6 +1344,7 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
+    beginPermitGbmsRequest()
     const tabsResult = await fetchProvincialPermitDetailCoreTabs({
       permitNumber: resolvedPermitNumber,
       receiptNumber: detail.receiptNumber,
@@ -1317,13 +1352,18 @@ const ProvincialPermitDetailsPage = () => {
     })
     setTabsData(tabsResult)
     setPermitTablesErrorMessage('')
+    loadPermitGbmsEvents({
+      permitNumber: resolvedPermitNumber,
+      receiptNumber: detail.receiptNumber,
+      blanketOic: detail.blanketOic,
+    })
     if (loadedDeferredPermitTabsRef.current.has('fees')) {
       await loadDeferredPermitTab('fees', {
         force: true,
         packageNumbers: tabsResult.packages.map((row) => row.packageNumber),
       })
     }
-  }, [detail, loadDeferredPermitTab, permitNumber])
+  }, [beginPermitGbmsRequest, detail, loadDeferredPermitTab, loadPermitGbmsEvents, permitNumber])
 
   const reloadAvailablePermitApplications = useCallback(async () => {
     const isLatestRequest = beginAvailablePermitApplicationsRequest()
@@ -3940,22 +3980,15 @@ const ProvincialPermitDetailsPage = () => {
                             <TextInput
                               id="permitFeeTotalVolume"
                               labelText="Total volume (m³)"
-                              value={
-                                permitTablesErrorMessage
-                                  ? 'Unavailable'
-                                  : totalFeeVolume.toLocaleString()
-                              }
+                              value={feeSummaryStatus ?? totalFeeVolume.toLocaleString()}
                               disabled
                             />
                             <TextInput
                               id="permitCalculatedFee"
                               labelText="Calculated fee (CAD)"
                               value={
-                                permitTablesErrorMessage
-                                  ? 'Unavailable'
-                                  : permitFeesMasked
-                                    ? '$'
-                                    : `$${formatAmount(calculatedPermitFee)}`
+                                feeSummaryStatus ??
+                                (permitFeesMasked ? '$' : `$${formatAmount(calculatedPermitFee)}`)
                               }
                               disabled
                             />
@@ -3963,13 +3996,12 @@ const ProvincialPermitDetailsPage = () => {
                               id="permitEffectiveFee"
                               labelText="Effective fee (CAD)"
                               value={
-                                permitTablesErrorMessage
-                                  ? 'Unavailable'
-                                  : feeOverrideContext?.overrideEnabled
-                                    ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
-                                    : permitFeesMasked
-                                      ? '$'
-                                      : `$${formatAmount(calculatedPermitFee)}`
+                                feeSummaryStatus ??
+                                (feeOverrideContext?.overrideEnabled
+                                  ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
+                                  : permitFeesMasked
+                                    ? '$'
+                                    : `$${formatAmount(calculatedPermitFee)}`)
                               }
                               disabled
                             />

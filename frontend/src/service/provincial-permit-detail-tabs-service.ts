@@ -585,6 +585,7 @@ const resolveDetailTabsRequest = (
 const fetchProvincialPermitDetailTabsData = async (
   request: string | ProvincialPermitDetailTabsRequest,
   includeFees: boolean,
+  includeGbms: boolean,
 ): Promise<ProvincialPermitDetailTabsData> => {
   const {
     permitNumber,
@@ -592,6 +593,8 @@ const fetchProvincialPermitDetailTabsData = async (
     blanketOic: blanketOicValue,
   } = resolveDetailTabsRequest(request)
   const blanketOic = !!blanketOicValue
+  // GBMS history is optional, but retain concurrent loading for callers that request the full set.
+  const gbmsEventsPromise = includeGbms ? fetchGbmsRows(permitNumber, receiptNumber) : null
   const [applicationList, packageList] = await Promise.all([
     fetchApplicationList(permitNumber),
     fetchPackageList(permitNumber, blanketOic),
@@ -612,14 +615,13 @@ const fetchProvincialPermitDetailTabsData = async (
   ])
   const scaleRows = packageScaleRows.flat()
   const feeRows = packageFeeRows.flat()
-  const gbmsEvents = await fetchGbmsRows(permitNumber, receiptNumber)
 
   return {
     applications: applicationList,
     packages,
     items: scaleRows,
     fees: feeRows.map(normalizeScaleFeeRow),
-    gbmsEvents,
+    gbmsEvents: gbmsEventsPromise ? await gbmsEventsPromise : [],
     oicItems: [],
     boicItems: [],
   }
@@ -627,7 +629,15 @@ const fetchProvincialPermitDetailTabsData = async (
 
 export const fetchProvincialPermitDetailCoreTabs = async (
   request: string | ProvincialPermitDetailTabsRequest,
-): Promise<ProvincialPermitDetailTabsData> => fetchProvincialPermitDetailTabsData(request, false)
+): Promise<ProvincialPermitDetailTabsData> =>
+  fetchProvincialPermitDetailTabsData(request, false, false)
+
+export const fetchProvincialPermitGbmsEvents = async (
+  request: string | ProvincialPermitDetailTabsRequest,
+): Promise<ProvincialPermitEventRow[]> => {
+  const { permitNumber, receiptNumber } = resolveDetailTabsRequest(request)
+  return fetchGbmsRows(permitNumber, receiptNumber)
+}
 
 export const fetchProvincialPermitFees = async ({
   permitNumber,
@@ -646,7 +656,8 @@ export const fetchProvincialPermitFees = async ({
 
 export const fetchProvincialPermitDetailTabs = async (
   request: string | ProvincialPermitDetailTabsRequest,
-): Promise<ProvincialPermitDetailTabsData> => fetchProvincialPermitDetailTabsData(request, true)
+): Promise<ProvincialPermitDetailTabsData> =>
+  fetchProvincialPermitDetailTabsData(request, true, true)
 
 export const fetchAvailablePermitApplications = async (
   exemptionNumber: string,

@@ -3,7 +3,7 @@
 This note records the active RTM Average Monthly Values contract at
 `/admin/rtm/emslogamv`. It aligns the page with the approved single-table workflow while
 preserving the legacy `THE.EMS_LOG_AMV` schema and its downstream synchronization trigger.
-The former workbook upload endpoints remain dormant and are not part of this workflow.
+The former workbook upload endpoints are not authorized and are not part of this workflow.
 
 ## Unified AMV table
 
@@ -17,7 +17,7 @@ The former workbook upload endpoints remain dormant and are not part of this wor
   show `W` or the legacy blank-grade row.
 - A stored blank grade is still normalized to `BLANK` by the read/API compatibility layer, but it
   is intentionally not editable through the GUI.
-- Legacy pre-April-2006 validation remains in force for `Z`, `1`, and `2`.
+- Every listed grid grade is available for every effective month.
 
 `THE.EMS_LOG_AMV` has no `blank` flag; its legacy columns are `SPECIES`, `GRADE`,
 `GROWTH_TYPE_ST`, `EFFECTIVE_DATE`, `AVG_MARKET_PRICE`, and `REVISION_COUNT`. The UI therefore
@@ -26,6 +26,8 @@ does not invent or submit a `blank = 1` field.
 ## Dates and values
 
 - The UI accepts a month and always submits the first calendar day of that month.
+- The API also normalizes a supported `YYYY-MM-DD` input to that month's first day before it
+  queries or saves a value. It does not retain a time-of-day component.
 - Retrieval dates are implementation data and are not shown or editable in the UI.
 - A value must be numeric, non-negative, at most `9999.99`, and have at most two decimal places.
 - A past-month change requires confirmation. A future or empty month can use the latest prior
@@ -36,7 +38,8 @@ does not invent or submit a `blank = 1` field.
 ## Atomic grid saves
 
 The active page calls `POST /api/lexis/rtm/emslogamv/batch` once per Save action. The body is a
-`values` array containing the dirty logical cells.
+`values` array containing the dirty logical cells. The prior single-row `POST /emslogamv` route is
+not exposed, so a caller cannot bypass the atomic batch contract.
 
 The backend validates the complete request before any write, then expands each logical cell to its
 physical targets:
@@ -56,13 +59,29 @@ downstream consumers continue to receive the legacy physical rows.
 
 ## Legacy procedure boundary
 
-`RTM_EMS_LOG_AMV_INSERT` and `RTM_EMS_LOG_AMV_UPDATE` are retained for legacy compatibility and
-the dormant workbook workflow. Both issue `COMMIT`, which makes them unsuitable for the active
-multi-row UI save. The read path can still use the direct effective-date query because the legacy
-select procedure requires an exact species and growth type.
+`RTM_EMS_LOG_AMV_INSERT` and `RTM_EMS_LOG_AMV_UPDATE` are retained in the database for legacy
+compatibility. Both issue `COMMIT`, which makes them unsuitable for the active multi-row UI save.
+The UI does not expose a single-row or workbook mutation route. The read path can still use the
+direct effective-date query because the legacy select procedure requires an exact species and
+growth type.
 
 The table has no user/timestamp audit columns. This change preserves the schema and trigger; it
 does not claim to add audit metadata that the legacy data model cannot store.
+
+## Outstanding legacy data decisions
+
+The approved UI behavior is implemented against the existing data model. The following Confluence
+requirements need a data-owner decision and an approved persistence design before they can be
+implemented without changing legacy semantics:
+
+- `EMS_LOG_AMV` has no `blank` (or equivalent) column, so the system cannot persist `blank = 1`
+  for both growth partitions.
+- It has no submitting-user, submission-timestamp, or update-timestamp column. A new audit table
+  or an approved schema change is required to retain that information.
+- `AVG_MARKET_PRICE` is `NOT NULL`; a cleared grid cell is rejected. The legacy blank/clear
+  behavior still needs confirmation from the data architect before it is changed.
+
+No schema, trigger, or downstream consumer behavior is inferred or altered by this branch.
 
 ## Sources reviewed
 

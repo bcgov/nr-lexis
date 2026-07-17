@@ -1,8 +1,9 @@
 /**
- * Dormant AMV workbook upload and review workflow.
+ * Retained AMV workbook upload and review workflow.
  *
  * The table workflow in index.tsx is the active route. This module is deliberately
- * not routed so the prior screen can be reactivated without rebuilding it.
+ * not routed. Reactivation requires restoring server-side authorization and an
+ * atomic-save review before it can be exposed again.
  */
 
 import {

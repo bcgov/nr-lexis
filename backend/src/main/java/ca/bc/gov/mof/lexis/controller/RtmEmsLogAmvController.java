@@ -3,7 +3,6 @@ package ca.bc.gov.mof.lexis.controller;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvBatchSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
-import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvService;
 import java.util.List;
 import org.slf4j.Logger;
@@ -49,20 +48,6 @@ public class RtmEmsLogAmvController {
     }
 
     return ResponseEntity.ok(service.find(species, growthIndicator, retrievalDate, updateDate));
-  }
-
-  @PostMapping("/emslogamv")
-  public ResponseEntity<RtmEmsLogAmvMutationResultDto> save(
-      @RequestBody(required = false) RtmEmsLogAmvSaveRequestDto request) {
-    RtmEmsLogAmvService service = requiredService("save");
-
-    RtmEmsLogAmvSaveRequestDto normalizedRequest =
-        request == null
-            ? new RtmEmsLogAmvSaveRequestDto(null, null, null, null, null, null, null)
-            : request;
-
-    RtmEmsLogAmvMutationResultDto result = service.save(normalizedRequest);
-    return ResponseEntity.status(responseStatus(result.status())).body(result);
   }
 
   @PostMapping("/emslogamv/batch")

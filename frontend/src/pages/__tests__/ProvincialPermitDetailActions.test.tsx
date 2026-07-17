@@ -22,6 +22,7 @@ import {
   deleteBlanketOicScale,
   fetchBlanketOicPackageEditContext,
   fetchAvailablePermitApplications,
+  fetchProvincialPermitGbmsEvents,
   fetchProvincialPermitDetailCoreTabs,
   fetchProvincialPermitFees,
   removeApplicationFromPermit,
@@ -76,6 +77,7 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
   deleteBlanketOicScale: vi.fn(),
   fetchBlanketOicPackageEditContext: vi.fn(),
   fetchAvailablePermitApplications: vi.fn(),
+  fetchProvincialPermitGbmsEvents: vi.fn(),
   fetchProvincialPermitDetailCoreTabs: vi.fn(),
   fetchProvincialPermitFees: vi.fn(),
   removeApplicationFromPermit: vi.fn(),
@@ -147,6 +149,7 @@ vi.setConfig({ testTimeout: 20000 })
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailCoreTabs)
+const mockedFetchProvincialPermitGbmsEvents = vi.mocked(fetchProvincialPermitGbmsEvents)
 const mockedFetchProvincialPermitFees = vi.mocked(fetchProvincialPermitFees)
 const mockedUpdatePermitScaleAttachment = vi.mocked(updatePermitScaleAttachment)
 const mockedFetchAvailablePermitApplications = vi.mocked(fetchAvailablePermitApplications)
@@ -312,6 +315,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([])
     mockedFetchProvincialPermitFees.mockResolvedValue([])
     mockedFetchProvincialPermitOptions.mockResolvedValue({
       permitStatuses: [
@@ -522,19 +526,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it('renders permit details, client contacts, and invoice history', async () => {
     configureActivePermit()
-    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
-      ...tabsResult,
-      gbmsEvents: [
-        {
-          id: 'GBMS-1',
-          eventDate: '2026-05-02',
-          eventType: 'Invoice created',
-          status: 'ACT',
-          reference: 'GBMS-1001',
-          notes: 'Invoice accepted',
-        },
-      ],
-    })
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([
+      {
+        id: 'GBMS-1',
+        eventDate: '2026-05-02',
+        eventType: 'Invoice created',
+        status: 'ACT',
+        reference: 'GBMS-1001',
+        notes: 'Invoice accepted',
+      },
+    ])
     mockedFetchPermitInvoices.mockResolvedValue({
       rows: [
         {
@@ -662,6 +663,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
   }, 15000)
 
   it('defers fee, document, and invoice data until their tabs are opened', async () => {
+    let resolveFees:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitFees>>) => void)
+      | undefined
+    mockedFetchProvincialPermitFees.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitFees>>>((resolve) => {
+          resolveFees = resolve
+        }),
+    )
     renderPermitDetails()
 
     expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
@@ -670,6 +680,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
 
     await selectPermitDetailTab('Fees')
+    expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(1)
+    expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalledWith({
+      permitNumber: '777',
+      receiptNumber: 'R-1',
+      blanketOic: false,
+    })
+    expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('Loading…')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
+    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Loading…')
+    await act(async () => {
+      resolveFees?.([])
+    })
     expect(
       await screen.findByRole('heading', { name: 'No fee details available', level: 3 }),
     ).toBeInTheDocument()
@@ -696,6 +718,93 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Permit')
     await selectPermitDetailTab('Invoices')
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts permit edit context and core tables together', async () => {
+    let resolveFeeContext:
+      | ((value: Awaited<ReturnType<typeof fetchPermitFeeOverrideContext>>) => void)
+      | undefined
+    let resolveTabs:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>) => void)
+      | undefined
+    let resolveGbms:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitGbmsEvents>>) => void)
+      | undefined
+    mockedFetchPermitFeeOverrideContext.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchPermitFeeOverrideContext>>>((resolve) => {
+          resolveFeeContext = resolve
+        }),
+    )
+    mockedFetchProvincialPermitDetailTabs.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>>((resolve) => {
+          resolveTabs = resolve
+        }),
+    )
+    mockedFetchProvincialPermitGbmsEvents.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitGbmsEvents>>>((resolve) => {
+          resolveGbms = resolve
+        }),
+    )
+
+    renderPermitDetails()
+
+    await waitFor(() => {
+      expect(mockedFetchPermitFeeOverrideContext).toHaveBeenCalledWith('777')
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
+        permitNumber: '777',
+        receiptNumber: 'R-1',
+        blanketOic: false,
+      })
+    })
+
+    await act(async () => {
+      resolveTabs?.(tabsResult)
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    await waitFor(() => expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveGbms?.([
+        {
+          id: 'GBMS-1',
+          eventDate: '2026-05-02',
+          eventType: 'Invoice created',
+          status: 'ACT',
+          reference: 'GBMS-1001',
+          notes: 'Invoice accepted',
+        },
+      ])
+    })
+    expect(await screen.findByRole('tab', { name: 'GBMS' })).toBeInTheDocument()
+
+    await act(async () => {
+      resolveFeeContext?.({
+        overrideEnabled: false,
+        overrideFee: '',
+        overrideComment: '',
+        locked: false,
+        lockMessage: '',
+      })
+    })
+  })
+
+  it('shows unavailable fee summaries when the deferred fee request fails', async () => {
+    mockedFetchProvincialPermitFees.mockRejectedValue(new Error('fees unavailable'))
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Fee details unavailable' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('Unavailable')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Unavailable')
+    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Unavailable')
   })
 
   it('shows legacy package metadata on the items tab', async () => {

@@ -112,8 +112,6 @@ const RTM_AMV_GRADE_ORDER = [
   '6',
 ]
 
-const RTM_AMV_GRADE_ROLLOVER_DATE = '2006-04-01'
-const RTM_AMV_POST_ROLLOVER_GRADES = new Set(['Z', '1', '2'])
 const RTM_AMV_DISPLAY_GROWTH: RtmGrowthIndicator = 'O'
 const MAX_AMV_VALUE = 9999.99
 
@@ -138,11 +136,6 @@ const isMonthStartDate = (value: string) => {
   const [year, month] = value.split('-').map(Number)
   return Number.isInteger(year) && year >= 1 && Number.isInteger(month) && month >= 1 && month <= 12
 }
-
-const availableGradesForDate = (dateValue: string) =>
-  isMonthStartDate(dateValue) && dateValue < RTM_AMV_GRADE_ROLLOVER_DATE
-    ? RTM_AMV_GRADE_ORDER.filter((grade) => !RTM_AMV_POST_ROLLOVER_GRADES.has(grade))
-    : RTM_AMV_GRADE_ORDER
 
 const previousMonthDate = (dateValue: string) => {
   if (!isMonthStartDate(dateValue)) {
@@ -393,8 +386,7 @@ const RTMEmsLogAmvPage = () => {
   const selectedDateIsCurrent = isMonthStartDate(targetDate) && targetDate === currentMonth
   const selectedDateIsFuture = isMonthStartDate(targetDate) && targetDate > currentMonth
   const selectedPreviousMonthDate = previousMonthDate(targetDate)
-  const availableGrades = useMemo(() => availableGradesForDate(targetDate), [targetDate])
-  const usesHistoricGrades = availableGrades.length < RTM_AMV_GRADE_ORDER.length
+  const availableGrades = RTM_AMV_GRADE_ORDER
 
   const loadRows = useCallback(async () => {
     const requestId = ++loadRequestIdRef.current
@@ -762,8 +754,6 @@ const RTMEmsLogAmvPage = () => {
             <p>
               Each cell applies to the matching old- and second-growth records for its species,
               grade, and month.
-              {usesHistoricGrades &&
-                ' The historical grade set applies before April 2006; Z, 1, and 2 are unavailable.'}
             </p>
           </div>
 

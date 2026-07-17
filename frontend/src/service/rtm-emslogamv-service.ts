@@ -40,8 +40,9 @@ export type RtmEmsLogAmvBatchSaveRequest = {
 }
 
 /**
- * Dormant workbook upload contracts retained for the legacy AMV upload screen.
- * The active AMV route uses the editable table instead.
+ * Retained only for a future, explicitly authorized legacy AMV workbook workflow.
+ * The active AMV route uses the editable table; reactivation also requires
+ * server-side authorization and an atomic-save review.
  */
 export type RtmEmsLogAmvUploadPreview = {
   status: string
@@ -128,18 +129,6 @@ export const searchLatestRtmEmsLogAmv = async (
     })
 
   return response.data ?? []
-}
-
-export const saveRtmEmsLogAmv = async (
-  request: RtmEmsLogAmvSaveRequest,
-): Promise<RtmEmsLogAmvMutationResult> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .post<RtmEmsLogAmvMutationResult>('/lexis/rtm/emslogamv', request, {
-      validateStatus: (status) => status < 500,
-    })
-
-  return response.data ?? { status: 'failed', message: '', errors: [], rows: [] }
 }
 
 export const saveRtmEmsLogAmvBatch = async (

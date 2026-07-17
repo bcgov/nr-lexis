@@ -103,9 +103,10 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(precisionResult.errors()).contains("New value must have no more than 2 decimal places.");
     assertThat(rangeResult.status()).isEqualTo("validation_failed");
     assertThat(rangeResult.errors()).contains("New value must not exceed 9999.99.");
-    assertThat(dayLevelDateResult.status()).isEqualTo("validation_failed");
-    assertThat(dayLevelDateResult.errors())
-        .anyMatch(error -> error.startsWith("Retrieval date"));
+    assertThat(dayLevelDateResult.status()).isEqualTo("accepted");
+    assertThat(dayLevelDateResult.rows())
+        .extracting(row -> row.retrievalDate())
+        .containsExactly("2026-07-01");
   }
 
   @Test
@@ -135,6 +136,27 @@ class InMemoryRtmEmsLogAmvServiceTest {
             List.of("LO", "S", new BigDecimal("10.25")),
             List.of("YE", "O", new BigDecimal("10.25")),
             List.of("YE", "S", new BigDecimal("10.25")));
+  }
+
+  @Test
+  void shouldAcceptModernGridGradesForHistoricMonths() {
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
+
+    var result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "Z",
+                    "O",
+                    "2000-02-01",
+                    "2000-02-01",
+                    new BigDecimal("10.25"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.rows()).extracting(row -> List.of(row.grade(), row.growthIndicator()))
+        .containsExactlyInAnyOrder(List.of("Z", "O"), List.of("Z", "S"));
   }
 
   @Test
@@ -176,7 +198,9 @@ class InMemoryRtmEmsLogAmvServiceTest {
         .extracting(row -> List.of(row.species(), row.retrievalDate(), row.newValue()))
         .contains(List.of("BA", "2026-08-01", new BigDecimal("20.50")));
 
-    assertThat(service.findLatestBefore("2026-08-10")).isEmpty();
+    assertThat(service.findLatestBefore("2026-08-10"))
+        .extracting(row -> List.of(row.species(), row.retrievalDate(), row.newValue()))
+        .contains(List.of("BA", "2026-07-01", new BigDecimal("10.25")));
   }
 
   private MultipartFile matrixWorkbook() throws IOException {

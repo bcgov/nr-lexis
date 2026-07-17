@@ -537,14 +537,9 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       return errors;
     }
 
-    LocalDate effectiveDate =
-        effectiveDateForSave(
-            request.effectiveSaveMode(),
-            parseRetrievalDate(request.retrievalDate()),
-            parseRetrievalDate(request.updateDate()));
     for (String species : physicalSpecies) {
       errors.addAll(
-          RtmEmsLogAmvDimensionValidator.validate(species, request.grade(), "O", effectiveDate));
+          RtmEmsLogAmvDimensionValidator.validateModernGrid(species, request.grade(), "O"));
     }
     return errors;
   }

@@ -88,36 +88,6 @@ class RtmEmsLogAmvControllerTest {
   }
 
   @Test
-  void saveShouldDelegateFutureEffectiveDate() {
-    RtmEmsLogAmvSaveRequestDto request = request("2026-07-01", "2026-07-01");
-    RtmEmsLogAmvMutationResultDto result =
-        new RtmEmsLogAmvMutationResultDto("accepted", "Save completed.", List.of(), List.of());
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.save(request)).thenReturn(result);
-
-    ResponseEntity<RtmEmsLogAmvMutationResultDto> response = controller().save(request);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(result);
-    verify(service).save(request);
-  }
-
-  @Test
-  void saveShouldDelegatePastEffectiveDate() {
-    RtmEmsLogAmvSaveRequestDto request = request("2026-06-01", "2026-06-22");
-    RtmEmsLogAmvMutationResultDto result =
-        new RtmEmsLogAmvMutationResultDto("accepted", "Save completed.", List.of(), List.of());
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.save(request)).thenReturn(result);
-
-    ResponseEntity<RtmEmsLogAmvMutationResultDto> response = controller().save(request);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(result);
-    verify(service).save(request);
-  }
-
-  @Test
   void saveBatchShouldDelegateTheFullGridSubmission() {
     RtmEmsLogAmvSaveRequestDto value = request("2026-07-01", "2026-07-01");
     RtmEmsLogAmvBatchSaveRequestDto request = new RtmEmsLogAmvBatchSaveRequestDto(List.of(value));
@@ -131,23 +101,6 @@ class RtmEmsLogAmvControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(result);
     verify(service).saveBatch(request.values());
-  }
-
-  @Test
-  void createShouldDelegatePastRetrievalDate() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    RtmEmsLogAmvSaveRequestDto request =
-        new RtmEmsLogAmvSaveRequestDto(
-            "BA", "A", "O", "2026-06-22", null, new BigDecimal("10.01"), "create");
-    RtmEmsLogAmvMutationResultDto result =
-        new RtmEmsLogAmvMutationResultDto("accepted", "Save completed.", List.of(), List.of());
-    when(service.save(request)).thenReturn(result);
-
-    ResponseEntity<RtmEmsLogAmvMutationResultDto> response = controller().save(request);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(result);
-    verify(service).save(request);
   }
 
   private RtmEmsLogAmvSaveRequestDto request(String retrievalDate, String updateDate) {
