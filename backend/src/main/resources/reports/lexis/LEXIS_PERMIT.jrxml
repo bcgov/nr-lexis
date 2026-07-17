@@ -568,7 +568,7 @@ BRITISH COLUMBIA]]></text>
 			<staticText>
 				<reportElement uuid="a9c03742-4dc1-435e-8f08-28036277b3ef" x="66" y="77" width="588" height="18" forecolor="#000000"/>
 				<textElement textAlignment="Center">
-					<font fontName="Calibri" size="11" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					<font fontName="Arial" size="11" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
 				<text><![CDATA[Please see next page for Detailed Summary]]></text>
 			</staticText>
