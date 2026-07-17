@@ -377,6 +377,7 @@ describe('Admin policy action states', () => {
     {
       area: 'fee',
       heading: 'Fee policy administration',
+      editorHeading: 'Policy details',
       subtitle: 'Manage regional fee policy percentages and effective dates.',
       absentHeadings: [
         'Fee in lieu percent policy administration',
@@ -388,6 +389,7 @@ describe('Admin policy action states', () => {
     {
       area: 'fil',
       heading: 'Fee in lieu percent policy administration',
+      editorHeading: 'Policy details',
       subtitle: 'Manage fee-in-lieu percentages and effective dates.',
       absentHeadings: ['Fee policy administration', 'Export schedule administration'],
       fetchPage: mockedFetchFilPolicyPage,
@@ -396,6 +398,7 @@ describe('Admin policy action states', () => {
     {
       area: 'schedule',
       heading: 'Export schedule administration',
+      editorHeading: 'Schedule details',
       subtitle: 'Manage advertising, receipt, offer, and TEAC schedule dates.',
       absentHeadings: ['Fee policy administration', 'Fee in lieu percent policy administration'],
       fetchPage: mockedFetchExportSchedulePage,
@@ -403,12 +406,21 @@ describe('Admin policy action states', () => {
     },
   ])(
     'loads only the selected $area admin area',
-    async ({ area, heading, subtitle, absentHeadings, fetchPage, untouchedFetches }) => {
+    async ({
+      area,
+      heading,
+      editorHeading,
+      subtitle,
+      absentHeadings,
+      fetchPage,
+      untouchedFetches,
+    }) => {
       const { container } = renderPage(area as AdminPolicyArea)
 
       await screen.findByRole('heading', { level: 1, name: heading })
       expect(screen.getByText(subtitle)).toBeVisible()
-      expect(screen.getByRole('heading', { level: 2, name: heading })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { level: 2, name: editorHeading })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { level: 2, name: heading })).not.toBeInTheDocument()
       expect(container.querySelectorAll('.cds--tile')).toHaveLength(1)
       const resultsRegion = await screen.findByRole('region', { name: 'Search results table' })
       expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveTextContent(

@@ -210,6 +210,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       : area === 'fil'
         ? 'Manage fee-in-lieu percentages and effective dates.'
         : 'Manage advertising, receipt, offer, and TEAC schedule dates.'
+  const editorTitle = area === 'schedule' ? 'Schedule details' : 'Policy details'
   const loadingDescription =
     area === 'schedule'
       ? 'Loading export schedules...'
@@ -796,7 +797,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
             <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">Fee policy administration</h2>
+              <h2 className="dashboard-title">{editorTitle}</h2>
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="feeEffectiveDate"
@@ -961,7 +962,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
             <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">Fee in lieu percent policy administration</h2>
+              <h2 className="dashboard-title">{editorTitle}</h2>
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="filEffectiveDate"
@@ -1080,7 +1081,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
             <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">Export schedule administration</h2>
+              <h2 className="dashboard-title">{editorTitle}</h2>
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="scheduleAdvertisingDate"
