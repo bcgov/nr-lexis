@@ -1183,14 +1183,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByRole('heading', { name: 'Associated applications' })
     ).closest('.cds--tile') as HTMLElement
     expect(within(applicationsTile).getByText('1000456')).toBeInTheDocument()
+    const availableApplicationsCombobox = within(applicationsTile).getByRole('combobox', {
+      name: 'Available application',
+    })
+    expect(mockedFetchAvailablePermitApplications).not.toHaveBeenCalled()
+    await userEvent.click(availableApplicationsCombobox)
     await waitFor(() => {
       expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-9', ['1000456'])
     })
 
-    await chooseComboBoxOption(
-      within(applicationsTile).getByRole('combobox', { name: 'Available application' }),
-      '1000457',
-    )
+    await chooseComboBoxOption(availableApplicationsCombobox, '1000457')
     const addApplicationButton = within(applicationsTile).getByRole('button', {
       name: 'Add application',
     })
@@ -1286,16 +1288,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const applicationsTile = (
       await screen.findByRole('heading', { name: 'Associated applications' })
     ).closest('.cds--tile') as HTMLElement
+    const availableApplicationsCombobox = within(applicationsTile).getByRole('combobox', {
+      name: 'Available application',
+    })
+    expect(mockedFetchAvailablePermitApplications).not.toHaveBeenCalled()
+    await userEvent.click(availableApplicationsCombobox)
     await waitFor(() => {
       expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-9', ['1000456'])
     })
     const addApplicationButton = within(applicationsTile).getByRole('button', {
       name: 'Add application',
     })
-    await chooseComboBoxOption(
-      within(applicationsTile).getByRole('combobox', { name: 'Available application' }),
-      '1000457',
-    )
+    await chooseComboBoxOption(availableApplicationsCombobox, '1000457')
     await waitFor(() => expect(addApplicationButton).toBeEnabled())
     expect(screen.getByRole('button', { name: 'Email review request' })).toBeEnabled()
 
@@ -1320,7 +1324,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add application' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Add application' })).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Email review request' })).toBeEnabled()
     })
   })
@@ -1742,10 +1746,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    const firstPermitCombobox = await screen.findByRole('combobox', {
+      name: 'Available application',
+    })
+    expect(mockedFetchAvailablePermitApplications).not.toHaveBeenCalled()
+    await userEvent.click(firstPermitCombobox)
     await waitFor(() =>
       expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-777', []),
     )
     await userEvent.click(screen.getByRole('button', { name: 'Switch permit' }))
+    const secondPermitCombobox = await screen.findByRole('combobox', {
+      name: 'Available application',
+    })
+    await userEvent.click(secondPermitCombobox)
     await waitFor(() =>
       expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-888', []),
     )

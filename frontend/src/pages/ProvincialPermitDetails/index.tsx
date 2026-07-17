@@ -553,6 +553,8 @@ const ProvincialPermitDetailsPage = () => {
   >(null)
   const [availablePermitApplications, setAvailablePermitApplications] = useState<string[]>([])
   const [permitApplicationToAdd, setPermitApplicationToAdd] = useState('')
+  const [hasLoadedAvailablePermitApplications, setHasLoadedAvailablePermitApplications] =
+    useState(false)
   const [isLoadingAvailableApplications, setIsLoadingAvailableApplications] = useState(false)
   const [isSavingPermitApplication, setIsSavingPermitApplication] = useState(false)
   const [isRemovingPermitApplication, setIsRemovingPermitApplication] = useState<string | null>(
@@ -656,6 +658,7 @@ const ProvincialPermitDetailsPage = () => {
     setSelectedPermitTabId('permit')
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
+    setHasLoadedAvailablePermitApplications(false)
     setIsLoadingAvailableApplications(false)
     setPermitApprovalEmailOpen(false)
     setPermitApprovalEmailAddress('')
@@ -1397,6 +1400,7 @@ const ProvincialPermitDetailsPage = () => {
       if (isLatestRequest()) {
         setAvailablePermitApplications([])
         setPermitApplicationToAdd('')
+        setHasLoadedAvailablePermitApplications(false)
         setIsLoadingAvailableApplications(false)
       }
       return
@@ -1413,10 +1417,12 @@ const ProvincialPermitDetailsPage = () => {
       setPermitApplicationToAdd((current) =>
         result.applicationList.includes(current) ? current : '',
       )
+      setHasLoadedAvailablePermitApplications(true)
     } catch (error) {
       if (!isLatestRequest()) return
       console.error(error)
       setAvailablePermitApplications([])
+      setHasLoadedAvailablePermitApplications(false)
     } finally {
       if (isLatestRequest()) {
         setIsLoadingAvailableApplications(false)
@@ -1429,9 +1435,16 @@ const ProvincialPermitDetailsPage = () => {
     detail?.exemptionNumber,
   ])
 
-  useEffect(() => {
+  const loadAvailablePermitApplicationsOnFocus = useCallback(() => {
+    if (hasLoadedAvailablePermitApplications || isLoadingAvailableApplications) {
+      return
+    }
     void reloadAvailablePermitApplications()
-  }, [reloadAvailablePermitApplications])
+  }, [
+    hasLoadedAvailablePermitApplications,
+    isLoadingAvailableApplications,
+    reloadAvailablePermitApplications,
+  ])
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
     if (!permitForm) {
       return {}
@@ -1978,6 +1991,7 @@ const ProvincialPermitDetailsPage = () => {
               }
             : current,
         )
+        setHasLoadedAvailablePermitApplications(false)
         try {
           await reloadPermitTabs()
           setActionInfoMessage(result.message || 'Application was removed from the permit.')
@@ -3226,13 +3240,16 @@ const ProvincialPermitDetailsPage = () => {
                                   placeholder={
                                     isLoadingAvailableApplications
                                       ? 'Loading applications'
-                                      : 'Select application'
+                                      : hasLoadedAvailablePermitApplications
+                                        ? availablePermitApplicationOptions.length > 0
+                                          ? 'Select application'
+                                          : 'No applications available'
+                                        : 'Select to load applications'
                                   }
                                   disabled={
-                                    isSavingPermitApplication ||
-                                    isLoadingAvailableApplications ||
-                                    availablePermitApplicationOptions.length === 0
+                                    isSavingPermitApplication || isLoadingAvailableApplications
                                   }
+                                  onFocus={loadAvailablePermitApplicationsOnFocus}
                                   onChange={setPermitApplicationToAdd}
                                 />
                               </div>

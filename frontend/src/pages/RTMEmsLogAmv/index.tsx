@@ -304,10 +304,6 @@ const buildCellValidationError = (cell: {
   value: string
 }) => {
   const parsedValue = parseCellValue(cell.value)
-  if (parsedValue === null && cell.dirty) {
-    return `${cell.column.label} grade ${cell.grade} is required.`
-  }
-
   if (parsedValue === undefined) {
     return `${cell.column.label} grade ${cell.grade} must be a number from 0 to 9999.99 with no more than two decimal places.`
   }
@@ -326,13 +322,17 @@ const buildCells = (
       const key = buildCellKey(RTM_AMV_DISPLAY_GROWTH, grade, column.key)
       const basis = basisByKey[key]
       const value = editedValues[key] ?? basis.currentValue
+      const clearedExistingValue = basis.hasCurrentValue && parseCellValue(value) === null
       const dirty =
-        retryCellKeys[key] === true ||
-        comparableCellValue(value) !== comparableCellValue(basis.currentValue)
+        !clearedExistingValue &&
+        (retryCellKeys[key] === true ||
+          comparableCellValue(value) !== comparableCellValue(basis.currentValue))
       const baselineValue = prefillValues[key] ?? basis.currentValue
-      const changedFromBaseline = comparableCellValue(value) !== comparableCellValue(baselineValue)
+      const effectiveValue = clearedExistingValue ? basis.currentValue : value
+      const changedFromBaseline =
+        comparableCellValue(effectiveValue) !== comparableCellValue(baselineValue)
       const baselineHasValue = normalizeNumericString(baselineValue) !== ''
-      const hasInputValue = normalizeNumericString(value) !== ''
+      const hasInputValue = normalizeNumericString(effectiveValue) !== ''
       const changeKind: RtmAmvChangeKind = !changedFromBaseline
         ? null
         : !baselineHasValue && hasInputValue
@@ -499,6 +499,31 @@ const RTMEmsLogAmvPage = () => {
       ...current,
       [key]: value,
     }))
+  }
+
+  const ignoreClearedExistingCell = (cell: RtmAmvCell) => {
+    if (!cell.hasCurrentValue || parseCellValue(cell.value) !== null) {
+      return
+    }
+
+    setEditedValues((current) => {
+      if (current[cell.key] === undefined) {
+        return current
+      }
+
+      const remainingValues = { ...current }
+      delete remainingValues[cell.key]
+      return remainingValues
+    })
+    setRetryCellKeys((current) => {
+      if (current[cell.key] === undefined) {
+        return current
+      }
+
+      const remainingKeys = { ...current }
+      delete remainingKeys[cell.key]
+      return remainingKeys
+    })
   }
 
   const resetChanges = () => {
@@ -811,6 +836,7 @@ const RTMEmsLogAmvPage = () => {
                                 value={cell.value}
                                 disabled={isReadOnly}
                                 onChange={(event) => updateCellValue(cell.key, event.target.value)}
+                                onBlur={() => ignoreClearedExistingCell(cell)}
                               />
                             </label>
                             {cell.hasMixedCurrentValues && (

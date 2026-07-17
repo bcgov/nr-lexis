@@ -55,6 +55,19 @@ applied, the transaction is rolled back. An incomplete batch is reported as reje
 failure uses the API's normal service-unavailable response. A successful response is therefore
 the confirmation that the complete grid submission was accepted.
 
+## Batch audit event
+
+After the batch service returns, the controller writes one structured
+`event=lexis_rtm_amv_batch` application audit event. It records the authenticated
+`LexisPrincipalService` identity, a server-generated timestamp, the HTTP status and service
+outcome, requested logical-cell count, and written physical-row count. The request has no actor
+field, so no client-supplied identity is logged or trusted. If a stable identity cannot be
+resolved, the controller logs `identity_rejected`, returns `403 Forbidden`, and does not invoke
+the service.
+
+This is an operational audit event rather than a new persisted audit table. It does not change the
+legacy RTM schema or claim to satisfy a durable row-level audit requirement by itself.
+
 `SYNC_EMSLA_EXPLA` remains the configured mechanism that mirrors successful table mutations to
 `EXPORT_LOG_AMV`. Live downstream-consumer compatibility still needs verification before this
 change can claim that every report, integration, and query is unaffected.
@@ -93,9 +106,9 @@ trigger behavior, or downstream exports.
 | FR-12 and FR-14 | Data-owner decision        | The physical table has no blank flag/column to set to `1`.                                                                                          |
 | FR-13           | Implemented                | No blank flag is rendered or accepted from the UI.                                                                                                  |
 | FR-15           | Implemented                | The editable grade set is `A` through `M`, `U`, `X`, `Y`, `Z`, and `1` through `6`; `W` and blank are hidden.                                       |
-| FR-16           | Data-owner decision        | Existing `AVG_MARKET_PRICE NOT NULL` prevents a clear operation; legacy empty-cell semantics need confirmation.                                     |
+| FR-16           | Implemented                | A legacy empty `NEWVAL` is a no-op: clearing an existing cell restores its loaded value on blur and omits it from the batch; blank cells with no stored value remain omitted. |
 | FR-17           | Implemented                | The batch service validates before direct `MERGE` writes inside one transaction.                                                                    |
-| FR-18           | Data-owner decision        | Persisted submitter/timestamp audit requires an approved audit table or schema change.                                                              |
+| FR-18           | Partially implemented      | Structured application audit events record the authenticated actor, server timestamp, batch outcome/status, and logical/physical row counts; durable persisted audit still requires an approved table or schema change. |
 | FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |
 | FR-21           | Live verification required | The trigger mirrors to `EXPORT_LOG_AMV`, but reports, integrations, and queries still require TEST/downstream validation.                           |
 

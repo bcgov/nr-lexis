@@ -178,6 +178,40 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByText(/Saved 2 table cells to old and second growth/)).toBeVisible()
   })
 
+  it('treats clearing an existing value as a no-op and omits it from the batch', async () => {
+    const user = userEvent.setup()
+    mockRows([row('BA', 'A', 'O', CURRENT_MONTH, 10), row('HE', 'A', 'O', CURRENT_MONTH, 20)])
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    const balsam = amvCell('Balsam (BA)', 'A')
+    const hemlock = amvCell('Hemlock (HE)', 'A')
+    await user.clear(balsam)
+
+    expect(screen.queryByText(/Balsam \(BA\) grade A is required/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+
+    await user.tab()
+    expect(balsam).toHaveValue('10')
+
+    await user.clear(hemlock)
+    await user.type(hemlock, '21')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    const [{ values }] = mockedSaveBatch.mock.calls[0]
+    expect(values).toEqual([
+      expect.objectContaining({
+        species: 'HE',
+        grade: 'A',
+        growthIndicator: 'O',
+        newValue: 21,
+        saveMode: 'update',
+      }),
+    ])
+  })
+
   it('copies only old-growth values into a new month and sends the first day of every month', async () => {
     mockedSearchLatest.mockResolvedValue([
       row('BA', 'A', 'O', PREVIOUS_MONTH, 10.25),
