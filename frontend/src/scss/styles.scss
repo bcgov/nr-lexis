@@ -1702,11 +1702,13 @@ legend.cds--label {
   vertical-align: top;
 }
 
-.legacy-search-table-frame .cds--data-table tbody tr:hover td {
-  background-color: var(--csp-brand-blue-tint-hover);
+.legacy-search-table-frame .cds--data-table tbody tr:hover td,
+.legacy-search-table-frame .cds--data-table tbody tr:focus-within td {
+  background-color: #dfeaf8;
 }
 
-.cds--g100 .legacy-search-table-frame .cds--data-table tbody tr:hover td {
+.cds--g100 .legacy-search-table-frame .cds--data-table tbody tr:hover td,
+.cds--g100 .legacy-search-table-frame .cds--data-table tbody tr:focus-within td {
   background-color: var(--csp-layer-hover);
 }
 
@@ -2707,8 +2709,14 @@ legend.cds--label {
   background: var(--fds-table-zebra, #f3f3f5);
 }
 
-.admin-upload-queue__table tbody tr:hover td {
-  background: var(--fds-interactive-light, #dfeaf8);
+.admin-upload-queue__table tbody tr:hover td,
+.admin-upload-queue__table tbody tr:focus-within td {
+  background: #dfeaf8;
+}
+
+:root[data-carbon-theme='g100'] .admin-upload-queue__table tbody tr:hover td,
+:root[data-carbon-theme='g100'] .admin-upload-queue__table tbody tr:focus-within td {
+  background: var(--fds-interactive-light);
 }
 
 .admin-upload-queue__table--generic th:nth-child(1),
@@ -2955,13 +2963,6 @@ legend.cds--label {
   min-inline-size: 56rem;
 }
 
-.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr,
-.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr:hover,
-.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr:hover td,
-.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody td {
-  background: var(--fds-layer-01, var(--cds-layer));
-}
-
 .admin-upload-review-table .cds--data-table tbody td {
   border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
 }
@@ -3110,6 +3111,11 @@ legend.cds--label {
 
 .rtm-amv-table-wrap .cds--data-table tbody tr:hover > td,
 .rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td {
+  background: #dfeaf8;
+}
+
+:root[data-carbon-theme='g100'] .rtm-amv-table-wrap .cds--data-table tbody tr:hover > td,
+:root[data-carbon-theme='g100'] .rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td {
   background: var(--csp-layer-hover);
 }
 
@@ -3970,15 +3976,41 @@ legend.cds--label {
 }
 
 .cds--data-table thead th {
-  background: var(--csp-table-header-bg);
+  background: #dfdfe1;
   color: var(--csp-table-header-text);
 }
 
+.cds--data-table tbody tr:nth-child(odd),
+.cds--data-table tbody tr:nth-child(odd) td {
+  background: #ffffff;
+}
+
+.cds--data-table tbody tr:nth-child(even),
 .cds--data-table tbody tr:nth-child(even) td {
+  background: #f3f3f5;
+}
+
+.cds--data-table tbody tr:hover td,
+.cds--data-table tbody tr:focus-within td {
+  background: #dfeaf8;
+}
+
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table thead th {
+  background: var(--csp-table-header-bg);
+}
+
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd),
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd) td {
+  background: var(--csp-layer-01);
+}
+
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even),
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) td {
   background: var(--csp-table-row-alt-bg);
 }
 
-.cds--g100 .app-shell .cds--data-table tbody tr:hover td {
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:hover td,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:focus-within td {
   background: var(--csp-layer-hover);
 }
 

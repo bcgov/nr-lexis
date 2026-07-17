@@ -77,6 +77,12 @@ export type ProvincialPermitDetailTabsRequest = {
   blanketOic?: boolean | null
 }
 
+export type ProvincialPermitFeesRequest = {
+  permitNumber: string
+  blanketOic?: boolean | null
+  packageNumbers?: string[]
+}
+
 export type UpdatePermitScaleAttachmentRequest = {
   scaleId: string
   permitNumber: string
@@ -561,12 +567,31 @@ const fetchGbmsRows = async (
   )
 }
 
-export const fetchProvincialPermitDetailTabs = async (
+const resolveDetailTabsRequest = (
   request: string | ProvincialPermitDetailTabsRequest,
+): Required<Pick<ProvincialPermitDetailTabsRequest, 'permitNumber'>> &
+  Omit<ProvincialPermitDetailTabsRequest, 'permitNumber'> => {
+  if (typeof request === 'string') {
+    return {
+      permitNumber: request,
+      receiptNumber: undefined,
+      blanketOic: false,
+    }
+  }
+
+  return request
+}
+
+const fetchProvincialPermitDetailTabsData = async (
+  request: string | ProvincialPermitDetailTabsRequest,
+  includeFees: boolean,
 ): Promise<ProvincialPermitDetailTabsData> => {
-  const permitNumber = typeof request === 'string' ? request : request.permitNumber
-  const receiptNumber = typeof request === 'string' ? undefined : request.receiptNumber
-  const blanketOic = typeof request === 'string' ? false : !!request.blanketOic
+  const {
+    permitNumber,
+    receiptNumber,
+    blanketOic: blanketOicValue,
+  } = resolveDetailTabsRequest(request)
+  const blanketOic = !!blanketOicValue
   const [applicationList, packageList] = await Promise.all([
     fetchApplicationList(permitNumber),
     fetchPackageList(permitNumber, blanketOic),
@@ -579,7 +604,11 @@ export const fetchProvincialPermitDetailTabs = async (
     Promise.all(
       packageList.map((packageNumber) => fetchScaleRows(permitNumber, packageNumber, blanketOic)),
     ),
-    Promise.all(packageList.map((packageNumber) => fetchScaleFeeRows(permitNumber, packageNumber))),
+    includeFees
+      ? Promise.all(
+          packageList.map((packageNumber) => fetchScaleFeeRows(permitNumber, packageNumber)),
+        )
+      : Promise.resolve<unknown[][]>([]),
   ])
   const scaleRows = packageScaleRows.flat()
   const feeRows = packageFeeRows.flat()
@@ -595,6 +624,29 @@ export const fetchProvincialPermitDetailTabs = async (
     boicItems: [],
   }
 }
+
+export const fetchProvincialPermitDetailCoreTabs = async (
+  request: string | ProvincialPermitDetailTabsRequest,
+): Promise<ProvincialPermitDetailTabsData> => fetchProvincialPermitDetailTabsData(request, false)
+
+export const fetchProvincialPermitFees = async ({
+  permitNumber,
+  blanketOic = false,
+  packageNumbers,
+}: ProvincialPermitFeesRequest): Promise<ProvincialPermitFeeRow[]> => {
+  const resolvedPackageNumbers = packageNumbers
+    ? packageNumbers.filter(Boolean)
+    : await fetchPackageList(permitNumber, !!blanketOic)
+  const packageFeeRows = await Promise.all(
+    resolvedPackageNumbers.map((packageNumber) => fetchScaleFeeRows(permitNumber, packageNumber)),
+  )
+
+  return packageFeeRows.flat().map(normalizeScaleFeeRow)
+}
+
+export const fetchProvincialPermitDetailTabs = async (
+  request: string | ProvincialPermitDetailTabsRequest,
+): Promise<ProvincialPermitDetailTabsData> => fetchProvincialPermitDetailTabsData(request, true)
 
 export const fetchAvailablePermitApplications = async (
   exemptionNumber: string,

@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvBatchSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvService;
@@ -114,6 +115,22 @@ class RtmEmsLogAmvControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(result);
     verify(service).save(request);
+  }
+
+  @Test
+  void saveBatchShouldDelegateTheFullGridSubmission() {
+    RtmEmsLogAmvSaveRequestDto value = request("2026-07-01", "2026-07-01");
+    RtmEmsLogAmvBatchSaveRequestDto request = new RtmEmsLogAmvBatchSaveRequestDto(List.of(value));
+    RtmEmsLogAmvMutationResultDto result =
+        new RtmEmsLogAmvMutationResultDto("accepted", "Saved grid.", List.of(), List.of());
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.saveBatch(request.values())).thenReturn(result);
+
+    ResponseEntity<RtmEmsLogAmvMutationResultDto> response = controller().saveBatch(request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(result);
+    verify(service).saveBatch(request.values());
   }
 
   @Test

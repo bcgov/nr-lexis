@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   previewRtmEmsLogAmvUpload,
   saveRtmEmsLogAmv,
+  saveRtmEmsLogAmvBatch,
   searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
   uploadRtmEmsLogAmv,
@@ -92,6 +93,39 @@ describe('rtm-emslogamv-service', () => {
       errors: [],
       rows: [],
     })
+  })
+
+  it('posts the full AMV grid as one batch', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        status: 'accepted',
+        message: 'Average monthly values saved.',
+        errors: [],
+        rows: [],
+      },
+    })
+    const request = {
+      values: [
+        {
+          species: 'PINE',
+          grade: 'A',
+          growthIndicator: 'O',
+          retrievalDate: '2026-06-01',
+          updateDate: '2026-06-01',
+          newValue: 123.45,
+          saveMode: 'update' as const,
+        },
+      ],
+    }
+
+    const result = await saveRtmEmsLogAmvBatch(request)
+
+    expect(postMock).toHaveBeenCalledWith(
+      '/lexis/rtm/emslogamv/batch',
+      request,
+      expect.objectContaining({ validateStatus: expect.any(Function) }),
+    )
+    expect(result).toEqual(expect.objectContaining({ status: 'accepted' }))
   })
 
   it('retains the dormant AMV upload preview client contract', async () => {

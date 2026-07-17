@@ -87,6 +87,29 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
     mockMvc
         .perform(
+            post("/api/lexis/rtm/emslogamv/batch")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "values":[
+                        {
+                          "species":"BA",
+                          "grade":"A",
+                          "growthIndicator":"O",
+                          "retrievalDate":"2099-01-01",
+                          "updateDate":"2099-01-01",
+                          "newValue":10.01,
+                          "saveMode":"create"
+                        }
+                      ]
+                    }
+                    """)
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(
             post("/api/lexis/rtm/emslogamv/preview")
                 .with(jwt().authorities(admin)))
         .andExpect(status().isNotFound());
@@ -127,6 +150,14 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
             post("/api/lexis/rtm/emslogamv")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/rtm/emslogamv/batch")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"values\":[]}")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isForbidden());
   }

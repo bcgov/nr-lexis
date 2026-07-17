@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvBatchSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
@@ -61,6 +62,15 @@ public class RtmEmsLogAmvController {
             : request;
 
     RtmEmsLogAmvMutationResultDto result = service.save(normalizedRequest);
+    return ResponseEntity.status(responseStatus(result.status())).body(result);
+  }
+
+  @PostMapping("/emslogamv/batch")
+  public ResponseEntity<RtmEmsLogAmvMutationResultDto> saveBatch(
+      @RequestBody(required = false) RtmEmsLogAmvBatchSaveRequestDto request) {
+    RtmEmsLogAmvService service = requiredService("save_batch");
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(request == null ? List.of() : request.values());
     return ResponseEntity.status(responseStatus(result.status())).body(result);
   }
 

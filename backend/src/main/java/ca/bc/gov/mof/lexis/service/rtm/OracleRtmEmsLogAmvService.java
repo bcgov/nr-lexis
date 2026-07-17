@@ -15,8 +15,10 @@ import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +44,16 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_SUCCESS = "accepted";
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
+  private static final List<String> GROWTH_TARGETS = List.of("O", "S");
+  private static final Map<String, List<String>> BATCH_SPECIES_TARGETS =
+      Map.of(
+          "BA", List.of("BA"),
+          "HE", List.of("HE"),
+          "CE", List.of("CE"),
+          "CY", List.of("CY"),
+          "FI", List.of("FI"),
+          "SP", List.of("SP"),
+          "PINE", List.of("WH", "LO", "YE"));
   private final OracleRtmEmsLogAmvRepository repository;
   private final VirusScanService virusScanService;
 
@@ -167,6 +179,92 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         "Save completed. " + (SAVE_MODE_UPDATE.equals(saveMode) ? "Updated" : "Created") + " value.",
         List.of(),
         List.of(buildSavedRow(species, grade, growthIndicator, retrievalDate, updateDate, request)));
+  }
+
+  @Override
+  @Transactional
+  public RtmEmsLogAmvMutationResultDto saveBatch(List<RtmEmsLogAmvSaveRequestDto> requests) {
+    if (requests == null || requests.isEmpty()) {
+      return buildMutationResult(
+          RETURN_VALIDATION,
+          "Please correct the highlighted fields.",
+          List.of("At least one AMV table value is required."),
+          List.of());
+    }
+
+    List<String> errors = new ArrayList<>();
+    Map<String, OracleRtmEmsLogAmvRepository.AtomicWriteTarget> targetsByKey =
+        new LinkedHashMap<>();
+    List<RtmEmsLogAmvRowDto> savedRows = new ArrayList<>();
+
+    for (int requestIndex = 0; requestIndex < requests.size(); requestIndex++) {
+      RtmEmsLogAmvSaveRequestDto request = requests.get(requestIndex);
+      int tableValueIndex = requestIndex + 1;
+      List<String> requestErrors = validateBatchSaveRequest(request);
+      if (!requestErrors.isEmpty()) {
+        requestErrors.forEach(error -> errors.add("Table value %d: %s".formatted(tableValueIndex, error)));
+        continue;
+      }
+
+      String logicalSpecies = RtmEmsLogAmvDimensionValidator.normalize(request.species());
+      String grade = RtmEmsLogAmvDimensionValidator.normalize(request.grade());
+      LocalDate retrievalDate = parseRetrievalDate(request.retrievalDate());
+      LocalDate updateDate = parseRetrievalDate(request.updateDate());
+      LocalDate effectiveDate = effectiveDateForSave(request.effectiveSaveMode(), retrievalDate, updateDate);
+
+      for (String species : BATCH_SPECIES_TARGETS.get(logicalSpecies)) {
+        for (String growthIndicator : GROWTH_TARGETS) {
+          OracleRtmEmsLogAmvRepository.AtomicWriteTarget target =
+              new OracleRtmEmsLogAmvRepository.AtomicWriteTarget(
+                  species, grade, growthIndicator, effectiveDate, request.newValue());
+          String targetKey =
+              "%s|%s|%s|%s".formatted(species, grade, growthIndicator, effectiveDate);
+          OracleRtmEmsLogAmvRepository.AtomicWriteTarget previous =
+              targetsByKey.putIfAbsent(targetKey, target);
+          if (previous != null && previous.newValue().compareTo(target.newValue()) != 0) {
+            errors.add(
+                "Table values target the same physical AMV row with different amounts: %s."
+                    .formatted(targetKey));
+          }
+        }
+      }
+    }
+
+    if (!errors.isEmpty()) {
+      return buildMutationResult(RETURN_VALIDATION, "Please correct the highlighted fields.", errors, List.of());
+    }
+
+    List<OracleRtmEmsLogAmvRepository.AtomicWriteTarget> targets =
+        List.copyOf(targetsByKey.values());
+    int[] updateCounts = repository.upsertAtomically(targets);
+    if (!allWritesApplied(updateCounts, targets.size())) {
+      markRollbackOnly();
+      return buildMutationResult(
+          RETURN_FAILURE,
+          "Unable to save all average monthly values.",
+          List.of("The full AMV submission was not applied."),
+          List.of());
+    }
+
+    for (OracleRtmEmsLogAmvRepository.AtomicWriteTarget target : targets) {
+      savedRows.add(
+          new RtmEmsLogAmvRowDto(
+              target.species(),
+              target.grade(),
+              target.growthIndicator(),
+              formatDate(target.effectiveDate()),
+              formatDate(target.effectiveDate()),
+              null,
+              target.newValue(),
+              "0"));
+    }
+
+    return buildMutationResult(
+        RETURN_SUCCESS,
+        "Saved %d table value%s to old and second growth."
+            .formatted(requests.size(), requests.size() == 1 ? "" : "s"),
+        List.of(),
+        savedRows);
   }
 
   @Override
@@ -409,6 +507,49 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   private List<String> validateSaveRequest(RtmEmsLogAmvSaveRequestDto request) {
+    List<String> errors = validateSaveRequestFields(request);
+    if (request == null) {
+      return errors;
+    }
+
+    LocalDate effectiveDate =
+        effectiveDateForSave(
+            request.effectiveSaveMode(),
+            parseRetrievalDate(request.retrievalDate()),
+            parseRetrievalDate(request.updateDate()));
+    errors.addAll(
+        RtmEmsLogAmvDimensionValidator.validate(
+            request.species(), request.grade(), request.growthIndicator(), effectiveDate));
+
+    return errors;
+  }
+
+  private List<String> validateBatchSaveRequest(RtmEmsLogAmvSaveRequestDto request) {
+    List<String> errors = validateSaveRequestFields(request);
+    if (request == null) {
+      return errors;
+    }
+
+    String logicalSpecies = RtmEmsLogAmvDimensionValidator.normalize(request.species());
+    List<String> physicalSpecies = BATCH_SPECIES_TARGETS.get(logicalSpecies);
+    if (physicalSpecies == null) {
+      errors.add("Species must be Balsam, Hemlock, Cedar, Cypress, Fir, Spruce, or Pine.");
+      return errors;
+    }
+
+    LocalDate effectiveDate =
+        effectiveDateForSave(
+            request.effectiveSaveMode(),
+            parseRetrievalDate(request.retrievalDate()),
+            parseRetrievalDate(request.updateDate()));
+    for (String species : physicalSpecies) {
+      errors.addAll(
+          RtmEmsLogAmvDimensionValidator.validate(species, request.grade(), "O", effectiveDate));
+    }
+    return errors;
+  }
+
+  private List<String> validateSaveRequestFields(RtmEmsLogAmvSaveRequestDto request) {
     List<String> errors = new ArrayList<>();
     if (request == null) {
       return List.of("Save request is required.");
@@ -442,14 +583,6 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         && parsedUpdateDate.isBefore(parsedRetrievalDate)) {
       errors.add("Update date must be on or after the retrieval date.");
     }
-
-    LocalDate effectiveDate =
-        SAVE_MODE_UPDATE.equals(saveMode)
-            ? effectiveDateForSave(saveMode, parsedRetrievalDate, parsedUpdateDate)
-            : parsedRetrievalDate;
-    errors.addAll(
-        RtmEmsLogAmvDimensionValidator.validate(
-            request.species(), request.grade(), request.growthIndicator(), effectiveDate));
 
     return errors;
   }
@@ -792,6 +925,13 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors,
         warnings,
         rows);
+  }
+
+  private boolean allWritesApplied(int[] updateCounts, int expectedCount) {
+    return updateCounts != null
+        && updateCounts.length == expectedCount
+        && Arrays.stream(updateCounts)
+            .allMatch(count -> count > 0 || count == Statement.SUCCESS_NO_INFO);
   }
 
   private void markRollbackOnly() {

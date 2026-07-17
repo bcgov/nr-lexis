@@ -40,6 +40,7 @@ public class LexisApiAuthorizationCustomizer
   };
   private static final String[] PROD_RTM_ONLY_POST_PATTERNS = {
     "/api/lexis/rtm/emslogamv",
+    "/api/lexis/rtm/emslogamv/batch",
     "/api/lexis/rtm/emslogamv/preview",
     "/api/lexis/rtm/emslogamv/upload"
   };

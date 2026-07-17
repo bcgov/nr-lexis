@@ -7,7 +7,9 @@ import {
   deleteBlanketOicScale,
   fetchBlanketOicPackageEditContext,
   fetchAvailablePermitApplications,
+  fetchProvincialPermitDetailCoreTabs,
   fetchProvincialPermitDetailTabs,
+  fetchProvincialPermitFees,
   removeApplicationFromPermit,
   updateBlanketOicPackage,
   updatePermitScaleAttachment,
@@ -255,6 +257,76 @@ describe('provincial permit detail services', () => {
       oicItems: [],
       boicItems: [],
     })
+  })
+
+  it('loads core permit tabs without requesting fee rows, then loads fees from known packages', async () => {
+    getCachedResponseMock.mockImplementation((path: string) => {
+      switch (path) {
+        case '/lexis/rpc/permit-details/application-list':
+          return Promise.resolve(response({ applicationList: ['1000456'] }))
+        case '/lexis/rpc/permit-details/package-list':
+          return Promise.resolve(response({ packageList: ['PKG-100'] }))
+        case '/lexis/rpc/permit-details/package-info':
+          return Promise.resolve(response({ region: 'Coast' }))
+        case '/lexis/rpc/permit-details/scales-for-package':
+          return Promise.resolve(response({ scaleList: [] }))
+        case '/lexis/rpc/permit-details/gbms-invoice-history':
+          return Promise.resolve(response([]))
+        case '/lexis/rpc/permit-details/scale-fees-for-package':
+          return Promise.resolve(
+            response({
+              scaleList: [
+                {
+                  id: 'SCALE-1',
+                  timbermark: 'TM-1',
+                  species: 'Fir',
+                  grade: 'A',
+                  amv: '$125.00',
+                  volume: '34.5',
+                  fee: '$123.45',
+                },
+              ],
+            }),
+          )
+        default:
+          return Promise.reject(new Error(`Unexpected request ${path}`))
+      }
+    })
+
+    const core = await fetchProvincialPermitDetailCoreTabs({
+      permitNumber: 'P-777',
+      receiptNumber: 'RCPT-1',
+    })
+
+    expect(core.fees).toEqual([])
+    expect(getCachedResponseMock).not.toHaveBeenCalledWith(
+      '/lexis/rpc/permit-details/scale-fees-for-package',
+      expect.anything(),
+      expect.anything(),
+    )
+
+    const fees = await fetchProvincialPermitFees({
+      permitNumber: 'P-777',
+      packageNumbers: core.packages.map((row) => row.packageNumber),
+    })
+
+    expect(fees).toEqual([
+      expect.objectContaining({
+        id: 'SCALE-1',
+        packageNumber: 'PKG-100',
+        amount: 123.45,
+      }),
+    ])
+    expect(getCachedResponseMock).toHaveBeenLastCalledWith(
+      '/lexis/rpc/permit-details/scale-fees-for-package',
+      {
+        params: {
+          packageNumber: 'PKG-100',
+          permitNumber: 'P-777',
+        },
+      },
+      { ttlMs: 30_000 },
+    )
   })
 
   it('loads Blanket OIC package rows from the legacy OIC permit endpoints', async () => {

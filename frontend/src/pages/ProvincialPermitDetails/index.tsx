@@ -90,7 +90,8 @@ import {
   deleteBlanketOicScale,
   fetchBlanketOicPackageEditContext,
   fetchAvailablePermitApplications,
-  fetchProvincialPermitDetailTabs,
+  fetchProvincialPermitDetailCoreTabs,
+  fetchProvincialPermitFees,
   removeApplicationFromPermit,
   updateBlanketOicPackage,
   updatePermitScaleAttachment,
@@ -189,6 +190,13 @@ const PERMIT_DETAIL_TABS = [
 ] as const
 
 type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
+type DeferredPermitTabId = Extract<PermitDetailTabId, 'fees' | 'documents' | 'invoices'>
+
+const EMPTY_DEFERRED_PERMIT_TAB_STATE: Record<DeferredPermitTabId, boolean> = {
+  fees: false,
+  documents: false,
+  invoices: false,
+}
 
 const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
   packageNumber: '',
@@ -506,8 +514,19 @@ const ProvincialPermitDetailsPage = () => {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [permitTablesErrorMessage, setPermitTablesErrorMessage] = useState('')
-  const [documentsInvoicesErrorMessage, setDocumentsInvoicesErrorMessage] = useState('')
+  const [permitFeesErrorMessage, setPermitFeesErrorMessage] = useState('')
+  const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
+  const [invoicesErrorMessage, setInvoicesErrorMessage] = useState('')
   const [documentsInvoicesErrorDismissed, setDocumentsInvoicesErrorDismissed] = useState(false)
+  const [deferredPermitTabLoaded, setDeferredPermitTabLoaded] = useState(
+    EMPTY_DEFERRED_PERMIT_TAB_STATE,
+  )
+  const [deferredPermitTabLoading, setDeferredPermitTabLoading] = useState(
+    EMPTY_DEFERRED_PERMIT_TAB_STATE,
+  )
+  const documentsInvoicesErrorMessage = [documentsErrorMessage, invoicesErrorMessage]
+    .filter(Boolean)
+    .join(' ')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -564,9 +583,14 @@ const ProvincialPermitDetailsPage = () => {
   const [permitOptionsErrorMessage, setPermitOptionsErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
+  const beginPermitFeesRequest = useLatestRequestGuard()
+  const beginPermitDocumentsRequest = useLatestRequestGuard()
+  const beginPermitInvoicesRequest = useLatestRequestGuard()
   const beginPermitMutationRequest = useLatestRequestGuard()
   const beginBoicPackageEditRequest = useLatestRequestGuard()
   const beginAvailablePermitApplicationsRequest = useLatestRequestGuard()
+  const deferredPermitTabLoadsRef = useRef(new Set<DeferredPermitTabId>())
+  const loadedDeferredPermitTabsRef = useRef(new Set<DeferredPermitTabId>())
   const permitMutationInFlightRef = useRef(false)
   const tryBeginPermitMutation = useCallback(() => {
     if (permitMutationInFlightRef.current) return null
@@ -596,6 +620,13 @@ const ProvincialPermitDetailsPage = () => {
   )
 
   const resetPermitRouteDrafts = useCallback(() => {
+    beginPermitFeesRequest()
+    beginPermitDocumentsRequest()
+    beginPermitInvoicesRequest()
+    deferredPermitTabLoadsRef.current.clear()
+    loadedDeferredPermitTabsRef.current.clear()
+    setDeferredPermitTabLoaded(EMPTY_DEFERRED_PERMIT_TAB_STATE)
+    setDeferredPermitTabLoading(EMPTY_DEFERRED_PERMIT_TAB_STATE)
     void beginBoicPackageEditRequest()
     void beginAvailablePermitApplicationsRequest()
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -614,12 +645,21 @@ const ProvincialPermitDetailsPage = () => {
     setInvoiceDocumentUploadDirty(false)
     setInvoiceDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
+    setDocumentRows([])
+    setInvoiceRows([])
+    setSelectedPermitTabId('permit')
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setIsLoadingAvailableApplications(false)
     setPermitApprovalEmailOpen(false)
     setPermitApprovalEmailAddress('')
-  }, [beginAvailablePermitApplicationsRequest, beginBoicPackageEditRequest])
+  }, [
+    beginAvailablePermitApplicationsRequest,
+    beginBoicPackageEditRequest,
+    beginPermitDocumentsRequest,
+    beginPermitFeesRequest,
+    beginPermitInvoicesRequest,
+  ])
 
   useEffect(() => {
     let active = true
@@ -696,7 +736,8 @@ const ProvincialPermitDetailsPage = () => {
         setPermitTablesErrorMessage('')
         setDocumentRows([])
         setInvoiceRows([])
-        setDocumentsInvoicesErrorMessage('')
+        setDocumentsErrorMessage('')
+        setInvoicesErrorMessage('')
         setDocumentsInvoicesErrorDismissed(false)
         setLoading(false)
         return
@@ -705,7 +746,9 @@ const ProvincialPermitDetailsPage = () => {
       setLoading(true)
       setErrorMessage('')
       setPermitTablesErrorMessage('')
-      setDocumentsInvoicesErrorMessage('')
+      setPermitFeesErrorMessage('')
+      setDocumentsErrorMessage('')
+      setInvoicesErrorMessage('')
       setDocumentsInvoicesErrorDismissed(false)
       setTabsData(null)
       setFeeOverrideContext(null)
@@ -756,7 +799,7 @@ const ProvincialPermitDetailsPage = () => {
         }
 
         try {
-          const tabsResult = await fetchProvincialPermitDetailTabs({
+          const tabsResult = await fetchProvincialPermitDetailCoreTabs({
             permitNumber,
             receiptNumber: response.receiptNumber,
             blanketOic: response.blanketOic,
@@ -770,25 +813,6 @@ const ProvincialPermitDetailsPage = () => {
             console.error(error)
             setTabsData(EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS)
             setPermitTablesErrorMessage('Unable to retrieve permit table details.')
-          }
-        }
-
-        try {
-          const documentsResult = await fetchPermitDocuments(permitNumber)
-          const invoicesResult = await fetchPermitInvoices(permitNumber)
-          if (isLatestRequest()) {
-            setDocumentRows(documentsResult.rows)
-            setInvoiceRows(invoicesResult.rows)
-          }
-        } catch (error) {
-          if (isLatestRequest()) {
-            console.error(error)
-            setDocumentRows([])
-            setInvoiceRows([])
-            setDocumentsInvoicesErrorMessage(
-              'Unable to retrieve permit documents or invoice details.',
-            )
-            setDocumentsInvoicesErrorDismissed(false)
           }
         }
       } catch (error) {
@@ -807,7 +831,8 @@ const ProvincialPermitDetailsPage = () => {
           setPermitTablesErrorMessage('')
           setDocumentRows([])
           setInvoiceRows([])
-          setDocumentsInvoicesErrorMessage('')
+          setDocumentsErrorMessage('')
+          setInvoicesErrorMessage('')
           setDocumentsInvoicesErrorDismissed(false)
         }
       } finally {
@@ -880,6 +905,92 @@ const ProvincialPermitDetailsPage = () => {
       isCancelled = true
     }
   }, [detail])
+
+  const loadDeferredPermitTab = useCallback(
+    async (
+      tab: DeferredPermitTabId,
+      options: { force?: boolean; packageNumbers?: string[] } = {},
+    ) => {
+      const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+      if (
+        !resolvedPermitNumber ||
+        deferredPermitTabLoadsRef.current.has(tab) ||
+        (!options.force && loadedDeferredPermitTabsRef.current.has(tab)) ||
+        (tab === 'fees' && !options.force && (!tabsData || !!permitTablesErrorMessage))
+      ) {
+        return
+      }
+
+      const isLatestRequest =
+        tab === 'fees'
+          ? beginPermitFeesRequest()
+          : tab === 'documents'
+            ? beginPermitDocumentsRequest()
+            : beginPermitInvoicesRequest()
+      deferredPermitTabLoadsRef.current.add(tab)
+      setDeferredPermitTabLoading((current) => ({ ...current, [tab]: true }))
+
+      try {
+        if (tab === 'fees') {
+          const fees = await fetchProvincialPermitFees({
+            permitNumber: resolvedPermitNumber,
+            blanketOic: detail?.blanketOic,
+            packageNumbers:
+              options.packageNumbers ?? tabsData?.packages.map((row) => row.packageNumber),
+          })
+          if (!isLatestRequest()) return
+          setTabsData((current) => (current ? { ...current, fees } : current))
+          setPermitFeesErrorMessage('')
+        } else if (tab === 'documents') {
+          const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
+          if (!isLatestRequest()) return
+          setDocumentRows(documentsResult.rows)
+          setDocumentsErrorMessage('')
+        } else {
+          const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+          if (!isLatestRequest()) return
+          setInvoiceRows(invoicesResult.rows)
+          setInvoicesErrorMessage('')
+        }
+
+        loadedDeferredPermitTabsRef.current.add(tab)
+        setDeferredPermitTabLoaded((current) => ({ ...current, [tab]: true }))
+      } catch (error) {
+        if (!isLatestRequest()) return
+        console.error(error)
+        if (tab === 'fees') {
+          setPermitFeesErrorMessage('Unable to retrieve permit fee details.')
+        } else {
+          if (tab === 'documents') {
+            setDocumentRows([])
+          } else {
+            setInvoiceRows([])
+          }
+          if (tab === 'documents') {
+            setDocumentsErrorMessage('Unable to retrieve permit documents.')
+          } else {
+            setInvoicesErrorMessage('Unable to retrieve permit invoice details.')
+          }
+          setDocumentsInvoicesErrorDismissed(false)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          deferredPermitTabLoadsRef.current.delete(tab)
+          setDeferredPermitTabLoading((current) => ({ ...current, [tab]: false }))
+        }
+      }
+    },
+    [
+      beginPermitDocumentsRequest,
+      beginPermitFeesRequest,
+      beginPermitInvoicesRequest,
+      detail?.blanketOic,
+      detail?.permitNumber,
+      permitNumber,
+      permitTablesErrorMessage,
+      tabsData,
+    ],
+  )
 
   const filteredItems = useMemo(() => {
     if (!tabsData) {
@@ -1199,14 +1310,20 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
-    const tabsResult = await fetchProvincialPermitDetailTabs({
+    const tabsResult = await fetchProvincialPermitDetailCoreTabs({
       permitNumber: resolvedPermitNumber,
       receiptNumber: detail.receiptNumber,
       blanketOic: detail.blanketOic,
     })
     setTabsData(tabsResult)
     setPermitTablesErrorMessage('')
-  }, [detail, permitNumber])
+    if (loadedDeferredPermitTabsRef.current.has('fees')) {
+      await loadDeferredPermitTab('fees', {
+        force: true,
+        packageNumbers: tabsResult.packages.map((row) => row.packageNumber),
+      })
+    }
+  }, [detail, loadDeferredPermitTab, permitNumber])
 
   const reloadAvailablePermitApplications = useCallback(async () => {
     const isLatestRequest = beginAvailablePermitApplicationsRequest()
@@ -2138,12 +2255,31 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
-    const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
-    const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+    beginPermitDocumentsRequest()
+    beginPermitInvoicesRequest()
+    deferredPermitTabLoadsRef.current.delete('documents')
+    deferredPermitTabLoadsRef.current.delete('invoices')
+    setDeferredPermitTabLoading((current) => ({
+      ...current,
+      documents: false,
+      invoices: false,
+    }))
+    const [documentsResult, invoicesResult] = await Promise.all([
+      fetchPermitDocuments(resolvedPermitNumber),
+      fetchPermitInvoices(resolvedPermitNumber),
+    ])
     setDocumentRows(documentsResult.rows)
     setInvoiceRows(invoicesResult.rows)
-    setDocumentsInvoicesErrorMessage('')
-  }, [detail?.permitNumber, permitNumber])
+    loadedDeferredPermitTabsRef.current.add('documents')
+    loadedDeferredPermitTabsRef.current.add('invoices')
+    setDeferredPermitTabLoaded((current) => ({
+      ...current,
+      documents: true,
+      invoices: true,
+    }))
+    setDocumentsErrorMessage('')
+    setInvoicesErrorMessage('')
+  }, [beginPermitDocumentsRequest, beginPermitInvoicesRequest, detail?.permitNumber, permitNumber])
 
   const onOpenDocument = useCallback(
     async (row: PermitDocumentRow) => {
@@ -2292,12 +2428,31 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
 
-        const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
-        const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+        beginPermitDocumentsRequest()
+        beginPermitInvoicesRequest()
+        deferredPermitTabLoadsRef.current.delete('documents')
+        deferredPermitTabLoadsRef.current.delete('invoices')
+        setDeferredPermitTabLoading((current) => ({
+          ...current,
+          documents: false,
+          invoices: false,
+        }))
+        const [documentsResult, invoicesResult] = await Promise.all([
+          fetchPermitDocuments(resolvedPermitNumber),
+          fetchPermitInvoices(resolvedPermitNumber),
+        ])
         if (isLatestRequest()) {
           setDocumentRows(documentsResult.rows)
           setInvoiceRows(invoicesResult.rows)
-          setDocumentsInvoicesErrorMessage('')
+          loadedDeferredPermitTabsRef.current.add('documents')
+          loadedDeferredPermitTabsRef.current.add('invoices')
+          setDeferredPermitTabLoaded((current) => ({
+            ...current,
+            documents: true,
+            invoices: true,
+          }))
+          setDocumentsErrorMessage('')
+          setInvoicesErrorMessage('')
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -2312,6 +2467,8 @@ const ProvincialPermitDetailsPage = () => {
     },
     [
       beginDocumentRefreshRequest,
+      beginPermitDocumentsRequest,
+      beginPermitInvoicesRequest,
       canDeleteInvoiceDocuments,
       canDeletePermitDocuments,
       detail?.permitNumber,
@@ -2499,7 +2656,11 @@ const ProvincialPermitDetailsPage = () => {
                 <dd>
                   {documentsInvoicesErrorMessage
                     ? 'Unavailable'
-                    : documentRows.length.toLocaleString()}
+                    : deferredPermitTabLoading.documents
+                      ? 'Loading…'
+                      : deferredPermitTabLoaded.documents
+                        ? documentRows.length.toLocaleString()
+                        : '—'}
                 </dd>
               </div>
             </dl>
@@ -2630,6 +2791,13 @@ const ProvincialPermitDetailsPage = () => {
                 const selectedTab = PERMIT_DETAIL_TABS[selectedIndex]
                 if (selectedTab) {
                   setSelectedPermitTabId(selectedTab.id)
+                  if (
+                    selectedTab.id === 'fees' ||
+                    selectedTab.id === 'documents' ||
+                    selectedTab.id === 'invoices'
+                  ) {
+                    void loadDeferredPermitTab(selectedTab.id)
+                  }
                 }
               }}
             >
@@ -3922,7 +4090,17 @@ const ProvincialPermitDetailsPage = () => {
                           onChange={(event) => updateFilterParam('feesFilter', event.target.value)}
                           placeholder="Filter by package, timber mark, species, grade, or amount"
                         />
-                        {!permitTablesErrorMessage &&
+                        {permitFeesErrorMessage ? (
+                          <EmptyState
+                            title="Fee details unavailable"
+                            description={permitFeesErrorMessage}
+                            headingLevel={3}
+                            role="alert"
+                          />
+                        ) : deferredPermitTabLoading.fees ? (
+                          <InlineLoading description="Loading permit fee details..." />
+                        ) : (
+                          !permitTablesErrorMessage &&
                           (filteredFees.length > 0 ? (
                             <TableFrame ariaLabel="Permit fee rows">
                               <Table useZebraStyles>
@@ -3978,7 +4156,8 @@ const ProvincialPermitDetailsPage = () => {
                               }
                               headingLevel={3}
                             />
-                          ))}
+                          ))
+                        )}
                       </Tile>
                     </Column>
                   </Grid>
@@ -4062,10 +4241,12 @@ const ProvincialPermitDetailsPage = () => {
                           }
                           placeholder="Filter by file name, description, type, source, or id"
                         />
-                        {documentsInvoicesErrorMessage ? (
+                        {deferredPermitTabLoading.documents ? (
+                          <InlineLoading description="Loading permit documents..." />
+                        ) : documentsErrorMessage ? (
                           <EmptyState
                             title="Permit documents unavailable"
-                            description={documentsInvoicesErrorMessage}
+                            description={documentsErrorMessage}
                             headingLevel={3}
                             role="alert"
                           />
@@ -4175,10 +4356,12 @@ const ProvincialPermitDetailsPage = () => {
                           }
                           placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
                         />
-                        {documentsInvoicesErrorMessage ? (
+                        {deferredPermitTabLoading.invoices ? (
+                          <InlineLoading description="Loading permit invoices..." />
+                        ) : invoicesErrorMessage ? (
                           <EmptyState
                             title="Invoices unavailable"
-                            description={documentsInvoicesErrorMessage}
+                            description={invoicesErrorMessage}
                             headingLevel={3}
                             role="alert"
                           />

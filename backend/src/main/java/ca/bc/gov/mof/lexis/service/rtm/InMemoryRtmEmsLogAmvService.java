@@ -32,6 +32,16 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_SUCCESS = "accepted";
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
+  private static final List<String> GROWTH_TARGETS = List.of("O", "S");
+  private static final Map<String, List<String>> BATCH_SPECIES_TARGETS =
+      Map.of(
+          "BA", List.of("BA"),
+          "HE", List.of("HE"),
+          "CE", List.of("CE"),
+          "CY", List.of("CY"),
+          "FI", List.of("FI"),
+          "SP", List.of("SP"),
+          "PINE", List.of("WH", "LO", "YE"));
 
   private final VirusScanService virusScanService;
 
@@ -222,6 +232,86 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         "Save completed. Created value.",
         List.of(),
         List.of(created));
+  }
+
+  @Override
+  public RtmEmsLogAmvMutationResultDto saveBatch(List<RtmEmsLogAmvSaveRequestDto> requests) {
+    if (requests == null || requests.isEmpty()) {
+      return buildMutationResult(
+          RETURN_VALIDATION,
+          "Please correct the highlighted fields.",
+          List.of("At least one AMV table value is required."),
+          List.of());
+    }
+
+    List<String> errors = new ArrayList<>();
+    Map<String, BatchTarget> targetsByKey = new LinkedHashMap<>();
+    for (int requestIndex = 0; requestIndex < requests.size(); requestIndex++) {
+      RtmEmsLogAmvSaveRequestDto request = requests.get(requestIndex);
+      int tableValueIndex = requestIndex + 1;
+      List<String> requestErrors = validateBatchSaveRequest(request);
+      if (!requestErrors.isEmpty()) {
+        requestErrors.forEach(error -> errors.add("Table value %d: %s".formatted(tableValueIndex, error)));
+        continue;
+      }
+
+      String logicalSpecies = RtmEmsLogAmvDimensionValidator.normalize(request.species());
+      String grade = RtmEmsLogAmvDimensionValidator.normalize(request.grade());
+      LocalDate retrievalDate = parseRetrievalDate(request.retrievalDate());
+      LocalDate updateDate = parseRetrievalDate(request.updateDate());
+      LocalDate effectiveDate = effectiveDateForSave(request.effectiveSaveMode(), retrievalDate, updateDate);
+      for (String species : BATCH_SPECIES_TARGETS.get(logicalSpecies)) {
+        for (String growthIndicator : GROWTH_TARGETS) {
+          BatchTarget target =
+              new BatchTarget(species, grade, growthIndicator, effectiveDate, request.newValue());
+          String targetKey =
+              "%s|%s|%s|%s".formatted(species, grade, growthIndicator, effectiveDate);
+          BatchTarget previous = targetsByKey.putIfAbsent(targetKey, target);
+          if (previous != null && previous.newValue().compareTo(target.newValue()) != 0) {
+            errors.add(
+                "Table values target the same physical AMV row with different amounts: %s."
+                    .formatted(targetKey));
+          }
+        }
+      }
+    }
+
+    if (!errors.isEmpty()) {
+      return buildMutationResult(RETURN_VALIDATION, "Please correct the highlighted fields.", errors, List.of());
+    }
+
+    List<RtmEmsLogAmvRowDto> nextRows = new ArrayList<>(rows);
+    List<RtmEmsLogAmvRowDto> savedRows = new ArrayList<>();
+    for (BatchTarget target : targetsByKey.values()) {
+      String effectiveDate = formatDate(target.effectiveDate());
+      int existingIndex = findMatchingRowIndex(
+          nextRows, target.species(), target.grade(), target.growthIndicator(), effectiveDate);
+      RtmEmsLogAmvRowDto current = existingIndex < 0 ? null : nextRows.get(existingIndex);
+      RtmEmsLogAmvRowDto saved = new RtmEmsLogAmvRowDto(
+          target.species(),
+          target.grade(),
+          target.growthIndicator(),
+          effectiveDate,
+          effectiveDate,
+          current == null ? null : current.newValue(),
+          target.newValue(),
+          "0");
+      if (existingIndex < 0) {
+        nextRows.add(saved);
+      } else {
+        nextRows.set(existingIndex, saved);
+      }
+      savedRows.add(saved);
+    }
+
+    rows.clear();
+    rows.addAll(nextRows);
+    return buildMutationResult(
+        RETURN_SUCCESS,
+        "Saved %d table value%s to old and second growth."
+            .formatted(requests.size(), requests.size() == 1 ? "" : "s"),
+        List.of(),
+        savedRows);
   }
 
   @Override
@@ -569,6 +659,66 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     return errors;
   }
 
+  private List<String> validateBatchSaveRequest(RtmEmsLogAmvSaveRequestDto request) {
+    List<String> errors = new ArrayList<>();
+    if (request == null) {
+      return List.of("Save request is required.");
+    }
+
+    LocalDate parsedRetrievalDate = parseRetrievalDate(request.retrievalDate());
+    if (parsedRetrievalDate == null) {
+      errors.add(
+          "Retrieval date is required and must identify a month as YYYYMM, YYYY-MM, or YYYY-MM-01.");
+    }
+    validateMonthStart(parsedRetrievalDate, "Retrieval date", errors);
+    errors.addAll(RtmEmsLogAmvValueValidator.validate(request.newValue()));
+
+    String saveMode = request.effectiveSaveMode();
+    if (!SAVE_MODE_CREATE.equals(saveMode) && !SAVE_MODE_UPDATE.equals(saveMode)) {
+      errors.add("Save mode must be 'create' or 'update'.");
+    }
+
+    LocalDate parsedUpdateDate = parseRetrievalDate(request.updateDate());
+    if (SAVE_MODE_UPDATE.equals(saveMode) && parsedUpdateDate == null) {
+      errors.add(
+          "Update date is required for update mode and must identify a month as YYYYMM, YYYY-MM, or YYYY-MM-01.");
+    }
+    if (SAVE_MODE_UPDATE.equals(saveMode)) {
+      validateMonthStart(parsedUpdateDate, "Update date", errors);
+    }
+    if (SAVE_MODE_UPDATE.equals(saveMode)
+        && parsedRetrievalDate != null
+        && parsedUpdateDate != null
+        && parsedUpdateDate.isBefore(parsedRetrievalDate)) {
+      errors.add("Update date must be on or after the retrieval date.");
+    }
+
+    String logicalSpecies = RtmEmsLogAmvDimensionValidator.normalize(request.species());
+    List<String> physicalSpecies = BATCH_SPECIES_TARGETS.get(logicalSpecies);
+    if (physicalSpecies == null) {
+      errors.add("Species must be Balsam, Hemlock, Cedar, Cypress, Fir, Spruce, or Pine.");
+      return errors;
+    }
+
+    LocalDate effectiveDate = effectiveDateForSave(saveMode, parsedRetrievalDate, parsedUpdateDate);
+    for (String species : physicalSpecies) {
+      errors.addAll(
+          RtmEmsLogAmvDimensionValidator.validate(species, request.grade(), "O", effectiveDate));
+    }
+    return errors;
+  }
+
+  private LocalDate effectiveDateForSave(
+      String saveMode, LocalDate retrievalDate, LocalDate updateDate) {
+    if (SAVE_MODE_UPDATE.equals(saveMode)
+        && retrievalDate != null
+        && updateDate != null
+        && updateDate.isAfter(retrievalDate)) {
+      return updateDate;
+    }
+    return retrievalDate;
+  }
+
   private RtmEmsLogAmvMutationResultDto buildMutationResult(
       String status,
       String message,
@@ -701,8 +851,17 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       String grade,
       String growthIndicator,
       String retrievalDate) {
-    for (int i = 0; i < rows.size(); i++) {
-      RtmEmsLogAmvRowDto row = rows.get(i);
+    return findMatchingRowIndex(rows, species, grade, growthIndicator, retrievalDate);
+  }
+
+  private int findMatchingRowIndex(
+      List<RtmEmsLogAmvRowDto> candidates,
+      String species,
+      String grade,
+      String growthIndicator,
+      String retrievalDate) {
+    for (int i = 0; i < candidates.size(); i++) {
+      RtmEmsLogAmvRowDto row = candidates.get(i);
       if (equalsIgnoreCaseOrNull(species, row.species())
           && equalsIgnoreCaseOrNull(grade, row.grade())
           && equalsIgnoreCaseOrNull(growthIndicator, row.growthIndicator())
@@ -712,6 +871,13 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     }
     return -1;
   }
+
+  private record BatchTarget(
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate,
+      BigDecimal newValue) {}
 
   private boolean equalsIgnoreCaseOrNull(String expected, String candidate) {
     String normalizedExpected = normalize(expected);

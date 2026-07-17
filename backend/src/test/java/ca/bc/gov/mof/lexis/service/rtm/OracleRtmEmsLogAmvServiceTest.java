@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -116,6 +117,110 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(service.findLatestBefore("not-a-date")).isEmpty();
 
     verifyNoInteractions(repository);
+  }
+
+  @Test
+  void shouldAtomicallyFanOutPineToBothGrowthTypes() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any()))
+        .thenReturn(new int[] {1, 1, 1, 1, 1, 1});
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "PINE",
+                    "A",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("12.50"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.rows()).hasSize(6);
+    assertThat(result.rows())
+        .extracting(RtmEmsLogAmvRowDto::species)
+        .containsExactlyInAnyOrder("WH", "WH", "LO", "LO", "YE", "YE");
+    assertThat(result.rows())
+        .extracting(RtmEmsLogAmvRowDto::growthIndicator)
+        .containsExactlyInAnyOrder("O", "S", "O", "S", "O", "S");
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 6
+                        && targets.stream()
+                            .allMatch(
+                                target ->
+                                    target.effectiveDate().equals(LocalDate.of(2026, 7, 1))
+                                        && target.newValue().compareTo(new BigDecimal("12.50")) == 0)));
+    verify(repository, never())
+        .update(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+    verify(repository, never())
+        .insert(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+  }
+
+  @Test
+  void shouldRollBackTheFullBatchWhenAnyAtomicWriteIsNotApplied() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 0});
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+    RtmEmsLogAmvService service = transactionalService(repository, transactionManager);
+
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "A",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("12.50"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    assertThat(transactionManager.commits).isZero();
+  }
+
+  @Test
+  void shouldRollBackTheFullBatchWhenOracleWriteFails() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any()))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+    RtmEmsLogAmvService service = transactionalService(repository, transactionManager);
+
+    assertThatThrownBy(
+            () ->
+                service.saveBatch(
+                    List.of(
+                        new RtmEmsLogAmvSaveRequestDto(
+                            "BA",
+                            "A",
+                            "O",
+                            "2026-07-01",
+                            "2026-07-01",
+                            new BigDecimal("12.50"),
+                            "update"))))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    assertThat(transactionManager.commits).isZero();
   }
 
   @Test

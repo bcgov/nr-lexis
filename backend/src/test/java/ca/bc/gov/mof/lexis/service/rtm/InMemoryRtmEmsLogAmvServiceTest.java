@@ -109,6 +109,35 @@ class InMemoryRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldApplyPineToAllPhysicalSpeciesAndBothGrowthTypesInOneBatch() {
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
+
+    var result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "PINE",
+                    "A",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("10.25"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.rows()).hasSize(6);
+    assertThat(service.find("", "", "2026-07-01", "2026-07-01"))
+        .extracting(row -> List.of(row.species(), row.growthIndicator(), row.newValue()))
+        .containsExactlyInAnyOrder(
+            List.of("WH", "O", new BigDecimal("10.25")),
+            List.of("WH", "S", new BigDecimal("10.25")),
+            List.of("LO", "O", new BigDecimal("10.25")),
+            List.of("LO", "S", new BigDecimal("10.25")),
+            List.of("YE", "O", new BigDecimal("10.25")),
+            List.of("YE", "S", new BigDecimal("10.25")));
+  }
+
+  @Test
   void shouldFindTableRowsForEffectiveDateAfterCreateAndUpdate() {
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
 
