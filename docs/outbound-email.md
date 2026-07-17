@@ -6,6 +6,7 @@ Modern LEXIS uses Spring Mail with the BC Government application SMTP relay:
 - port: `25`
 - SMTP authentication: disabled
 - STARTTLS: disabled
+- From address: supplied by the `LEXIS_MAIL_FROM` GitHub Environment secret
 
 Workflow services publish immutable email snapshots. A dedicated executor dispatches them after
 the surrounding transaction commits. A successful API response means **queued**, not delivered;

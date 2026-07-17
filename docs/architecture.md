@@ -19,14 +19,15 @@ flowchart LR
 
     Backend --> Oracle[("Shared Oracle database")]
     Backend --> Identity["FAM identity lookup"]
-    Backend --> ClamAV["ClamAV service"]
+    Backend --> ClamAV["Shared ClamAV service<br/>separate namespace"]
     Backend --> Mail["Government mail relay"]
 ```
 
 The frontend and backend are separate container images. Caddy serves the static application,
 applies Coraza WAF rules, and proxies API traffic to the backend. The backend owns authorization,
-validation, workflow coordination, reporting, file inspection, and Oracle access. ClamAV runs as a
-separate service beside the application workloads.
+validation, workflow coordination, reporting, file inspection, and Oracle access. ClamAV is a
+shared service in a separate namespace; the backend reaches its cluster-internal `clamd` endpoint
+over TCP rather than deploying a scanner workload of its own.
 
 ## Component responsibilities
 
@@ -35,7 +36,7 @@ separate service beside the application workloads.
 | React frontend           | Interactive provincial, federal, reporting, administration, and RTM AMV journeys. It uses backend-provided capabilities to control navigation and actions.             |
 | Spring Boot backend      | REST endpoints, object- and client-level authorization, Oracle workflow coordination, report generation, attachment validation, email events, and operational metrics. |
 | Oracle                   | System of record for LEXIS data, reference codes, audit fields, attachments, and the established PL/SQL package contracts.                                             |
-| ClamAV                   | Malware scanning for uploaded content before accepted files are persisted.                                                                                             |
+| Shared ClamAV            | Malware scanning for uploaded content before accepted files are persisted. The scanner service and signature updates are operated separately from LEXIS.              |
 | FAM / Cognito            | Interactive authentication and FAM role authorities, including client-scoped Provincial Submitter access.                                                              |
 | Keycloak and API gateway | Dedicated machine-to-machine authentication, scope enforcement, traffic controls, and routing for NEXCOL federal submissions.                                          |
 | Mail relay               | Delivery of post-commit workflow notifications from provincial and regional positional mailboxes to validated applicants and regional positional recipients.            |
@@ -73,10 +74,11 @@ scope.
 
 ## Deployment and operations
 
-GitHub Actions builds and scans the frontend, backend, and ClamAV images, then deploys them to BC
-Gov's Gold OpenShift cluster. Environment-specific credentials are supplied through GitHub
-environment secrets and OpenShift Secrets; non-sensitive behavior is supplied through environment
-variables and template parameters.
+GitHub Actions builds and scans the frontend and backend images, then deploys them to BC Gov's Gold
+OpenShift cluster. The reusable deployment workflow derives the shared scanner endpoint from the
+environment-specific `CLAMAV_NAMESPACE` secret. Environment-specific credentials are supplied
+through GitHub environment secrets and OpenShift Secrets; non-sensitive behavior is supplied through
+environment variables and template parameters.
 
 Pull requests deploy an isolated DEV preview after their required builds and tests pass. A merge to
 `main` deploys the accepted images to the persistent TEST environment and runs the smoke suite.
@@ -102,7 +104,7 @@ that finds an existing package receives a conflict for NEXCOL reconciliation.
 
 | Concern              | Legacy                                                                  | Modern                                                                                                                   |
 | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Application delivery | Java 8 WAR deployed to an application server                            | Separate React/Caddy, Spring Boot, and ClamAV workloads on OpenShift                                                     |
+| Application delivery | Java 8 WAR deployed to an application server                            | Separate React/Caddy and Spring Boot workloads on OpenShift, with a shared ClamAV service in its own namespace            |
 | Web architecture     | Struts actions, JSP pages, browser JavaScript, and server HTTP sessions | React SPA, typed REST contracts, stateless JWT authentication, and Spring services                                       |
 | Interactive identity | WebADE filters, roles, and organization context                         | FAM roles through Cognito JWTs, backend capability resolution, and explicit client/object checks                         |
 | Federal ingress      | ESF queue-oriented ingestion                                            | NEXCOL through a dedicated Keycloak scope and API gateway routes                                                         |
@@ -120,6 +122,7 @@ controls change without introducing another persistence or coordination service.
 ## Related documentation
 
 - [Backend configuration and API areas](../backend/README.md)
+- [Shared ClamAV service](shared-clamav-service.md)
 - [Frontend configuration and structure](../frontend/README.md)
 - [NEXCOL service-client contract](nexcol-keycloak-service-client.md)
 - [Permit invoicing](permit-invoicing.md)

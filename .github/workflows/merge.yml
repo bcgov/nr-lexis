@@ -33,6 +33,7 @@ jobs:
     uses: ./.github/workflows/reusable-deploy.yml
     secrets:
       oc_namespace: ${{ secrets.oc_namespace }}
+      clamav_namespace: ${{ secrets.clamav_namespace }}
       oc_token: ${{ secrets.oc_token }}
       database_user: ${{ secrets.database_user }}
       database_password: ${{ secrets.database_password }}
@@ -84,6 +85,7 @@ jobs:
     uses: ./.github/workflows/reusable-deploy.yml
     secrets:
       oc_namespace: ${{ secrets.oc_namespace }}
+      clamav_namespace: ${{ secrets.clamav_namespace }}
       oc_token: ${{ secrets.oc_token }}
       database_user: ${{ secrets.database_user }}
       database_password: ${{ secrets.database_password }}
@@ -134,7 +136,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        package: [backend, frontend, clamav]
+        package: [backend, frontend]
     timeout-minutes: 1
     steps:
       - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5

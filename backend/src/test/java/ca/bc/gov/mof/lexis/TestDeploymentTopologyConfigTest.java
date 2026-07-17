@@ -26,6 +26,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("frontend_memory_request: \"128Mi\"")
         .contains("frontend_cpu_limit: \"500m\"")
         .contains("frontend_memory_limit: \"256Mi\"")
+        .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}")
         .contains("expiry_enabled: true");
   }
 
@@ -64,7 +65,8 @@ class TestDeploymentTopologyConfigTest {
     assertThat(prDeploy)
         .contains("backend_min_replicas: \"1\"")
         .contains("backend_max_replicas: \"1\"")
-        .contains("frontend_replicas: \"1\"");
+        .contains("frontend_replicas: \"1\"")
+        .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}");
     assertThat(backendDeploy)
         .contains("file: backend/openshift.deploy.yml")
         .contains("lite_mode: false");
@@ -95,6 +97,10 @@ class TestDeploymentTopologyConfigTest {
     assertThat(workflow)
         .contains("backend_min_replicas:")
         .contains("backend_max_replicas:")
+        .contains(
+            "lexis_mail_from:\n"
+                + "        description: Approved sender mailbox for LEXIS workflow messages\n"
+                + "        required: true")
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
@@ -404,7 +410,7 @@ class TestDeploymentTopologyConfigTest {
         "app.openshift.io/redeploy-token: ${ROLLOUT_TRIGGER}";
 
     assertThat(occurrences(workflow, rolloutParameter)).isEqualTo(2);
-    assertThat(occurrences(backendTemplate, rolloutAnnotation)).isEqualTo(2);
+    assertThat(occurrences(backendTemplate, rolloutAnnotation)).isOne();
     assertThat(occurrences(frontendTemplate, rolloutAnnotation)).isOne();
   }
 

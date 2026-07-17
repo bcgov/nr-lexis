@@ -60,9 +60,10 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | legacy-best-effort |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Requested timeout in seconds for each isolated GBMS transaction (1-3600); cancellation can leave the outcome unknown | 60 |
 | `LEXIS_VIRUS_SCAN_ENABLED` | Enables ClamAV scanning. Deployed Oracle runtimes refuse to start when this is false. | false locally; true in OpenShift |
-| `LEXIS_VIRUS_SCAN_HOST` | ClamAV service hostname | localhost |
+| `LEXIS_VIRUS_SCAN_HOST` | Shared ClamAV service hostname | localhost locally; required in OpenShift |
 | `LEXIS_VIRUS_SCAN_PORT` | ClamAV INSTREAM port | 3310 |
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | End-to-end deadline for one ClamAV scan | 10s |
+| `LEXIS_VIRUS_SCAN_CHUNK_SIZE` | Bytes streamed per ClamAV protocol chunk | 8192 |
 | `LEXIS_MAIL_NON_PRODUCTION` | Marks DEV/TEST messages and redirects them when override recipients are configured | true outside PROD |
 | `LEXIS_MAIL_ENVIRONMENT` | Non-secret environment label shown on intercepted DEV/TEST messages | non-prod locally; derived from deployment environment |
 | `LEXIS_MAIL_FROM` | Provincial/system positional sender mailbox | Required in every environment |
@@ -93,7 +94,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_PERMIT_INVOICE_MODE` | Variable `LEXIS_PERMIT_INVOICE_MODE` |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Variable `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` |
 | `LEXIS_VIRUS_SCAN_ENABLED` | OpenShift template default `true` |
-| `LEXIS_VIRUS_SCAN_HOST` | Generated ClamAV service name |
+| `LEXIS_VIRUS_SCAN_HOST` | Environment secret `CLAMAV_NAMESPACE`, referenced as `secrets.clamav_namespace` and resolved to `clamav.<namespace>.svc` |
 | `LEXIS_VIRUS_SCAN_PORT` | OpenShift template value `3310` |
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | OpenShift template default `10s` |
 | `LEXIS_MAIL_NON_PRODUCTION` | Derived from the deployment environment |
@@ -103,6 +104,16 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_MAIL_REGION_RCO_ADDRESS` | Secret `LEXIS_MAIL_REGION_RCO_ADDRESS` |
 | `LEXIS_MAIL_REGION_RNI_ADDRESS` | Secret `LEXIS_MAIL_REGION_RNI_ADDRESS` |
 | `LEXIS_MAIL_REGION_RSI_ADDRESS` | Secret `LEXIS_MAIL_REGION_RSI_ADDRESS` |
+
+### Virus Scanning
+
+OpenShift deployments use a shared ClamAV service in a separate namespace rather than a
+LEXIS-managed scanner workload. The reusable deployment workflow resolves the cluster-local
+`clamav.<namespace>.svc:3310` endpoint and supplies its hostname through
+`LEXIS_VIRUS_SCAN_HOST`.
+
+See [Shared ClamAV service](../docs/shared-clamav-service.md) for GitHub environment setup,
+receiver-side NetworkPolicy requirements, local configuration, and verification.
 
 Backend replicas use optimistic version checks for interactive saves. A stale save returns a
 conflict so the user can refresh or explicitly overwrite after reviewing newer changes. Short

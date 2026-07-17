@@ -83,7 +83,7 @@ jobs:
             fi
 
             ALL_DEPLOYS=$(oc get deploy -n "${NAMESPACE}" --no-headers -o custom-columns=:metadata.name,:metadata.creationTimestamp)
-            DEPLOYS=$(printf '%s\n' "${ALL_DEPLOYS}" | grep -E "${REPO}-(backend|frontend|clamav)-[0-9]+" || :)
+            DEPLOYS=$(printf '%s\n' "${ALL_DEPLOYS}" | grep -E "${REPO}-(backend|frontend)-[0-9]+" || :)
 
             if [ -n "${DEPLOYS}" ]; then
               while read -r name created; do
