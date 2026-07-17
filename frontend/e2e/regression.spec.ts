@@ -2631,9 +2631,7 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
-  // TODO: Re-enable this EXPORT_SCHEDULE write regression once TEST grants allow
-  // INSERT/UPDATE/DELETE on EXPORT_SCHEDULE and access to EXPORT_SCHEDULE_SEQ.
-  test.skip('allows legacy duplicate future export schedule advertising dates', async () => {
+  test('allows legacy duplicate future export schedule advertising dates', async () => {
     const page = await authenticatedIdirPage()
     const scheduleIds: string[] = []
 
