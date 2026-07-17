@@ -95,7 +95,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_PERMIT_INVOICE_MODE` | Variable `LEXIS_PERMIT_INVOICE_MODE` |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Variable `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` |
 | `LEXIS_VIRUS_SCAN_ENABLED` | OpenShift template default `true` |
-| `LEXIS_VIRUS_SCAN_HOST` | Environment secret `clamav_namespace`, resolved to `clamav.<namespace>.svc` |
+| `LEXIS_VIRUS_SCAN_HOST` | Environment secret `CLAMAV_NAMESPACE`, referenced as `secrets.clamav_namespace` and resolved to `clamav.<namespace>.svc` |
 | `LEXIS_VIRUS_SCAN_PORT` | OpenShift template value `3310` |
 | `LEXIS_VIRUS_SCAN_TIMEOUT` | OpenShift template default `10s` |
 | `LEXIS_MAIL_NON_PRODUCTION` | Derived from the deployment environment |
@@ -111,7 +111,8 @@ The reusable deployment workflow maps these GitHub settings:
 
 OpenShift deployments use a shared ClamAV service in a separate namespace rather than a
 LEXIS-managed scanner workload. The reusable deployment workflow resolves the cluster-local
-`clamd` endpoint and supplies it through `LEXIS_VIRUS_SCAN_HOST`.
+`clamav.<namespace>.svc:3310` endpoint and supplies its hostname through
+`LEXIS_VIRUS_SCAN_HOST`.
 
 See [Shared ClamAV service](../docs/shared-clamav-service.md) for GitHub environment setup,
 receiver-side NetworkPolicy requirements, local configuration, and verification.

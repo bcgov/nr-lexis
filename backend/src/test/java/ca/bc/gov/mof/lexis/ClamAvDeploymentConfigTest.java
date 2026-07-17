@@ -35,6 +35,36 @@ class ClamAvDeploymentConfigTest {
         .contains("-p LEXIS_VIRUS_SCAN_HOST=\"clamav.${{ secrets.clamav_namespace }}.svc\"");
   }
 
+  @Test
+  void deploymentWorkflowCallersShouldSupplySharedClamAvNamespace() throws IOException {
+    String prOpenWorkflow = read(".github/workflows/pr-open.yml");
+    String mergeWorkflow = read(".github/workflows/merge.yml");
+    String namespaceSecret = "clamav_namespace: ${{ secrets.clamav_namespace }}";
+
+    assertThat(prOpenWorkflow).contains(namespaceSecret);
+    assertThat(occurrences(mergeWorkflow, namespaceSecret)).isEqualTo(2);
+  }
+
+  @Test
+  void previewCleanupShouldNotManageLocalClamAvWorkloads() throws IOException {
+    String workflow = read(".github/workflows/pr-close.yml");
+
+    assertThat(workflow)
+        .contains("for component in backend frontend; do")
+        .contains("s/^${REPO}-(backend|frontend)-([0-9]+)$/\\2/p")
+        .doesNotContain("backend frontend clamav", "(backend|frontend|clamav)");
+  }
+
+  private static int occurrences(String value, String expected) {
+    int count = 0;
+    int index = 0;
+    while ((index = value.indexOf(expected, index)) >= 0) {
+      count++;
+      index += expected.length();
+    }
+    return count;
+  }
+
   private static String read(String relativePath) throws IOException {
     Path path = Path.of(relativePath);
     if (Files.exists(path)) {

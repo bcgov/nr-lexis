@@ -21,6 +21,9 @@ PROD values mapped to their matching scanner environments. The secret is require
 by the reusable deployment workflow, so a deployment fails early if it is absent.
 It is the only ClamAV-specific GitHub secret.
 
+LEXIS deployment, promotion, and PR cleanup workflows manage only the backend and frontend
+workloads. A LEXIS preview never creates, promotes, or deletes a ClamAV workload.
+
 The OpenShift template injects the resolved hostname as `LEXIS_VIRUS_SCAN_HOST`.
 It enables scanning, uses TCP port `3310`, and has a 10-second socket timeout.
 The service is cluster-internal: no OpenShift Route or HTTP ingress is used.
@@ -72,10 +75,11 @@ locally, configure a reachable ClamAV endpoint with
 optionally `LEXIS_VIRUS_SCAN_TIMEOUT` in
 `backend/src/main/resources/application-local.yml`.
 
-The TEST credentialed regression suite submits the EICAR test payload to upload
-and submission endpoints and expects rejection. That test verifies the deployed
-backend can reach the shared scanner. Backend protocol and deployment wiring are
-covered by `ClamAvVirusScanServiceTest` and `ClamAvDeploymentConfigTest`.
+The TEST credentialed regression suite (`frontend/e2e/regression.spec.ts`) submits the EICAR
+test payload to upload and submission endpoints and expects rejection. It verifies the deployed
+backend can reach the shared scanner. `ClamAvVirusScanServiceTest` covers the `INSTREAM` protocol;
+`ClamAvDeploymentConfigTest` verifies the shared endpoint wiring for DEV, TEST, and PROD and
+ensures PR cleanup does not manage a local scanner workload.
 
 ## Cutover and ownership
 
