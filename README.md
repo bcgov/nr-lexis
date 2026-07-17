@@ -52,7 +52,7 @@ These files are gitignored and stay local.
 
 #### `backend/src/main/resources/application-local.yml`
 
-Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, optional Keycloak issuer URI for service-client tokens, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
+Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, optional Keycloak issuer URI for service-client tokens, IDIR base URL, and `TRUSTSTORE_PATH`. It must also provide the four approved `LEXIS_MAIL_*` positional-mailbox settings when running with the `oracle` profile, because startup validates outbound-mail configuration. Obtain all values through approved team channels and keep them out of git. See [outbound email configuration](docs/outbound-email.md) for the setting names and safe local/TEST delivery behavior.
 
 For Option B, Compose overrides `TRUSTSTORE_PATH` inside Docker to `/app/src/main/resources/cert/jssecacerts`; no local edit is needed for the container path.
 

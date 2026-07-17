@@ -69,3 +69,23 @@ even if its intended recipient is not deliverable outside the override.
 
 When no override is configured, messages are sent to their intended recipients. PROD preserves
 the intended recipients and sender, and does not add an interception label.
+
+## TEST acceptance
+
+Before enabling production delivery, configure the four positional-mailbox secrets and a TEST
+`LEXIS_MAIL_OVERRIDE_RECIPIENTS` address. A secret change alone does not restart the workload: the
+revision containing this configuration must be deployed to TEST.
+
+Exercise each regional route for application rejection/withdrawal, exemption approval, permit
+approval/payment-pending, permit review, and purchase-offer create/update/withdrawal. Include
+Skeena cases with an `A`–`Y` scale grade and a numeric scale grade, plus a permit-review request
+with the optional entered address.
+
+For every intercepted message, inspect the raw received headers and the interception label:
+
+- The MIME `From` must be the provincial or selected regional positional mailbox.
+- The MIME `To` must be only the TEST override recipient; no business mailbox should receive TEST
+  traffic.
+- The subject/body must identify the intended sender and original `To`/`Cc` routing. Permit review
+  must show both intended recipients as `To`, never as `Cc`.
+- Confirm the SMTP relay did not reject or rewrite the intended sender identity.
