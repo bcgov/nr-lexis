@@ -81,6 +81,24 @@ relevant suites are `OracleRtmEmsLogAmvServiceTest`, `OracleRtmEmsLogAmvReposito
 Those tests do not replace live Oracle/TEST verification of direct-`MERGE` grants, rollback,
 trigger behavior, or downstream exports.
 
+## Confluence requirement traceability
+
+| Requirement     | Current status             | Evidence or decision needed                                                                                                                         |
+| --------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-01           | Data-owner decision        | The existing schema has one physical table with `O` and `S` partitions, not two physical tables.                                                    |
+| FR-02 to FR-04  | Implemented                | One user save fans out identical values to `O` and `S` without exposing either choice in the UI.                                                    |
+| FR-05 to FR-06  | Implemented                | Friendly species labels are mapped by the service; Pine expands to `WH`, `LO`, and `YE` for both growth partitions.                                 |
+| FR-07 to FR-10  | Implemented                | The UI/API normalize to a `LocalDate` month start and do not expose retrieval date input.                                                           |
+| FR-11           | Data-owner decision        | `EMS_LOG_AMV` has no submission/update timestamp column; the legacy procedure's update-date parameter is an effective date, not an audit timestamp. |
+| FR-12 and FR-14 | Data-owner decision        | The physical table has no blank flag/column to set to `1`.                                                                                          |
+| FR-13           | Implemented                | No blank flag is rendered or accepted from the UI.                                                                                                  |
+| FR-15           | Implemented                | The editable grade set is `A` through `M`, `U`, `X`, `Y`, `Z`, and `1` through `6`; `W` and blank are hidden.                                       |
+| FR-16           | Data-owner decision        | Existing `AVG_MARKET_PRICE NOT NULL` prevents a clear operation; legacy empty-cell semantics need confirmation.                                     |
+| FR-17           | Implemented                | The batch service validates before direct `MERGE` writes inside one transaction.                                                                    |
+| FR-18           | Data-owner decision        | Persisted submitter/timestamp audit requires an approved audit table or schema change.                                                              |
+| FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |
+| FR-21           | Live verification required | The trigger mirrors to `EXPORT_LOG_AMV`, but reports, integrations, and queries still require TEST/downstream validation.                           |
+
 ## Outstanding legacy data decisions
 
 The implemented UI behavior is constrained by the existing data model. The following Confluence
