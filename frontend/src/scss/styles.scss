@@ -323,55 +323,48 @@ body {
 
 .csp-header-theme-toggle {
   align-items: center;
-  color: var(--csp-text-inverse);
   display: flex;
-  font-size: 12px;
-  gap: 8px;
   height: 100%;
-  padding: 0 16px;
-  white-space: nowrap;
+  padding: 0 12px;
 }
 
 .csp-theme-switch {
-  position: relative;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.35);
+  background-color: rgba(255, 255, 255, 0.9);
   border: 0;
-  border-radius: 16px;
-  color: var(--csp-interactive);
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
-  height: 16px;
+  height: 24px;
   justify-content: flex-start;
   margin: 0;
   padding: 2px;
-  width: 32px;
+  width: 44px;
 }
 
-.csp-theme-switch::after {
-  position: absolute;
-  inset-block-start: 2px;
-  inset-inline-start: 2px;
-  width: 12px;
-  height: 12px;
-  background-color: #ffffff;
+.csp-theme-switch__thumb {
+  align-items: center;
+  background-color: var(--csp-interactive);
   border-radius: 50%;
-  content: '';
+  color: #ffffff;
+  display: flex;
+  height: 20px;
+  justify-content: center;
   transition: transform 0.2s ease;
+  width: 20px;
 }
 
 .csp-theme-switch[aria-checked='true'] {
   background-color: rgba(255, 255, 255, 0.9);
 }
 
-.csp-theme-switch[aria-checked='true']::after {
-  background-color: var(--csp-interactive);
-  transform: translateX(16px);
+.csp-theme-switch[aria-checked='true'] .csp-theme-switch__thumb {
+  transform: translateX(20px);
 }
 
 .csp-theme-switch svg {
-  z-index: 1;
-  display: none;
+  display: block;
+  fill: currentcolor;
 }
 
 .csp-header-action {
@@ -4065,10 +4058,6 @@ legend.cds--label {
   }
 
   .csp-header-title {
-    display: none;
-  }
-
-  .csp-header-theme-toggle span {
     display: none;
   }
 

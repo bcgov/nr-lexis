@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  AsleepFilled,
   Calendar,
   ChevronDown,
   Certificate,
@@ -9,11 +8,12 @@ import {
   DataBase,
   DocumentAdd,
   Finance,
-  LightFilled,
   Logout,
+  Moon,
   Report,
   Search,
   Settings,
+  Sun,
   Tag,
   TaskComplete,
   Upload,
@@ -569,7 +569,6 @@ function Layout({ children }: LayoutProps) {
 
           <div className="cds--header__global csp-header-global">
             <div className="csp-header-theme-toggle">
-              <span aria-hidden="true">Light</span>
               <button
                 type="button"
                 className="csp-theme-switch"
@@ -578,9 +577,10 @@ function Layout({ children }: LayoutProps) {
                 aria-label="Toggle dark mode"
                 onClick={() => setTheme((current) => (current === 'white' ? 'g100' : 'white'))}
               >
-                {isDarkTheme ? <AsleepFilled size={12} /> : <LightFilled size={12} />}
+                <span className="csp-theme-switch__thumb" aria-hidden="true">
+                  {isDarkTheme ? <Moon size={14} /> : <Sun size={14} />}
+                </span>
               </button>
-              <span aria-hidden="true">Dark</span>
             </div>
 
             <IconButton

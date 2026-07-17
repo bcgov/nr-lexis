@@ -72,10 +72,10 @@ describe('Layout shell', () => {
   it('uses and persists public-safe defaults when no preferences exist', () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
-      'aria-checked',
-      'false',
-    )
+    const themeSwitch = screen.getByRole('switch', { name: 'Toggle dark mode' })
+    expect(themeSwitch).toHaveAttribute('aria-checked', 'false')
+    expect(document.querySelector('.csp-header-theme-toggle')).toHaveTextContent('')
+    expect(themeSwitch.querySelector('.csp-theme-switch__thumb svg')).toBeInTheDocument()
     expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'white')
     expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
     expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
