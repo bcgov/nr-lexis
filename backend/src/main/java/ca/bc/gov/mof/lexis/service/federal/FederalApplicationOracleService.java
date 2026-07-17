@@ -121,7 +121,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
                 .map(FederalApplicationSearchResultDto::applicationNumber)
                 .toList());
     if (lockedApplicationNumbers == null) {
-      throw new IllegalStateException("Application lock registry returned no authoritative state.");
+      throw new IllegalStateException("Application editability check returned no state.");
     }
     List<FederalApplicationSearchResultDto> results =
         repositoryResults.stream()

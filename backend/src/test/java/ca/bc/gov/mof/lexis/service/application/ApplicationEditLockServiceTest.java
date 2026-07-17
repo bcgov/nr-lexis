@@ -2,8 +2,6 @@ package ca.bc.gov.mof.lexis.service.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Clock;
-import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +17,7 @@ class ApplicationEditLockServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new ApplicationEditLockService(Duration.ofMinutes(20), Clock.systemUTC());
+    service = new ApplicationEditLockService();
   }
 
   @Test
@@ -51,9 +49,7 @@ class ApplicationEditLockServiceTest {
   }
 
   @Test
-  void compatibilityTouchAndReleaseShouldNotDependOnStoredState() {
-    assertThat(service.touch(SYNTHETIC_APPLICATION_NUMBER, "IDIR\\USER")).isTrue();
-    assertThat(service.touchOffer(SYNTHETIC_OFFER_NUMBER, "IDIR\\USER")).isTrue();
+  void compatibilityReleaseShouldNotDependOnStoredState() {
     assertThat(service.release(SYNTHETIC_APPLICATION_NUMBER, "IDIR\\USER")).isTrue();
     assertThat(service.releasePermit(SYNTHETIC_PERMIT_NUMBER, "IDIR\\USER")).isTrue();
     assertThat(service.releaseExemption(SYNTHETIC_EXEMPTION_NUMBER, "IDIR\\USER")).isTrue();

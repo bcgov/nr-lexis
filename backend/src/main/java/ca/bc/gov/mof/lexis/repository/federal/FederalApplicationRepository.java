@@ -91,7 +91,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
               getLocalDate(rs, "RECEIVED_DATE"),
               getLocalDate(rs, "ADVERTISING_DATE"),
               selectable,
-              // The service replaces this fail-closed value from the in-JVM lock registry.
+              // The service replaces this fail-closed value with current editability state.
               true);
         });
   }

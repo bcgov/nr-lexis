@@ -1,8 +1,6 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
-import java.time.Clock;
-import java.time.Duration;
 import java.util.Collection;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -13,10 +11,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ApplicationEditLockService {
-
-  public ApplicationEditLockService() {}
-
-  ApplicationEditLockService(Duration ignoredTtl, Clock ignoredClock) {}
 
   public ApplicationEditLockDto acquire(
       Long applicationNumber, String userId, String displayName, boolean showOwner) {
@@ -43,11 +37,6 @@ public class ApplicationEditLockService {
     return editable(false);
   }
 
-  public ApplicationEditLockDto snapshotPermit(
-      Long permitNumber, String userId, boolean showOwner) {
-    return editable(false);
-  }
-
   public ApplicationEditLockDto snapshotOffer(
       Long offerNumber, String userId, boolean showOwner) {
     return editable(false);
@@ -60,14 +49,6 @@ public class ApplicationEditLockService {
 
   public Set<Long> lockedApplicationNumbers(Collection<Long> applicationNumbers) {
     return Set.of();
-  }
-
-  public boolean touch(Long applicationNumber, String userId) {
-    return validNumber(applicationNumber);
-  }
-
-  public boolean touchOffer(Long offerNumber, String userId) {
-    return validNumber(offerNumber);
   }
 
   public boolean release(Long applicationNumber, String userId) {

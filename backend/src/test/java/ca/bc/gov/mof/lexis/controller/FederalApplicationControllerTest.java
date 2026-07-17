@@ -366,7 +366,7 @@ class FederalApplicationControllerTest {
     when(
             editLockService.acquire(
                 1000456L, "idir\\approver", "idir\\approver", true))
-        .thenThrow(new IllegalStateException("lock registry failed"));
+        .thenThrow(new IllegalStateException("editability check failed"));
 
     FederalApplicationDetailDto detail =
         controller.getByApplicationNumber(1000456L, authentication).getBody();

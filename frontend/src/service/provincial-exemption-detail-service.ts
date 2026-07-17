@@ -204,7 +204,7 @@ export const releaseExemptionEditLock = async (exemptionNumber: string): Promise
       params: { exemptionNumber: exemptionNumber.trim() },
     })
   } catch {
-    // Best-effort cleanup only; the server expires abandoned locks.
+    // Compatibility cleanup only; record versions enforce save conflicts.
   }
 }
 

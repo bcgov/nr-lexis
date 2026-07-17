@@ -458,7 +458,7 @@ export const releasePermitEditLock = async (permitNumber: string): Promise<void>
       params: { permitNumber: permitNumber.trim() },
     })
   } catch {
-    // Best-effort cleanup only; the server expires abandoned locks.
+    // Compatibility cleanup only; record versions enforce save conflicts.
   }
 }
 

@@ -63,7 +63,7 @@ export const releaseApplicationEditLock = async (applicationNumber: string): Pro
       params: { applicationNumber },
     })
   } catch {
-    // Best-effort cleanup only; the server expires abandoned locks.
+    // Compatibility cleanup only; record versions enforce save conflicts.
   }
 }
 
@@ -133,7 +133,7 @@ export const releaseOfferEditLock = async (offerNumber: string): Promise<void> =
       params: { offerNumber },
     })
   } catch {
-    // Best-effort cleanup only; the server expires abandoned locks.
+    // Compatibility cleanup only; record versions enforce save conflicts.
   }
 }
 

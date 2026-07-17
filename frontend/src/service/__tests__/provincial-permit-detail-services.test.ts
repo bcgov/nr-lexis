@@ -887,7 +887,7 @@ describe('provincial permit detail services', () => {
     )
   })
 
-  it('releases the in-memory permit edit lock as best-effort cleanup', async () => {
+  it('calls the permit edit-lock compatibility endpoint during cleanup', async () => {
     postMock.mockResolvedValue(response({ release: 'ok' }))
 
     await releasePermitEditLock(' 777 ')

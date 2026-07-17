@@ -93,7 +93,6 @@ jobs:
       lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
       keycloak_sa_client_id: ${{ secrets.keycloak_sa_client_id }}
       keycloak_sa_client_secret: ${{ secrets.keycloak_sa_client_secret }}
-      lexis_mail_override_recipients: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}
       lexis_mail_region_rco_recipients: ${{ secrets.LEXIS_MAIL_REGION_RCO_RECIPIENTS }}
       lexis_mail_region_rni_recipients: ${{ secrets.LEXIS_MAIL_REGION_RNI_RECIPIENTS }}
       lexis_mail_region_rsi_recipients: ${{ secrets.LEXIS_MAIL_REGION_RSI_RECIPIENTS }}

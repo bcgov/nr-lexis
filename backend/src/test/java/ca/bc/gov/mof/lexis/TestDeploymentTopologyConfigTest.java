@@ -39,7 +39,8 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_min_replicas: \"3\"")
         .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
-        .contains("expiry_enabled: true");
+        .contains("expiry_enabled: true")
+        .doesNotContain("lexis_mail_override_recipients", "LEXIS_MAIL_OVERRIDE_RECIPIENTS");
   }
 
   @Test

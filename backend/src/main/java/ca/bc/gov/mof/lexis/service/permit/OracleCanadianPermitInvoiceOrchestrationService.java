@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
-/** Canadian-only rollback mode that keeps all permit invoicing inside LEXIS. */
+/** Processes Canadian permit invoicing and rejects non-Canadian transitions. */
 @Service
 @Profile("oracle")
 @ConditionalOnProperty(
