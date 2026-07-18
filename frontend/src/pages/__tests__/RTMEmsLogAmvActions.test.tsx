@@ -107,7 +107,12 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.getByLabelText('Effective month')).toHaveAttribute('type', 'month')
     expect(screen.queryByRole('radio')).not.toBeInTheDocument()
     expect(screen.getByText('Maintain one monthly value for each species and grade.')).toBeVisible()
-    expect(screen.queryByText(/old and second growth/i)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Each cell represents one species and grade for the selected effective month.',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByText(/old[-\s]+and second[-\s]+growth/i)).not.toBeInTheDocument()
 
     const table = screen.getByRole('table', { name: 'Average monthly value table' })
     ;[
@@ -185,6 +190,7 @@ describe('RTM EMS Log AMV actions', () => {
     const balsam = amvCell('Balsam (BA)', 'A')
     const hemlock = amvCell('Hemlock (HE)', 'A')
     await user.clear(balsam)
+    await user.type(balsam, '-')
 
     expect(screen.queryByText(/Balsam \(BA\) grade A is required/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
@@ -207,6 +213,44 @@ describe('RTM EMS Log AMV actions', () => {
         saveMode: 'update',
       }),
     ])
+  })
+
+  it('treats a dash as an empty starting value instead of an invalid number', async () => {
+    const user = userEvent.setup()
+    mockedSearchLatest.mockResolvedValue([
+      row('BA', 'A', 'O', PREVIOUS_MONTH, 10),
+      row('HE', 'A', 'O', PREVIOUS_MONTH, 20),
+    ])
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    const hemlock = amvCell('Hemlock (HE)', 'A')
+    await user.clear(hemlock)
+    await user.type(hemlock, '-')
+
+    expect(
+      screen.queryByText(/Hemlock \(HE\) grade A must be a number from 0 to 9999.99/i),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Hemlock \(HE\) grade A had a value in the starting values and is now blank/i,
+      ),
+    ).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    expect(mockedSaveBatch).toHaveBeenCalledWith({
+      values: [
+        expect.objectContaining({
+          species: 'BA',
+          grade: 'A',
+          growthIndicator: 'O',
+          newValue: 10,
+          saveMode: 'create',
+        }),
+      ],
+    })
   })
 
   it('copies only old-growth values into a new month and sends the first day of every month', async () => {

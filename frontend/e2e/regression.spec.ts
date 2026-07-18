@@ -1828,7 +1828,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(table.getByRole('columnheader', { name: 'Pine' })).toBeVisible()
     await expect(table.getByRole('columnheader', { name: /white pine|lodgepole|yellow pine/i })).toHaveCount(0)
     await expect(
-      page.getByText(/Each cell applies to the matching old- and second-growth records/),
+      page.getByText('Each cell represents one species and grade for the selected effective month.'),
     ).toBeVisible()
     const balsamGradeA = page.getByLabel('Balsam (BA) grade A')
     const balsamGradeB = page.getByLabel('Balsam (BA) grade B')

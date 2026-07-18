@@ -51,6 +51,9 @@ only and does not misrepresent it as audit metadata.
   old-growth values as an unsaved starting point.
 - Values cannot be cleared: `AVG_MARKET_PRICE` is `NOT NULL` and the approved RTM contract has no
   delete operation.
+- In the grid, a single dash (`-`) is treated as an empty value. It warns when a copied starting
+  value is omitted from the batch; it is never persisted as a value, and negative numbers remain
+  invalid.
 
 ## Atomic grid saves
 
@@ -113,7 +116,7 @@ does not claim to add audit metadata that the legacy data model cannot store.
 | FR-12 and FR-14 | Confluence correction needed | `BLANK` is the legacy display alias for `GRADE = ' '`; the physical table has no blank flag/column to set to `1`.                                  |
 | FR-13           | Implemented                | No blank flag is rendered or accepted from the UI.                                                                                                  |
 | FR-15           | Implemented                | The editable grade set is `A` through `M`, `U`, `X`, `Y`, `Z`, and `1` through `6`; `W` and blank are hidden.                                       |
-| FR-16           | Implemented                | A legacy empty `NEWVAL` is a no-op: clearing an existing cell restores its loaded value on blur and omits it from the batch; blank cells with no stored value remain omitted. |
+| FR-16           | Implemented                | A legacy empty `NEWVAL` is a no-op: clearing an existing cell restores its loaded value on blur and omits it from the batch; a single dash is treated as the same blank marker; blank cells with no stored value remain omitted. |
 | FR-17           | Implemented                | The batch service validates before direct `MERGE` writes inside one transaction.                                                                    |
 | FR-18           | Partially implemented      | Structured application audit events record the authenticated actor, server timestamp, batch outcome/status, and logical/physical row counts; durable persisted audit still requires an approved table or schema change. |
 | FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |

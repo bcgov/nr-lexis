@@ -167,7 +167,10 @@ const formatRawNumber = (value: number | null | undefined) => {
   return String(value)
 }
 
-const normalizeNumericString = (value: string) => value.trim().replace(/,/g, '')
+const normalizeNumericString = (value: string) => {
+  const normalized = value.trim().replace(/,/g, '')
+  return normalized === '-' ? '' : normalized
+}
 
 const parseCellValue = (value: string): number | null | undefined => {
   const normalized = normalizeNumericString(value)
@@ -774,10 +777,7 @@ const RTMEmsLogAmvPage = () => {
         <section className="admin-upload-panel rtm-amv-table-panel">
           <div className="admin-upload-section-heading rtm-amv-table-heading">
             <h2 id="rtm-amv-table-title">Average monthly values table</h2>
-            <p>
-              Each cell applies to the matching old- and second-growth records for its species,
-              grade, and month.
-            </p>
+            <p>Each cell represents one species and grade for the selected effective month.</p>
           </div>
 
           <div className="rtm-amv-table-wrap">
