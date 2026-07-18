@@ -38,10 +38,6 @@
   align-items: center;
 }
 
-.lexis-page-header__status--end {
-  margin-inline-start: auto;
-}
-
 .lexis-page-header__actions {
   justify-content: flex-end;
   gap: 0.5rem;
@@ -59,11 +55,6 @@
   .lexis-page-header__actions {
     flex-basis: 100%;
     justify-content: flex-start;
-    margin-inline-start: 0;
-  }
-
-  .lexis-page-header__status--end {
-    flex-basis: 100%;
     margin-inline-start: 0;
   }
 }

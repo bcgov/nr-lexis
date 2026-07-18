@@ -3459,52 +3459,6 @@ legend.cds--label {
   font-size: 0.875rem;
 }
 
-.application-detail-title-row {
-  align-items: start;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.application-detail-title-row > .lexis-page-header {
-  flex: 1 1 32rem;
-}
-
-.application-detail-title-row h1 {
-  margin-bottom: 0.25rem;
-  font-size: 2rem;
-  font-weight: 400;
-  line-height: 2.5rem;
-}
-
-.application-detail-title-row p {
-  margin: 0;
-}
-
-.application-detail-header-metrics {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(2, minmax(6.5rem, auto));
-  margin: 0;
-}
-
-.application-detail-header-metrics div {
-  border-left: 3px solid var(--cds-border-interactive);
-  padding-left: 0.75rem;
-}
-
-.application-detail-header-metrics dt {
-  color: var(--csp-text-primary);
-  font-size: 0.75rem;
-  margin-bottom: 0.125rem;
-}
-
-.application-detail-header-metrics dd {
-  font-weight: 700;
-  margin: 0;
-}
-
 .detail-page-error {
   margin-bottom: 1rem;
 }
@@ -3893,7 +3847,6 @@ legend.cds--label {
     grid-column: span 2;
   }
 
-  .application-detail-header-metrics,
   .application-detail-documents .legacy-search-grid,
   .application-detail-remarks .legacy-search-actions {
     grid-template-columns: 1fr;

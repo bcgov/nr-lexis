@@ -284,10 +284,7 @@ describe('Create Page Core Flows', () => {
       'type',
       'button',
     )
-    const newApplicationState = screen.getByRole('group', { name: 'New application state' })
-    expect(within(newApplicationState).getByText('Application number')).toBeInTheDocument()
-    expect(within(newApplicationState).getByText('Status')).toBeInTheDocument()
-    expect(within(newApplicationState).getAllByText('New')).toHaveLength(2)
+    expect(screen.queryByRole('group', { name: 'New application state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /application number/i })).not.toBeInTheDocument()
     for (const tabName of [
       'Summary',
@@ -1109,9 +1106,7 @@ describe('Create Page Core Flows', () => {
       'type',
       'button',
     )
-    const newExemptionState = screen.getByRole('group', { name: 'New exemption state' })
-    expect(within(newExemptionState).getByText('Exemption number')).toBeInTheDocument()
-    expect(within(newExemptionState).getAllByText('New')).not.toHaveLength(0)
+    expect(screen.queryByRole('group', { name: 'New exemption state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Owner client number' })).not.toBeInTheDocument()
     expect(
@@ -1717,9 +1712,7 @@ describe('Create Page Core Flows', () => {
       'type',
       'button',
     )
-    const newOfferState = screen.getByRole('group', { name: 'New offer state' })
-    expect(within(newOfferState).getByText('Offer number')).toBeInTheDocument()
-    expect(within(newOfferState).getByText('New')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'New offer state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /offer number/i })).not.toBeInTheDocument()
     const offerSections = [
       screen.getByRole('group', { name: 'Application details' }),

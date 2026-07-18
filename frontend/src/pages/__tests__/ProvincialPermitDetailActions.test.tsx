@@ -595,15 +595,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(pageHeader as HTMLElement).queryByRole('button', { name: 'Print permit' }),
     ).not.toBeInTheDocument()
-    const permitHighlights = screen.getByLabelText('Permit highlights')
-    expect(within(permitHighlights).queryByText('Status')).not.toBeInTheDocument()
-    expect(within(permitHighlights).queryByText('Completed')).not.toBeInTheDocument()
-    expect(within(permitHighlights).getByText('Application')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('111')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('Exemption')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('EX-9')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('Documents')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('—')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Permit highlights')).not.toBeInTheDocument()
     const permitSummaryTile = screen
       .getByRole('heading', { name: 'Permit summary' })
       .closest('.cds--tile')
@@ -1413,9 +1405,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(await screen.findByText('Documents/invoices unavailable')).toBeInTheDocument()
     expect(screen.getAllByText('Unable to retrieve permit documents.')).not.toHaveLength(0)
-    expect(
-      within(screen.getByLabelText('Permit highlights')).getByText('Unavailable'),
-    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Permit highlights')).not.toBeInTheDocument()
 
     expect(
       await screen.findByRole('heading', { name: 'Permit documents unavailable', level: 3 }),

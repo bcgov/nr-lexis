@@ -25,7 +25,6 @@ describe('PageHeader', () => {
       <PageHeader
         title="Application 123"
         status={<StatusTag status="Approved" />}
-        statusPlacement="end"
         actions={<button type="button">Edit application</button>}
         actionsLabel="Application actions"
         className="application-header"
@@ -35,7 +34,7 @@ describe('PageHeader', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Application 123' })).toBeVisible()
     const status = screen.getByText('Approved')
     expect(status).toHaveAttribute('data-status-variant', 'positive')
-    expect(status.parentElement).toHaveClass('lexis-page-header__status--end')
+    expect(status.parentElement).toHaveClass('lexis-page-header__status')
     expect(screen.getByRole('group', { name: 'Application actions' })).toContainElement(
       screen.getByRole('button', { name: 'Edit application' }),
     )

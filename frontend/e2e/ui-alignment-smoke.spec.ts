@@ -493,28 +493,22 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
     await expect(page.locator('.detail-page-grid')).toHaveCSS('row-gap', '16px')
 
+    await expect(page.getByLabel('Offer highlights')).toHaveCount(0)
+
     const detailHeaderLayout = await page.evaluate(() => {
       const breadcrumb = document.querySelector('.cds--breadcrumb')
       const pageHeader = document.querySelector('.lexis-page-header')
-      const metrics = document.querySelector('[aria-label="Offer highlights"]')
-      const metricRows = metrics ? Array.from(metrics.children) : []
       if (!(breadcrumb instanceof HTMLElement)) throw new Error('Detail breadcrumb not found')
       if (!(pageHeader instanceof HTMLElement)) throw new Error('Detail page header not found')
-      if (!(metrics instanceof HTMLElement)) throw new Error('Detail metrics not found')
 
       const breadcrumbBounds = breadcrumb.getBoundingClientRect()
       const pageHeaderBounds = pageHeader.getBoundingClientRect()
-      const metricsBounds = metrics.getBoundingClientRect()
       return {
         breadcrumbGap: pageHeaderBounds.top - breadcrumbBounds.bottom,
-        headerAlignment: Math.abs(pageHeaderBounds.top - metricsBounds.top),
-        metricRowTops: metricRows.map((row) => row.getBoundingClientRect().top),
       }
     })
 
     expect(detailHeaderLayout.breadcrumbGap).toBeLessThanOrEqual(24)
-    expect(detailHeaderLayout.headerAlignment).toBeLessThanOrEqual(4)
-    expect(new Set(detailHeaderLayout.metricRowTops).size).toBeGreaterThan(1)
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()

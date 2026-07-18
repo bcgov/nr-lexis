@@ -1111,113 +1111,87 @@ const ProvincialExemptionDetailsPage = () => {
         <DetailBreadcrumb label="Provincial exemption search" to="/provincial/exemption" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <div className="application-detail-title-row">
-          <PageHeader
-            title={`Exemption ${detail?.exemptionNumber ?? exemptionNumber ?? ''}`.trim()}
-            subtitle="Check and manage this provincial exemption"
-            status={
-              detail ? (
-                <StatusTag
-                  status={detail.exemptionStatusDescription ?? detail.exemptionStatusCode ?? ''}
-                  fallbackLabel="Not provided"
-                />
-              ) : undefined
-            }
-            actionsLabel="Exemption actions"
-            actions={
-              detail &&
-              ((!editing && canSaveExemption) ||
-                editing ||
-                canApproveExemption ||
-                (persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport'))) ? (
-                <>
-                  {!editing && canSaveExemption && (
-                    <Button kind="secondary" size="sm" onClick={() => setEditing(true)}>
-                      Edit exemption
-                    </Button>
-                  )}
-                  {editing && (
-                    <>
-                      <Button
-                        kind="primary"
-                        size="sm"
-                        disabled={
-                          saving ||
-                          Boolean(formValidationMessage) ||
-                          requiredExemptionOptionsMissing ||
-                          optionsAvailability !== 'available'
-                        }
-                        onClick={() => void onSaveExemption()}
-                      >
-                        {saving ? 'Saving...' : 'Save exemption'}
-                      </Button>
-                      <Button
-                        kind="tertiary"
-                        size="sm"
-                        disabled={saving}
-                        onClick={() => {
-                          setEditForm(toEditForm(detail, editContext))
-                          setEditing(false)
-                        }}
-                      >
-                        Cancel edit
-                      </Button>
-                    </>
-                  )}
-                  {canApproveExemption && (
+        <PageHeader
+          title={`Exemption ${detail?.exemptionNumber ?? exemptionNumber ?? ''}`.trim()}
+          subtitle="Check and manage this provincial exemption"
+          status={
+            detail ? (
+              <StatusTag
+                status={detail.exemptionStatusDescription ?? detail.exemptionStatusCode ?? ''}
+                fallbackLabel="Not provided"
+              />
+            ) : undefined
+          }
+          actionsLabel="Exemption actions"
+          actions={
+            detail &&
+            ((!editing && canSaveExemption) ||
+              editing ||
+              canApproveExemption ||
+              (persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport'))) ? (
+              <>
+                {!editing && canSaveExemption && (
+                  <Button kind="secondary" size="sm" onClick={() => setEditing(true)}>
+                    Edit exemption
+                  </Button>
+                )}
+                {editing && (
+                  <>
                     <Button
                       kind="primary"
                       size="sm"
-                      disabled={approving}
+                      disabled={
+                        saving ||
+                        Boolean(formValidationMessage) ||
+                        requiredExemptionOptionsMissing ||
+                        optionsAvailability !== 'available'
+                      }
+                      onClick={() => void onSaveExemption()}
+                    >
+                      {saving ? 'Saving...' : 'Save exemption'}
+                    </Button>
+                    <Button
+                      kind="tertiary"
+                      size="sm"
+                      disabled={saving}
                       onClick={() => {
-                        setApprovalCertified(false)
-                        setApprovalDate(formatLocalIsoDate(new Date()))
-                        setApprovalConfirmationTarget(detail.exemptionNumber)
-                        setApprovalConfirmationOpen(true)
+                        setEditForm(toEditForm(detail, editContext))
+                        setEditing(false)
                       }}
                     >
-                      {approving ? 'Approving...' : 'Approve exemption'}
+                      Cancel edit
                     </Button>
-                  )}
-                  {persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport') && (
-                    <Button
-                      kind="secondary"
-                      size="sm"
-                      disabled={generatingReport}
-                      onClick={() => void onGenerateApprovedReport()}
-                    >
-                      {generatingReport ? 'Generating...' : 'Print approved exemption'}
-                    </Button>
-                  )}
-                </>
-              ) : undefined
-            }
-          />
-          {detail && (
-            <dl className="application-detail-header-metrics" aria-label="Exemption highlights">
-              <div>
-                <dt>Type</dt>
-                <dd>{displayValue(detail.exemptionTypeDescription ?? detail.exemptionTypeCode)}</dd>
-              </div>
-              <div>
-                <dt>Remaining volume (m³)</dt>
-                <dd>{displayValue(detail.remainingVolume)}</dd>
-              </div>
-              <div>
-                <dt>Permits</dt>
-                <dd>
-                  {permitsErrorMessage ? 'Unavailable' : visiblePermitRows.length.toLocaleString()}
-                </dd>
-              </div>
-              <div>
-                <dt>Documents</dt>
-                <dd>
-                  {documentsErrorMessage ? 'Unavailable' : documentRows.length.toLocaleString()}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
+                  </>
+                )}
+                {canApproveExemption && (
+                  <Button
+                    kind="primary"
+                    size="sm"
+                    disabled={approving}
+                    onClick={() => {
+                      setApprovalCertified(false)
+                      setApprovalDate(formatLocalIsoDate(new Date()))
+                      setApprovalConfirmationTarget(detail.exemptionNumber)
+                      setApprovalConfirmationOpen(true)
+                    }}
+                  >
+                    {approving ? 'Approving...' : 'Approve exemption'}
+                  </Button>
+                )}
+                {persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport') && (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    disabled={generatingReport}
+                    onClick={() => void onGenerateApprovedReport()}
+                  >
+                    {generatingReport ? 'Generating...' : 'Print approved exemption'}
+                  </Button>
+                )}
+              </>
+            ) : undefined
+          }
+        />
       </Column>
 
       {loading && (

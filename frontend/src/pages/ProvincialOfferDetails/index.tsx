@@ -374,35 +374,17 @@ const ProvincialOfferDetailsPage = () => {
         <DetailBreadcrumb label="Provincial offer search" to="/provincial/offers" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <div className="application-detail-title-row">
-          <PageHeader
-            title={`Offer ${detail?.offerNumber ?? offerNumber ?? ''}`.trim()}
-            subtitle="Check and manage this provincial offer"
-            actions={
-              !isEditing && detail && form && canEditAnyOfferField ? (
-                <Button kind="primary" onClick={() => setIsEditing(true)}>
-                  Edit
-                </Button>
-              ) : undefined
-            }
-          />
-          {detail && (
-            <dl className="application-detail-header-metrics" aria-label="Offer highlights">
-              <div>
-                <dt>Application</dt>
-                <dd>{displayValue(detail.applicationNumber)}</dd>
-              </div>
-              <div>
-                <dt>Package</dt>
-                <dd>{displayValue(detail.packageNumber)}</dd>
-              </div>
-              <div>
-                <dt>Valid offer</dt>
-                <dd>{displayValue(detail.validOfferIndicator)}</dd>
-              </div>
-            </dl>
-          )}
-        </div>
+        <PageHeader
+          title={`Offer ${detail?.offerNumber ?? offerNumber ?? ''}`.trim()}
+          subtitle="Check and manage this provincial offer"
+          actions={
+            !isEditing && detail && form && canEditAnyOfferField ? (
+              <Button kind="primary" onClick={() => setIsEditing(true)}>
+                Edit
+              </Button>
+            ) : undefined
+          }
+        />
       </Column>
 
       {loading && (

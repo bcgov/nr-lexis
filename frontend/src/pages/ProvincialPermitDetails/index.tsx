@@ -2669,87 +2669,61 @@ const ProvincialPermitDetailsPage = () => {
         <DetailBreadcrumb label="Provincial permit search" to="/provincial/permit" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <div className="application-detail-title-row">
-          <PageHeader
-            title={`Permit ${detail?.permitNumber ?? permitNumber ?? ''}`.trim()}
-            subtitle="Check and manage this provincial permit"
-            status={
-              detail ? (
-                <StatusTag
-                  status={detail.permitStatusDescription ?? detail.permitStatusCode ?? ''}
-                  fallbackLabel="Not provided"
-                />
-              ) : undefined
-            }
-            actions={
-              canRequestPermitReview || canSendPermitApproval || canOpenPermitReport ? (
-                <>
-                  {canRequestPermitReview && (
-                    <Button
-                      kind="secondary"
-                      size="sm"
-                      disabled={isSendingPermitEmail || !permitReviewReady}
-                      title={
-                        permitReviewReady
-                          ? undefined
-                          : isPermitTablesLoading
-                            ? 'Checking permit review readiness...'
-                            : 'An active permit requires an application, package, and scale detail before review can be requested.'
-                      }
-                      onClick={() => void onSendPermitEmail('request')}
-                    >
-                      Email review request
-                    </Button>
-                  )}
-                  {canSendPermitApproval && (
-                    <Button
-                      kind="secondary"
-                      size="sm"
-                      disabled={isSendingPermitEmail}
-                      onClick={() => void onOpenPermitApprovalEmail()}
-                    >
-                      Email approval
-                    </Button>
-                  )}
-                  {canOpenPermitReport && (
-                    <Button
-                      kind="primary"
-                      size="sm"
-                      disabled={isOpeningPermitReport}
-                      onClick={() => void onOpenPermitReport()}
-                    >
-                      {isOpeningPermitReport ? 'Opening...' : 'Print permit'}
-                    </Button>
-                  )}
-                </>
-              ) : undefined
-            }
-          />
-          {detail && (
-            <dl className="application-detail-header-metrics" aria-label="Permit highlights">
-              <div>
-                <dt>Application</dt>
-                <dd>{displayValue(detail.applicationNumber)}</dd>
-              </div>
-              <div>
-                <dt>Exemption</dt>
-                <dd>{displayValue(detail.exemptionNumber)}</dd>
-              </div>
-              <div>
-                <dt>Documents</dt>
-                <dd>
-                  {documentsInvoicesErrorMessage
-                    ? 'Unavailable'
-                    : deferredPermitTabLoading.documents
-                      ? 'Loading…'
-                      : deferredPermitTabLoaded.documents
-                        ? documentRows.length.toLocaleString()
-                        : '—'}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
+        <PageHeader
+          title={`Permit ${detail?.permitNumber ?? permitNumber ?? ''}`.trim()}
+          subtitle="Check and manage this provincial permit"
+          status={
+            detail ? (
+              <StatusTag
+                status={detail.permitStatusDescription ?? detail.permitStatusCode ?? ''}
+                fallbackLabel="Not provided"
+              />
+            ) : undefined
+          }
+          actions={
+            canRequestPermitReview || canSendPermitApproval || canOpenPermitReport ? (
+              <>
+                {canRequestPermitReview && (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    disabled={isSendingPermitEmail || !permitReviewReady}
+                    title={
+                      permitReviewReady
+                        ? undefined
+                        : isPermitTablesLoading
+                          ? 'Checking permit review readiness...'
+                          : 'An active permit requires an application, package, and scale detail before review can be requested.'
+                    }
+                    onClick={() => void onSendPermitEmail('request')}
+                  >
+                    Email review request
+                  </Button>
+                )}
+                {canSendPermitApproval && (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    disabled={isSendingPermitEmail}
+                    onClick={() => void onOpenPermitApprovalEmail()}
+                  >
+                    Email approval
+                  </Button>
+                )}
+                {canOpenPermitReport && (
+                  <Button
+                    kind="primary"
+                    size="sm"
+                    disabled={isOpeningPermitReport}
+                    onClick={() => void onOpenPermitReport()}
+                  >
+                    {isOpeningPermitReport ? 'Opening...' : 'Print permit'}
+                  </Button>
+                )}
+              </>
+            ) : undefined
+          }
+        />
       </Column>
 
       {loading && (

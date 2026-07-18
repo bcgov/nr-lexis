@@ -115,7 +115,6 @@ import {
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
 import { triggerBrowserDownload } from '@/utils/download'
-import { displayAuditIdentity } from '@/utils/text'
 import {
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
@@ -2806,45 +2805,15 @@ const ProvincialApplicationDetailsPage = () => {
         <DetailBreadcrumb label="Provincial application search" to="/provincial/application" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <div className="application-detail-title-row">
-          <PageHeader
-            title={`Application ${detail?.applicationNumber ?? applicationNumber ?? ''}`.trim()}
-            subtitle="Check and manage this provincial application"
-            status={
-              detail ? (
-                <StatusTag
-                  status={detail.statusDescription ?? detail.applicationStatusCode ?? ''}
-                />
-              ) : undefined
-            }
-          />
-          {detail && (
-            <dl
-              className="application-detail-header-metrics"
-              role="group"
-              aria-label="Application highlights"
-            >
-              <div>
-                <dt>Author</dt>
-                <dd>{displayAuditIdentity(detail.author)}</dd>
-              </div>
-              <div>
-                <dt>Package count</dt>
-                <dd>{detail.packages.length.toLocaleString()}</dd>
-              </div>
-              <div>
-                <dt>File count</dt>
-                <dd>
-                  {documentLookupAvailability === 'available'
-                    ? documentRows.length.toLocaleString()
-                    : documentLookupAvailability === 'unavailable'
-                      ? 'Unavailable'
-                      : 'Loading'}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
+        <PageHeader
+          title={`Application ${detail?.applicationNumber ?? applicationNumber ?? ''}`.trim()}
+          subtitle="Check and manage this provincial application"
+          status={
+            detail ? (
+              <StatusTag status={detail.statusDescription ?? detail.applicationStatusCode ?? ''} />
+            ) : undefined
+          }
+        />
       </Column>
 
       {loading && (

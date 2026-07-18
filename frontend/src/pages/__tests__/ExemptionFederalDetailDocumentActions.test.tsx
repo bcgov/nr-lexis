@@ -416,13 +416,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       'data-status-variant',
       'positive',
     )
-    const exemptionHighlights = screen.getByLabelText('Exemption highlights')
-    expect(within(exemptionHighlights).getByText('Type')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('Type 1')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('Remaining volume (m³)')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('94')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('Permits')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Exemption highlights')).not.toBeInTheDocument()
     const exemptionSummaryTile = screen
       .getByRole('heading', { name: 'Exemption summary' })
       .closest('.cds--tile')
@@ -675,11 +669,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(await screen.findAllByText('Documents unavailable')).not.toHaveLength(0)
-    const highlights = screen.getByLabelText('Exemption highlights')
-    const documentMetric = within(highlights).getByText('Documents').closest('div')
-    expect(documentMetric).toBeTruthy()
-    expect(within(documentMetric as HTMLElement).getByText('Unavailable')).toBeInTheDocument()
-    expect(within(documentMetric as HTMLElement).queryByText('0')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Exemption highlights')).not.toBeInTheDocument()
 
     await selectDetailTab('Documents')
     expect(

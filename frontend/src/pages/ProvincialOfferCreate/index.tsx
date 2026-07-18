@@ -594,19 +594,6 @@ const ProvincialOfferCreatePage = () => {
         <PageHeader
           title="Create provincial offer"
           subtitle="Enter offer details and save a new provincial offer."
-          statusPlacement="end"
-          status={
-            <dl
-              className="application-detail-header-metrics"
-              role="group"
-              aria-label="New offer state"
-            >
-              <div>
-                <dt>Offer number</dt>
-                <dd>New</dd>
-              </div>
-            </dl>
-          }
         />
       </Column>
 

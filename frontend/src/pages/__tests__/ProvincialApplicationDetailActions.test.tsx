@@ -44,7 +44,7 @@ import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetai
 describe.sequential('Provincial Application Detail Actions - application', () => {
   beforeEach(setupApplicationDetailTests)
 
-  it('shows the legacy application author in the high-level identity', async () => {
+  it('does not render a top-right application highlights widget', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -56,35 +56,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    const highlights = await screen.findByRole('group', {
-      name: 'Application highlights',
-    })
-    expect(within(highlights).getByText('Author')).toBeInTheDocument()
-    expect(within(highlights).getByText('idir\\application-author')).toBeInTheDocument()
-  })
-
-  it('does not display a historical Cognito subject as the application author', async () => {
-    mockedFetchProvincialApplicationDetail.mockResolvedValue({
-      ...applicationDetail,
-      author: '00000000-0000-4000-8000-000000000001',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const highlights = await screen.findByRole('group', {
-      name: 'Application highlights',
-    })
-    expect(within(highlights).getByText('Not available')).toBeInTheDocument()
-    expect(within(highlights).queryByText(/00000000-0000-4000/i)).not.toBeInTheDocument()
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    expect(
+      screen.queryByRole('group', {
+        name: 'Application highlights',
+      }),
+    ).not.toBeInTheDocument()
   })
 
   it('uses the legacy application detail tab order', async () => {
@@ -122,13 +99,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Page actions',
       }),
     ).not.toBeInTheDocument()
-    const applicationHighlights = screen.getByRole('group', {
-      name: 'Application highlights',
-    })
-    expect(within(applicationHighlights).getByText('Package count')).toBeInTheDocument()
-    expect(within(applicationHighlights).getByText('File count')).toBeInTheDocument()
-    expect(within(applicationHighlights).getByText('1')).toBeInTheDocument()
-    expect(within(applicationHighlights).getByText('0')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Application highlights' })).not.toBeInTheDocument()
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       'Owner',
       'Agent',
