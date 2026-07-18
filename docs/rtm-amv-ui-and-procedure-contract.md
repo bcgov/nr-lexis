@@ -97,21 +97,6 @@ because the legacy select procedure requires an exact species and growth type.
 The table has no user/timestamp audit columns. This change preserves the schema and trigger; it
 does not claim to add audit metadata that the legacy data model cannot store.
 
-## Verification coverage
-
-Focused service and UI tests cover the two-growth fan-out, Pine expansion, transaction rollback,
-month normalization, the one-table UI, numeric validation, and rejected-batch feedback. The
-relevant suites are `OracleRtmEmsLogAmvServiceTest`, `OracleRtmEmsLogAmvRepositoryTest`,
-`RtmEmsLogAmvControllerTest`, `RTMEmsLogAmvActions.test.tsx`, and
-`rtm-emslogamv-service.test.ts`.
-
-Those tests do not replace live Oracle/TEST verification of direct-`MERGE` grants, rollback,
-trigger behavior, or downstream exports.
-
-Use the [TEST validation checklist](rtm-amv-test-validation.md) after deployment. It keeps all
-TEST values parameterized and covers UI, O/S persistence, the export trigger, audit events,
-downstream consumers, and permit-load timing.
-
 ## Confluence requirement traceability
 
 | Requirement     | Current status             | Evidence or decision needed                                                                                                                         |

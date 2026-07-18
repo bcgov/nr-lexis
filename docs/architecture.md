@@ -76,9 +76,7 @@ scope.
   bypassing application authorization. Table-dependent edits and review requests remain unavailable while those
   tables load or refresh, preventing actions against stale data. Package-scoped endpoints verify a
   direct Oracle relationship rather than reloading normal and Blanket OIC package lists for every
-  request. The
-  [TEST validation guide](permit-package-membership-test-validation.md) identifies both
-  relationship paths and denial cases without writing data.
+  request.
 - Canadian permit invoicing remains internal to LEXIS. Non-Canadian invoicing uses the established
   GBMS Oracle package sequence with ordered best-effort coordination and explicit reconciliation
   guidance.

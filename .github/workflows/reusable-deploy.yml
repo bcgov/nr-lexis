@@ -108,9 +108,6 @@ on:
       keycloak_sa_client_secret:
         description: Keycloak service-account client secret used to provision LEXIS clients/scopes
         required: false
-      lexis_mail_from:
-        description: Approved sender mailbox for LEXIS workflow messages
-        required: true
       lexis_mail_override_recipients:
         description: Non-production recipient override
         required: false
