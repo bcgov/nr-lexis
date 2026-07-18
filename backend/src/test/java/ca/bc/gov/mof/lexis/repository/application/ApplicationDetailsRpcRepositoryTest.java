@@ -5,10 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.sql.CallableStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -272,6 +276,62 @@ class ApplicationDetailsRpcRepositoryTest {
             () -> repository.streamFileAttachment(44L, new ByteArrayOutputStream()))
         .isInstanceOf(java.io.IOException.class)
         .hasCauseInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void permitLookupsShouldReadOraclePermitDetailNumber() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement ordinaryStatement = mock(CallableStatement.class);
+    CallableStatement oicStatement = mock(CallableStatement.class);
+    ResultSet ordinaryReadCursor = permitCursor(76925L);
+    ResultSet ordinaryRequiredCursor = permitCursor(76925L);
+    ResultSet oicSingleCursor = permitCursor(76925L);
+    ResultSet oicListCursor = permitCursor(76925L);
+
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_PERMIT_DET_BY_APP(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(ordinaryStatement));
+    when(ordinaryStatement.getObject(2)).thenReturn(ordinaryReadCursor, ordinaryRequiredCursor);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_PERMIT_DET_BY_OIC_APP(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(oicStatement));
+    when(oicStatement.getObject(2)).thenReturn(oicSingleCursor, oicListCursor);
+
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPermitsByApplicationNumber(46116L))
+        .containsExactly(new ApplicationDetailsRpcRepository.ApplicationPermitRow(76925L, "Active"));
+    assertThat(repository.findPermitsByApplicationNumberRequired(46116L))
+        .containsExactly(new ApplicationDetailsRpcRepository.ApplicationPermitRow(76925L, "Active"));
+    assertThat(repository.findPermitByOicApplicationNumberRequired(46116L))
+        .contains(new ApplicationDetailsRpcRepository.ApplicationPermitRow(76925L, "Active"));
+    assertThat(repository.findPermitsByOicApplicationNumberRequired(46116L))
+        .containsExactly(new ApplicationDetailsRpcRepository.ApplicationPermitRow(76925L, "Active"));
+
+    verify(ordinaryReadCursor, never()).getLong("EXPORT_PERMIT_NUMBER");
+    verify(ordinaryRequiredCursor, never()).getLong("EXPORT_PERMIT_NUMBER");
+    verify(oicSingleCursor, never()).getLong("EXPORT_PERMIT_NUMBER");
+    verify(oicListCursor, never()).getLong("EXPORT_PERMIT_NUMBER");
+  }
+
+  private static ResultSet permitCursor(long permitNumber) throws SQLException {
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn(permitNumber);
+    when(cursor.wasNull()).thenReturn(false);
+    when(cursor.getString("STATUS_DESCRIPTION")).thenReturn("Active");
+    return cursor;
   }
 
   private static ApplicationDetailsRpcRepository.PackageMutationRecord packageMutationRecord(
