@@ -30,6 +30,7 @@ import {
   fetchOfferClientData,
   fetchOfferPackageList,
   fetchOfferPackageVolume,
+  validateOfferApplication,
 } from '@/service/provincial-offer-create-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 import { formatBusinessIsoDate } from '@/utils/date'
@@ -74,6 +75,7 @@ vi.mock('@/service/provincial-offer-create-service', () => ({
   fetchOfferClientData: vi.fn(),
   fetchOfferPackageList: vi.fn(),
   fetchOfferPackageVolume: vi.fn(),
+  validateOfferApplication: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-application-search-service', () => ({
@@ -103,6 +105,7 @@ const mockedFetchOfferApplicationVolume = vi.mocked(fetchOfferApplicationVolume)
 const mockedFetchOfferClientData = vi.mocked(fetchOfferClientData)
 const mockedFetchOfferPackageList = vi.mocked(fetchOfferPackageList)
 const mockedFetchOfferPackageVolume = vi.mocked(fetchOfferPackageVolume)
+const mockedValidateOfferApplication = vi.mocked(validateOfferApplication)
 const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
   searchProvincialApplicationNumberOptions,
 )
@@ -221,6 +224,7 @@ describe('Create Page Core Flows', () => {
     })
     mockedFetchOfferPackageList.mockResolvedValue(['PKG-9'])
     mockedFetchOfferPackageVolume.mockResolvedValue('95.0')
+    mockedValidateOfferApplication.mockResolvedValue({ isValid: true, errors: [] })
     mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
       {
         value: '321',
@@ -1778,6 +1782,69 @@ describe('Create Page Core Flows', () => {
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080')
   }, 15000)
+
+  it('blocks offers against a federal application before loading offer details', async () => {
+    const eligibilityError = 'Application 2001 does not have a valid jurisdiction to accept offers'
+    mockedValidateOfferApplication.mockResolvedValue({
+      isValid: false,
+      errors: [eligibilityError],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/offers/create?applicationNumber=2001']}>
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(eligibilityError)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(mockedFetchOfferApplicationDetails).not.toHaveBeenCalled()
+    expect(mockedFetchOfferPackageList).not.toHaveBeenCalled()
+    expect(mockedFetchOfferApplicationVolume).not.toHaveBeenCalled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('shows an offer save validation error returned by the backend', async () => {
+    const saveError = 'Application 2001 does not have a valid jurisdiction to accept offers'
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\approver',
+          roles: ['APPLICATION_APPROVER'],
+        }),
+      }),
+    )
+    mockedSubmitProvincialOfferCreate.mockResolvedValue({
+      success: false,
+      message: '',
+      errors: [saveError],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&offeringClientNumber=00099999',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByDisplayValue('PKG-9')
+    await userEvent.type(screen.getByLabelText('Company'), 'Example Lumber')
+    await userEvent.type(screen.getByLabelText('Contact name'), 'Sample Contact')
+    await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
+    await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText(saveError)).toBeInTheDocument()
+    expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledTimes(1)
+  })
 
   it('uses the authoritative scoped client and non-approver offer defaults', async () => {
     mockedUseAuth.mockReturnValue(

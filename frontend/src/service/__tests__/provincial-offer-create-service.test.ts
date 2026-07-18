@@ -4,6 +4,7 @@ import {
   fetchOfferApplicationVolume,
   fetchOfferClientData,
   fetchOfferPackageList,
+  validateOfferApplication,
 } from '@/service/provincial-offer-create-service'
 
 const { getCachedDataMock } = vi.hoisted(() => ({
@@ -48,6 +49,30 @@ describe('provincial-offer-create-service', () => {
       advertisingDate: '2026-06-15',
       teacReviewDate: '2026-06-16',
       region: 'Cariboo Natural Resource Region',
+    })
+  })
+
+  it('returns the offer eligibility validation result', async () => {
+    getCachedDataMock.mockResolvedValue({
+      isValid: false,
+      errors: ['Application 45970 does not have a valid jurisdiction to accept offers'],
+    })
+
+    const result = await validateOfferApplication('45970')
+
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/rpc/offer-details/validate-application-number',
+      {
+        params: { applicationNumber: '45970' },
+      },
+      {
+        cacheKey: 'offer-application-validation:45970',
+        ttlMs: 30_000,
+      },
+    )
+    expect(result).toEqual({
+      isValid: false,
+      errors: ['Application 45970 does not have a valid jurisdiction to accept offers'],
     })
   })
 

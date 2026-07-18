@@ -15,6 +15,11 @@ export type OfferApplicationDetails = {
   region: string
 }
 
+export type OfferApplicationValidation = {
+  isValid: boolean
+  errors: string[]
+}
+
 export type OfferClientData = {
   clientNumber: string
   companyName: string
@@ -75,6 +80,26 @@ export const fetchOfferApplicationDetails = async (
     advertisingDate: asString(source.advertisingDate),
     teacReviewDate: asString(source.teacReviewDate),
     region: asString(source.region),
+  }
+}
+
+export const validateOfferApplication = async (
+  applicationNumber: string,
+): Promise<OfferApplicationValidation> => {
+  const data = await apiService.getCachedData<unknown>(
+    '/lexis/rpc/offer-details/validate-application-number',
+    {
+      params: { applicationNumber },
+    },
+    {
+      cacheKey: `offer-application-validation:${applicationNumber}`,
+      ttlMs: OFFER_CREATE_CACHE_TTL_MS,
+    },
+  )
+  const source = recordOrEmpty(data)
+  return {
+    isValid: source.isValid === true,
+    errors: asStringArray(source.errors),
   }
 }
 

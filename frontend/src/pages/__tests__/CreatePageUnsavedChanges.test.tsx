@@ -30,6 +30,7 @@ import {
   fetchOfferClientData,
   fetchOfferPackageList,
   fetchOfferPackageVolume,
+  validateOfferApplication,
 } from '@/service/provincial-offer-create-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 import { useAuth } from '@/context/auth/useAuth'
@@ -63,6 +64,7 @@ vi.mock('@/service/provincial-offer-create-service', () => ({
   fetchOfferClientData: vi.fn(),
   fetchOfferPackageList: vi.fn(),
   fetchOfferPackageVolume: vi.fn(),
+  validateOfferApplication: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-application-search-service', () => ({
@@ -92,6 +94,7 @@ const mockedFetchOfferApplicationVolume = vi.mocked(fetchOfferApplicationVolume)
 const mockedFetchOfferClientData = vi.mocked(fetchOfferClientData)
 const mockedFetchOfferPackageList = vi.mocked(fetchOfferPackageList)
 const mockedFetchOfferPackageVolume = vi.mocked(fetchOfferPackageVolume)
+const mockedValidateOfferApplication = vi.mocked(validateOfferApplication)
 const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
   searchProvincialApplicationNumberOptions,
 )
@@ -185,6 +188,7 @@ describe('create page unsaved changes', () => {
     mockedFetchOfferClientData.mockResolvedValue(null)
     mockedFetchOfferPackageList.mockResolvedValue([])
     mockedFetchOfferPackageVolume.mockResolvedValue('')
+    mockedValidateOfferApplication.mockResolvedValue({ isValid: true, errors: [] })
     mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
     mockedSubmitProvincialApplicationCreate.mockResolvedValue({
       success: false,
