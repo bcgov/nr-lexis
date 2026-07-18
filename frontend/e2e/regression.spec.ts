@@ -1862,7 +1862,12 @@ test.describe('TEST IDIR admin regression', () => {
 
   test('uses copied AMV values as the warning baseline', async () => {
     const page = await authenticatedIdirPage()
-    const sourceDate = '2000-01-01'
+    const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
+    const [currentYear, currentMonthNumber] = currentMonth.split('-').map(Number)
+    const previousCurrentMonth = new Date(
+      Date.UTC(currentYear, currentMonthNumber - 2, 1),
+    ).toISOString().slice(0, 10)
+    const sourceDate = previousCurrentMonth
     const copiedRows = [
       ['BA', 'O', 10.25],
       ['BA', 'S', 10.25],
@@ -1886,17 +1891,21 @@ test.describe('TEST IDIR admin regression', () => {
         return
       }
 
-      const latestBeforeDate = new URL(request.url()).searchParams.get('latestBeforeDate')
+      const searchParams = new URL(request.url()).searchParams
+      const latestBeforeDate = searchParams.get('latestBeforeDate')
+      const isImmediatePreviousMonth =
+        searchParams.get('retrievalDate') === previousCurrentMonth &&
+        searchParams.get('updateDate') === previousCurrentMonth
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(latestBeforeDate ? copiedRows : []),
+        body: JSON.stringify(latestBeforeDate || isImmediatePreviousMonth ? copiedRows : []),
       })
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expect(page.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
-    await expect(page.getByText(/Prefilled from the latest available earlier value/)).toBeVisible()
+    await expect(page.getByText(/Prefilled from the previous month/)).toBeVisible()
 
     const balsamGradeA = page.getByLabel('Balsam (BA) grade A')
     const cedarGradeA = page.getByLabel('Cedar (CE) grade A')

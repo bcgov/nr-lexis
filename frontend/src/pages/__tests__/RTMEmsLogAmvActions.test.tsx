@@ -217,10 +217,7 @@ describe('RTM EMS Log AMV actions', () => {
 
   it('treats a dash as an empty starting value instead of an invalid number', async () => {
     const user = userEvent.setup()
-    mockedSearchLatest.mockResolvedValue([
-      row('BA', 'A', 'O', PREVIOUS_MONTH, 10),
-      row('HE', 'A', 'O', PREVIOUS_MONTH, 20),
-    ])
+    mockRows([], [row('BA', 'A', 'O', PREVIOUS_MONTH, 10), row('HE', 'A', 'O', PREVIOUS_MONTH, 20)])
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
@@ -247,13 +244,43 @@ describe('RTM EMS Log AMV actions', () => {
           grade: 'A',
           growthIndicator: 'O',
           newValue: 10,
-          saveMode: 'create',
+          saveMode: 'update',
         }),
       ],
     })
   })
 
-  it('copies only old-growth values into a new month and sends the first day of every month', async () => {
+  it('prefills an empty current month from the immediately previous month', async () => {
+    mockRows(
+      [],
+      [row('BA', 'A', 'O', PREVIOUS_MONTH, 10.25), row('BA', 'A', 'S', PREVIOUS_MONTH, 99)],
+    )
+    mockedSearchLatest.mockResolvedValue([row('BA', 'A', 'O', '2000-01-01', 999)])
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    expect(amvCell('Balsam (BA)', 'A')).toHaveValue('10.25')
+    expect(amvCell('Balsam (BA)', 'A')).toHaveClass('rtm-amv-cell-input')
+    expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
+    expect(screen.getByText(/Prefilled from the previous month/i)).toBeVisible()
+    expect(mockedSearchLatest).not.toHaveBeenCalled()
+  })
+
+  it('does not prefill a partially populated current month', async () => {
+    mockRows([row('BA', 'A', 'O', CURRENT_MONTH, 10.25)], [row('HE', 'A', 'O', PREVIOUS_MONTH, 20)])
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    expect(amvCell('Balsam (BA)', 'A')).toHaveValue('10.25')
+    expect(amvCell('Hemlock (HE)', 'A')).toHaveValue('')
+    expect(
+      screen.queryByRole('heading', { name: 'Starting values copied' }),
+    ).not.toBeInTheDocument()
+    expect(mockedSearchLatest).not.toHaveBeenCalled()
+  })
+
+  it('prefills a future month from the latest available values', async () => {
+    const futureMonth = monthOffset(CURRENT_MONTH, 1)
     mockedSearchLatest.mockResolvedValue([
       row('BA', 'A', 'O', PREVIOUS_MONTH, 10.25),
       row('BA', 'A', 'S', PREVIOUS_MONTH, 99),
@@ -261,17 +288,56 @@ describe('RTM EMS Log AMV actions', () => {
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    expect(amvCell('Balsam (BA)', 'A')).toHaveValue('10.25')
-    expect(amvCell('Balsam (BA)', 'A')).toHaveClass('rtm-amv-cell-input')
+    fireEvent.change(screen.getByLabelText('Effective month'), {
+      target: { value: futureMonth.slice(0, 7) },
+    })
+    await waitForMonthLoad(futureMonth)
 
-    fireEvent.change(screen.getByLabelText('Effective month'), { target: { value: '2000-02' } })
-    await waitForMonthLoad('2000-02-01')
-    expect(mockedSearch).toHaveBeenCalledWith(
-      expect.objectContaining({ retrievalDate: '2000-01-01', updateDate: '2000-01-01' }),
-    )
-    expect(amvCell('Balsam (BA)', 'Z')).toBeVisible()
-    expect(amvCell('Balsam (BA)', '1')).toBeVisible()
-    expect(amvCell('Balsam (BA)', '2')).toBeVisible()
+    expect(amvCell('Balsam (BA)', 'A')).toHaveValue('10.25')
+    expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
+    expect(screen.getByText(/Prefilled from the latest available earlier value/i)).toBeVisible()
+    expect(mockedSearchLatest).toHaveBeenLastCalledWith(futureMonth)
+  })
+
+  it('does not prefill a past month and confirms multi-cell saves', async () => {
+    const user = userEvent.setup()
+    const pastMonth = monthOffset(CURRENT_MONTH, -1)
+    mockRows([], [], pastMonth)
+    mockedSearchLatest.mockResolvedValue([row('BA', 'A', 'O', PREVIOUS_MONTH, 10.25)])
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    fireEvent.change(screen.getByLabelText('Effective month'), {
+      target: { value: pastMonth.slice(0, 7) },
+    })
+    await waitForMonthLoad(pastMonth)
+
+    const balsam = amvCell('Balsam (BA)', 'A')
+    const hemlock = amvCell('Hemlock (HE)', 'A')
+    expect(balsam).toHaveValue('')
+    expect(screen.getByRole('heading', { name: 'Past month selected' })).toBeVisible()
+    expect(screen.getByText(/require confirmation before saving/i)).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: 'Starting values copied' }),
+    ).not.toBeInTheDocument()
+    expect(mockedSearchLatest).not.toHaveBeenCalled()
+
+    await user.type(balsam, '10')
+    await user.type(hemlock, '20')
+    expect(screen.getByText('2 cells ready to save')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('heading', { name: 'Confirm AMV changes' })).toBeVisible()
+    expect(screen.getByText(/before saving 2 changed cells/i)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Confirm and save' }))
+
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    expect(mockedSaveBatch).toHaveBeenCalledWith({
+      values: expect.arrayContaining([
+        expect.objectContaining({ species: 'BA', grade: 'A', newValue: 10 }),
+        expect.objectContaining({ species: 'HE', grade: 'A', newValue: 20 }),
+      ]),
+    })
   })
 
   it('blocks invalid values before a batch is sent', async () => {

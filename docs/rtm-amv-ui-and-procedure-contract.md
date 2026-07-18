@@ -47,8 +47,11 @@ only and does not misrepresent it as audit metadata.
   queries or saves a value. It does not retain a time-of-day component.
 - Retrieval dates are implementation data and are not shown or editable in the UI.
 - A value must be numeric, non-negative, at most `9999.99`, and have at most two decimal places.
-- A past-month change requires confirmation. A future or empty month can use the latest prior
-  old-growth values as an unsaved starting point.
+- Past months never prefill. They remain editable, and multiple changes are saved together as one
+  atomic batch after confirmation.
+- An empty current month can use values from the immediately preceding calendar month as an
+  unsaved starting point.
+- A future month can use the latest available earlier values as an unsaved starting point.
 - Values cannot be cleared: `AVG_MARKET_PRICE` is `NOT NULL` and the approved RTM contract has no
   delete operation.
 - In the grid, a single dash (`-`) is treated as an empty value. It warns when a copied starting

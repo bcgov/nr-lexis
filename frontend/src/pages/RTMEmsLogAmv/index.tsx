@@ -409,6 +409,7 @@ const RTMEmsLogAmvPage = () => {
     setLoadError('')
 
     try {
+      const prefillFromLatest = targetDate > currentMonth
       const [currentResponse, previousResponse, latestRows] = await Promise.all([
         searchRtmEmsLogAmv({
           species: '',
@@ -424,14 +425,18 @@ const RTMEmsLogAmvPage = () => {
               updateDate: selectedPreviousMonthDate,
             })
           : Promise.resolve([]),
-        searchLatestRtmEmsLogAmv(targetDate),
+        prefillFromLatest ? searchLatestRtmEmsLogAmv(targetDate) : Promise.resolve([]),
       ])
 
       if (requestId !== loadRequestIdRef.current) {
         return
       }
 
-      const nextPrefillValues = buildPrefillValues(latestRows, currentResponse)
+      const nextPrefillValues = prefillFromLatest
+        ? buildPrefillValues(latestRows, currentResponse)
+        : targetDate === currentMonth && currentResponse.length === 0
+          ? buildPrefillValues(previousResponse, currentResponse)
+          : {}
 
       setCurrentRows(currentResponse)
       setPreviousRows(previousResponse)
@@ -458,7 +463,7 @@ const RTMEmsLogAmvPage = () => {
         setIsLoading(false)
       }
     }
-  }, [selectedPreviousMonthDate, targetDate])
+  }, [currentMonth, selectedPreviousMonthDate, targetDate])
 
   useEffect(() => {
     void loadRows()
@@ -726,8 +731,10 @@ const RTMEmsLogAmvPage = () => {
             <div className="admin-upload-validation__content">
               <h3>Starting values copied</h3>
               <p>
-                Prefilled from the latest available earlier value for each species and grade. Save
-                changes applies the displayed values for {formatEffectiveMonth(targetDate)}.
+                {selectedDateIsCurrent
+                  ? 'Prefilled from the previous month for each species and grade.'
+                  : 'Prefilled from the latest available earlier value for each species and grade.'}{' '}
+                Save changes applies the displayed values for {formatEffectiveMonth(targetDate)}.
               </p>
             </div>
           </div>
