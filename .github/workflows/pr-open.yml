@@ -63,8 +63,8 @@ jobs:
         working-directory: backend
         run: mvn -B -DskipITs verify
 
-  frontend-tests:
-    name: Frontend Tests
+  frontend-quality:
+    name: Frontend Quality
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -82,18 +82,91 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Run frontend checks
+      - name: Run frontend quality checks
         working-directory: frontend
         run: |
           npm run typecheck
           npm run lint
           npm run format:check
-          npm run test:cov
+
+  frontend-test-shards:
+    name: Frontend Test Shard (${{ matrix.index }}/${{ matrix.total }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - index: 1
+            total: 3
+          - index: 2
+            total: 3
+          - index: 3
+            total: 3
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend coverage shard
+        working-directory: frontend
+        env:
+          LEXIS_VITEST_SHARD: "true"
+        run: npm run test:cov -- --reporter=blob --shard=${{ matrix.index }}/${{ matrix.total }}
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: vitest-blob-${{ matrix.index }}
+          path: frontend/.vitest-reports/*.json
+          retention-days: 1
+          if-no-files-found: error
+
+  frontend-tests:
+    name: Frontend Tests
+    needs: [frontend-test-shards]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Download Vitest shard reports
+        uses: actions/download-artifact@v5
+        with:
+          pattern: vitest-blob-*
+          path: frontend/.vitest-reports
+          merge-multiple: true
+
+      - name: Merge coverage and enforce thresholds
+        working-directory: frontend
+        run: npx vitest --merge-reports=.vitest-reports --coverage
 
   deploys:
     name: Deploys (${{ github.event.number }})
     if: github.event.pull_request.head.repo.full_name == github.repository
-    needs: [builds, vars, backend-tests, frontend-tests]
+    needs: [builds, vars, backend-tests, frontend-quality, frontend-tests]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
@@ -136,7 +209,16 @@ jobs:
 
   results:
     name: PR Results
-    needs: [builds, backend-tests, frontend-tests, deploys, tests]
+    needs:
+      [
+        builds,
+        backend-tests,
+        frontend-quality,
+        frontend-test-shards,
+        frontend-tests,
+        deploys,
+        tests,
+      ]
     if: always()
     runs-on: ubuntu-slim
     steps:

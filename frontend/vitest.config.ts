@@ -1,5 +1,15 @@
 import { defineConfig } from 'vitest/config'
 
+const coverageThresholds =
+  process.env.LEXIS_VITEST_SHARD === 'true'
+    ? {}
+    : {
+        statements: 80,
+        branches: 75,
+        functions: 80,
+        lines: 80,
+      }
+
 // https://vitejs.dev/config/
 export default defineConfig({
   resolve: {
@@ -15,12 +25,8 @@ export default defineConfig({
     css: false,
     coverage: {
       reporter: ['lcov', 'text-summary', 'text', 'json', 'html'],
-      thresholds: {
-        statements: 80,
-        branches: 75,
-        functions: 80,
-        lines: 80,
-      },
+      // CI merges shard coverage before enforcing the full-suite threshold.
+      thresholds: coverageThresholds,
       exclude: [
         '**/node_modules/**',
         '**/dist/**',
