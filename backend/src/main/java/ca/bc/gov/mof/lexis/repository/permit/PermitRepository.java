@@ -7,18 +7,22 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 @Profile("oracle")
 public class PermitRepository extends OracleRepositorySupport {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(PermitRepository.class);
 
   private static final String FIND_ALL_PERMIT_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)";
@@ -165,44 +169,59 @@ public class PermitRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleFailClosed(
-        FIND_PERMIT_DETAIL_BY_ID,
-        cs -> cs.setString(1, permitNumber.toString()),
-        2,
-        rs ->
-            new PermitDetailDto(
-                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
-                getString(rs, "EXEMPTION_NUMBER"),
-                getString(rs, "EXPORT_PERMIT_STATUS_CODE"),
-                getString(rs, "STATUS_DESCRIPTION"),
-                getString(rs, "AGENT_NUMBER"),
-                getString(rs, "AGENT_LOCN_CODE"),
-                getString(rs, "CLIENT_NUMBER"),
-                getString(rs, "CLIENT_LOCN_CODE"),
-                getString(rs, "DESTINATION_COMPANY_NAME"),
-                getString(rs, "EXPORT_COUNTRY_CODE"),
-                getString(rs, "EXPORT_TRANSPORT_TYPE_CODE"),
-                getString(rs, "TRANSPORT_NAME"),
-                getString(rs, "EXPORT_PORT_OF_EXPORT_CODE"),
-                getString(rs, "OTHER_PORT_OF_EXPORT"),
-                getLocalDate(rs, "APPLICATION_DATE"),
-                getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
-                getLocalDate(rs, "EXPIRY_DATE"),
-                getLocalDate(rs, "RECEIVED_DATE"),
-                getLocalDate(rs, "ESTIMATED_SHIPPING_DATE"),
-                coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
-                coalesce(getLong(rs, "NUMBER_OF_PIECES"), 0L),
-                getString(rs, "RECEIPT_NUMBER"),
-                getString(rs, "FEDERAL_PERMIT_NUMBER"),
-                getString(rs, "EXPORT_SALES_INVOICE_NUMBER"),
-                getString(rs, "REMARKS"),
-                getLong(rs, "OIC_APPLICATION_NUMBER"),
-                getLong(rs, "OIC_REQUEST_PIECES"),
-                getDouble(rs, "OIC_REQUEST_VOLUME"),
-                getLong(rs, "ORG_UNIT_NO"),
-                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
+    long startedAtNanos = System.nanoTime();
+    LOGGER.info(
+        "event=lexis_permit_detail_oracle operation=find_permit_det_by_id outcome=started permitNumber={}",
+        permitNumber);
+    Optional<PermitDetailDto> detail =
+        queryCursorSingleFailClosed(
+            FIND_PERMIT_DETAIL_BY_ID,
+            cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            rs ->
+                new PermitDetailDto(
+                    getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+                    getLong(rs, "APPLICATION_NUMBER"),
+                    getString(rs, "PACKAGE_NUMBER"),
+                    getString(rs, "EXEMPTION_NUMBER"),
+                    getString(rs, "EXPORT_PERMIT_STATUS_CODE"),
+                    getString(rs, "STATUS_DESCRIPTION"),
+                    getString(rs, "AGENT_NUMBER"),
+                    getString(rs, "AGENT_LOCN_CODE"),
+                    getString(rs, "CLIENT_NUMBER"),
+                    getString(rs, "CLIENT_LOCN_CODE"),
+                    getString(rs, "DESTINATION_COMPANY_NAME"),
+                    getString(rs, "EXPORT_COUNTRY_CODE"),
+                    getString(rs, "EXPORT_TRANSPORT_TYPE_CODE"),
+                    getString(rs, "TRANSPORT_NAME"),
+                    getString(rs, "EXPORT_PORT_OF_EXPORT_CODE"),
+                    getString(rs, "OTHER_PORT_OF_EXPORT"),
+                    getLocalDate(rs, "APPLICATION_DATE"),
+                    getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
+                    getLocalDate(rs, "EXPIRY_DATE"),
+                    getLocalDate(rs, "RECEIVED_DATE"),
+                    getLocalDate(rs, "ESTIMATED_SHIPPING_DATE"),
+                    coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
+                    coalesce(getLong(rs, "NUMBER_OF_PIECES"), 0L),
+                    getString(rs, "RECEIPT_NUMBER"),
+                    getString(rs, "FEDERAL_PERMIT_NUMBER"),
+                    getString(rs, "EXPORT_SALES_INVOICE_NUMBER"),
+                    getString(rs, "REMARKS"),
+                    getLong(rs, "OIC_APPLICATION_NUMBER"),
+                    getLong(rs, "OIC_REQUEST_PIECES"),
+                    getDouble(rs, "OIC_REQUEST_VOLUME"),
+                    getLong(rs, "ORG_UNIT_NO"),
+                    firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
+    LOGGER.info(
+        "event=lexis_permit_detail_oracle operation=find_permit_det_by_id outcome={} permitNumber={} durationMs={}",
+        detail.isPresent() ? "found" : "not_found",
+        permitNumber,
+        elapsedMillis(startedAtNanos));
+    return detail;
+  }
+
+  private static long elapsedMillis(long startedAtNanos) {
+    return Math.max(0L, (System.nanoTime() - startedAtNanos) / 1_000_000L);
   }
 
 }
