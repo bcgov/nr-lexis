@@ -24,6 +24,19 @@ The legacy workbook upload controller is disabled unless
 `GROWTH_TYPE_ST`, `EFFECTIVE_DATE`, `AVG_MARKET_PRICE`, and `REVISION_COUNT`. The UI therefore
 does not invent or submit a `blank = 1` field.
 
+### Clarified legacy `BLANK` semantics
+
+The legacy `BLANK` label is a display alias for a space-valued `GRADE` (`' '`) row. It is not a
+column or a flag. The legacy UI submitted that row as `GRADE = ' '`, the select procedure returned
+it as `BLANK`, and the table trigger normalizes an omitted or trimmed grade to a space. The active
+UI intentionally omits that row, as requested; it does not replace it with a new `blank = 1`
+attribute.
+
+Likewise, legacy `UPDATE_DATE` is a user-entered effective month. It is not the timestamp of the
+last submission: the legacy update procedure uses a later value to create a new effective-dated
+version and an equal value to update the current one. The active UI supplies the effective month
+only and does not misrepresent it as audit metadata.
+
 ## Dates and values
 
 - The UI accepts a month and always submits the first calendar day of that month.
@@ -107,8 +120,8 @@ downstream consumers, and permit-load timing.
 | FR-02 to FR-04  | Implemented                | One user save fans out identical values to `O` and `S` without exposing either choice in the UI.                                                    |
 | FR-05 to FR-06  | Implemented                | Friendly species labels are mapped by the service; Pine expands to `WH`, `LO`, and `YE` for both growth partitions.                                 |
 | FR-07 to FR-10  | Implemented                | The UI/API normalize to a `LocalDate` month start and do not expose retrieval date input.                                                           |
-| FR-11           | Data-owner decision        | `EMS_LOG_AMV` has no submission/update timestamp column; the legacy procedure's update-date parameter is an effective date, not an audit timestamp. |
-| FR-12 and FR-14 | Data-owner decision        | The physical table has no blank flag/column to set to `1`.                                                                                          |
+| FR-11           | Confluence correction needed | `EMS_LOG_AMV` has no submission/update timestamp column; the legacy update-date value is an effective month, not an audit timestamp.              |
+| FR-12 and FR-14 | Confluence correction needed | `BLANK` is the legacy display alias for `GRADE = ' '`; the physical table has no blank flag/column to set to `1`.                                  |
 | FR-13           | Implemented                | No blank flag is rendered or accepted from the UI.                                                                                                  |
 | FR-15           | Implemented                | The editable grade set is `A` through `M`, `U`, `X`, `Y`, `Z`, and `1` through `6`; `W` and blank are hidden.                                       |
 | FR-16           | Implemented                | A legacy empty `NEWVAL` is a no-op: clearing an existing cell restores its loaded value on blur and omits it from the batch; blank cells with no stored value remain omitted. |
@@ -127,13 +140,13 @@ implemented without changing legacy semantics:
   one `EMS_LOG_AMV` table partitioned by `GROWTH_TYPE_ST` values `O` and `S`. A data owner must
   confirm that those two logical partitions satisfy the requirement before any physical-table
   change is considered.
-- `EMS_LOG_AMV` has no `blank` (or equivalent) column, so the system cannot persist `blank = 1`
-  for both growth partitions.
+- `BLANK` is a legacy grade sentinel (`GRADE = ' '`), not a column. The Confluence `blank = 1`
+  wording needs correction before a new flag or column is considered.
 - It has no submitting-user, submission-timestamp, or update-timestamp column. A new audit table
   or an approved schema change is required to retain that information.
-- `AVG_MARKET_PRICE` is `NOT NULL`; the active UI treats an explicit clear as a legacy no-op and
-  restores the loaded value on blur. The data architect still needs to confirm that this matches
-  the legacy blank/clear behavior.
+- `AVG_MARKET_PRICE` is `NOT NULL`; legacy code treats an empty value as a no-op. The active UI
+  preserves that behavior by restoring a cleared stored value on blur and omitting it from the
+  batch. Product confirmation is still needed if a delete behavior is desired instead.
 
 No schema, trigger, or downstream consumer behavior is inferred or altered by this branch.
 
@@ -145,3 +158,7 @@ No schema, trigger, or downstream consumer behavior is inferred or altered by th
 - `../nr-mof-db/scripts/THE/PROCEDURES/V7.02651__RTM_EMS_LOG_AMV_UPDATE.sql`
 - `../nr-mof-db/scripts/THE/GRANTS/V16.00571__RTM_EXP_LOGAMV_UPD.sql`
 - `../nr-mof-db/scripts/THE/TRIGGERS/V11.00299__SYNC_EMSLA_EXPLA.sql`
+- `../nr-mof-db/scripts/THE/TRIGGERS/V11.00355__TB1__EMS_LOG_AMV.sql`
+- `../nr-rtm/src/main/webapp/manager/EMSLOGAMV/summary.jsp`
+- `../nr-rtm/src/main/java/ca/bc/gov/mof/rtm/controller/EMSLOGAMVAction.java`
+- `../nr-rtm/src/main/webapp/resources/help/EMS_LOG_AMVHelp.html`
