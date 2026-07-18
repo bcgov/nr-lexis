@@ -13,7 +13,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
-import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialPermitDetail,
+  fetchProvincialPermitExemptionContext,
+} from '@/service/lexis-detail-service'
 import {
   addApplicationsToPermit,
   addBlanketOicPackage,
@@ -58,6 +61,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialPermitDetail: vi.fn(),
+  fetchProvincialPermitExemptionContext: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
@@ -148,6 +152,7 @@ vi.setConfig({ testTimeout: 20000 })
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
+const mockedFetchProvincialPermitExemptionContext = vi.mocked(fetchProvincialPermitExemptionContext)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailCoreTabs)
 const mockedFetchProvincialPermitGbmsEvents = vi.mocked(fetchProvincialPermitGbmsEvents)
 const mockedFetchProvincialPermitFees = vi.mocked(fetchProvincialPermitFees)
@@ -275,6 +280,12 @@ const configureEditableBlanketOicPackage = () => {
     ...tabsResult,
     packages: [editableBlanketOicPackage],
   })
+  mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+    approvedExemptionVolume: 250,
+    exemptionVolumeRemaining: 130,
+    exemptionTypeDescription: 'Blanket OIC',
+    blanketOic: true,
+  })
 }
 
 const renderPermitDetails = () =>
@@ -314,6 +325,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: permitDetail.approvedExemptionVolume,
+      exemptionVolumeRemaining: permitDetail.exemptionVolumeRemaining,
+      exemptionTypeDescription: permitDetail.exemptionTypeDescription,
+      blanketOic: permitDetail.blanketOic,
+    })
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([])
     mockedFetchProvincialPermitFees.mockResolvedValue([])
@@ -788,6 +805,55 @@ describe('Provincial Permit Detail Action Smoke', () => {
         lockMessage: '',
       })
     })
+  })
+
+  it('shows the base permit detail while exemption context continues loading', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      approvedExemptionVolume: null,
+      exemptionVolumeRemaining: null,
+      exemptionTypeDescription: null,
+      blanketOic: false,
+    })
+    let resolveExemptionContext:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitExemptionContext>>) => void)
+      | undefined
+    mockedFetchProvincialPermitExemptionContext.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitExemptionContext>>>(
+          (resolve) => {
+            resolveExemptionContext = resolve
+          },
+        ),
+    )
+
+    renderPermitDetails()
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(screen.queryByText('Loading provincial permit detail...')).not.toBeInTheDocument()
+    expect(mockedFetchProvincialPermitExemptionContext).toHaveBeenCalledWith('EX-9')
+    expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveExemptionContext?.({
+        approvedExemptionVolume: 250,
+        exemptionVolumeRemaining: 130,
+        exemptionTypeDescription: 'Standard exemption',
+        blanketOic: false,
+      })
+    })
+
+    await waitFor(() =>
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
+        permitNumber: '777',
+        receiptNumber: 'R-1',
+        blanketOic: false,
+      }),
+    )
   })
 
   it('shows unavailable fee summaries when the deferred fee request fails', async () => {

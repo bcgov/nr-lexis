@@ -370,6 +370,8 @@ body {
 }
 
 .csp-header-action {
+  --cds-icon-primary: var(--csp-text-inverse);
+
   width: var(--csp-header-height);
   height: var(--csp-header-height);
   color: var(--csp-text-inverse);
@@ -381,6 +383,8 @@ body {
 }
 
 .csp-header-action[aria-expanded='true'] {
+  --cds-icon-primary: var(--csp-interactive);
+
   background-color: var(--csp-layer-01);
   color: var(--csp-interactive);
 }

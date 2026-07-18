@@ -137,17 +137,14 @@ export const releaseOfferEditLock = async (offerNumber: string): Promise<void> =
   }
 }
 
-const fetchPermitExemptionContext = async (
+export type ProvincialPermitExemptionContext = Pick<
+  ProvincialPermitDetail,
+  'approvedExemptionVolume' | 'exemptionVolumeRemaining' | 'exemptionTypeDescription' | 'blanketOic'
+>
+
+export const fetchProvincialPermitExemptionContext = async (
   exemptionNumber: string,
-): Promise<
-  Pick<
-    ProvincialPermitDetail,
-    | 'approvedExemptionVolume'
-    | 'exemptionVolumeRemaining'
-    | 'exemptionTypeDescription'
-    | 'blanketOic'
-  >
-> => {
+): Promise<ProvincialPermitExemptionContext> => {
   const path = `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`
   const response = await apiService.getCachedResponse<ProvincialExemptionDetail>(path, undefined, {
     ttlMs: DETAIL_CACHE_TTL_MS,
@@ -187,21 +184,12 @@ export const fetchProvincialPermitDetail = async (
     })
     apiService.registerRecordVersion('permit', permitNumber, response, path)
     const permitDetail = response.data
-    if (!permitDetail.exemptionNumber) {
-      return {
-        ...permitDetail,
-        approvedExemptionVolume: permitDetail.approvedExemptionVolume ?? null,
-        exemptionVolumeRemaining: permitDetail.exemptionVolumeRemaining ?? null,
-        exemptionTypeDescription: permitDetail.exemptionTypeDescription ?? null,
-        blanketOic: permitDetail.blanketOic ?? false,
-      }
-    }
-
-    const exemptionContext = await fetchPermitExemptionContext(permitDetail.exemptionNumber)
-
     return {
       ...permitDetail,
-      ...exemptionContext,
+      approvedExemptionVolume: permitDetail.approvedExemptionVolume ?? null,
+      exemptionVolumeRemaining: permitDetail.exemptionVolumeRemaining ?? null,
+      exemptionTypeDescription: permitDetail.exemptionTypeDescription ?? null,
+      blanketOic: permitDetail.blanketOic ?? false,
     }
   } catch (error) {
     if (isNotFound(error)) {

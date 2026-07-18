@@ -5,6 +5,7 @@ import {
   fetchProvincialExemptionDetail,
   fetchProvincialOfferDetail,
   fetchProvincialPermitDetail,
+  fetchProvincialPermitExemptionContext,
   releaseOfferEditLock,
 } from '@/service/lexis-detail-service'
 
@@ -33,54 +34,32 @@ describe('lexis detail service', () => {
     vi.clearAllMocks()
   })
 
-  it('loads provincial permit detail with totals from the exemption detail response', async () => {
-    getCachedResponseMock
-      .mockResolvedValueOnce(
-        response({
-          permitNumber: 777,
-          exemptionNumber: 'EX-9',
-          applicationDate: '2026-04-10',
-          receivedDate: '2026-04-15',
-          permitVolume: 120,
-        }),
-      )
-      .mockResolvedValueOnce(
-        response({
-          approvedVolume: '250.5',
-          remainingVolume: 130,
-          exemptionTypeDescription: 'Blanket OIC',
-          blanketOic: true,
-        }),
-      )
+  it('loads provincial permit detail without waiting for exemption context', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        permitNumber: 777,
+        exemptionNumber: 'EX-9',
+        applicationDate: '2026-04-10',
+        receivedDate: '2026-04-15',
+        permitVolume: 120,
+      }),
+    )
 
     const result = await fetchProvincialPermitDetail('777')
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(2)
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(1, '/lexis/permits/777', undefined, {
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(1)
+    expect(getCachedResponseMock).toHaveBeenCalledWith('/lexis/permits/777', undefined, {
       ttlMs: 30_000,
     })
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(2, '/lexis/exemptions/EX-9', undefined, {
-      ttlMs: 30_000,
-    })
-    expect(getCachedResponseMock).not.toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/approved-exemption-volume',
-      expect.anything(),
-      expect.anything(),
-    )
-    expect(getCachedResponseMock).not.toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/exemption-volume-remaining',
-      expect.anything(),
-      expect.anything(),
-    )
     expect(result).toMatchObject({
       permitNumber: 777,
       exemptionNumber: 'EX-9',
       applicationDate: '2026-04-10',
       receivedDate: '2026-04-15',
-      approvedExemptionVolume: 250.5,
-      exemptionVolumeRemaining: 130,
-      exemptionTypeDescription: 'Blanket OIC',
-      blanketOic: true,
+      approvedExemptionVolume: null,
+      exemptionVolumeRemaining: null,
+      exemptionTypeDescription: null,
+      blanketOic: false,
     })
     expect(registerRecordVersionMock).toHaveBeenCalledWith(
       'permit',
@@ -88,6 +67,28 @@ describe('lexis detail service', () => {
       expect.objectContaining({ data: expect.objectContaining({ permitNumber: 777 }) }),
       '/lexis/permits/777',
     )
+  })
+
+  it('loads permit exemption context separately from the permit detail', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        approvedVolume: '250.5',
+        remainingVolume: 130,
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
+      }),
+    )
+
+    await expect(fetchProvincialPermitExemptionContext('EX-9')).resolves.toEqual({
+      approvedExemptionVolume: 250.5,
+      exemptionVolumeRemaining: 130,
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+    })
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith('/lexis/exemptions/EX-9', undefined, {
+      ttlMs: 30_000,
+    })
   })
 
   it('registers application and exemption detail versions against their authoritative URLs', async () => {
@@ -114,48 +115,33 @@ describe('lexis detail service', () => {
     )
   })
 
-  it('rejects permit detail when the required exemption detail request fails', async () => {
+  it('rejects permit exemption context when the exemption detail request fails', async () => {
     const failedPath = '/lexis/exemptions/EX-9'
-    getCachedResponseMock.mockImplementation((path: string) => {
-      if (path === failedPath) {
-        return Promise.reject(new Error(`unavailable: ${path}`))
-      }
-      if (path === '/lexis/permits/777') {
-        return Promise.resolve(response({ permitNumber: 777, exemptionNumber: 'EX-9' }))
-      }
-      return Promise.resolve(
-        response({
-          approvedVolume: 250,
-          remainingVolume: 125,
-          exemptionTypeDescription: 'Ministerial',
-          blanketOic: false,
-        }),
-      )
-    })
+    getCachedResponseMock.mockRejectedValue(new Error(`unavailable: ${failedPath}`))
 
-    await expect(fetchProvincialPermitDetail('777')).rejects.toThrow(`unavailable: ${failedPath}`)
+    await expect(fetchProvincialPermitExemptionContext('EX-9')).rejects.toThrow(
+      `unavailable: ${failedPath}`,
+    )
   })
 
-  it('rejects permit detail when a required exemption context endpoint returns no content', async () => {
-    getCachedResponseMock
-      .mockResolvedValueOnce(response({ permitNumber: 777, exemptionNumber: 'EX-9' }))
-      .mockResolvedValueOnce(response(undefined, 204))
+  it('rejects permit exemption context when its endpoint returns no content', async () => {
+    getCachedResponseMock.mockResolvedValue(response(undefined, 204))
 
-    await expect(fetchProvincialPermitDetail('777')).rejects.toThrow(/service unavailable/i)
+    await expect(fetchProvincialPermitExemptionContext('EX-9')).rejects.toThrow(
+      /service unavailable/i,
+    )
   })
 
-  it('rejects permit detail when the exemption context cannot be verified', async () => {
-    getCachedResponseMock
-      .mockResolvedValueOnce(response({ permitNumber: 777, exemptionNumber: 'EX-9' }))
-      .mockResolvedValueOnce(
-        response({
-          approvedVolume: 250,
-          remainingVolume: 125,
-          exemptionTypeDescription: 'Blanket OIC',
-        }),
-      )
+  it('rejects permit exemption context when it cannot be verified', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        approvedVolume: 250,
+        remainingVolume: 125,
+        exemptionTypeDescription: 'Blanket OIC',
+      }),
+    )
 
-    await expect(fetchProvincialPermitDetail('777')).rejects.toThrow(
+    await expect(fetchProvincialPermitExemptionContext('EX-9')).rejects.toThrow(
       /invalid permit exemption context/i,
     )
   })
@@ -163,12 +149,12 @@ describe('lexis detail service', () => {
   it.each([
     { field: 'approvedVolume', detail: { remainingVolume: 125, blanketOic: false } },
     { field: 'remainingVolume', detail: { approvedVolume: 250, blanketOic: false } },
-  ])('rejects permit detail when exemption detail omits $field', async ({ detail }) => {
-    getCachedResponseMock
-      .mockResolvedValueOnce(response({ permitNumber: 777, exemptionNumber: 'EX-9' }))
-      .mockResolvedValueOnce(response(detail))
+  ])('rejects permit exemption context when exemption detail omits $field', async ({ detail }) => {
+    getCachedResponseMock.mockResolvedValue(response(detail))
 
-    await expect(fetchProvincialPermitDetail('777')).rejects.toThrow(/invalid .*exemption volume/i)
+    await expect(fetchProvincialPermitExemptionContext('EX-9')).rejects.toThrow(
+      /invalid .*exemption volume/i,
+    )
   })
 
   it('always bypasses the federal detail cache and preserves explicit lock state', async () => {

@@ -56,7 +56,10 @@ import {
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialPermitDetail,
+  fetchProvincialPermitExemptionContext,
+} from '@/service/lexis-detail-service'
 import {
   fetchApplicationClientData,
   type ApplicationClientData,
@@ -402,6 +405,12 @@ const buildPermitDetailForm = (permitDetail: ProvincialPermitDetail): PermitDeta
   otherPortOfExport: detailValue(permitDetail.otherPortOfExport),
 })
 
+const hasPermitExemptionContext = (permitDetail: ProvincialPermitDetail): boolean =>
+  permitDetail.blanketOic ||
+  permitDetail.approvedExemptionVolume !== null ||
+  permitDetail.exemptionVolumeRemaining !== null ||
+  permitDetail.exemptionTypeDescription !== null
+
 const withUpdatedPermitDetail = (
   currentDetail: ProvincialPermitDetail,
   form: PermitDetailForm,
@@ -516,6 +525,7 @@ const ProvincialPermitDetailsPage = () => {
   const [permitApprovalEmailAddress, setPermitApprovalEmailAddress] = useState('')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [permitExemptionContextReady, setPermitExemptionContextReady] = useState(false)
   const [isPermitTablesLoading, setIsPermitTablesLoading] = useState(false)
   const [permitTablesErrorMessage, setPermitTablesErrorMessage] = useState('')
   const [permitFeesErrorMessage, setPermitFeesErrorMessage] = useState('')
@@ -754,6 +764,7 @@ const ProvincialPermitDetailsPage = () => {
         setFeeOverrideContext(null)
         setFeeOverrideForm(null)
         setEditContextLoaded(false)
+        setPermitExemptionContextReady(false)
         setIsEditingFeeOverride(false)
         setIsEditingPermit(false)
         setIsEditingShipping(false)
@@ -773,6 +784,7 @@ const ProvincialPermitDetailsPage = () => {
       setPermitTablesErrorMessage('')
       setPermitFeesErrorMessage('')
       setIsPermitTablesLoading(false)
+      setPermitExemptionContextReady(false)
       setDocumentsErrorMessage('')
       setInvoicesErrorMessage('')
       setDocumentsInvoicesErrorDismissed(false)
@@ -827,23 +839,55 @@ const ProvincialPermitDetailsPage = () => {
             setIsEditingShipping(false)
           })
 
+        const loadPermitTables = (permitDetail: ProvincialPermitDetail) => {
+          void fetchProvincialPermitDetailCoreTabs({
+            permitNumber,
+            receiptNumber: permitDetail.receiptNumber,
+            blanketOic: permitDetail.blanketOic,
+          })
+            .then((tabsResult) => {
+              if (!isLatestRequest()) {
+                return
+              }
+              setTabsData(tabsResult)
+              setPermitTablesErrorMessage('')
+              loadPermitGbmsEvents({
+                permitNumber,
+                receiptNumber: permitDetail.receiptNumber,
+                blanketOic: permitDetail.blanketOic,
+              })
+            })
+            .catch((error) => {
+              if (!isLatestRequest()) {
+                return
+              }
+              console.error(error)
+              setTabsData(EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS)
+              setPermitTablesErrorMessage('Unable to retrieve permit table details.')
+            })
+            .finally(() => {
+              if (isLatestRequest()) {
+                setIsPermitTablesLoading(false)
+              }
+            })
+        }
+
         setIsPermitTablesLoading(true)
-        void fetchProvincialPermitDetailCoreTabs({
-          permitNumber,
-          receiptNumber: response.receiptNumber,
-          blanketOic: response.blanketOic,
-        })
-          .then((tabsResult) => {
+        if (!response.exemptionNumber || hasPermitExemptionContext(response)) {
+          setPermitExemptionContextReady(true)
+          loadPermitTables(response)
+          return
+        }
+
+        void fetchProvincialPermitExemptionContext(response.exemptionNumber)
+          .then((exemptionContext) => {
             if (!isLatestRequest()) {
               return
             }
-            setTabsData(tabsResult)
-            setPermitTablesErrorMessage('')
-            loadPermitGbmsEvents({
-              permitNumber,
-              receiptNumber: response.receiptNumber,
-              blanketOic: response.blanketOic,
-            })
+            const permitDetail = { ...response, ...exemptionContext }
+            setDetail(permitDetail)
+            setPermitExemptionContextReady(true)
+            loadPermitTables(permitDetail)
           })
           .catch((error) => {
             if (!isLatestRequest()) {
@@ -851,12 +895,10 @@ const ProvincialPermitDetailsPage = () => {
             }
             console.error(error)
             setTabsData(EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS)
-            setPermitTablesErrorMessage('Unable to retrieve permit table details.')
-          })
-          .finally(() => {
-            if (isLatestRequest()) {
-              setIsPermitTablesLoading(false)
-            }
+            setPermitTablesErrorMessage(
+              'Unable to retrieve the exemption context required for this permit.',
+            )
+            setIsPermitTablesLoading(false)
           })
       } catch (error) {
         if (isLatestRequest()) {
@@ -1230,14 +1272,23 @@ const ProvincialPermitDetailsPage = () => {
   }, [detail?.orgUnitNumber, detail?.region, permitRegionOptions])
   const permitExpired = permitStatusCode === 'EXP'
   const canUploadPermitDocuments =
-    canPerform('/filePermitUpload') && editContextLoaded && !permitEditLocked && !permitExpired
+    permitExemptionContextReady &&
+    canPerform('/filePermitUpload') &&
+    editContextLoaded &&
+    !permitEditLocked &&
+    !permitExpired
   const canUploadInvoiceDocuments =
+    permitExemptionContextReady &&
     canPerform('/fileInvoiceUpload') &&
     editContextLoaded &&
     !permitEditLocked &&
     permitStatusCode === 'ACT'
   const canSavePermit =
-    canPerform('savePermit') && editContextLoaded && !permitEditLocked && !permitExpired
+    permitExemptionContextReady &&
+    canPerform('savePermit') &&
+    editContextLoaded &&
+    !permitEditLocked &&
+    !permitExpired
   const canEditShipping = canSavePermit && permitStatusCode !== 'CAN'
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
   const canEnterPaymentReceipt = permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
@@ -1245,6 +1296,7 @@ const ProvincialPermitDetailsPage = () => {
     canSavePermit && (permitStatusCode === 'COM' || permitStatusCode === 'PPD')
   const canRequestPermitReview =
     hasProvincialSubmitterRole(capabilities.roles) &&
+    permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
     !permitExpired
@@ -1255,12 +1307,14 @@ const ProvincialPermitDetailsPage = () => {
     hasRole(capabilities.roles, 'APPLICATION_APPROVER') ||
     hasProvincialSubmitterRole(capabilities.roles)
   const canDeletePermitDocuments =
+    permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
     !!permitStatusCode &&
     ((adminUser && permitStatusCode !== 'EXP') ||
       (hasDocumentActorRole && !readOnlyUser && permitStatusCode === 'ACT'))
   const canDeleteInvoiceDocuments =
+    permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
     hasDocumentActorRole &&
