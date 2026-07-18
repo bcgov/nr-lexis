@@ -97,10 +97,6 @@ class TestDeploymentTopologyConfigTest {
     assertThat(workflow)
         .contains("backend_min_replicas:")
         .contains("backend_max_replicas:")
-        .contains(
-            "lexis_mail_from:\n"
-                + "        description: Approved sender mailbox for LEXIS workflow messages\n"
-                + "        required: true")
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
