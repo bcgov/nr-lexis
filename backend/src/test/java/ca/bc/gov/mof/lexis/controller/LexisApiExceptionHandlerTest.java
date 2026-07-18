@@ -18,11 +18,14 @@ import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordVersion;
 import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportRequestNormalizer;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
+import ch.qos.logback.classic.Level;
+import java.sql.SQLException;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.core.task.TaskRejectedException;
@@ -69,6 +72,31 @@ class LexisApiExceptionHandlerTest {
             "event=lexis_database operation=request outcome=unavailable "
                 + "failureType=DataAccessResourceFailureException")
         .doesNotContain("THE.LEXIS_GROUP_5.FIND_APPLICATIONS", "ORA-01089");
+  }
+
+  @Test
+  void dataAccessFailureShouldEmitSafeDiagnosticsWhenEnabled(CapturedOutput output)
+      throws Exception {
+    ch.qos.logback.classic.Logger diagnosticLogger =
+        (ch.qos.logback.classic.Logger)
+            LoggerFactory.getLogger("ca.bc.gov.mof.lexis.audit.failure");
+    Level originalLevel = diagnosticLogger.getLevel();
+    diagnosticLogger.setLevel(Level.DEBUG);
+    try {
+      mockMvc
+          .perform(get("/test/database-sql-failure"))
+          .andExpect(status().isServiceUnavailable());
+    } finally {
+      diagnosticLogger.setLevel(originalLevel);
+    }
+
+    assertThat(output)
+        .contains(
+            "event=lexis_api_failure operation=request outcome=database_unavailable "
+                + "method=GET route=/test/database-sql-failure "
+                + "failureType=DataAccessResourceFailureException rootFailureType=SQLException "
+                + "sqlState=42000 databaseErrorCode=942")
+        .doesNotContain("THE.LEXIS_GROUP_5.FIND_APPLICATIONS", "ORA-00942");
   }
 
   @Test
@@ -179,6 +207,13 @@ class LexisApiExceptionHandlerTest {
     String fail() {
       throw new DataAccessResourceFailureException(
           "ORA-01089 while calling THE.LEXIS_GROUP_5.FIND_APPLICATIONS");
+    }
+
+    @GetMapping("/test/database-sql-failure")
+    String failWithSqlCause() {
+      throw new DataAccessResourceFailureException(
+          "ORA-00942 while calling THE.LEXIS_GROUP_5.FIND_APPLICATIONS",
+          new SQLException("ORA-00942", "42000", 942));
     }
 
     @GetMapping("/test/task-rejected")

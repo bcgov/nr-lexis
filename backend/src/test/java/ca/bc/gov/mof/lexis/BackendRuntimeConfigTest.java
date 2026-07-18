@@ -19,6 +19,8 @@ class BackendRuntimeConfigTest {
         .contains(
             "ca.bc.gov.mof.lexis.audit.report: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}")
         .contains(
+            "ca.bc.gov.mof.lexis.audit.failure: ${LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL:INFO}")
+        .contains(
             "ca.bc.gov.mof.lexis.service.report.OracleLexisReportService:"
                 + " ${LEXIS_REPORT_STATISTICS_LOG_LEVEL:INFO}");
   }
