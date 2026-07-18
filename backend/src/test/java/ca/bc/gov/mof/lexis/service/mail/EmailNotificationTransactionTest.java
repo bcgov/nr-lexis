@@ -41,10 +41,11 @@ class EmailNotificationTransactionTest {
           .send(
               "LEXIS permit #7000123 ready for review",
               "Permit #7000123 is ready for review.\n",
-              List.of("reviewers@gov.bc.ca"),
+              List.of("reviewers@gov.bc.ca", "applicant@example.com"),
               List.of(),
-              "PERMIT_REQUEST",
-              null);
+              "REGION_RCO",
+              null,
+              RegionalMailRoute.GENERAL);
     }
   }
 
@@ -68,7 +69,7 @@ class EmailNotificationTransactionTest {
   }
 
   @Test
-  void shouldDispatchWithFallbackOutsideTransaction() {
+  void shouldDispatchOutsideTransactionWhenNoTransactionIsActive() {
     try (AnnotationConfigApplicationContext context = context()) {
       LexisMailService mailService = context.getBean(LexisMailService.class);
       context.getBean(EmailNotificationService.class).publish(event());
@@ -77,10 +78,11 @@ class EmailNotificationTransactionTest {
           .send(
               "LEXIS permit #7000123 ready for review",
               "Permit #7000123 is ready for review.\n",
-              List.of("reviewers@gov.bc.ca"),
+              List.of("reviewers@gov.bc.ca", "applicant@example.com"),
               List.of(),
-              "PERMIT_REQUEST",
-              null);
+              "REGION_RCO",
+              null,
+              RegionalMailRoute.GENERAL);
     }
   }
 
@@ -91,9 +93,9 @@ class EmailNotificationTransactionTest {
   private WorkflowEmailEvent event() {
     return new WorkflowEmailEvent.PermitReview(
         7000123L,
-        List.of("reviewers@gov.bc.ca"),
+        List.of("reviewers@gov.bc.ca", "applicant@example.com"),
         List.of(),
-        "PERMIT_REQUEST");
+        "REGION_RCO");
   }
 
   @Configuration

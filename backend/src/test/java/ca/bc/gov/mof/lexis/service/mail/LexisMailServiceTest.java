@@ -38,16 +38,21 @@ class LexisMailServiceTest {
     verify(sender).send(captor.capture());
     assertThat(captor.getValue().getTo())
         .containsExactly("admin.one@gov.bc.ca", "admin.two@gov.bc.ca");
+    assertThat(captor.getValue().getFrom()).isEqualTo("sender@example.com");
     assertThat(captor.getValue().getSubject())
-        .isEqualTo("[TEST - real.client@example.com; CC REGION_RCO] Permit approved");
+        .isEqualTo(
+            "[TEST - Intended From: GENERAL <sender@example.com> - Intended To: real.client@example.com; "
+                + "Intended Cc: REGION_RCO: regional.office@gov.bc.ca] Permit approved");
     assertThat(captor.getValue().getText())
-        .contains("Original To: real.client@example.com")
-        .contains("Original Cc: regional.office@gov.bc.ca")
+        .contains("Non-production delivery was redirected to the configured override recipient(s).")
+        .contains("Intended From: GENERAL <sender@example.com>")
+        .contains("Intended To: real.client@example.com")
+        .contains("Intended Cc: REGION_RCO: regional.office@gov.bc.ca")
         .contains("Permit body");
   }
 
   @Test
-  void nonProductionShouldLabelRegionalAndFallbackRoutes() {
+  void nonProductionShouldExposeTheIntendedRegionalSender() {
     JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
     LexisMailService service =
         new LexisMailService(
@@ -55,7 +60,9 @@ class LexisMailServiceTest {
             true,
             "sender@example.com",
             "test.admin@gov.bc.ca",
-            "test");
+            "test",
+            new RegionalMailRecipientResolver(
+                "rco.positional@gov.bc.ca", "rni.positional@gov.bc.ca", "rsi.positional@gov.bc.ca"));
 
     assertThat(
             service.send(
@@ -64,16 +71,18 @@ class LexisMailServiceTest {
                 List.of("regional.office@gov.bc.ca"),
                 List.of(),
                 "REGION_RCO",
-                null))
+                null,
+                RegionalMailRoute.RCO))
         .isTrue();
     assertThat(
             service.send(
-                "Fallback review",
+                "Northern review",
                 "Body",
-                List.of("permit.requests@gov.bc.ca"),
+                List.of("northern.office@gov.bc.ca"),
                 List.of(),
-                "PERMIT_REQUEST",
-                null))
+                "REGION_RNI",
+                null,
+                RegionalMailRoute.RNI))
         .isTrue();
 
     ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
@@ -81,8 +90,15 @@ class LexisMailServiceTest {
     assertThat(captor.getAllValues())
         .extracting(SimpleMailMessage::getSubject)
         .containsExactly(
-            "[TEST - REGION_RCO] Regional review",
-            "[TEST - PERMIT_REQUEST] Fallback review");
+            "[TEST - Intended From: REGION_RCO <rco.positional@gov.bc.ca> - Intended To: "
+                + "REGION_RCO: regional.office@gov.bc.ca] Regional review",
+            "[TEST - Intended From: REGION_RNI <rni.positional@gov.bc.ca> - Intended To: "
+                + "REGION_RNI: northern.office@gov.bc.ca] Northern review");
+    assertThat(captor.getAllValues())
+        .extracting(SimpleMailMessage::getFrom)
+        .containsExactly("rco.positional@gov.bc.ca", "rni.positional@gov.bc.ca");
+    assertThat(captor.getAllValues().getFirst().getText())
+        .contains("Intended From: REGION_RCO <rco.positional@gov.bc.ca>");
   }
 
   @Test
@@ -109,7 +125,9 @@ class LexisMailServiceTest {
     ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
     verify(sender).send(captor.capture());
     assertThat(captor.getValue().getSubject())
-        .isEqualTo("[TEST - client@example.com] Application updated");
+        .isEqualTo(
+            "[TEST - Intended From: GENERAL <sender@example.com> - Intended To: client@example.com]"
+                + " Application updated");
   }
 
   @Test
@@ -141,21 +159,26 @@ class LexisMailServiceTest {
         new LexisMailService(
             sender, true, "sender@example.com", "test.admin@gov.bc.ca", "test");
 
-    for (String route : List.of("REGION_RCO", "REGION_RNI", "REGION_RSI", "PERMIT_REQUEST")) {
+    for (String route : List.of("REGION_RCO", "REGION_RNI", "REGION_RSI")) {
       assertThat(service.send("Review", "Body", List.of(), List.of(), route, null)).isTrue();
     }
 
     ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
-    verify(sender, org.mockito.Mockito.times(4)).send(captor.capture());
+    verify(sender, org.mockito.Mockito.times(3)).send(captor.capture());
     assertThat(captor.getAllValues())
         .extracting(SimpleMailMessage::getSubject)
         .containsExactly(
-            "[TEST - REGION_RCO] Review",
-            "[TEST - REGION_RNI] Review",
-            "[TEST - REGION_RSI] Review",
-            "[TEST - PERMIT_REQUEST] Review");
+            "[TEST - Intended From: GENERAL <sender@example.com> - Intended To: "
+                + "REGION_RCO (not configured)] Review",
+            "[TEST - Intended From: GENERAL <sender@example.com> - Intended To: "
+                + "REGION_RNI (not configured)] Review",
+            "[TEST - Intended From: GENERAL <sender@example.com> - Intended To: "
+                + "REGION_RSI (not configured)] Review");
     assertThat(captor.getAllValues().getFirst().getText())
-        .startsWith("Original To: REGION_RCO (not configured)");
+        .startsWith(
+            "Non-production delivery was redirected to the configured override recipient(s).\n"
+                + "Intended From: GENERAL <sender@example.com>\n"
+                + "Intended To: REGION_RCO (not configured)");
   }
 
   @Test
@@ -165,8 +188,9 @@ class LexisMailServiceTest {
         new LexisMailService(
             sender, true, "sender@example.com", "test.admin@gov.bc.ca", "test");
 
-    assertThat(service.send("Subject", "Body", List.of(), List.of(), "APPLICANT", null))
-        .isFalse();
+    for (String route : List.of("APPLICANT", "PERMIT_REQUEST")) {
+      assertThat(service.send("Subject", "Body", List.of(), List.of(), route, null)).isFalse();
+    }
 
     verify(sender, never()).send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
   }
@@ -191,9 +215,68 @@ class LexisMailServiceTest {
     ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
     verify(sender).send(captor.capture());
     assertThat(captor.getValue().getSubject())
-        .isEqualTo("[TEST - client@example.com; CC REGION_RCO] Offer created");
+        .isEqualTo(
+            "[TEST - Intended From: GENERAL <sender@example.com> - Intended To: client@example.com; "
+                + "Intended Cc: REGION_RCO (not configured)] Offer created");
     assertThat(captor.getValue().getText())
-        .contains("Original Cc: REGION_RCO (not configured)");
+        .contains("Intended Cc: REGION_RCO (not configured)");
+  }
+
+  @Test
+  void nonProductionShouldShowEveryIntendedPermitReviewRecipient() {
+    JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
+    LexisMailService service =
+        new LexisMailService(
+            sender,
+            true,
+            "sender@example.com",
+            "test.admin@gov.bc.ca",
+            "test");
+
+    assertThat(
+            service.send(
+                "Permit review",
+                "Body",
+                List.of("regional.office@gov.bc.ca", "additional.requester@example.com"),
+                List.of(),
+                "REGION_RCO",
+                null))
+        .isTrue();
+
+    ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+    verify(sender).send(captor.capture());
+    assertThat(captor.getValue().getSubject())
+        .contains("Intended To: REGION_RCO: regional.office@gov.bc.ca, additional.requester@example.com")
+        .doesNotContain("Intended Cc:");
+    assertThat(captor.getValue().getText())
+        .contains("Intended To: REGION_RCO: regional.office@gov.bc.ca, additional.requester@example.com")
+        .doesNotContain("Intended Cc:");
+  }
+
+  @Test
+  void shouldFailClosedWhenTheSelectedRegionalSenderIsNotConfigured() {
+    JavaMailSender sender = org.mockito.Mockito.mock(JavaMailSender.class);
+    LexisMailService service =
+        new LexisMailService(
+            sender,
+            false,
+            "sender@example.com",
+            "",
+            "prod",
+            new RegionalMailRecipientResolver("", "rni.positional@gov.bc.ca", ""));
+
+    assertThat(
+            service.send(
+                "Subject",
+                "Body",
+                List.of("client@example.com"),
+                List.of(),
+                "client@example.com",
+                null,
+                RegionalMailRoute.RCO))
+        .isFalse();
+
+    verify(sender, never()).send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
   }
 
   @Test

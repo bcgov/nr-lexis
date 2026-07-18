@@ -552,7 +552,7 @@ class ApplicationReviewOracleServiceTest {
         new ApplicationReviewStatusEmailRequestDto(
             " REJ ", " Applicant <edited@example.test> ", " Missing docs ");
     AuthoritativeApplicantStatusContext applicant =
-        new AuthoritativeApplicantStatusContext("REJ", "00077881", "00");
+        new AuthoritativeApplicantStatusContext("REJ", "O", "00077881", "00", 1835L);
     when(repository.findAuthoritativeApplicantStatusContext(1000456L))
         .thenReturn(java.util.Optional.of(applicant));
     when(repository.findLatestAuthoritativeRemark(1000456L))
@@ -562,14 +562,47 @@ class ApplicationReviewOracleServiceTest {
                     77L, 1000456L, "Missing docs", "idir\\reviewer", Instant.EPOCH)));
     when(repository.sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs"))
         .thenReturn(true);
+    when(emailSender.sendStatusEmail(
+            1000456L, "REJ", "edited@example.test", "Missing docs", 1835L))
+        .thenReturn(true);
 
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
     assertThat(result.success()).isTrue();
     assertThat(result.message()).isEqualTo("Application status email queued.");
     verify(repository).sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs");
-    verify(emailSender).sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs");
+    verify(emailSender)
+        .sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs", 1835L);
     verifyNoInteractions(clientEmailResolver);
+  }
+
+  @Test
+  void sendStatusEmailShouldReportFailureWhenThePersistedOrganizationHasNoRegionalRoute() {
+    AuthoritativeApplicantStatusContext applicant =
+        new AuthoritativeApplicantStatusContext("REJ", "O", "00077881", "00", 9999L);
+    when(repository.findAuthoritativeApplicantStatusContext(1000456L))
+        .thenReturn(Optional.of(applicant));
+    when(repository.findLatestAuthoritativeRemark(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ReviewRemarkRow(
+                    77L, 1000456L, "Missing docs", "idir\\reviewer", Instant.EPOCH)));
+    when(repository.sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs"))
+        .thenReturn(true);
+    when(emailSender.sendStatusEmail(
+            1000456L, "REJ", "edited@example.test", "Missing docs", 9999L))
+        .thenReturn(false);
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto(
+                "REJ", "edited@example.test", "Missing docs"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Application status email could not be prepared.");
+    verify(emailSender)
+        .sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs", 9999L);
   }
 
   @Test
@@ -717,7 +750,7 @@ class ApplicationReviewOracleServiceTest {
   @Test
   void sendStatusEmailShouldPreserveWithdrawnFlowWithPersistedRemark() {
     AuthoritativeApplicantStatusContext applicant =
-        new AuthoritativeApplicantStatusContext("WDN", "00077881", "00");
+        new AuthoritativeApplicantStatusContext("WDN", "O", "00077881", "00", 1834L);
     ReviewRemarkRow persisted =
         new ReviewRemarkRow(
             88L, 1000456L, "Withdrawn by applicant", "idir\\reviewer", Instant.EPOCH);
@@ -729,6 +762,9 @@ class ApplicationReviewOracleServiceTest {
         .thenReturn(Optional.of(persisted));
     when(repository.sendStatusEmail(
             1000456L, "WDN", "owner@example.test", "Withdrawn by applicant"))
+        .thenReturn(true);
+    when(emailSender.sendStatusEmail(
+            1000456L, "WDN", "owner@example.test", "Withdrawn by applicant", 1834L))
         .thenReturn(true);
 
     ApplicationReviewStatusEmailResultDto result =
@@ -743,7 +779,7 @@ class ApplicationReviewOracleServiceTest {
             1000456L, "WDN", "owner@example.test", "Withdrawn by applicant");
     verify(emailSender)
         .sendStatusEmail(
-            1000456L, "WDN", "owner@example.test", "Withdrawn by applicant");
+            1000456L, "WDN", "owner@example.test", "Withdrawn by applicant", 1834L);
   }
 
   @Test

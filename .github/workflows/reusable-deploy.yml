@@ -78,6 +78,9 @@ on:
       oc_namespace:
         description: OpenShift namespace
         required: true
+      clamav_namespace:
+        description: Shared ClamAV OpenShift namespace
+        required: true
       oc_token:
         description: OpenShift token
         required: true
@@ -105,21 +108,24 @@ on:
       keycloak_sa_client_secret:
         description: Keycloak service-account client secret used to provision LEXIS clients/scopes
         required: false
+      lexis_mail_from:
+        description: Approved sender mailbox for LEXIS workflow messages
+        required: true
       lexis_mail_override_recipients:
         description: Non-production recipient override
         required: false
-      lexis_mail_region_rco_recipients:
-        description: RCO workflow distribution list
-        required: false
-      lexis_mail_region_rni_recipients:
-        description: RNI workflow distribution list
-        required: false
-      lexis_mail_region_rsi_recipients:
-        description: RSI workflow distribution list
-        required: false
-      lexis_mail_permit_request_recipients:
-        description: Permit-review migration fallback recipients
-        required: false
+      lexis_mail_from:
+        description: Provincial Log Export Analyst positional mailbox
+        required: true
+      lexis_mail_region_rco_address:
+        description: RCO positional mailbox
+        required: true
+      lexis_mail_region_rni_address:
+        description: RNI positional mailbox
+        required: true
+      lexis_mail_region_rsi_address:
+        description: RSI positional mailbox
+        required: true
 
     outputs:
       triggered:
@@ -171,12 +177,11 @@ jobs:
           LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS: ${{ vars.LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS || '60' }}
           LEXIS_MAIL_NON_PRODUCTION: ${{ inputs.environment == 'prod' && 'false' || 'true' }}
           LEXIS_MAIL_ENVIRONMENT: ${{ inputs.environment }}
-          LEXIS_MAIL_FROM: ${{ vars.LEXIS_MAIL_FROM }}
+          LEXIS_MAIL_FROM: ${{ secrets.lexis_mail_from }}
           LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}
-          LEXIS_MAIL_REGION_RCO_RECIPIENTS: ${{ secrets.lexis_mail_region_rco_recipients }}
-          LEXIS_MAIL_REGION_RNI_RECIPIENTS: ${{ secrets.lexis_mail_region_rni_recipients }}
-          LEXIS_MAIL_REGION_RSI_RECIPIENTS: ${{ secrets.lexis_mail_region_rsi_recipients }}
-          LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS: ${{ secrets.lexis_mail_permit_request_recipients }}
+          LEXIS_MAIL_REGION_RCO_ADDRESS: ${{ secrets.lexis_mail_region_rco_address }}
+          LEXIS_MAIL_REGION_RNI_ADDRESS: ${{ secrets.lexis_mail_region_rni_address }}
+          LEXIS_MAIL_REGION_RSI_ADDRESS: ${{ secrets.lexis_mail_region_rsi_address }}
         with:
           file: backend/openshift.deploy.yml
           # PR lite mode produces an invalid strategy for this RollingUpdate deployment.
@@ -207,8 +212,7 @@ jobs:
             -p DATABASE_USER="$DATABASE_USER"
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
-            -p CLAMAV_REGISTRY="ghcr.io/${{ github.repository }}/clamav"
-            -p CLAMAV_IMAGE_TAG="${{ inputs.tag }}"
+            -p LEXIS_VIRUS_SCAN_HOST="clamav.${{ secrets.clamav_namespace }}.svc"
             -p LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
             -p LEXIS_EXPIRY_ENABLED="$LEXIS_EXPIRY_ENABLED"
             -p LEXIS_EXPIRY_CRON="$LEXIS_EXPIRY_CRON"
@@ -223,10 +227,9 @@ jobs:
             -p LEXIS_MAIL_ENVIRONMENT="$LEXIS_MAIL_ENVIRONMENT"
             -p LEXIS_MAIL_FROM="$LEXIS_MAIL_FROM"
             -p LEXIS_MAIL_OVERRIDE_RECIPIENTS="$LEXIS_MAIL_OVERRIDE_RECIPIENTS"
-            -p LEXIS_MAIL_REGION_RCO_RECIPIENTS="$LEXIS_MAIL_REGION_RCO_RECIPIENTS"
-            -p LEXIS_MAIL_REGION_RNI_RECIPIENTS="$LEXIS_MAIL_REGION_RNI_RECIPIENTS"
-            -p LEXIS_MAIL_REGION_RSI_RECIPIENTS="$LEXIS_MAIL_REGION_RSI_RECIPIENTS"
-            -p LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS="$LEXIS_MAIL_PERMIT_REQUEST_RECIPIENTS"
+            -p LEXIS_MAIL_REGION_RCO_ADDRESS="$LEXIS_MAIL_REGION_RCO_ADDRESS"
+            -p LEXIS_MAIL_REGION_RNI_ADDRESS="$LEXIS_MAIL_REGION_RNI_ADDRESS"
+            -p LEXIS_MAIL_REGION_RSI_ADDRESS="$LEXIS_MAIL_REGION_RSI_ADDRESS"
           triggers: ${{ inputs.triggers }}
 
   frontend:

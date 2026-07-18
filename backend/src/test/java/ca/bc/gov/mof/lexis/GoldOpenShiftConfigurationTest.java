@@ -10,9 +10,6 @@ import org.junit.jupiter.api.Test;
 class GoldOpenShiftConfigurationTest {
 
   private static final String GOLD_APPS = "apps.gold.devops.gov.bc.ca";
-  private static final String SILVER_MIRROR =
-      "https://clamav-mirror.apps.silver.devops.gov.bc.ca";
-
   @Test
   void deployAndCleanupJobsShouldUseConfiguredOpenShiftServer() throws IOException {
     String deploy = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
@@ -32,25 +29,20 @@ class GoldOpenShiftConfigurationTest {
 
     assertThat(promotion)
         .contains("name: Image Promotion")
-        .contains("packages: backend frontend clamav")
+        .contains("packages: backend frontend")
         .doesNotContain("cleanup:", "cleanup_name:", "oc_namespace", "oc_token", "oc_server");
   }
 
   @Test
-  void applicationRoutesShouldUseGoldWhileClamAvUsesTheApprovedSilverMirror()
-      throws IOException {
+  void applicationRoutesShouldUseGold() throws IOException {
     String backend = Files.readString(resolve("backend/openshift.deploy.yml"));
     String frontend = Files.readString(resolve("frontend/openshift.deploy.yml"));
-    String freshclam = Files.readString(resolve("clamav/config/freshclam.conf"));
     String workflows = readWorkflowFiles();
 
     assertThat(backend)
         .contains("value: " + GOLD_APPS)
-        .contains("value: " + SILVER_MIRROR)
-        .contains("DatabaseMirror ${CLAMAV_DEFINITION_MIRROR}")
         .doesNotContain("api.silver.devops.gov.bc.ca");
     assertThat(frontend).contains("value: " + GOLD_APPS).doesNotContain("silver.devops.gov.bc.ca");
-    assertThat(freshclam).contains("DatabaseMirror " + SILVER_MIRROR);
     assertThat(workflows)
         .contains(GOLD_APPS)
         .doesNotContain("api.silver.devops.gov.bc.ca", "apps.silver.devops.gov.bc.ca");

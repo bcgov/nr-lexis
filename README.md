@@ -19,9 +19,10 @@ Full-stack LEXIS application for log export workflows.
 
 ## Architecture
 
-LEXIS runs as separate frontend, backend, and ClamAV workloads on OpenShift while retaining Oracle
-as its system of record. Interactive access uses FAM/Cognito; NEXCOL federal submissions use a
-dedicated Keycloak service client through the API gateway.
+LEXIS runs as separate frontend and backend workloads on OpenShift while retaining Oracle as its
+system of record. Uploaded content is scanned through a shared ClamAV service in a dedicated
+namespace. Interactive access uses FAM/Cognito; NEXCOL federal submissions use a dedicated
+Keycloak service client through the API gateway.
 
 See [docs/architecture.md](docs/architecture.md) for the runtime architecture, component boundaries,
 deployment constraints, and the major legacy-to-modern shifts.
@@ -39,6 +40,11 @@ Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 
 Both options share the same prerequisites and property files below. Reports use the checked-in JRXML templates in the Spring Boot backend.
 
+Virus scanning is disabled by default for local development, and neither option starts a ClamAV
+container. Deployed environments use a shared ClamAV service; see
+[Shared ClamAV service](docs/shared-clamav-service.md) for configuration and network-policy
+ownership.
+
 ### Shared prerequisites
 
 1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
@@ -52,7 +58,7 @@ These files are gitignored and stay local.
 
 #### `backend/src/main/resources/application-local.yml`
 
-Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, optional Keycloak issuer URI for service-client tokens, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
+Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, optional Keycloak issuer URI for service-client tokens, IDIR base URL, and `TRUSTSTORE_PATH`. It must also provide the four approved `LEXIS_MAIL_*` positional-mailbox settings when running with the `oracle` profile, because startup validates outbound-mail configuration. Obtain all values through approved team channels and keep them out of git. See [outbound email configuration](docs/outbound-email.md) for the setting names and safe local/TEST delivery behavior.
 
 For Option B, Compose overrides `TRUSTSTORE_PATH` inside Docker to `/app/src/main/resources/cert/jssecacerts`; no local edit is needed for the container path.
 
@@ -162,6 +168,7 @@ default URL from `VITE_ZONE`.
 ## Component docs
 
 - [docs/architecture.md](docs/architecture.md) - Runtime architecture and legacy-to-modern shifts.
+- [docs/shared-clamav-service.md](docs/shared-clamav-service.md) - Shared scanner deployment, policy, verification, and ownership.
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
 - [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.
 - [docs/permit-invoicing.md](docs/permit-invoicing.md) - Canadian and GBMS permit invoicing modes, consistency limits, and recovery.

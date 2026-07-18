@@ -35,7 +35,7 @@ class ScheduledWorkflowDefaultsTest {
         .contains("oc auth can-i delete routes -n \"${NAMESPACE}\"")
         .contains("oc auth can-i delete persistentvolumeclaims -n \"${NAMESPACE}\"")
         .contains("oc auth can-i delete networkpolicies -n \"${NAMESPACE}\"")
-        .contains("grep -E \"${REPO}-(backend|frontend|clamav)-[0-9]+\"")
+        .contains("grep -E \"${REPO}-(backend|frontend)-[0-9]+\"")
         .contains(
             "LABEL=$(oc get deploy \"${name}\" -n \"${NAMESPACE}\" -o jsonpath='{.metadata.labels.app}'")
         .contains(

@@ -283,7 +283,8 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                           currentStatus,
                           applicantTypeCode,
                           value.clientNumber(),
-                          value.locationCode()));
+                          value.locationCode(),
+                          record.orgUnitNo()));
             });
   }
 
@@ -613,11 +614,17 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       String statusCode,
       String applicantTypeCode,
       String clientNumber,
-      String locationCode) {
+      String locationCode,
+      Long orgUnitNumber) {
 
     public AuthoritativeApplicantStatusContext(
         String statusCode, String clientNumber, String locationCode) {
-      this(statusCode, "O", clientNumber, locationCode);
+      this(statusCode, "O", clientNumber, locationCode, null);
+    }
+
+    public AuthoritativeApplicantStatusContext(
+        String statusCode, String applicantTypeCode, String clientNumber, String locationCode) {
+      this(statusCode, applicantTypeCode, clientNumber, locationCode, null);
     }
   }
 

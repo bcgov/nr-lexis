@@ -5,93 +5,71 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ClamAvDeploymentConfigTest {
 
   @Test
-  void clamdConfigShouldUseWritableLogFile() throws IOException {
-    for (Path configPath : clamdConfigPaths()) {
-      String config = Files.readString(resolve(configPath));
+  void deploymentTemplateShouldRequireSharedClamAvServiceHost() throws IOException {
+    String template = read("backend/openshift.deploy.yml");
 
-      assertThat(config)
-          .contains("LogFile /var/log/clamav/clamav.log")
-          .doesNotContain("LogFile /dev/stdout")
-          .doesNotContain("AllowSupplementaryGroups");
+    assertThat(template)
+        .contains("name: LEXIS_VIRUS_SCAN_HOST")
+        .contains("description: Shared ClamAV service DNS name")
+        .contains("required: true")
+        .contains("value: ${LEXIS_VIRUS_SCAN_HOST}")
+        .contains("name: LEXIS_VIRUS_SCAN_PORT")
+        .contains("value: \"3310\"")
+        .doesNotContain("${NAME}-clamav-${ZONE}")
+        .doesNotContain("CLAMAV_REGISTRY")
+        .doesNotContain("CLAMAV_IMAGE_TAG")
+        .doesNotContain("CLAMAV_DEFINITION_MIRROR");
+  }
+
+  @Test
+  void reusableDeployShouldBuildSharedClamAvServiceHostFromEnvironmentSecret() throws IOException {
+    String workflow = read(".github/workflows/reusable-deploy.yml");
+
+    assertThat(workflow)
+        .contains("clamav_namespace:")
+        .contains("-p LEXIS_VIRUS_SCAN_HOST=\"clamav.${{ secrets.clamav_namespace }}.svc\"");
+  }
+
+  @Test
+  void deploymentWorkflowCallersShouldSupplySharedClamAvNamespace() throws IOException {
+    String prOpenWorkflow = read(".github/workflows/pr-open.yml");
+    String mergeWorkflow = read(".github/workflows/merge.yml");
+    String namespaceSecret = "clamav_namespace: ${{ secrets.clamav_namespace }}";
+
+    assertThat(prOpenWorkflow).contains(namespaceSecret);
+    assertThat(occurrences(mergeWorkflow, namespaceSecret)).isEqualTo(2);
+  }
+
+  @Test
+  void previewCleanupShouldNotManageLocalClamAvWorkloads() throws IOException {
+    String workflow = read(".github/workflows/pr-close.yml");
+
+    assertThat(workflow)
+        .contains("for component in backend frontend; do")
+        .contains("s/^${REPO}-(backend|frontend)-([0-9]+)$/\\2/p")
+        .doesNotContain("backend frontend clamav", "(backend|frontend|clamav)");
+  }
+
+  private static int occurrences(String value, String expected) {
+    int count = 0;
+    int index = 0;
+    while ((index = value.indexOf(expected, index)) >= 0) {
+      count++;
+      index += expected.length();
     }
+    return count;
   }
 
-  @Test
-  void definitionsShouldRefreshPeriodicallyAndExposeStaleness() throws IOException {
-    String freshclam = Files.readString(resolve(Path.of("clamav", "config", "freshclam.conf")));
-    String deployment = Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
-    String dockerfile = Files.readString(resolve(Path.of("clamav", "Dockerfile")));
-    String startup = Files.readString(resolve(Path.of("clamav", "start-clamav.sh")));
-    String health = Files.readString(resolve(Path.of("clamav", "clamdcheck.sh")));
-
-    assertThat(freshclam).contains("Checks 12");
-    assertThat(deployment).contains("Checks 12");
-    assertThat(dockerfile).contains("CMD [\"/opt/app-root/start-clamav.sh\"]");
-    assertThat(startup).contains("freshclam --daemon --foreground=true");
-    assertThat(health).contains("-mmin -4320");
-  }
-
-  @Test
-  void startupShouldSuperviseScannerAndDefinitionRefreshProcesses() throws IOException {
-    String startup = Files.readString(resolve(Path.of("clamav", "start-clamav.sh")));
-
-    assertThat(startup)
-        .contains("#!/usr/bin/env bash")
-        .contains("trap handle_shutdown TERM INT HUP")
-        .contains("freshclam &")
-        .contains("if wait \"${freshclam_pid}\"")
-        .contains("freshclam --daemon --foreground=true &")
-        .contains("freshclam_pid=$!")
-        .contains("clamd &")
-        .contains("clamd_pid=$!")
-        .contains("wait -n -p exited_pid")
-        .contains("kill -TERM \"${freshclam_pid}\"")
-        .contains("kill -TERM \"${clamd_pid}\"")
-        .contains("exited unexpectedly; stopping the ClamAV container for restart.")
-        .doesNotContain("exec clamd");
-  }
-
-  @Test
-  void livenessShouldOnlyPingWhileReadinessAlsoRequiresFreshDefinitions() throws IOException {
-    String deployment = Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
-    String health = Files.readString(resolve(Path.of("clamav", "clamdcheck.sh")));
-
-    assertThat(deployment)
-        .contains(
-            "              livenessProbe:\n"
-                + "                exec:\n"
-                + "                  command:\n"
-                + "                    - /opt/app-root/clamdcheck.sh\n"
-                + "                    - live\n")
-        .contains(
-            "              readinessProbe:\n"
-                + "                exec:\n"
-                + "                  command:\n"
-                + "                    - /opt/app-root/clamdcheck.sh\n"
-                + "                initialDelaySeconds: 60\n");
-    assertThat(health)
-        .contains("printf 'zPING\\0'")
-        .contains("if [ \"${1:-ready}\" = \"live\" ]")
-        .contains("-mmin -4320");
-    assertThat(health.indexOf("exit 0")).isLessThan(health.indexOf("-mmin -4320"));
-  }
-
-  private static List<Path> clamdConfigPaths() {
-    return List.of(
-        Path.of("clamav", "config", "clamd.conf"),
-        Path.of("backend", "openshift.deploy.yml"));
-  }
-
-  private static Path resolve(Path path) {
+  private static String read(String relativePath) throws IOException {
+    Path path = Path.of(relativePath);
     if (Files.exists(path)) {
-      return path;
+      return Files.readString(path);
     }
-    return Path.of("..").resolve(path);
+    return Files.readString(Path.of("..").resolve(relativePath));
   }
 }

@@ -23,14 +23,29 @@ public sealed interface WorkflowEmailEvent {
     return null;
   }
 
+  /** Defaults to the configured provincial/system sender. */
+  default RegionalMailRoute senderRoute() {
+    return RegionalMailRoute.GENERAL;
+  }
+
   String reference();
 
   record ApplicationStatus(
       long applicationNumber,
       String statusDescription,
       String remark,
-      String recipient)
+      String recipient,
+      RegionalMailRoute senderRoute)
       implements WorkflowEmailEvent {
+
+    public ApplicationStatus {
+      senderRoute = senderRoute == null ? RegionalMailRoute.GENERAL : senderRoute;
+    }
+
+    public ApplicationStatus(
+        long applicationNumber, String statusDescription, String remark, String recipient) {
+      this(applicationNumber, statusDescription, remark, recipient, RegionalMailRoute.GENERAL);
+    }
 
     @Override
     public String subject() {
@@ -56,8 +71,17 @@ public sealed interface WorkflowEmailEvent {
   record ExemptionApproval(
       String exemptionNumber,
       String applicationNumbers,
-      String recipient)
+      String recipient,
+      RegionalMailRoute senderRoute)
       implements WorkflowEmailEvent {
+
+    public ExemptionApproval {
+      senderRoute = senderRoute == null ? RegionalMailRoute.GENERAL : senderRoute;
+    }
+
+    public ExemptionApproval(String exemptionNumber, String applicationNumbers, String recipient) {
+      this(exemptionNumber, applicationNumbers, recipient, RegionalMailRoute.GENERAL);
+    }
 
     @Override
     public String subject() {
@@ -184,8 +208,18 @@ public sealed interface WorkflowEmailEvent {
       long permitNumber,
       boolean paymentPending,
       String packageNumbers,
-      String recipient)
+      String recipient,
+      RegionalMailRoute senderRoute)
       implements WorkflowEmailEvent {
+
+    public PermitApproval {
+      senderRoute = senderRoute == null ? RegionalMailRoute.GENERAL : senderRoute;
+    }
+
+    public PermitApproval(
+        long permitNumber, boolean paymentPending, String packageNumbers, String recipient) {
+      this(permitNumber, paymentPending, packageNumbers, recipient, RegionalMailRoute.GENERAL);
+    }
 
     @Override
     public String subject() {
