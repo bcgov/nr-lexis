@@ -1810,11 +1810,7 @@ test.describe('TEST IDIR admin regression', () => {
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
-    await expect(
-      page.getByText(
-        'Maintain one monthly value for each species and grade. Values are applied to old and second growth together.',
-      ),
-    ).toBeVisible()
+    await expect(page.getByText('Maintain one monthly value for each species and grade.')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Upload' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Download template' })).toHaveCount(0)
     await expect(

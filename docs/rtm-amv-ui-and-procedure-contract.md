@@ -11,8 +11,11 @@ The legacy workbook upload controller is disabled unless
 - The page shows one editable table. It has no old-growth/second-growth control.
 - The displayed value is the old-growth (`O`) baseline. When saved, the same value is written to
   both old growth (`O`) and second growth (`S`).
+- User-facing copy intentionally describes one monthly value only; it does not expose the
+  underlying growth-partition persistence behavior.
 - The table columns are Balsam (`BA`), Hemlock (`HE`), Cedar (`CE`), Cypress (`CY`), Fir (`FI`),
   Spruce (`SP`), and one friendly Pine column.
+- Spruce maps one-to-one to physical `SP`; it does not expand like Pine.
 - Pine expands to all three legacy species codes: `WH`, `LO`, and `YE`.
 - The UI exposes grades `A` through `M`, `U`, `X`, `Y`, `Z`, and `1` through `6`. It does not
   show `W` or the legacy blank-grade row.
@@ -62,11 +65,12 @@ physical targets:
 - Every Pine cell becomes six writes: `WH`, `LO`, and `YE`, each for `O` and `S`.
 
 The Oracle implementation performs those writes with direct `MERGE` statements inside one Spring
-transaction. It uses the existing `INSERT` and `UPDATE` grant on `THE.EMS_LOG_AMV`; it does not
-call the legacy row procedures because they commit internally. If any write fails or is not
-applied, the transaction is rolled back. An incomplete batch is reported as rejected; a database
-failure uses the API's normal service-unavailable response. A successful response is therefore
-the confirmation that the complete grid submission was accepted.
+transaction. It requires the deployed LEXIS database user to have direct `INSERT` and `UPDATE`
+access to `THE.EMS_LOG_AMV`; it does not call the legacy row procedures because they commit
+internally. If any write fails or is not applied, the transaction is rolled back. An incomplete
+batch is reported as rejected; a database failure uses the API's normal service-unavailable
+response. A successful response is therefore the confirmation that the complete grid submission
+was accepted.
 
 ## Batch audit event
 
@@ -101,7 +105,7 @@ does not claim to add audit metadata that the legacy data model cannot store.
 
 | Requirement     | Current status             | Evidence or decision needed                                                                                                                         |
 | --------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR-01           | Data-owner decision        | The existing schema has one physical table with `O` and `S` partitions, not two physical tables.                                                    |
+| FR-01           | Implemented                | The existing schema represents the required old-growth and second-growth values as `O` and `S` partitions in one physical table.                    |
 | FR-02 to FR-04  | Implemented                | One user save fans out identical values to `O` and `S` without exposing either choice in the UI.                                                    |
 | FR-05 to FR-06  | Implemented                | Friendly species labels are mapped by the service; Pine expands to `WH`, `LO`, and `YE` for both growth partitions.                                 |
 | FR-07 to FR-10  | Implemented                | The UI/API normalize to a `LocalDate` month start and do not expose retrieval date input.                                                           |
@@ -115,16 +119,13 @@ does not claim to add audit metadata that the legacy data model cannot store.
 | FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |
 | FR-21           | Live verification required | The trigger mirrors to `EXPORT_LOG_AMV`, but reports, integrations, and queries still require TEST/downstream validation.                           |
 
-## Outstanding legacy data decisions
+## Legacy schema constraints
 
-The implemented UI behavior is constrained by the existing data model. The following Confluence
-requirements need a data-owner decision and an approved persistence design before they can be
-implemented without changing legacy semantics:
+The implemented UI behavior is constrained by the existing data model:
 
-- Confluence describes separate old-growth and second-growth tables, while the existing schema has
-  one `EMS_LOG_AMV` table partitioned by `GROWTH_TYPE_ST` values `O` and `S`. A data owner must
-  confirm that those two logical partitions satisfy the requirement before any physical-table
-  change is considered.
+- Legacy RTM allowed a user to enter one physical growth partition at a time. The active unified
+  table intentionally applies the Confluence O/S fan-out rule instead; no physical-table change is
+  required because `EMS_LOG_AMV` stores the partitions through `GROWTH_TYPE_ST`.
 - `BLANK` is a legacy grade sentinel (`GRADE = ' '`), not a column. The Confluence `blank = 1`
   wording needs correction before a new flag or column is considered.
 - It has no submitting-user, submission-timestamp, or update-timestamp column. A new audit table

@@ -100,17 +100,14 @@ describe('RTM EMS Log AMV actions', () => {
     mockRows()
   })
 
-  it('renders one old-growth baseline table without growth radios, W, or a blank row', async () => {
+  it('renders one monthly value table without growth radios, W, or a blank row', async () => {
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
     expect(screen.getByLabelText('Effective month')).toHaveAttribute('type', 'month')
     expect(screen.queryByRole('radio')).not.toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'Maintain one monthly value for each species and grade. Values are applied to old and second growth together.',
-      ),
-    ).toBeVisible()
+    expect(screen.getByText('Maintain one monthly value for each species and grade.')).toBeVisible()
+    expect(screen.queryByText(/old and second growth/i)).not.toBeInTheDocument()
 
     const table = screen.getByRole('table', { name: 'Average monthly value table' })
     ;[
@@ -132,7 +129,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(screen.queryByLabelText('Balsam (BA) grade BLANK')).not.toBeInTheDocument()
   })
 
-  it('uses old-growth data as the display baseline and saves a single atomic batch', async () => {
+  it('uses the displayed data as the baseline and saves a single atomic batch', async () => {
     const user = userEvent.setup()
     mockRows([
       row('BA', 'A', 'O', CURRENT_MONTH, 10),
@@ -175,7 +172,7 @@ describe('RTM EMS Log AMV actions', () => {
         }),
       ]),
     })
-    expect(screen.getByText(/Saved 2 table cells to old and second growth/)).toBeVisible()
+    expect(screen.getByText('Saved 2 table cells.')).toBeVisible()
   })
 
   it('treats clearing an existing value as a no-op and omits it from the batch', async () => {

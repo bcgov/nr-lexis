@@ -308,7 +308,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     rows.addAll(nextRows);
     return buildMutationResult(
         RETURN_SUCCESS,
-        "Saved %d table value%s to old and second growth."
+        "Saved %d table value%s."
             .formatted(requests.size(), requests.size() == 1 ? "" : "s"),
         List.of(),
         savedRows);

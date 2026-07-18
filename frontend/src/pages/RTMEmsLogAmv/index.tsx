@@ -73,8 +73,7 @@ type NotificationState = {
   subtitle: string
 }
 
-const RTM_AMV_DESCRIPTION =
-  'Maintain one monthly value for each species and grade. Values are applied to old and second growth together.'
+const RTM_AMV_DESCRIPTION = 'Maintain one monthly value for each species and grade.'
 
 const RTM_AMV_SPECIES_COLUMNS: RtmAmvSpeciesColumn[] = [
   { key: 'BA', label: 'Balsam (BA)', speciesCodes: ['BA', 'BALSAM'] },
@@ -602,8 +601,8 @@ const RTMEmsLogAmvPage = () => {
         title: 'Average monthly values updated',
         subtitle:
           saveWarnings.length > 0
-            ? `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'} to old and second growth with ${saveWarnings.length} warning${saveWarnings.length === 1 ? '' : 's'}.`
-            : `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'} to old and second growth.`,
+            ? `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'} with ${saveWarnings.length} warning${saveWarnings.length === 1 ? '' : 's'}.`
+            : `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'}.`,
       })
       await loadRows()
     } catch (error) {
@@ -725,8 +724,7 @@ const RTMEmsLogAmvPage = () => {
               <h3>Starting values copied</h3>
               <p>
                 Prefilled from the latest available earlier value for each species and grade. Save
-                changes applies the displayed values to both old and second growth for{' '}
-                {formatEffectiveMonth(targetDate)}.
+                changes applies the displayed values for {formatEffectiveMonth(targetDate)}.
               </p>
             </div>
           </div>

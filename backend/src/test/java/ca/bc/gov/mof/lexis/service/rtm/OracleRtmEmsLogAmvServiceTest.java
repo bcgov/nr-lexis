@@ -174,6 +174,48 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldAtomicallyFanOutSpruceToBothGrowthTypesWithoutPineExpansion() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1});
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "SP",
+                    "A",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("12.50"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.message()).isEqualTo("Saved 1 table value.");
+    assertThat(result.rows()).hasSize(2);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvRowDto::species).containsOnly("SP");
+    assertThat(result.rows())
+        .extracting(RtmEmsLogAmvRowDto::growthIndicator)
+        .containsExactlyInAnyOrder("O", "S");
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 2
+                        && targets.stream()
+                            .allMatch(
+                                target ->
+                                    target.species().equals("SP")
+                                        && target.grade().equals("A")
+                                        && target
+                                            .effectiveDate()
+                                            .equals(LocalDate.of(2026, 7, 1))
+                                        && target.newValue().compareTo(new BigDecimal("12.50"))
+                                            == 0)));
+  }
+
+  @Test
   void shouldAcceptModernGridGradesForHistoricMonths() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1});

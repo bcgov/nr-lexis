@@ -418,9 +418,9 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
   }
 
   /**
-   * Writes the full AMV grid submission without using the legacy procedures, which commit each
-   * row independently. The caller owns the transaction, so all old/second-growth and Pine rows
-   * commit or roll back together.
+   * Writes the generated physical AMV targets without using the legacy procedures, which commit
+   * each row independently. The caller owns the transaction so the complete grid submission
+   * commits or rolls back together.
    */
   public int[] upsertAtomically(List<AtomicWriteTarget> targets) {
     if (targets == null || targets.isEmpty()) {
