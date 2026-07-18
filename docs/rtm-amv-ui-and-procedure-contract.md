@@ -95,6 +95,10 @@ relevant suites are `OracleRtmEmsLogAmvServiceTest`, `OracleRtmEmsLogAmvReposito
 Those tests do not replace live Oracle/TEST verification of direct-`MERGE` grants, rollback,
 trigger behavior, or downstream exports.
 
+Use the [TEST validation checklist](rtm-amv-test-validation.md) after deployment. It keeps all
+TEST values parameterized and covers UI, O/S persistence, the export trigger, audit events,
+downstream consumers, and permit-load timing.
+
 ## Confluence requirement traceability
 
 | Requirement     | Current status             | Evidence or decision needed                                                                                                                         |
@@ -127,8 +131,9 @@ implemented without changing legacy semantics:
   for both growth partitions.
 - It has no submitting-user, submission-timestamp, or update-timestamp column. A new audit table
   or an approved schema change is required to retain that information.
-- `AVG_MARKET_PRICE` is `NOT NULL`; a cleared grid cell is rejected. The legacy blank/clear
-  behavior still needs confirmation from the data architect before it is changed.
+- `AVG_MARKET_PRICE` is `NOT NULL`; the active UI treats an explicit clear as a legacy no-op and
+  restores the loaded value on blur. The data architect still needs to confirm that this matches
+  the legacy blank/clear behavior.
 
 No schema, trigger, or downstream consumer behavior is inferred or altered by this branch.
 
