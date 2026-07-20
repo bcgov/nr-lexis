@@ -814,6 +814,45 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it('reports an unavailable GBMS history instead of showing an empty result', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitGbmsEvents.mockRejectedValueOnce(new Error('gbms unavailable'))
+
+    renderPermitDetails()
+
+    expect(
+      await screen.findByText('GBMS invoice history could not be loaded. Please try again later.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
+  })
+
+  it('loads GBMS history when the permit has no receipt number', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({ ...permitDetail, receiptNumber: null })
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([
+      {
+        id: 'GBMS-1',
+        eventDate: '2026-05-02',
+        eventType: 'Invoice created',
+        status: 'ACT',
+        reference: 'GBMS-1001',
+        notes: 'Invoice accepted',
+      },
+    ])
+
+    renderPermitDetails()
+
+    await waitFor(() =>
+      expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalledWith({
+        permitNumber: '777',
+        receiptNumber: null,
+        blanketOic: false,
+      }),
+    )
+    await selectPermitDetailTab('GBMS')
+    expect(await screen.findByRole('cell', { name: 'GBMS-1001' })).toBeInTheDocument()
+  })
+
   it('shows the base permit detail while exemption context continues loading', async () => {
     configureActivePermit()
     mockedFetchProvincialPermitDetail.mockResolvedValue({

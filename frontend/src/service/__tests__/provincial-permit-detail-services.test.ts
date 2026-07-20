@@ -339,6 +339,8 @@ describe('provincial permit detail services', () => {
               ],
             }),
           )
+        case '/lexis/rpc/permit-details/gbms-invoice-history':
+          return Promise.resolve(response([]))
         default:
           return Promise.reject(new Error(`Unexpected request ${path}`))
       }
@@ -466,6 +468,8 @@ describe('provincial permit detail services', () => {
               ],
             }),
           )
+        case '/lexis/rpc/permit-details/gbms-invoice-history':
+          return Promise.resolve(response([]))
         default:
           return Promise.reject(new Error(`Unexpected request ${path}`))
       }
@@ -476,7 +480,7 @@ describe('provincial permit detail services', () => {
       blanketOic: true,
     })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(2)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(3)
     expect(getCachedResponseMock).toHaveBeenCalledWith(
       '/lexis/rpc/permit-details/core-tabs',
       { params: { permitNumber: 'P-888', blanketOic: true } },
@@ -490,6 +494,11 @@ describe('provincial permit detail services', () => {
           permitNumber: 'P-888',
         },
       },
+      { ttlMs: 30_000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/permit-details/gbms-invoice-history',
+      { params: { receiptNumber: '', permitNumber: 'P-888' } },
       { ttlMs: 30_000 },
     )
     expect(result.packages).toEqual([
@@ -676,26 +685,51 @@ describe('provincial permit detail services', () => {
       label: 'service-unavailable no-content response',
       gbmsResult: () => Promise.resolve(response(undefined, 204)),
     },
-  ])(
-    'keeps display-only GBMS history optional on $label when required permit tables load',
-    async (testCase) => {
-      getCachedResponseMock.mockImplementation((path: string) => {
-        if (path === '/lexis/rpc/permit-details/gbms-invoice-history') {
-          return testCase.gbmsResult()
-        }
-        return Promise.resolve(requiredPermitTabResponse(path))
-      })
+  ])('reports a GBMS history failure on $label', async (testCase) => {
+    getCachedResponseMock.mockImplementation((path: string) => {
+      if (path === '/lexis/rpc/permit-details/gbms-invoice-history') {
+        return testCase.gbmsResult()
+      }
+      return Promise.resolve(requiredPermitTabResponse(path))
+    })
 
-      const result = await fetchProvincialPermitDetailTabs({
+    await expect(
+      fetchProvincialPermitDetailTabs({
         permitNumber: 'P-777',
         receiptNumber: 'RCPT-1',
-      })
+      }),
+    ).rejects.toThrow(
+      testCase.label === 'request failure'
+        ? 'gbms unavailable'
+        : 'No content response from /lexis/rpc/permit-details/gbms-invoice-history',
+    )
+  })
 
-      expect(result.applications).toEqual(['1000456'])
-      expect(result.packages).toHaveLength(1)
-      expect(result.gbmsEvents).toEqual([])
-    },
-  )
+  it('loads GBMS history by permit when the receipt number is blank', async () => {
+    getCachedResponseMock.mockImplementation((path: string) => {
+      if (path === '/lexis/rpc/permit-details/gbms-invoice-history') {
+        return Promise.resolve(
+          response([
+            {
+              gbmsInvoiceNumber: 'GBMS-1',
+              invoiceAmount: '123.45',
+              printedDate: '2026-06-01',
+            },
+          ]),
+        )
+      }
+      return Promise.resolve(requiredPermitTabResponse(path))
+    })
+
+    await expect(
+      fetchProvincialPermitGbmsEvents({ permitNumber: 'P-777', receiptNumber: null }),
+    ).resolves.toEqual([expect.objectContaining({ reference: 'GBMS-1', eventDate: '2026-06-01' })])
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/permit-details/gbms-invoice-history',
+      { params: { receiptNumber: '', permitNumber: 'P-777' } },
+      { ttlMs: 30_000 },
+    )
+  })
 
   it('loads available permit applications with the selected application filter', async () => {
     getCachedResponseMock.mockResolvedValue(

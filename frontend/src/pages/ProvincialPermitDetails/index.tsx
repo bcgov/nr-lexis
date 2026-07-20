@@ -530,6 +530,7 @@ const ProvincialPermitDetailsPage = () => {
   const [permitExemptionContextReady, setPermitExemptionContextReady] = useState(false)
   const [isPermitTablesLoading, setIsPermitTablesLoading] = useState(false)
   const [permitTablesErrorMessage, setPermitTablesErrorMessage] = useState('')
+  const [gbmsErrorMessage, setGbmsErrorMessage] = useState('')
   const [permitFeesErrorMessage, setPermitFeesErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [invoicesErrorMessage, setInvoicesErrorMessage] = useState('')
@@ -648,6 +649,7 @@ const ProvincialPermitDetailsPage = () => {
     setDeferredPermitTabLoaded(EMPTY_DEFERRED_PERMIT_TAB_STATE)
     setDeferredPermitTabLoading(EMPTY_DEFERRED_PERMIT_TAB_STATE)
     setIsPermitTablesLoading(false)
+    setGbmsErrorMessage('')
     void beginBoicPackageEditRequest()
     void beginAvailablePermitApplicationsRequest()
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -688,12 +690,22 @@ const ProvincialPermitDetailsPage = () => {
   const loadPermitGbmsEvents = useCallback(
     (request: ProvincialPermitDetailTabsRequest) => {
       const isLatestRequest = beginPermitGbmsRequest()
-      void fetchProvincialPermitGbmsEvents(request).then((gbmsEvents) => {
-        if (!isLatestRequest()) {
-          return
-        }
-        setTabsData((current) => (current ? { ...current, gbmsEvents } : current))
-      })
+      void fetchProvincialPermitGbmsEvents(request)
+        .then((gbmsEvents) => {
+          if (!isLatestRequest()) {
+            return
+          }
+          setTabsData((current) => (current ? { ...current, gbmsEvents } : current))
+          setGbmsErrorMessage('')
+        })
+        .catch((error: unknown) => {
+          if (!isLatestRequest()) {
+            return
+          }
+          console.error(error)
+          setTabsData((current) => (current ? { ...current, gbmsEvents: [] } : current))
+          setGbmsErrorMessage('GBMS invoice history could not be loaded. Please try again later.')
+        })
     },
     [beginPermitGbmsRequest],
   )
@@ -2833,6 +2845,17 @@ const ProvincialPermitDetailsPage = () => {
                 title="Permit tables unavailable"
                 subtitle={permitTablesErrorMessage}
                 lowContrast
+              />
+            </Column>
+          )}
+          {!!gbmsErrorMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="warning"
+                title="GBMS history unavailable"
+                subtitle={gbmsErrorMessage}
+                lowContrast
+                onCloseButtonClick={() => setGbmsErrorMessage('')}
               />
             </Column>
           )}

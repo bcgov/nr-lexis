@@ -270,12 +270,16 @@ const fetchRows = async <TRow>(
   path: string,
   normalize: (row: unknown, index: number) => TRow,
   config?: Parameters<typeof apiService.getCachedResponse>[1],
+  noContentIsError = false,
 ): Promise<TRow[]> => {
   try {
     const response = await apiService.getCachedResponse<unknown>(path, config, {
       ttlMs: PERMIT_TAB_CACHE_TTL_MS,
     })
     if (response.status === 204) {
+      if (noContentIsError) {
+        throw new Error(`No content response from ${path}`)
+      }
       return []
     }
 
@@ -287,18 +291,6 @@ const fetchRows = async <TRow>(
     return payloadRows.map(normalize)
   } catch (error) {
     throw toSearchServiceError(`Unable to load permit tab data from ${path}.`, error)
-  }
-}
-
-const fetchOptionalRows = async <TRow>(
-  path: string,
-  normalize: (row: unknown, index: number) => TRow,
-  config?: Parameters<typeof apiService.getCachedResponse>[1],
-): Promise<TRow[]> => {
-  try {
-    return await fetchRows(path, normalize, config)
-  } catch {
-    return []
   }
 }
 
@@ -494,21 +486,18 @@ const fetchGbmsRows = async (
   permitNumber: string,
   receiptNumber: string | number | null | undefined,
 ): Promise<ProvincialPermitEventRow[]> => {
-  const normalizedReceiptNumber = asString(receiptNumber)
-  if (!normalizedReceiptNumber) {
-    return []
-  }
-
-  // GBMS history is display-only and does not participate in permit mutation eligibility.
-  return fetchOptionalRows(
+  // The legacy procedure uses the permit number as the authoritative lookup. Receipt number is
+  // only its fallback, so permits without a receipt must still load their GBMS history.
+  return fetchRows(
     '/lexis/rpc/permit-details/gbms-invoice-history',
     normalizeGbmsHistoryRow,
     {
       params: {
-        receiptNumber: normalizedReceiptNumber,
+        receiptNumber: asString(receiptNumber),
         permitNumber,
       },
     },
+    true,
   )
 }
 
