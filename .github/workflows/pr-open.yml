@@ -193,6 +193,10 @@ jobs:
       backend_min_replicas: "1"
       backend_max_replicas: "1"
       frontend_replicas: "1"
+      backend_cpu_request: "500m"
+      backend_memory_request: "1Gi"
+      backend_cpu_limit: "1500m"
+      backend_memory_limit: "2Gi"
       triggers: ('backend/', 'frontend/', '.github/workflows/')
 
   tests:

@@ -66,6 +66,10 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_min_replicas: \"1\"")
         .contains("backend_max_replicas: \"1\"")
         .contains("frontend_replicas: \"1\"")
+        .contains("backend_cpu_request: \"500m\"")
+        .contains("backend_memory_request: \"1Gi\"")
+        .contains("backend_cpu_limit: \"1500m\"")
+        .contains("backend_memory_limit: \"2Gi\"")
         .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}");
     assertThat(backendDeploy)
         .contains("file: backend/openshift.deploy.yml")
