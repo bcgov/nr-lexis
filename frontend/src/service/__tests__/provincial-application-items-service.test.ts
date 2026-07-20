@@ -259,6 +259,28 @@ describe('provincial-application-items-service', () => {
     expect(body.get('remarkBody')).toBe('New note')
   })
 
+  it('preserves an explicit application remark validation message', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        status: 'validation_error',
+        message:
+          'Application remarks contain unsupported special characters. Remove them and try again.',
+      },
+    })
+
+    const result = await saveApplicationRemark({
+      applicationNumber: '321',
+      remarkBody: 'éè',
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      status: 'validation_error',
+      message:
+        'Application remarks contain unsupported special characters. Remove them and try again.',
+    })
+  })
+
   it('posts application summary updates as legacy url-encoded form fields', async () => {
     postMock.mockResolvedValue({
       data: {

@@ -1955,7 +1955,7 @@ const ProvincialApplicationDetailsPage = () => {
           remarkId: editingRemarkId ?? undefined,
         })
         if (!result.success) {
-          setActionErrorMessage('Unable to save application remark.')
+          setActionErrorMessage(result.message || 'Unable to save application remark.')
           return false
         }
 

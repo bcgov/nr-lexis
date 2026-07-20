@@ -115,6 +115,13 @@ public class ApplicationDetailsRpcController {
   private static final String APPLICATION_APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
+  private static final int APPLICATION_REMARK_MAX_BYTES = 254;
+  private static final String APPLICATION_REMARK_UNSUPPORTED_CHARACTERS_MESSAGE =
+      "Application remarks contain unsupported special characters. Remove them and try again.";
+  private static final String APPLICATION_REMARK_TOO_LONG_MESSAGE =
+      "Application remarks must not exceed 254 characters.";
+  private static final String APPLICATION_REMARK_PERSISTENCE_FAILURE_MESSAGE =
+      "Application remark could not be saved. Please try again or contact support.";
   private static final Set<String> APPLICATION_DOCUMENT_DELETE_ROLES =
       Set.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
   private static final Set<String> APPLICATION_DOCUMENT_INDUSTRY_ROLES =
@@ -366,7 +373,9 @@ public class ApplicationDetailsRpcController {
     ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
     if (lock.locked()) {
       return ResponseEntity.status(HttpStatus.CONFLICT)
-          .body(new PersistRemarkResponseDto("locked", null, null, lock.message(), lock.message(), null));
+          .body(
+              new PersistRemarkResponseDto(
+                  "locked", null, null, lock.message(), lock.message(), null, lock.message()));
     }
 
     String userId = userId(authentication);
@@ -389,7 +398,24 @@ public class ApplicationDetailsRpcController {
                         null,
                         currentLock.message(),
                         currentLock.message(),
-                        null));
+                        null,
+                        currentLock.message()));
+          }
+          RemarkValidationFailure validationFailure = validateApplicationRemark(remarkBody);
+          if (validationFailure != null) {
+            LOGGER.warn(
+                "event=lexis_application_remark operation=persist outcome=validation_rejected applicationNumber={} reason={}",
+                parsedApplicationNumber,
+                validationFailure.reason());
+            return ResponseEntity.ok(
+                new PersistRemarkResponseDto(
+                    "validation_error",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    validationFailure.message()));
           }
           return service
               .persistRemark(remarkId, parsedApplicationNumber, remarkBody, userId)
@@ -402,12 +428,23 @@ public class ApplicationDetailsRpcController {
                               persisted.user(),
                               persisted.displayRemark(),
                               persisted.remark(),
-                              persisted.remarkId())))
+                              persisted.remarkId(),
+                              null)))
               .orElseGet(
-                  () ->
-                      ResponseEntity.ok(
-                          new PersistRemarkResponseDto(
-                              "error", null, null, null, null, null)));
+                  () -> {
+                    LOGGER.warn(
+                        "event=lexis_application_remark operation=persist outcome=not_persisted applicationNumber={}",
+                        parsedApplicationNumber);
+                    return ResponseEntity.ok(
+                        new PersistRemarkResponseDto(
+                            "error",
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            APPLICATION_REMARK_PERSISTENCE_FAILURE_MESSAGE));
+                  });
         });
   }
 
@@ -1475,6 +1512,17 @@ public class ApplicationDetailsRpcController {
     return authorizationService.canPerformAction(roles, action);
   }
 
+  private RemarkValidationFailure validateApplicationRemark(String remarkBody) {
+    if (remarkBody == null || !remarkBody.chars().allMatch(character -> character <= 0x7f)) {
+      return new RemarkValidationFailure(
+          "unsupported_characters", APPLICATION_REMARK_UNSUPPORTED_CHARACTERS_MESSAGE);
+    }
+    if (remarkBody.length() > APPLICATION_REMARK_MAX_BYTES) {
+      return new RemarkValidationFailure("too_long", APPLICATION_REMARK_TOO_LONG_MESSAGE);
+    }
+    return null;
+  }
+
   private boolean isPackageNumberChange(String packageNumber, String newPackageNumber) {
     String current = trimToNull(packageNumber);
     String requested = trimToNull(newPackageNumber);
@@ -2208,7 +2256,15 @@ public class ApplicationDetailsRpcController {
   public record GetRemarkResponseDto(String remark, boolean notfound) {}
 
   public record PersistRemarkResponseDto(
-      String status, Instant date, String user, String remark, String title, Long remarkId) {}
+      String status,
+      Instant date,
+      String user,
+      String remark,
+      String title,
+      Long remarkId,
+      String message) {}
+
+  private record RemarkValidationFailure(String reason, String message) {}
 
   public record CheckFormChangesResponseDto(boolean applicationChanged) {}
 

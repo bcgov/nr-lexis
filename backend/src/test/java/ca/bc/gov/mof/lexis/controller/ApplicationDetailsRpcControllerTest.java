@@ -520,6 +520,22 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void persistRemarkShouldReturnExplicitValidationFailureForUnsupportedCharacters() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+
+    ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
+        controller.persistRemark("new", "1000456", "éè", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("validation_error");
+    assertThat(response.getBody().message())
+        .isEqualTo("Application remarks contain unsupported special characters. Remove them and try again.");
+    verify(service, never()).persistRemark(any(), any(), any(), any());
+  }
+
+  @Test
   void persistRemarkShouldRejectWithoutApplicationRemarksAction() {
     TestingAuthenticationToken authentication = unauthorized("/applicationRemarks");
 
