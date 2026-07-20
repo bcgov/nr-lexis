@@ -258,18 +258,15 @@ public class PermitDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
     requirePermitAccess(permitNumber, authentication);
-    ApplicationEditLockDto lock = null;
-    if (canSavePermit(authentication)) {
-      lock = acquirePermitLock(permitNumber, authentication);
-    }
+    // The compatibility lock facade never creates a lease; record versions coordinate saves.
     PermitDetailsRpcService.PermitEditContext context = service.getEditContext(permitNumber);
     return ResponseEntity.ok(
         new PermitEditContextResponseDto(
             context.overrideEnabled(),
             context.overrideFee(),
             context.overrideComment(),
-            lock != null && lock.locked(),
-            lock == null ? null : lock.message()));
+            false,
+            null));
   }
 
   @GetMapping("/scale-fees-for-package")

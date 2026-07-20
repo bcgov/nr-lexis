@@ -46,6 +46,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
@@ -90,6 +91,7 @@ class PermitDetailsRpcControllerTest {
   @Mock private LexisAuthorizationService authorizationService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private ApplicationEditLockService editLockService;
+  @Mock private LexisPrincipalService principalService;
   @Mock private PermitService permitService;
   @Mock private HttpServletRequest request;
   @Mock private HttpSession session;
@@ -141,6 +143,31 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
+  }
+
+  @Test
+  void permitEditContextShouldNotResolveIdentityForCompatibilityLock() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getEditContext(7000123L))
+        .thenReturn(new PermitDetailsRpcService.PermitEditContext(true, "12.50", "Reviewed"));
+    controller.setApplicationEditLockService(editLockService);
+    controller.setLexisPrincipalService(principalService);
+
+    ResponseEntity<PermitDetailsRpcController.PermitEditContextResponseDto> response =
+        controller.getPermitEditContext(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().overrideEnabled()).isTrue();
+    assertThat(response.getBody().overrideFee()).isEqualTo("12.50");
+    assertThat(response.getBody().overrideComment()).isEqualTo("Reviewed");
+    assertThat(response.getBody().locked()).isFalse();
+    assertThat(response.getBody().lockMessage()).isNull();
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+    verify(service).getEditContext(7000123L);
+    verifyNoInteractions(editLockService, principalService);
   }
 
   @Test

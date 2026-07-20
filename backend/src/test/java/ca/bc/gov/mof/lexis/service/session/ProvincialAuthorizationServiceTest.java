@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
@@ -508,13 +509,13 @@ class ProvincialAuthorizationServiceTest {
     Authentication readOnly =
         new TestingAuthenticationToken("readonly", "n/a", "LEXIS_READ_ONLY");
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
-    when(permitService.findByPermitNumber(1L))
-        .thenReturn(Optional.of(permit(1L, "00012345", 76L)));
-    when(permitService.findByPermitNumber(2L))
-        .thenReturn(Optional.of(permit(2L, "00012345", 12L)));
-    when(permitService.findByPermitNumber(3L))
-        .thenReturn(Optional.of(permit(3L, "00012345", null)));
-    when(permitService.findByPermitNumber(4L)).thenReturn(Optional.empty());
+    when(permitService.findAccessByPermitNumber(1L))
+        .thenReturn(Optional.of(permitAccess(1L, "00012345", 76L)));
+    when(permitService.findAccessByPermitNumber(2L))
+        .thenReturn(Optional.of(permitAccess(2L, "00012345", 12L)));
+    when(permitService.findAccessByPermitNumber(3L))
+        .thenReturn(Optional.of(permitAccess(3L, "00012345", null)));
+    when(permitService.findAccessByPermitNumber(4L)).thenReturn(Optional.empty());
 
     assertThat(service.canAccessPermit(readOnly, 1L)).isTrue();
     assertThat(service.canAccessPermit(readOnly, 2L)).isTrue();
@@ -543,8 +544,8 @@ class ProvincialAuthorizationServiceTest {
     Authentication submitter = submitter("00012345");
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
     when(offerServiceProvider.getIfAvailable()).thenReturn(offerService);
-    when(permitService.findByPermitNumber(1L))
-        .thenReturn(Optional.of(permit(1L, "00012345", 12L)));
+    when(permitService.findAccessByPermitNumber(1L))
+        .thenReturn(Optional.of(permitAccess(1L, "00012345", 12L)));
     when(offerService.findByOfferNumber(2L))
         .thenReturn(Optional.of(offer(2L, 102L, "00012345")));
 
@@ -772,6 +773,11 @@ class ProvincialAuthorizationServiceTest {
   private PermitDetailDto permit(
       Long permitNumber, String ownerClientNumber, Long orgUnitNumber) {
     return permit(permitNumber, ownerClientNumber, null, orgUnitNumber);
+  }
+
+  private PermitAccessDto permitAccess(
+      Long permitNumber, String ownerClientNumber, Long orgUnitNumber) {
+    return new PermitAccessDto(permitNumber, null, ownerClientNumber, orgUnitNumber);
   }
 
   private PermitDetailDto permit(

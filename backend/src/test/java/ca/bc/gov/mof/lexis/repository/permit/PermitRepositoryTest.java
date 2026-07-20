@@ -2,9 +2,14 @@ package ca.bc.gov.mof.lexis.repository.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
@@ -17,6 +22,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | PermitRepository")
 class PermitRepositoryTest {
@@ -75,6 +82,31 @@ class PermitRepositoryTest {
     assertThatThrownBy(() -> repository.findByPermitNumber(700001L))
         .isInstanceOf(DataAccessResourceFailureException.class)
         .hasMessageContaining("FIND_PERMIT_DET_BY_ID");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void accessLookupShouldReadOnlyRootPermitFields() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    PermitAccessDto access =
+        new PermitAccessDto(700001L, "00055667", "00077881", 1904L);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq(700001L)))
+        .thenReturn(List.of(access));
+    PermitRepository repository = new PermitRepository(jdbcTemplate);
+
+    assertThat(repository.findAccessByPermitNumber(700001L)).contains(access);
+
+    verify(jdbcTemplate)
+        .query(
+            argThat(
+                sql ->
+                    sql.contains("FROM EXPORT_PERMIT_DETAIL")
+                        && sql.contains("AGENT_NUMBER")
+                        && sql.contains("CLIENT_NUMBER")
+                        && sql.contains("ORG_UNIT_NO")
+                        && !sql.contains("EXPORT_SALES_INVOICE")),
+            any(RowMapper.class),
+            eq(700001L));
   }
 
   @Test

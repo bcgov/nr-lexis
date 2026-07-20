@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
@@ -33,6 +34,10 @@ public class PermitRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "COUNT_PERMIT_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
+  private static final String FIND_PERMIT_ACCESS =
+      "SELECT EXPORT_PERMIT_DETAIL_NUMBER, AGENT_NUMBER, CLIENT_NUMBER, ORG_UNIT_NO "
+          + "FROM EXPORT_PERMIT_DETAIL "
+          + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = ?";
 
   public PermitRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -218,6 +223,25 @@ public class PermitRepository extends OracleRepositorySupport {
         permitNumber,
         elapsedMillis(startedAtNanos));
     return detail;
+  }
+
+  public Optional<PermitAccessDto> findAccessByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+
+    return jdbcTemplate
+        .query(
+            FIND_PERMIT_ACCESS,
+            (rs, rowNumber) ->
+                new PermitAccessDto(
+                    getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+                    getString(rs, "AGENT_NUMBER"),
+                    getString(rs, "CLIENT_NUMBER"),
+                    getLong(rs, "ORG_UNIT_NO")),
+            permitNumber)
+        .stream()
+        .findFirst();
   }
 
   private static long elapsedMillis(long startedAtNanos) {
