@@ -1457,6 +1457,39 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByRole('heading', { name: 'Invoices' })).toBeInTheDocument()
   })
 
+  it('keeps GBMS selected when the permit has no agent', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      applicantClientNumber: null,
+      agentClientLocationCode: null,
+    })
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([
+      {
+        id: 'GBMS-1',
+        eventDate: '2026-05-02',
+        eventType: 'Invoice created',
+        status: 'ACT',
+        reference: 'GBMS-1001',
+        notes: 'Invoice accepted',
+      },
+    ])
+
+    renderPermitDetails()
+
+    expect(await screen.findByRole('tab', { name: 'GBMS' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+
+    await selectPermitDetailTab('GBMS')
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'General Billing Management System events',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'GBMS' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'false')
+  })
+
   it('does not present a deferred document lookup failure as an empty collection', async () => {
     mockedFetchPermitDocuments.mockRejectedValue(new Error('documents unavailable'))
 
