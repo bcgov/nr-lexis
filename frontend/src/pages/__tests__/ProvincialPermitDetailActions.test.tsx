@@ -657,6 +657,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Agent')
     expect(await screen.findByText('Agent Co')).toBeInTheDocument()
     expect(screen.getByText('agent@example.test')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'false')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '01')
     await selectPermitDetailTab('GBMS')

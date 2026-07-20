@@ -1178,20 +1178,8 @@ const ProvincialPermitDetailsPage = () => {
 
   const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0
-  const availablePermitDetailTabs = useMemo(
-    () =>
-      PERMIT_DETAIL_TABS.filter(
-        ({ id }) => (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
-      ),
-    [hasGbmsHistory, hasPermitAgent],
-  )
-  const effectiveSelectedPermitTabId = availablePermitDetailTabs.some(
-    ({ id }) => id === selectedPermitTabId,
-  )
-    ? selectedPermitTabId
-    : 'permit'
   const selectedPermitTabIndex = PERMIT_DETAIL_TABS.findIndex(
-    ({ id }) => id === effectiveSelectedPermitTabId,
+    ({ id }) => id === selectedPermitTabId,
   )
 
   const filteredDocumentRows = useMemo(() => {
