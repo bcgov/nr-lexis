@@ -135,6 +135,8 @@ describe('Admin upload workflow smoke', () => {
     })
 
     expect(screen.getByText('Upload submitted')).toBeInTheDocument()
+    expect(screen.queryByText('Choose at least one file to upload.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Document File')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
   it('shows every loaded permit number option for short result lists', async () => {
@@ -960,6 +962,13 @@ describe('Admin upload workflow smoke', () => {
         '2 application submissions created. Verify the created application and package details.',
       ),
     ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Choose at least one application submission file.'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Application submission file')).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
     expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
   })

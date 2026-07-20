@@ -794,6 +794,7 @@ describe('Admin policy action states', () => {
     fireEvent.change(screen.getByLabelText('Offer end date'), {
       target: { value: '2026-07-23' },
     })
+    fireEvent.blur(screen.getByLabelText('Offer end date'))
     fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
       target: { value: '2026-07-24' },
     })
@@ -815,6 +816,8 @@ describe('Admin policy action states', () => {
 
     expect(await screen.findByText('Export schedule added.')).toBeInTheDocument()
     expect(await screen.findByText('1002')).toBeInTheDocument()
+    expect(screen.queryByText('Offer end date is required.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Offer end date')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
   it('shows schedule validation errors before creating export schedule rows', async () => {

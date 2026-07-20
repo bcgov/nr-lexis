@@ -529,6 +529,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
       target: { value: 'PKG-NEW' },
     })
+    fireEvent.blur(createPackageControls.getByLabelText('Package Number'))
     fireEvent.change(createPackageControls.getByLabelText('Package Volume'), {
       target: { value: '25.0' },
     })
@@ -637,6 +638,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       })
     })
     expect(await screen.findByText('Package PKG-NEW created.')).toBeInTheDocument()
+    expect(createPackageControls.queryByText('Package number is required.')).not.toBeInTheDocument()
   })
 
   it('deletes the selected application package', async () => {
@@ -965,6 +967,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(screen.getByLabelText('Timber Mark'), {
       target: { value: 'TM002' },
     })
+    fireEvent.blur(screen.getByLabelText('Timber Mark'))
     await chooseComboBoxOption(
       screen.getAllByRole('combobox', { name: 'Species' })[1],
       'FI - Douglas-fir',
@@ -996,6 +999,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       detailFetchCountAfterInitialLoad,
     )
     expect(await screen.findByText('Scale 56 added.')).toBeInTheDocument()
+    expect(screen.queryByText('Timber mark is required.')).not.toBeInTheDocument()
 
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()

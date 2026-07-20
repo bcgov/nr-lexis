@@ -683,6 +683,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     setErrorMessage('')
     setSuccessMessage('')
     setSuccessTitle(defaultSuccessTitle(workflowType))
+    setTouchedFields({})
     setShowValidationErrors(false)
     setApplicationSubmissionStep('upload')
     setDocumentUploadStep('upload')
@@ -791,6 +792,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const resetUploadQueueAfterSuccess = (): void => {
     setUploadQueue([])
     setFileInputKey((current) => current + 1)
+    setTouchedFields({})
     setShowValidationErrors(false)
     setApplicationSubmissionStep('upload')
     setDocumentUploadStep('upload')
@@ -1232,6 +1234,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     setErrorMessage('')
     setSuccessMessage('')
     setSuccessTitle(defaultSuccessTitle(selectedWorkflowType))
+    setTouchedFields({})
     setShowValidationErrors(false)
     setApplicationSubmissionStep('upload')
     setDocumentUploadStep('upload')

@@ -944,6 +944,7 @@ function ProvincialApplicationItemsPanel({
     setCreateSpeciesDraft([])
     setCreateSpeciesToAdd('')
     setCreatePackageDraftTouched(false)
+    setTouchedItemFields({})
     setShowCreatePackageValidationErrors(false)
   }
 
@@ -951,6 +952,7 @@ function ProvincialApplicationItemsPanel({
     setScaleForm(emptyScaleForm)
     setScaleActionErrorMessage('')
     setScaleDraftTouched(false)
+    setTouchedItemFields({})
     setShowScaleValidationErrors(false)
   }
 
@@ -1108,11 +1110,7 @@ function ProvincialApplicationItemsPanel({
 
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
-      setCreatePackageForm(emptyPackageForm(productTypeCode))
-      setCreateSpeciesDraft([])
-      setCreatePackageDraftTouched(false)
-      setCreateSpeciesToAdd('')
-      setShowCreatePackageValidationErrors(false)
+      resetCreatePackageDraft()
       setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
       await onDetailChanged()
       await loadApplicationScaleSummary()
@@ -1203,10 +1201,7 @@ function ProvincialApplicationItemsPanel({
       }
 
       setScales((current) => [...current, result.result as ApplicationPackageScaleRow])
-      setScaleForm(emptyScaleForm)
-      setScaleDraftTouched(false)
-      setScaleActionErrorMessage('')
-      setShowScaleValidationErrors(false)
+      resetScaleDraft()
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
       setScaleLookupResult('')
       await loadApplicationScaleSummary()

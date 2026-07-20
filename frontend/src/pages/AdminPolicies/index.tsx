@@ -324,6 +324,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setFeeOrgUnitNo('')
     setFeePolicyPercentage('')
     setEditingFeePolicyId(null)
+    setTouchedFields({})
     setShowFeeValidationErrors(false)
   }
 
@@ -331,6 +332,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setFilEffectiveDate('')
     setFilPolicyPercentage('')
     setEditingFilPolicyId(null)
+    setTouchedFields({})
     setShowFilValidationErrors(false)
   }
 
@@ -342,6 +344,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setScheduleOfferWithdrawalDate('')
     setScheduleTeacMeetingDate('')
     setEditingScheduleId(null)
+    setTouchedFields({})
     setShowScheduleValidationErrors(false)
   }
 
