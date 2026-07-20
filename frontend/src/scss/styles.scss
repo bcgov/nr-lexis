@@ -382,13 +382,6 @@ body {
   background-color: var(--csp-header-hover);
 }
 
-.csp-header-action[aria-expanded='true'] {
-  --cds-icon-primary: var(--csp-interactive);
-
-  background-color: var(--csp-layer-01);
-  color: var(--csp-interactive);
-}
-
 .csp-side-nav {
   position: fixed;
   inset-block: var(--csp-header-height) 0;
