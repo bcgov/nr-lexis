@@ -27,7 +27,6 @@ public class OptimisticRecordVersionInterceptor implements HandlerInterceptor {
       Pattern.compile("^/api/lexis/purchase-offers/(\\d+)$");
   private static final Pattern EXEMPTION_PATH =
       Pattern.compile("^/api/lexis/exemptions/([^/]+)$");
-  private static final Pattern PERMIT_PATH = Pattern.compile("^/api/lexis/permits/(\\d+)$");
 
   private final OracleOptimisticRecordVersionService versionService;
 
@@ -64,10 +63,6 @@ public class OptimisticRecordVersionInterceptor implements HandlerInterceptor {
           new RecordTarget(
               OptimisticRecordType.EXEMPTION,
               UriUtils.decode(exemption.group(1), StandardCharsets.UTF_8)));
-    }
-    Matcher permit = PERMIT_PATH.matcher(path);
-    if (permit.matches()) {
-      return Optional.of(new RecordTarget(OptimisticRecordType.PERMIT, permit.group(1)));
     }
     if ("/api/lexis/rpc/exemption-details/edit-context".equals(path)) {
       return parameterTarget(request, "exemptionNumber", OptimisticRecordType.EXEMPTION);
