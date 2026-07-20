@@ -1732,6 +1732,10 @@ describe('Create Page Core Flows', () => {
     }
     expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeEnabled()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/provincial/application/2001?tab=items&packageNumber=PKG-9&section=scales',
+    )
     expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
     expect(screen.getByDisplayValue('H/SA')).toBeInTheDocument()
     expect(screen.getByDisplayValue('03/01/2026')).toBeInTheDocument()

@@ -298,11 +298,15 @@ const ProvincialOfferDetailsPage = () => {
     if (!applicationNumber || !packageNumber) {
       return
     }
-    const params = new URLSearchParams({ packageFilter: packageNumber })
-    const applicationPath =
-      detail?.exportJurisdictionCode?.trim().toUpperCase() === 'F'
-        ? `/federal/application/${applicationNumber}`
-        : `/provincial/application/${applicationNumber}`
+    const isFederal = detail?.exportJurisdictionCode?.trim().toUpperCase() === 'F'
+    const params = new URLSearchParams(
+      isFederal
+        ? { packageFilter: packageNumber }
+        : { tab: 'items', packageNumber, section: 'scales' },
+    )
+    const applicationPath = isFederal
+      ? `/federal/application/${applicationNumber}`
+      : `/provincial/application/${applicationNumber}`
     navigate(`${applicationPath}?${params}`)
   }
 

@@ -713,7 +713,11 @@ const ProvincialOfferCreatePage = () => {
                 size="sm"
                 disabled={!form.applicationNumber.trim() || !form.packageNumber.trim()}
                 onClick={() => {
-                  const params = new URLSearchParams({ packageFilter: form.packageNumber.trim() })
+                  const params = new URLSearchParams({
+                    tab: 'items',
+                    packageNumber: form.packageNumber.trim(),
+                    section: 'scales',
+                  })
                   navigate(`/provincial/application/${form.applicationNumber.trim()}?${params}`)
                 }}
               >

@@ -140,6 +140,8 @@ type ApplicationDetailTabKey =
   | 'remarks'
   | 'offers'
   | 'review'
+// Carbon indexes the conditional JSX children as well as the visible tabs.
+// Keep these slots aligned with the TabList and TabPanels declarations below.
 const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
   'owner',
   'agent',
@@ -614,6 +616,11 @@ const ProvincialApplicationDetailsPage = () => {
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
+  const requestedApplicationTab = (searchParams.get('tab') ?? '').trim().toLowerCase()
+  const requestedPackageNumber = (searchParams.get('packageNumber') ?? '').trim()
+  const shouldFocusScaleSection =
+    requestedApplicationTab === 'items' &&
+    (searchParams.get('section') ?? '').trim().toLowerCase() === 'scales'
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -958,6 +965,11 @@ const ProvincialApplicationDetailsPage = () => {
     0,
     APPLICATION_DETAIL_TAB_SLOTS.indexOf(selectedApplicationTab),
   )
+  useEffect(() => {
+    if (requestedApplicationTab === 'items') {
+      focusPackageInItems(requestedPackageNumber)
+    }
+  }, [focusPackageInItems, requestedApplicationTab, requestedPackageNumber])
   const summaryAgentClientNumber = isSummaryAgentApplicant
     ? (summaryForm?.agentClientNumber.trim() ?? '')
     : ''
@@ -3697,6 +3709,7 @@ const ProvincialApplicationDetailsPage = () => {
                         onBusyChange={setApplicationItemsBusy}
                         focusedPackageNumber={focusedPackageNumber}
                         focusedPackageRequestId={focusedPackageRequestId}
+                        focusScalesRequestId={shouldFocusScaleSection ? focusedPackageRequestId : 0}
                       />
                     </Column>
                   </Grid>

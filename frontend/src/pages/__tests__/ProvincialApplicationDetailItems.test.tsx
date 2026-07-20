@@ -10,11 +10,12 @@ import {
 } from 'react-router-dom'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import type { fetchApplicationPackageDetails } from '@/service/provincial-application-items-service'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   setupApplicationDetailTests,
   LocationProbe,
   applicationDetail,
+  applicationSummarySnapshot,
   chooseComboBoxOption,
   getApplicationSummaryTile,
   mockedAddApplicationPackage,
@@ -38,6 +39,8 @@ import {
   selectApplicationDetailTab,
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
+
+Element.prototype.scrollIntoView = vi.fn()
 
 describe.sequential('Provincial Application Detail Actions - items', () => {
   beforeEach(setupApplicationDetailTests)
@@ -74,6 +77,54 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const location = await screen.findByTestId('location')
     expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
+  })
+
+  it('opens a scale deep link on the Items tab and selects its package for an owner application', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'O',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+    })
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      agentClientNumber: null,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+        { packageNumber: 'PKG-2', volume: 50, pieceCount: 3 },
+      ],
+    })
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/321?tab=items&packageNumber=PKG-2&section=scales',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Items' })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
+    })
+    expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-2')
+    expect(document.getElementById('application-items-scales')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
   })
 
   it('blocks application summary and package edits for exemption approvers', async () => {
