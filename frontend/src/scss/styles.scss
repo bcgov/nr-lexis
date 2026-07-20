@@ -382,6 +382,15 @@ body {
   background-color: var(--csp-header-hover);
 }
 
+// Carbon's icon-only ghost focus state uses a grey active fill and blue inset ring.
+.csp-header-action[aria-expanded='true'],
+.csp-header-action[aria-expanded='true']:hover,
+.csp-header-action.cds--btn--icon-only.cds--btn--ghost:focus {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .csp-side-nav {
   position: fixed;
   inset-block: var(--csp-header-height) 0;
