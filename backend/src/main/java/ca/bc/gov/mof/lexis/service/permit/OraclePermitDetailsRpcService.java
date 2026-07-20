@@ -405,7 +405,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   @Override
   public PermitEditContext getEditContext(Long permitNumber) {
     return repository
-        .findPermitMutationByPermitNumber(permitNumber)
+        .findPermitFeeOverrideByPermitNumber(permitNumber)
         .map(
             permit -> {
               Double overrideFee = permit.overrideFee();

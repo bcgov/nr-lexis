@@ -513,6 +513,7 @@ const ProvincialPermitDetailsPage = () => {
     null,
   )
   const [editContextLoaded, setEditContextLoaded] = useState(false)
+  const [editContextLoadFailed, setEditContextLoadFailed] = useState(false)
   const [feeOverrideForm, setFeeOverrideForm] = useState<PermitFeeOverrideForm | null>(null)
   const [isEditingPermit, setIsEditingPermit] = useState(false)
   const [isEditingShipping, setIsEditingShipping] = useState(false)
@@ -765,6 +766,7 @@ const ProvincialPermitDetailsPage = () => {
         setFeeOverrideContext(null)
         setFeeOverrideForm(null)
         setEditContextLoaded(false)
+        setEditContextLoadFailed(false)
         setPermitExemptionContextReady(false)
         setIsEditingFeeOverride(false)
         setIsEditingPermit(false)
@@ -793,6 +795,7 @@ const ProvincialPermitDetailsPage = () => {
       setFeeOverrideContext(null)
       setFeeOverrideForm(null)
       setEditContextLoaded(false)
+      setEditContextLoadFailed(false)
       setIsEditingFeeOverride(false)
 
       try {
@@ -811,6 +814,7 @@ const ProvincialPermitDetailsPage = () => {
           setFeeOverrideContext(null)
           setFeeOverrideForm(null)
           setEditContextLoaded(false)
+          setEditContextLoadFailed(false)
           setTabsData(null)
           setPermitTablesErrorMessage('')
           setDocumentRows([])
@@ -826,6 +830,7 @@ const ProvincialPermitDetailsPage = () => {
             setFeeOverrideContext(feeContext)
             setFeeOverrideForm(feeContext)
             setEditContextLoaded(true)
+            setEditContextLoadFailed(false)
           })
           .catch((error) => {
             if (!isLatestRequest()) {
@@ -835,6 +840,7 @@ const ProvincialPermitDetailsPage = () => {
             setFeeOverrideContext(null)
             setFeeOverrideForm(null)
             setEditContextLoaded(false)
+            setEditContextLoadFailed(true)
             setIsEditingFeeOverride(false)
             setIsEditingPermit(false)
             setIsEditingShipping(false)
@@ -910,6 +916,7 @@ const ProvincialPermitDetailsPage = () => {
           setFeeOverrideContext(null)
           setFeeOverrideForm(null)
           setEditContextLoaded(false)
+          setEditContextLoadFailed(false)
           setIsPermitTablesLoading(false)
           setIsEditingFeeOverride(false)
           setIsEditingPermit(false)
@@ -1224,7 +1231,7 @@ const ProvincialPermitDetailsPage = () => {
       'This permit is currently locked for editing by another user.'
     : ''
   const permitEditContextUnavailableMessage =
-    hasPermitMutationPermission && !editContextLoaded
+    hasPermitMutationPermission && editContextLoadFailed
       ? 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
@@ -4126,8 +4133,9 @@ const ProvincialPermitDetailsPage = () => {
 
                           {!feeOverrideContext || !feeOverrideForm ? (
                             <p>
-                              Fee override details are unavailable. No override changes can be
-                              saved.
+                              {editContextLoadFailed
+                                ? 'Fee override details are unavailable. No override changes can be saved.'
+                                : 'Loading fee override details...'}
                             </p>
                           ) : isEditingFeeOverride ? (
                             <>

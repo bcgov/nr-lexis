@@ -80,6 +80,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_END_USE_BY_PACK = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
+  private static final String FIND_PERMIT_FEE_OVERRIDE =
+      "SELECT OVERRIDE_FEE, OVERRIDE_COMMENT "
+          + "FROM EXPORT_PERMIT_DETAIL "
+          + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = ?";
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_PERMIT_FILE_DETAILS =
@@ -795,6 +799,26 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         cs -> cs.setString(1, permitNumber.toString()),
         2,
         this::mapPermitMutationRow);
+  }
+
+  /**
+   * Reads the fields needed to initialize permit fee editing without relying on optional columns
+   * from the legacy full-permit cursor.
+   */
+  public Optional<PermitFeeOverrideRow> findPermitFeeOverrideByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+
+    return jdbcTemplate
+        .query(
+            FIND_PERMIT_FEE_OVERRIDE,
+            (rs, rowNumber) ->
+                new PermitFeeOverrideRow(
+                    getDouble(rs, "OVERRIDE_FEE"), getString(rs, "OVERRIDE_COMMENT")),
+            permitNumber)
+        .stream()
+        .findFirst();
   }
 
   public Optional<PermitMutationRow> insertPermitDetail(PermitMutationRow row, String entryUserId) {
@@ -1825,6 +1849,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       double exportValue,
       double currencyConversionRate,
       double feeInLieu) {}
+
+  public record PermitFeeOverrideRow(Double overrideFee, String overrideComment) {}
 
   public record PermitMutationRow(
       Long permitNumber,

@@ -774,6 +774,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
     expect(screen.queryByText('Loading provincial permit detail...')).not.toBeInTheDocument()
     expect(screen.getByText('Loading associated permit applications...')).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
+      ),
+    ).not.toBeInTheDocument()
 
     await act(async () => {
       resolveTabs?.(tabsResult)

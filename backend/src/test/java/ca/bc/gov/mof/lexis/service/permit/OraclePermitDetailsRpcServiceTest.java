@@ -58,6 +58,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.GbmsInvoiceHist
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitFeeOverrideRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCorePackageRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
@@ -559,15 +560,16 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void editContextShouldExposePersistedFeeOverride() {
-    PermitMutationRow permit = permitMutationRowWithOverride(45.25d, "Reviewed calculation");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permit));
+    when(repository.findPermitFeeOverrideByPermitNumber(7000123L))
+        .thenReturn(Optional.of(new PermitFeeOverrideRow(45.25d, "Reviewed calculation")));
 
     PermitDetailsRpcService.PermitEditContext response = service.getEditContext(7000123L);
 
     assertThat(response.overrideEnabled()).isTrue();
     assertThat(response.overrideFee()).isEqualTo("45.25");
     assertThat(response.overrideComment()).isEqualTo("Reviewed calculation");
+    verify(repository).findPermitFeeOverrideByPermitNumber(7000123L);
+    verify(repository, never()).findPermitMutationByPermitNumber(7000123L);
   }
 
   @Test
