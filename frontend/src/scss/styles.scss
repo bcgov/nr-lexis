@@ -3548,6 +3548,46 @@ legend.cds--label {
   }
 }
 
+.application-detail-tab-panel .federal-shipping-details.cds--tile {
+  min-height: auto;
+}
+
+.federal-shipping-details .federal-shipping-details__field-grid {
+  justify-content: start;
+}
+
+.federal-shipping-details__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem 1.5rem;
+}
+
+.federal-shipping-details__form > * {
+  flex: 1 1 16rem;
+  max-inline-size: 18rem;
+}
+
+.federal-shipping-details__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+
+@media (min-width: 672px) {
+  .federal-shipping-details .federal-shipping-details__field-grid {
+    grid-template-columns: repeat(2, minmax(12rem, 18rem));
+  }
+}
+
+@media (min-width: 1312px) {
+  .federal-shipping-details .federal-shipping-details__field-grid {
+    grid-template-columns: repeat(3, minmax(12rem, 18rem));
+  }
+}
+
 .detail-field-item {
   margin: 0;
   min-width: 0;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Edit } from '@carbon/icons-react'
 import {
   Button,
   Column,
@@ -149,6 +150,7 @@ const FederalApplicationDetailsPage = () => {
   const [remarkDraft, setRemarkDraft] = useState('')
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null)
   const [permitForm, setPermitForm] = useState<FederalPermitMutation>(emptyPermitForm)
+  const [isEditingFederalPermit, setIsEditingFederalPermit] = useState(false)
   const [isSavingMutation, setIsSavingMutation] = useState(false)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -315,6 +317,7 @@ const FederalApplicationDetailsPage = () => {
         )
         setStatusRemark('')
         setPermitForm(response ? permitFormFromDetail(response) : emptyPermitForm())
+        setIsEditingFederalPermit(false)
         if (!response) {
           setErrorMessage(`No federal application found for ${applicationNumber}.`)
           setDocumentRows([])
@@ -413,6 +416,7 @@ const FederalApplicationDetailsPage = () => {
     )
     setStatusRemark('')
     setPermitForm(refreshed ? permitFormFromDetail(refreshed) : emptyPermitForm())
+    setIsEditingFederalPermit(false)
     if (canViewFederalApplication) {
       try {
         setRemarkRows(await fetchFederalApplicationRemarks(applicationNumber))
@@ -508,6 +512,26 @@ const FederalApplicationDetailsPage = () => {
     refreshDetail,
     shippingReferences,
   ])
+
+  const onStartFederalPermitEdit = useCallback(() => {
+    if (
+      !canMutateFederalApplication ||
+      !detail ||
+      isShippingReferencesLoading ||
+      !shippingReferences
+    ) {
+      return
+    }
+    setPermitForm(permitFormFromDetail(detail))
+    setActionErrorMessage('')
+    setIsEditingFederalPermit(true)
+  }, [canMutateFederalApplication, detail, isShippingReferencesLoading, shippingReferences])
+
+  const onCancelFederalPermitEdit = useCallback(() => {
+    setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
+    setActionErrorMessage('')
+    setIsEditingFederalPermit(false)
+  }, [detail])
 
   const onSaveRemark = useCallback(async (): Promise<boolean> => {
     if (!applicationNumber || !canMutateFederalApplication || !remarkDraft.trim()) return false
@@ -620,6 +644,7 @@ const FederalApplicationDetailsPage = () => {
       : (remarkRows.find((remark) => remark.remarkId === editingRemarkId)?.remark ?? '')
   const remarkDraftDirty = canMutateFederalApplication && remarkDraft !== remarkBaseline
   const permitDraftDirty =
+    isEditingFederalPermit &&
     canMutateFederalApplication &&
     !!detail &&
     !formValuesEqual(permitForm, permitFormFromDetail(detail))
@@ -667,6 +692,7 @@ const FederalApplicationDetailsPage = () => {
     setRemarkDraft('')
     setEditingRemarkId(null)
     setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
+    setIsEditingFederalPermit(false)
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
@@ -1426,222 +1452,260 @@ const FederalApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <DetailFieldTile
-                        title="Shipping details"
-                        fields={[
-                          {
-                            label: 'Permit issue date',
-                            value: displayValue(detail.federalPermit?.permitIssueDate),
-                          },
-                          {
-                            label: 'Final destination country',
-                            value: displayValue(
-                              shippingReferenceLabel(
-                                shippingReferences?.countries,
-                                detail.federalPermit?.destinationCountry,
-                              ),
-                            ),
-                          },
-                          {
-                            label: 'Transport type',
-                            value: displayValue(
-                              shippingReferenceLabel(
-                                shippingReferences?.transportTypes,
-                                detail.federalPermit?.transportType,
-                              ),
-                            ),
-                          },
-                          {
-                            label: 'Transport name',
-                            value: displayValue(detail.federalPermit?.transportName),
-                          },
-                          {
-                            label: 'Estimated shipping date',
-                            value: displayValue(detail.federalPermit?.shippingDate),
-                          },
-                          {
-                            label: 'Customs port of export',
-                            value: displayValue(
-                              shippingReferenceLabel(
-                                shippingReferences?.ports,
-                                detail.federalPermit?.portOfExport,
-                              ),
-                            ),
-                          },
-                          ...(detail.federalPermit?.portOfExport?.trim().toUpperCase() === 'OT'
-                            ? [
-                                {
-                                  label: 'Other port of export',
-                                  value: displayValue(detail.federalPermit?.otherPortOfExport),
-                                },
-                              ]
-                            : []),
-                          {
-                            label: 'Permit number',
-                            value: displayValue(detail.federalPermit?.permitNumber),
-                          },
-                        ]}
-                      />
-                      {canMutateFederalApplication && (
-                        <Tile>
-                          <h2 className="detail-tile-title">
-                            {detail.federalPermit ? 'Update federal permit' : 'Add federal permit'}
-                          </h2>
-                          <div className="legacy-search-grid">
-                            {detail.federalPermit && (
-                              <TextInput
-                                id="federalPermitNumber"
-                                labelText="Permit number"
-                                value={String(permitForm.permitNumber ?? '')}
-                                readOnly
-                              />
-                            )}
-                            <IsoDatePicker
-                              id="federalPermitIssueDate"
-                              labelText="Permit issue date"
-                              value={permitForm.permitIssueDate}
-                              invalid={!!permitFieldErrors.permitIssueDate}
-                              invalidText={permitFieldErrors.permitIssueDate}
-                              onChange={(value) =>
-                                setPermitForm((current) => ({
-                                  ...current,
-                                  permitIssueDate: value,
-                                }))
-                              }
-                            />
-                            <Select
-                              id="federalPermitDestinationCountry"
-                              labelText="Destination country"
-                              value={permitForm.destinationCountry}
-                              invalid={!!permitFieldErrors.destinationCountry}
-                              invalidText={permitFieldErrors.destinationCountry}
-                              onChange={(event) =>
-                                setPermitForm((current) => ({
-                                  ...current,
-                                  destinationCountry: event.target.value,
-                                }))
-                              }
-                              disabled={isShippingReferencesLoading || !shippingReferences}
-                            >
-                              <SelectItem value="" text="Select a destination country" />
-                              {(shippingReferences?.countries ?? []).map((option) => (
-                                <SelectItem
-                                  key={option.code}
-                                  value={option.code}
-                                  text={formatShippingReferenceOption(option)}
+                      <Tile className="detail-section-card federal-shipping-details">
+                        {isEditingFederalPermit && canMutateFederalApplication ? (
+                          <>
+                            <div className="detail-section-card__header">
+                              <h2 className="detail-tile-title">
+                                {detail.federalPermit
+                                  ? 'Edit shipping details'
+                                  : 'Add federal permit'}
+                              </h2>
+                            </div>
+                            <div className="federal-shipping-details__form">
+                              {detail.federalPermit && (
+                                <TextInput
+                                  id="federalPermitNumber"
+                                  labelText="Permit number"
+                                  value={String(permitForm.permitNumber ?? '')}
+                                  readOnly
                                 />
-                              ))}
-                            </Select>
-                            <Select
-                              id="federalPermitTransportType"
-                              labelText="Transport type"
-                              value={permitForm.transportType}
-                              invalid={!!permitFieldErrors.transportType}
-                              invalidText={permitFieldErrors.transportType}
-                              onChange={(event) =>
-                                setPermitForm((current) => ({
-                                  ...current,
-                                  transportType: event.target.value,
-                                }))
-                              }
-                              disabled={isShippingReferencesLoading || !shippingReferences}
-                            >
-                              <SelectItem value="" text="Select a transport type" />
-                              {(shippingReferences?.transportTypes ?? []).map((option) => (
-                                <SelectItem
-                                  key={option.code}
-                                  value={option.code}
-                                  text={formatShippingReferenceOption(option)}
-                                />
-                              ))}
-                            </Select>
-                            <TextInput
-                              id="federalPermitTransportName"
-                              labelText="Transport name"
-                              value={permitForm.transportName}
-                              invalid={!!permitFieldErrors.transportName}
-                              invalidText={permitFieldErrors.transportName}
-                              maxLength={26}
-                              onChange={(event) =>
-                                setPermitForm((current) => ({
-                                  ...current,
-                                  transportName: event.target.value,
-                                }))
-                              }
-                            />
-                            <IsoDatePicker
-                              id="federalPermitShippingDate"
-                              labelText="Estimated shipping date"
-                              value={permitForm.shippingDate}
-                              invalid={!!permitFieldErrors.shippingDate}
-                              invalidText={permitFieldErrors.shippingDate}
-                              onChange={(value) =>
-                                setPermitForm((current) => ({
-                                  ...current,
-                                  shippingDate: value,
-                                }))
-                              }
-                            />
-                            <Select
-                              id="federalPermitPortOfExport"
-                              labelText="Port of export"
-                              value={permitForm.portOfExport}
-                              invalid={!!permitFieldErrors.portOfExport}
-                              invalidText={permitFieldErrors.portOfExport}
-                              onChange={(event) => {
-                                const portCode = event.target.value
-                                setPermitForm((current) => ({
-                                  ...current,
-                                  portOfExport: portCode,
-                                  otherPortOfExport:
-                                    portCode.toUpperCase() === 'OT'
-                                      ? current.otherPortOfExport
-                                      : '',
-                                }))
-                              }}
-                              disabled={isShippingReferencesLoading || !shippingReferences}
-                            >
-                              <SelectItem value="" text="Select a port of export" />
-                              {(shippingReferences?.ports ?? []).map((option) => (
-                                <SelectItem
-                                  key={option.code}
-                                  value={option.code}
-                                  text={formatShippingReferenceOption(option)}
-                                />
-                              ))}
-                            </Select>
-                            {permitForm.portOfExport.trim().toUpperCase() === 'OT' && (
-                              <TextInput
-                                id="federalPermitOtherPort"
-                                labelText="Other port of export"
-                                value={permitForm.otherPortOfExport}
-                                invalid={!!permitFieldErrors.otherPortOfExport}
-                                invalidText={permitFieldErrors.otherPortOfExport}
-                                maxLength={34}
-                                onChange={(event) =>
+                              )}
+                              <IsoDatePicker
+                                id="federalPermitIssueDate"
+                                labelText="Permit issue date"
+                                value={permitForm.permitIssueDate}
+                                invalid={!!permitFieldErrors.permitIssueDate}
+                                invalidText={permitFieldErrors.permitIssueDate}
+                                onChange={(value) =>
                                   setPermitForm((current) => ({
                                     ...current,
-                                    otherPortOfExport: event.target.value,
+                                    permitIssueDate: value,
                                   }))
                                 }
                               />
-                            )}
-                          </div>
-                          <Button
-                            kind="primary"
-                            size="sm"
-                            disabled={
-                              isSavingMutation ||
-                              isShippingReferencesLoading ||
-                              !shippingReferences ||
-                              hasPermitValidationError
-                            }
-                            onClick={() => void onSavePermit()}
-                          >
-                            {isSavingMutation ? 'Saving...' : 'Save federal permit'}
-                          </Button>
-                        </Tile>
-                      )}
+                              <Select
+                                id="federalPermitDestinationCountry"
+                                labelText="Destination country"
+                                value={permitForm.destinationCountry}
+                                invalid={!!permitFieldErrors.destinationCountry}
+                                invalidText={permitFieldErrors.destinationCountry}
+                                onChange={(event) =>
+                                  setPermitForm((current) => ({
+                                    ...current,
+                                    destinationCountry: event.target.value,
+                                  }))
+                                }
+                              >
+                                <SelectItem value="" text="Select a destination country" />
+                                {(shippingReferences?.countries ?? []).map((option) => (
+                                  <SelectItem
+                                    key={option.code}
+                                    value={option.code}
+                                    text={formatShippingReferenceOption(option)}
+                                  />
+                                ))}
+                              </Select>
+                              <Select
+                                id="federalPermitTransportType"
+                                labelText="Transport type"
+                                value={permitForm.transportType}
+                                invalid={!!permitFieldErrors.transportType}
+                                invalidText={permitFieldErrors.transportType}
+                                onChange={(event) =>
+                                  setPermitForm((current) => ({
+                                    ...current,
+                                    transportType: event.target.value,
+                                  }))
+                                }
+                              >
+                                <SelectItem value="" text="Select a transport type" />
+                                {(shippingReferences?.transportTypes ?? []).map((option) => (
+                                  <SelectItem
+                                    key={option.code}
+                                    value={option.code}
+                                    text={formatShippingReferenceOption(option)}
+                                  />
+                                ))}
+                              </Select>
+                              <TextInput
+                                id="federalPermitTransportName"
+                                labelText="Transport name"
+                                value={permitForm.transportName}
+                                invalid={!!permitFieldErrors.transportName}
+                                invalidText={permitFieldErrors.transportName}
+                                maxLength={26}
+                                onChange={(event) =>
+                                  setPermitForm((current) => ({
+                                    ...current,
+                                    transportName: event.target.value,
+                                  }))
+                                }
+                              />
+                              <IsoDatePicker
+                                id="federalPermitShippingDate"
+                                labelText="Estimated shipping date"
+                                value={permitForm.shippingDate}
+                                invalid={!!permitFieldErrors.shippingDate}
+                                invalidText={permitFieldErrors.shippingDate}
+                                onChange={(value) =>
+                                  setPermitForm((current) => ({
+                                    ...current,
+                                    shippingDate: value,
+                                  }))
+                                }
+                              />
+                              <Select
+                                id="federalPermitPortOfExport"
+                                labelText="Port of export"
+                                value={permitForm.portOfExport}
+                                invalid={!!permitFieldErrors.portOfExport}
+                                invalidText={permitFieldErrors.portOfExport}
+                                onChange={(event) => {
+                                  const portCode = event.target.value
+                                  setPermitForm((current) => ({
+                                    ...current,
+                                    portOfExport: portCode,
+                                    otherPortOfExport:
+                                      portCode.toUpperCase() === 'OT'
+                                        ? current.otherPortOfExport
+                                        : '',
+                                  }))
+                                }}
+                              >
+                                <SelectItem value="" text="Select a port of export" />
+                                {(shippingReferences?.ports ?? []).map((option) => (
+                                  <SelectItem
+                                    key={option.code}
+                                    value={option.code}
+                                    text={formatShippingReferenceOption(option)}
+                                  />
+                                ))}
+                              </Select>
+                              {permitForm.portOfExport.trim().toUpperCase() === 'OT' && (
+                                <TextInput
+                                  id="federalPermitOtherPort"
+                                  labelText="Other port of export"
+                                  value={permitForm.otherPortOfExport}
+                                  invalid={!!permitFieldErrors.otherPortOfExport}
+                                  invalidText={permitFieldErrors.otherPortOfExport}
+                                  maxLength={34}
+                                  onChange={(event) =>
+                                    setPermitForm((current) => ({
+                                      ...current,
+                                      otherPortOfExport: event.target.value,
+                                    }))
+                                  }
+                                />
+                              )}
+                            </div>
+                            <div className="federal-shipping-details__actions">
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={isSavingMutation}
+                                onClick={onCancelFederalPermitEdit}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={isSavingMutation || hasPermitValidationError}
+                                onClick={() => void onSavePermit()}
+                              >
+                                {isSavingMutation ? 'Saving...' : 'Save federal permit'}
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="detail-section-card__header">
+                              <h2 className="detail-tile-title">Shipping details</h2>
+                              {canMutateFederalApplication && (
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  renderIcon={Edit}
+                                  disabled={
+                                    isSavingMutation ||
+                                    isShippingReferencesLoading ||
+                                    !shippingReferences
+                                  }
+                                  onClick={onStartFederalPermitEdit}
+                                >
+                                  {detail.federalPermit
+                                    ? 'Edit shipping details'
+                                    : 'Add federal permit'}
+                                </Button>
+                              )}
+                            </div>
+                            <dl className="detail-field-grid federal-shipping-details__field-grid">
+                              {[
+                                {
+                                  label: 'Permit issue date',
+                                  value: displayValue(detail.federalPermit?.permitIssueDate),
+                                },
+                                {
+                                  label: 'Final destination country',
+                                  value: displayValue(
+                                    shippingReferenceLabel(
+                                      shippingReferences?.countries,
+                                      detail.federalPermit?.destinationCountry,
+                                    ),
+                                  ),
+                                },
+                                {
+                                  label: 'Transport type',
+                                  value: displayValue(
+                                    shippingReferenceLabel(
+                                      shippingReferences?.transportTypes,
+                                      detail.federalPermit?.transportType,
+                                    ),
+                                  ),
+                                },
+                                {
+                                  label: 'Transport name',
+                                  value: displayValue(detail.federalPermit?.transportName),
+                                },
+                                {
+                                  label: 'Estimated shipping date',
+                                  value: displayValue(detail.federalPermit?.shippingDate),
+                                },
+                                {
+                                  label: 'Customs port of export',
+                                  value: displayValue(
+                                    shippingReferenceLabel(
+                                      shippingReferences?.ports,
+                                      detail.federalPermit?.portOfExport,
+                                    ),
+                                  ),
+                                },
+                                ...(detail.federalPermit?.portOfExport?.trim().toUpperCase() ===
+                                'OT'
+                                  ? [
+                                      {
+                                        label: 'Other port of export',
+                                        value: displayValue(
+                                          detail.federalPermit?.otherPortOfExport,
+                                        ),
+                                      },
+                                    ]
+                                  : []),
+                                {
+                                  label: 'Permit number',
+                                  value: displayValue(detail.federalPermit?.permitNumber),
+                                },
+                              ].map((field) => (
+                                <div key={field.label} className="detail-field-item">
+                                  <dt className="detail-field-label">{field.label}</dt>
+                                  <dd className="detail-field-value">{field.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </>
+                        )}
+                      </Tile>
                     </Column>
                   </Grid>
                 </TabPanel>
