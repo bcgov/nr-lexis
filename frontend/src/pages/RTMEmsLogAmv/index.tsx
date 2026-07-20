@@ -699,7 +699,7 @@ const RTMEmsLogAmvPage = () => {
                 <InformationFilled size={16} aria-hidden="true" />
                 <span>
                   {selectedDateIsCurrent
-                    ? `Viewing ${formatEffectiveMonth(loadedDate)}; previous month is ${formatEffectiveMonth(selectedPreviousMonthDate)}`
+                    ? `Viewing ${formatEffectiveMonth(loadedDate)}`
                     : selectedDateIsFuture
                       ? `Viewing future month ${formatEffectiveMonth(loadedDate)}`
                       : `Viewing past month ${formatEffectiveMonth(loadedDate)}`}

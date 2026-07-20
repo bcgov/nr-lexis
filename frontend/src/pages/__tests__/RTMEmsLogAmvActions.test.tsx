@@ -106,6 +106,7 @@ describe('RTM EMS Log AMV actions', () => {
 
     expect(screen.getByLabelText('Effective month')).toHaveAttribute('type', 'month')
     expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.queryByText(/previous month is/i)).not.toBeInTheDocument()
     expect(screen.getByText('Maintain one monthly value for each species and grade.')).toBeVisible()
     expect(
       screen.getByText(
