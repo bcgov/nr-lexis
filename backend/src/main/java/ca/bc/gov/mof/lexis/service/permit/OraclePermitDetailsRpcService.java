@@ -119,8 +119,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OraclePermitDetailsRpcService.class);
 
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
+  private static final DateTimeFormatter LEGACY_GBMS_DATE_FORMATTER =
+      DateTimeFormatter.ISO_LOCAL_DATE;
   private static final LocalDate FEE_MASK_EFFECTIVE_DATE = LocalDate.of(2024, 6, 27);
   private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
@@ -949,7 +949,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   public List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
       String receiptNumber, Long permitNumber, boolean readOnlyUser) {
     return repository
-        .findGbmsInvoiceHistoryRequired(receiptNumber, permitNumber, readOnlyUser)
+        .findGbmsInvoiceHistoryForDisplay(receiptNumber, permitNumber, readOnlyUser)
         .stream()
         .map(this::toGbmsInvoiceHistoryItem)
         .toList();
@@ -3211,13 +3211,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         nonNull(row.cancelledByInvoice()),
         nonNull(row.replacedByInvoice()),
         formatDecimal(BigDecimal.valueOf(row.invoiceAmount()), 2),
-        formatDate(row.printedDate()),
-        formatDate(row.entryDate()),
-        formatDate(row.updateDate()));
+        formatLegacyGbmsDate(row.printedDate()),
+        formatLegacyGbmsDate(row.entryDate()),
+        formatLegacyGbmsDate(row.updateDate()));
   }
 
-  private String formatDate(LocalDate value) {
-    return value == null ? "" : LEGACY_DATE_FORMATTER.format(value);
+  private String formatLegacyGbmsDate(LocalDate value) {
+    return value == null ? "" : LEGACY_GBMS_DATE_FORMATTER.format(value);
   }
 
   private long sortGroup(long groupBy) {

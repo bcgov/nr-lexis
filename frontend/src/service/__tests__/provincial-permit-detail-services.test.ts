@@ -134,9 +134,13 @@ describe('provincial permit detail services', () => {
           return Promise.resolve(
             response([
               {
-                gbmsInvoiceNumber: 'GBMS-1',
-                invoiceAmount: '$123.45',
-                printedDate: '2026-06-01',
+                gbmsInvoiceNumber: 'A006654',
+                cancelledByInvoice: 'A007321',
+                replacedByInvoice: 'A007322',
+                invoiceAmount: '1939.50',
+                printedDate: '2020-05-06',
+                entryDate: '2020-05-06',
+                updateDate: '2022-02-15',
               },
             ]),
           )
@@ -237,12 +241,14 @@ describe('provincial permit detail services', () => {
       ],
       gbmsEvents: [
         {
-          id: 'GBMS-1',
-          eventDate: '2026-06-01',
-          eventType: 'GBMS Invoice',
-          status: 'Current',
-          reference: 'GBMS-1',
-          notes: 'Amount $123.45',
+          id: 'A006654',
+          gbmsInvoiceNumber: 'A006654',
+          cancelledByInvoice: 'A007321',
+          replacedByInvoice: 'A007322',
+          invoiceAmount: '1939.50',
+          printedDate: '2020-05-06',
+          entryDate: '2020-05-06',
+          updateDate: '2022-02-15',
         },
       ],
       oicItems: [],
@@ -711,9 +717,13 @@ describe('provincial permit detail services', () => {
         return Promise.resolve(
           response([
             {
-              gbmsInvoiceNumber: 'GBMS-1',
+              gbmsInvoiceNumber: 'A006654',
+              cancelledByInvoice: 'A007321',
+              replacedByInvoice: 'A007322',
               invoiceAmount: '123.45',
               printedDate: '2026-06-01',
+              entryDate: '2026-06-01',
+              updateDate: '2026-06-02',
             },
           ]),
         )
@@ -723,7 +733,16 @@ describe('provincial permit detail services', () => {
 
     await expect(
       fetchProvincialPermitGbmsEvents({ permitNumber: 'P-777', receiptNumber: null }),
-    ).resolves.toEqual([expect.objectContaining({ reference: 'GBMS-1', eventDate: '2026-06-01' })])
+    ).resolves.toEqual([
+      expect.objectContaining({
+        gbmsInvoiceNumber: 'A006654',
+        cancelledByInvoice: 'A007321',
+        replacedByInvoice: 'A007322',
+        printedDate: '2026-06-01',
+        entryDate: '2026-06-01',
+        updateDate: '2026-06-02',
+      }),
+    ])
     expect(getCachedResponseMock).toHaveBeenCalledWith(
       '/lexis/rpc/permit-details/gbms-invoice-history',
       { params: { receiptNumber: '', permitNumber: 'P-777' } },

@@ -787,7 +787,7 @@ class PermitDetailsRpcControllerTest {
     List<PermitGbmsInvoiceHistoryItemRpcResponseDto> dto =
         List.of(
             new PermitGbmsInvoiceHistoryItemRpcResponseDto(
-                "GBMS-1", "", "", "125.00", "03/01/2026", "03/01/2026", "03/02/2026"));
+                "GBMS-1", "", "", "125.00", "2026-03-01", "2026-03-01", "2026-03-02"));
     when(service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true)).thenReturn(dto);
 
     TestingAuthenticationToken authentication =

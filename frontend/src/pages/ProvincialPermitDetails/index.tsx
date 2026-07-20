@@ -622,14 +622,10 @@ const ProvincialPermitDetailsPage = () => {
   }, [])
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
-  const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const invoicesFilter = searchParams.get('invoicesFilter') ?? ''
   const updateFilterParam = useCallback(
-    (
-      key: 'itemsFilter' | 'feesFilter' | 'gbmsFilter' | 'documentsFilter' | 'invoicesFilter',
-      value: string,
-    ) => {
+    (key: 'itemsFilter' | 'feesFilter' | 'documentsFilter' | 'invoicesFilter', value: string) => {
       const nextSearchParams = searchParamsWithValue(searchParams, key, value)
 
       if (nextSearchParams.toString() !== searchParams.toString()) {
@@ -1175,18 +1171,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [feesFilter, tabsData])
   const showMinistryFeeColumn = filteredFees.some((row) => row.ministryUser)
 
-  const filteredGbmsEvents = useMemo(() => {
-    if (!tabsData) {
-      return []
-    }
-
-    return tabsData.gbmsEvents.filter((row) =>
-      matchesFilter(
-        [row.id, row.eventDate, row.eventType, row.status, row.reference, row.notes],
-        gbmsFilter,
-      ),
-    )
-  }, [gbmsFilter, tabsData])
+  const gbmsHistory = tabsData?.gbmsEvents ?? []
 
   const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0
@@ -4334,39 +4319,32 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          General Billing Management System events
-                        </h2>
-                        <TextInput
-                          id="permitGbmsFilter"
-                          labelText="Filter General Billing Management System rows"
-                          value={gbmsFilter}
-                          onChange={(event) => updateFilterParam('gbmsFilter', event.target.value)}
-                          placeholder="Filter by type, status, date, reference, or notes"
-                        />
+                        <h2 className="detail-tile-title">GBMS invoice history</h2>
                         {!permitTablesErrorMessage &&
-                          (filteredGbmsEvents.length > 0 ? (
-                            <TableFrame ariaLabel="Permit billing events">
+                          (gbmsHistory.length > 0 ? (
+                            <TableFrame ariaLabel="GBMS invoice history">
                               <Table useZebraStyles>
                                 <TableHead>
                                   <TableRow>
-                                    <TableHeader>Date</TableHeader>
-                                    <TableHeader>Type</TableHeader>
-                                    <TableHeader>Status</TableHeader>
-                                    <TableHeader>Reference</TableHeader>
-                                    <TableHeader>Notes</TableHeader>
+                                    <TableHeader>GBMS Invoice Number</TableHeader>
+                                    <TableHeader>Cancelled By Invoice</TableHeader>
+                                    <TableHeader>Replaced By Invoice</TableHeader>
+                                    <TableHeader>Invoice Amount</TableHeader>
+                                    <TableHeader>Printed Date</TableHeader>
+                                    <TableHeader>Entry Date</TableHeader>
+                                    <TableHeader>Update Date</TableHeader>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {filteredGbmsEvents.map((row) => (
+                                  {gbmsHistory.map((row) => (
                                     <TableRow key={row.id}>
-                                      <TableCell>{row.eventDate || '-'}</TableCell>
-                                      <TableCell>{row.eventType || '-'}</TableCell>
-                                      <TableCell>
-                                        {row.status ? <StatusTag status={row.status} /> : '-'}
-                                      </TableCell>
-                                      <TableCell>{row.reference || '-'}</TableCell>
-                                      <TableCell>{row.notes || '-'}</TableCell>
+                                      <TableCell>{row.gbmsInvoiceNumber}</TableCell>
+                                      <TableCell>{row.cancelledByInvoice}</TableCell>
+                                      <TableCell>{row.replacedByInvoice}</TableCell>
+                                      <TableCell>{row.invoiceAmount}</TableCell>
+                                      <TableCell>{row.printedDate}</TableCell>
+                                      <TableCell>{row.entryDate}</TableCell>
+                                      <TableCell>{row.updateDate}</TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -4374,8 +4352,8 @@ const ProvincialPermitDetailsPage = () => {
                             </TableFrame>
                           ) : (
                             <EmptyState
-                              title="No matching billing events"
-                              description="No billing system rows matched the current filter."
+                              title="No GBMS invoice history available"
+                              description="No GBMS invoice history is available for this permit."
                               headingLevel={3}
                             />
                           ))}

@@ -742,6 +742,31 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  void displayGbmsHistoryShouldPreserveLegacyReceiptFallbackRows() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_9.FIND_GBMS_INVOICE_HISTORY(?,?,?) }", 3);
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getString("INVOICE_NUMBER")).thenReturn("A007321", "A007322");
+    when(resultSet.getString("CANCELLED_BY_INVOICE")).thenReturn(null, "A007321");
+    when(resultSet.getString("REPLACED_BY_INVOICE")).thenReturn("A007322", null);
+    when(resultSet.getLong("LEXIS_PERMIT_NUMBER")).thenReturn(7000999L, 7000999L);
+    when(resultSet.getDouble("INVOICE_AMOUNT")).thenReturn(-1939.50d, 1950.70d);
+    when(resultSet.wasNull()).thenReturn(false);
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    var rows = repository.findGbmsInvoiceHistoryForDisplay("RN-42", 7000123L, false);
+
+    assertThat(rows)
+        .extracting("invoiceNumber", "cancelledByInvoice", "replacedByInvoice", "invoiceAmount")
+        .containsExactly(
+            tuple("A007321", null, "A007322", -1939.50d),
+            tuple("A007322", "A007321", null, 1950.70d));
+    verify(callableStatement).setString(1, "RN-42");
+    verify(callableStatement).setString(2, "7000123");
+    verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
+  }
+
+  @Test
   void requiredGbmsHistoryShouldRejectInvalidPermitAndPropagateOracleFailure() {
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 

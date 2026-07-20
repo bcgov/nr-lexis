@@ -1004,6 +1004,19 @@ public class PermitRpcRepository extends OracleRepositorySupport {
    */
   public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistoryRequired(
       String receiptNumber, Long permitNumber, boolean readOnlyUser) {
+    return filterGbmsHistoryForPermit(
+        findGbmsInvoiceHistoryForDisplay(receiptNumber, permitNumber, readOnlyUser), permitNumber);
+  }
+
+  /**
+   * Loads GBMS invoice history using the legacy permit-first, receipt-fallback lookup semantics.
+   *
+   * <p>The legacy procedure can resolve a different permit from the receipt/invoice number when
+   * the requested permit has no history. This display-oriented lookup preserves that result;
+   * mutation callers must use {@link #findGbmsInvoiceHistoryRequired(String, Long, boolean)}.
+   */
+  public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistoryForDisplay(
+      String receiptNumber, Long permitNumber, boolean readOnlyUser) {
     if (permitNumber == null || permitNumber < 1) {
       throw new IllegalArgumentException("Permit number must be positive.");
     }
@@ -1012,25 +1025,23 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     String procedure =
         readOnlyUser ? FIND_GBMS_INVOICE_HISTORY_READ_ONLY : FIND_GBMS_INVOICE_HISTORY;
 
-    return filterGbmsHistoryForPermit(
-        queryCursorProcedureRequired(
-            procedure,
-            cs -> {
-              cs.setString(1, normalizedReceiptNumber);
-              cs.setString(2, normalizedPermitNumber);
-            },
-            3,
-            rs ->
-                new GbmsInvoiceHistoryRow(
-                    getString(rs, "INVOICE_NUMBER"),
-                    getString(rs, "CANCELLED_BY_INVOICE"),
-                    getString(rs, "REPLACED_BY_INVOICE"),
-                    getLong(rs, "LEXIS_PERMIT_NUMBER"),
-                    coalesce(getDouble(rs, "INVOICE_AMOUNT"), 0.0d),
-                    getLocalDate(rs, "PRINTED_DATE"),
-                    getLocalDate(rs, "ENTRY_TIMESTAMP"),
-                    getLocalDate(rs, "UPDATE_TIMESTAMP"))),
-        permitNumber);
+    return queryCursorProcedureRequired(
+        procedure,
+        cs -> {
+          cs.setString(1, normalizedReceiptNumber);
+          cs.setString(2, normalizedPermitNumber);
+        },
+        3,
+        rs ->
+            new GbmsInvoiceHistoryRow(
+                getString(rs, "INVOICE_NUMBER"),
+                getString(rs, "CANCELLED_BY_INVOICE"),
+                getString(rs, "REPLACED_BY_INVOICE"),
+                getLong(rs, "LEXIS_PERMIT_NUMBER"),
+                coalesce(getDouble(rs, "INVOICE_AMOUNT"), 0.0d),
+                getLocalDate(rs, "PRINTED_DATE"),
+                getLocalDate(rs, "ENTRY_TIMESTAMP"),
+                getLocalDate(rs, "UPDATE_TIMESTAMP")));
   }
 
   private List<GbmsInvoiceHistoryRow> filterGbmsHistoryForPermit(

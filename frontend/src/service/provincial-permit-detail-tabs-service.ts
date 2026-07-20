@@ -61,12 +61,23 @@ export type ProvincialPermitEventRow = {
   notes: string
 }
 
+export type ProvincialPermitGbmsInvoiceHistoryRow = {
+  id: string
+  gbmsInvoiceNumber: string
+  cancelledByInvoice: string
+  replacedByInvoice: string
+  invoiceAmount: string
+  printedDate: string
+  entryDate: string
+  updateDate: string
+}
+
 export type ProvincialPermitDetailTabsData = {
   applications: string[]
   packages: ProvincialPermitPackageInfoRow[]
   items: ProvincialPermitItemRow[]
   fees: ProvincialPermitFeeRow[]
-  gbmsEvents: ProvincialPermitEventRow[]
+  gbmsEvents: ProvincialPermitGbmsInvoiceHistoryRow[]
   oicItems: ProvincialPermitEventRow[]
   boicItems: ProvincialPermitEventRow[]
 }
@@ -243,26 +254,22 @@ const normalizeScaleFeeRow = (row: unknown, index: number): ProvincialPermitFeeR
   }
 }
 
-const normalizeGbmsHistoryRow = (row: unknown, index: number): ProvincialPermitEventRow => {
+const normalizeGbmsHistoryRow = (
+  row: unknown,
+  index: number,
+): ProvincialPermitGbmsInvoiceHistoryRow => {
   const source = recordOrEmpty(row)
-  const cancelledByInvoice = asString(source.cancelledByInvoice)
-  const replacedByInvoice = asString(source.replacedByInvoice)
-  const invoiceAmount = asString(source.invoiceAmount)
-  const notes = [
-    cancelledByInvoice ? `Cancelled by ${cancelledByInvoice}` : '',
-    replacedByInvoice ? `Replaced by ${replacedByInvoice}` : '',
-    invoiceAmount ? `Amount ${invoiceAmount}` : '',
-  ]
-    .filter(Boolean)
-    .join('; ')
+  const gbmsInvoiceNumber = asString(source.gbmsInvoiceNumber || source.invoiceNumber)
 
   return {
-    id: asString(source.id || source.gbmsInvoiceNumber || `gbms-${index + 1}`),
-    eventDate: asString(source.printedDate || source.entryDate || source.updateDate),
-    eventType: 'GBMS Invoice',
-    status: cancelledByInvoice || replacedByInvoice ? 'Updated' : 'Current',
-    reference: asString(source.gbmsInvoiceNumber),
-    notes,
+    id: asString(source.id || gbmsInvoiceNumber || `gbms-${index + 1}`),
+    gbmsInvoiceNumber,
+    cancelledByInvoice: asString(source.cancelledByInvoice),
+    replacedByInvoice: asString(source.replacedByInvoice),
+    invoiceAmount: asString(source.invoiceAmount),
+    printedDate: asString(source.printedDate),
+    entryDate: asString(source.entryDate || source.entryTimestamp),
+    updateDate: asString(source.updateDate || source.updateTimestamp),
   }
 }
 
@@ -485,7 +492,7 @@ const fetchScaleFeeRows = async (
 const fetchGbmsRows = async (
   permitNumber: string,
   receiptNumber: string | number | null | undefined,
-): Promise<ProvincialPermitEventRow[]> => {
+): Promise<ProvincialPermitGbmsInvoiceHistoryRow[]> => {
   // The legacy procedure uses the permit number as the authoritative lookup. Receipt number is
   // only its fallback, so permits without a receipt must still load their GBMS history.
   return fetchRows(
@@ -557,7 +564,7 @@ export const fetchProvincialPermitDetailCoreTabs = async (
 
 export const fetchProvincialPermitGbmsEvents = async (
   request: string | ProvincialPermitDetailTabsRequest,
-): Promise<ProvincialPermitEventRow[]> => {
+): Promise<ProvincialPermitGbmsInvoiceHistoryRow[]> => {
   const { permitNumber, receiptNumber } = resolveDetailTabsRequest(request)
   return fetchGbmsRows(permitNumber, receiptNumber)
 }

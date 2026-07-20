@@ -1341,7 +1341,7 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void gbmsInvoiceHistoryShouldReturnLegacyFormattedRows() {
-    when(repository.findGbmsInvoiceHistoryRequired("RCPT-1", 7000123L, true))
+    when(repository.findGbmsInvoiceHistoryForDisplay("RCPT-1", 7000123L, true))
         .thenReturn(
             List.of(
                 new GbmsInvoiceHistoryRow(
@@ -1362,9 +1362,48 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.get(0).cancelledByInvoice()).isEmpty();
     assertThat(response.get(0).replacedByInvoice()).isEqualTo("GBMS-2");
     assertThat(response.get(0).invoiceAmount()).isEqualTo("125.00");
-    assertThat(response.get(0).printedDate()).isEqualTo("03/01/2026");
-    assertThat(response.get(0).entryDate()).isEqualTo("03/01/2026");
-    assertThat(response.get(0).updateDate()).isEqualTo("03/02/2026");
+    assertThat(response.get(0).printedDate()).isEqualTo("2026-03-01");
+    assertThat(response.get(0).entryDate()).isEqualTo("2026-03-01");
+    assertThat(response.get(0).updateDate()).isEqualTo("2026-03-02");
+  }
+
+  @Test
+  void gbmsInvoiceHistoryShouldRetainUnprintedZeroAndNegativeRows() {
+    when(repository.findGbmsInvoiceHistoryForDisplay("RCPT-1", 7000123L, true))
+        .thenReturn(
+            List.of(
+                new GbmsInvoiceHistoryRow(
+                    "A007488",
+                    null,
+                    null,
+                    7000123L,
+                    0.0d,
+                    null,
+                    LocalDate.of(2022, 9, 29),
+                    LocalDate.of(2022, 9, 29)),
+                new GbmsInvoiceHistoryRow(
+                    "A007321",
+                    null,
+                    null,
+                    7000123L,
+                    -1939.50d,
+                    null,
+                    LocalDate.of(2022, 2, 15),
+                    LocalDate.of(2022, 2, 15))));
+
+    List<PermitGbmsInvoiceHistoryItemRpcResponseDto> response =
+        service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true);
+
+    assertThat(response)
+        .extracting(
+            PermitGbmsInvoiceHistoryItemRpcResponseDto::gbmsInvoiceNumber,
+            PermitGbmsInvoiceHistoryItemRpcResponseDto::invoiceAmount,
+            PermitGbmsInvoiceHistoryItemRpcResponseDto::printedDate,
+            PermitGbmsInvoiceHistoryItemRpcResponseDto::entryDate,
+            PermitGbmsInvoiceHistoryItemRpcResponseDto::updateDate)
+        .containsExactly(
+            tuple("A007488", "0.00", "", "2022-09-29", "2022-09-29"),
+            tuple("A007321", "-1939.50", "", "2022-02-15", "2022-02-15"));
   }
 
   @Test
@@ -1372,7 +1411,7 @@ class OraclePermitDetailsRpcServiceTest {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("invoice history unavailable");
     when(repository.findInvoiceNumbersByPermitRequired(7000123L)).thenThrow(failure);
-    when(repository.findGbmsInvoiceHistoryRequired("RCPT-1", 7000123L, true))
+    when(repository.findGbmsInvoiceHistoryForDisplay("RCPT-1", 7000123L, true))
         .thenThrow(failure);
 
     assertThatThrownBy(() -> service.getInvoicesForPermit(7000123L)).isSameAs(failure);

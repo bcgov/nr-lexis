@@ -235,6 +235,17 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   boicItems: [],
 }
 
+const gbmsHistoryRow = {
+  id: 'GBMS-1',
+  gbmsInvoiceNumber: 'A006654',
+  cancelledByInvoice: 'A007321',
+  replacedByInvoice: 'A007322',
+  invoiceAmount: '1939.50',
+  printedDate: '2020-05-06',
+  entryDate: '2020-05-06',
+  updateDate: '2022-02-15',
+}
+
 const selectPermitDetailTab = async (name: string) => {
   const tab = await screen.findByRole('tab', { name })
   if (tab.getAttribute('aria-selected') !== 'true') {
@@ -543,16 +554,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it('renders permit details, client contacts, and invoice history', async () => {
     configureActivePermit()
-    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([
-      {
-        id: 'GBMS-1',
-        eventDate: '2026-05-02',
-        eventType: 'Invoice created',
-        status: 'ACT',
-        reference: 'GBMS-1001',
-        notes: 'Invoice accepted',
-      },
-    ])
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([gbmsHistoryRow])
     mockedFetchPermitInvoices.mockResolvedValue({
       rows: [
         {
@@ -664,10 +666,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('GBMS')
     expect(
       await screen.findByRole('heading', {
-        name: 'General Billing Management System events',
+        name: 'GBMS invoice history',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: 'GBMS-1001' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'A006654' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'A007321' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'A007322' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '1939.50' })).toBeInTheDocument()
+    expect(screen.getAllByRole('cell', { name: '2020-05-06' })).toHaveLength(2)
+    expect(screen.getByRole('cell', { name: '2022-02-15' })).toBeInTheDocument()
     await selectPermitDetailTab('Invoices')
     expect(await screen.findByText('INV-001')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
@@ -790,16 +797,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
 
     await act(async () => {
-      resolveGbms?.([
-        {
-          id: 'GBMS-1',
-          eventDate: '2026-05-02',
-          eventType: 'Invoice created',
-          status: 'ACT',
-          reference: 'GBMS-1001',
-          notes: 'Invoice accepted',
-        },
-      ])
+      resolveGbms?.([gbmsHistoryRow])
     })
     expect(await screen.findByRole('tab', { name: 'GBMS' })).toBeInTheDocument()
 
@@ -829,16 +827,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   it('loads GBMS history when the permit has no receipt number', async () => {
     configureActivePermit()
     mockedFetchProvincialPermitDetail.mockResolvedValue({ ...permitDetail, receiptNumber: null })
-    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([
-      {
-        id: 'GBMS-1',
-        eventDate: '2026-05-02',
-        eventType: 'Invoice created',
-        status: 'ACT',
-        reference: 'GBMS-1001',
-        notes: 'Invoice accepted',
-      },
-    ])
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([gbmsHistoryRow])
 
     renderPermitDetails()
 
@@ -850,7 +839,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       }),
     )
     await selectPermitDetailTab('GBMS')
-    expect(await screen.findByRole('cell', { name: 'GBMS-1001' })).toBeInTheDocument()
+    expect(await screen.findByRole('cell', { name: 'A006654' })).toBeInTheDocument()
   })
 
   it('shows the base permit detail while exemption context continues loading', async () => {
@@ -1502,16 +1491,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       applicantClientNumber: null,
       agentClientLocationCode: null,
     })
-    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([
-      {
-        id: 'GBMS-1',
-        eventDate: '2026-05-02',
-        eventType: 'Invoice created',
-        status: 'ACT',
-        reference: 'GBMS-1001',
-        notes: 'Invoice accepted',
-      },
-    ])
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([gbmsHistoryRow])
 
     renderPermitDetails()
 
@@ -1522,7 +1502,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: 'General Billing Management System events',
+        name: 'GBMS invoice history',
       }),
     ).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'GBMS' })).toHaveAttribute('aria-selected', 'true')
