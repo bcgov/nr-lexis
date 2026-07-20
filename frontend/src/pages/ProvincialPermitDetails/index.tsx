@@ -26,6 +26,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import EmptyState from '@/components/EmptyState'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -2717,17 +2718,34 @@ const ProvincialPermitDetailsPage = () => {
     />
   )
 
+  const detailMatchesRoute =
+    !!detail && !!permitNumber && String(detail.permitNumber) === permitNumber
+  const isRefreshingDetail = loading && detailMatchesRoute
+
   return (
-    <Grid fullWidth className="default-grid detail-page-grid">
+    <Grid
+      fullWidth
+      className={`default-grid detail-page-grid content-loading-region${
+        isRefreshingDetail ? ' is-loading' : ''
+      }`}
+      inert={isRefreshingDetail ? true : undefined}
+      aria-busy={isRefreshingDetail}
+    >
+      <ContentLoadingOverlay
+        loading={isRefreshingDetail}
+        loadingDescription="Refreshing provincial permit detail..."
+      />
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb label="Provincial permit search" to="/provincial/permit" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={`Permit ${detail?.permitNumber ?? permitNumber ?? ''}`.trim()}
+          title={`Permit ${
+            detailMatchesRoute ? (detail?.permitNumber ?? '') : (permitNumber ?? '')
+          }`.trim()}
           subtitle="Check and manage this provincial permit"
           status={
-            detail ? (
+            detail && detailMatchesRoute ? (
               <StatusTag
                 status={detail.permitStatusDescription ?? detail.permitStatusCode ?? ''}
                 fallbackLabel="Not provided"
@@ -2735,7 +2753,8 @@ const ProvincialPermitDetailsPage = () => {
             ) : undefined
           }
           actions={
-            canRequestPermitReview || canSendPermitApproval || canOpenPermitReport ? (
+            detailMatchesRoute &&
+            (canRequestPermitReview || canSendPermitApproval || canOpenPermitReport) ? (
               <>
                 {canRequestPermitReview && (
                   <Button
@@ -2780,7 +2799,7 @@ const ProvincialPermitDetailsPage = () => {
         />
       </Column>
 
-      {loading && (
+      {loading && !detailMatchesRoute && (
         <Column sm={4} md={8} lg={16}>
           <InlineLoading description="Loading provincial permit detail..." />
         </Column>
@@ -2810,7 +2829,7 @@ const ProvincialPermitDetailsPage = () => {
         </Column>
       )}
 
-      {!loading && detail && (
+      {detail && detailMatchesRoute && (
         <>
           {!!permitTablesErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
@@ -3038,7 +3057,10 @@ const ProvincialPermitDetailsPage = () => {
                               label: 'Application number',
                               value: displayValue(detail.applicationNumber),
                             },
-                            { label: 'Package number', value: displayValue(detail.packageNumber) },
+                            {
+                              label: 'Package number',
+                              value: displayValue(detail.packageNumber),
+                            },
                             {
                               label: 'Exemption number',
                               value: displayValue(detail.exemptionNumber),
@@ -3181,8 +3203,14 @@ const ProvincialPermitDetailsPage = () => {
                               label: 'Number of pieces',
                               value: displayValue(detail.numberOfPieces),
                             },
-                            { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
-                            { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
+                            {
+                              label: 'Receipt number',
+                              value: displayValue(detail.receiptNumber),
+                            },
+                            {
+                              label: 'Invoice number',
+                              value: displayValue(detail.invoiceNumber),
+                            },
                             {
                               label: 'Federal permit number',
                               value: displayValue(detail.federalPermitNumber),
@@ -3517,7 +3545,10 @@ const ProvincialPermitDetailsPage = () => {
                                 ),
                               ),
                             },
-                            { label: 'Transport name', value: displayValue(detail.transportName) },
+                            {
+                              label: 'Transport name',
+                              value: displayValue(detail.transportName),
+                            },
                             {
                               label: 'Port of export',
                               value: displayValue(

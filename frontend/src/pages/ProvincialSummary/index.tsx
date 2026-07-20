@@ -14,6 +14,7 @@ import {
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
+import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   buildPageDataCacheKey,
@@ -134,7 +135,8 @@ const ProvincialSummaryPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform } = useAuth()
   const [metrics, setMetrics] = useState<SummaryMetric[]>(INITIAL_METRICS)
-  const [loading, setLoading] = useState(false)
+  const [hasLoadedSummary, setHasLoadedSummary] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [reviewPreview, setReviewPreview] = useState<SummaryReviewPreviewRow[]>([])
   const beginSummaryRequest = useLatestRequestGuard()
@@ -167,6 +169,7 @@ const ProvincialSummaryPage = () => {
         if (cachedSummary) {
           setMetrics(cachedSummary.metrics)
           setReviewPreview(cachedSummary.reviewPreview)
+          setHasLoadedSummary(true)
           setLoading(false)
           setErrorMessage('')
           return
@@ -359,14 +362,17 @@ const ProvincialSummaryPage = () => {
           if (cacheUpdated) {
             setMetrics(nextMetrics)
             setReviewPreview(nextReviewPreview)
+            setHasLoadedSummary(true)
           }
         }
       } catch (error) {
         if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
           console.error(error)
           setErrorMessage('Unable to calculate provincial summary metrics.')
-          setMetrics(INITIAL_METRICS)
-          setReviewPreview([])
+          if (!hasLoadedSummary) {
+            setMetrics(INITIAL_METRICS)
+            setReviewPreview([])
+          }
         }
       } finally {
         if (isLatestRequest()) {
@@ -379,6 +385,7 @@ const ProvincialSummaryPage = () => {
       canAccessSummaryRoute,
       canOpenReviewApplication,
       capabilities?.principal,
+      hasLoadedSummary,
       visibleMetrics,
     ],
   )
@@ -387,8 +394,19 @@ const ProvincialSummaryPage = () => {
     void loadSummary()
   }, [loadSummary])
 
+  const isRefreshingSummary = loading && hasLoadedSummary
+
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid
+      fullWidth
+      className={`default-grid content-loading-region${isRefreshingSummary ? ' is-loading' : ''}`}
+      inert={isRefreshingSummary ? true : undefined}
+      aria-busy={isRefreshingSummary}
+    >
+      <ContentLoadingOverlay
+        loading={isRefreshingSummary}
+        loadingDescription="Refreshing summary metrics..."
+      />
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial summary</h1>
         <p>Drill-down summary for operational totals and review queue triage.</p>
@@ -413,7 +431,7 @@ const ProvincialSummaryPage = () => {
         </Tile>
       </Column>
 
-      {loading && (
+      {loading && !hasLoadedSummary && (
         <Column sm={4} md={8} lg={16}>
           <InlineLoading description="Loading summary metrics..." />
         </Column>
@@ -431,7 +449,7 @@ const ProvincialSummaryPage = () => {
         </Column>
       )}
 
-      {!loading &&
+      {hasLoadedSummary &&
         metrics
           .filter((metric) =>
             visibleMetrics.some((visibleMetric) => visibleMetric.key === metric.key),
@@ -455,7 +473,7 @@ const ProvincialSummaryPage = () => {
             </Column>
           ))}
 
-      {canAccessSummaryRoute('reviewQueue') && (
+      {hasLoadedSummary && canAccessSummaryRoute('reviewQueue') && (
         <Column sm={4} md={8} lg={16}>
           <Tile>
             <h2 className="dashboard-title">Review queue preview</h2>

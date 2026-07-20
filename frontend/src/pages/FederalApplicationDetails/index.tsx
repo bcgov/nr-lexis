@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Column,
@@ -22,6 +22,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -132,6 +133,7 @@ const FederalApplicationDetailsPage = () => {
   const { applicationNumber } = useParams()
   const [searchParams] = useSearchParams()
   const [detail, setDetail] = useState<FederalApplicationDetail | null>(null)
+  const detailRef = useRef<FederalApplicationDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<FederalApplicationDocumentRow[]>([])
   const [remarkRows, setRemarkRows] = useState<FederalApplicationRemark[]>([])
   const [scaleRows, setScaleRows] = useState<FederalApplicationScaleRow[]>([])
@@ -160,38 +162,44 @@ const FederalApplicationDetailsPage = () => {
   const [isShippingReferencesLoading, setIsShippingReferencesLoading] = useState(true)
   const [shippingReferencesErrorMessage, setShippingReferencesErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
+  const currentDetail =
+    detail && String(detail.applicationNumber) === applicationNumber ? detail : null
+  const isRefreshingDetail = loading && !!currentDetail
 
-  const federalApplicationLocked = detail?.locked === true
+  const federalApplicationLocked = currentDetail?.locked === true
   const canViewFederalApplication =
     canPerform('/federalApplicationDetails') && canPerform('viewFederalApplication')
   const canManageFederalApplication = canPerform('manageFederalApplication')
   const canMutateFederalApplication =
-    canManageFederalApplication && !!detail && !detail.readOnly && !federalApplicationLocked
+    canManageFederalApplication &&
+    !!currentDetail &&
+    !currentDetail.readOnly &&
+    !federalApplicationLocked
   const canUploadApplicationDocuments =
     canPerform('/fileApplicationUpload') &&
-    !!detail &&
-    !detail.readOnly &&
+    !!currentDetail &&
+    !currentDetail.readOnly &&
     !federalApplicationLocked
-  const applicationStatusCode = detail?.statusCode?.trim().toUpperCase() ?? ''
+  const applicationStatusCode = currentDetail?.statusCode?.trim().toUpperCase() ?? ''
   const businessToday = formatBusinessIsoDate()
   const statusTransitions = allowedFederalStatusTransitions(
     applicationStatusCode,
-    detail?.listingDate,
+    currentDetail?.listingDate,
     businessToday,
   )
   const canDeleteApplicationDocuments =
-    !detail?.readOnly &&
+    !currentDetail?.readOnly &&
     !federalApplicationLocked &&
     applicationStatusCode.length > 0 &&
     applicationStatusCode !== 'EXP' &&
     (hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN'))
   const hasAgent =
-    detail?.ownerApplicantType?.trim().toUpperCase() === 'A' ||
-    detail?.agentApplicantType?.trim().toUpperCase() === 'A' ||
-    !!detail?.agentClientNumber ||
-    !!detail?.agentClientLocationCode ||
-    !!detail?.agentContactName ||
-    !!detail?.agentCompanyName
+    currentDetail?.ownerApplicantType?.trim().toUpperCase() === 'A' ||
+    currentDetail?.agentApplicantType?.trim().toUpperCase() === 'A' ||
+    !!currentDetail?.agentClientNumber ||
+    !!currentDetail?.agentClientLocationCode ||
+    !!currentDetail?.agentContactName ||
+    !!currentDetail?.agentCompanyName
 
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -258,6 +266,10 @@ const FederalApplicationDetailsPage = () => {
   const hasPermitValidationError = Object.values(permitFieldErrors).some(Boolean)
 
   useEffect(() => {
+    detailRef.current = detail
+  }, [detail])
+
+  useEffect(() => {
     const load = async () => {
       const isLatestRequest = beginDetailRequest()
       if (!applicationNumber) {
@@ -274,11 +286,18 @@ const FederalApplicationDetailsPage = () => {
         return
       }
 
+      const isRefreshingCurrentApplication =
+        detailRef.current !== null &&
+        String(detailRef.current.applicationNumber) === applicationNumber
       setLoading(true)
       setErrorMessage('')
       setDocumentsErrorMessage('')
       setRemarksErrorMessage('')
-      setScaleRows([])
+      if (!isRefreshingCurrentApplication) {
+        setDocumentRows([])
+        setRemarkRows([])
+        setScaleRows([])
+      }
       setScaleErrorMessage('')
       setActionErrorMessage('')
       try {
@@ -362,13 +381,6 @@ const FederalApplicationDetailsPage = () => {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve federal application detail.')
-          setDetail(null)
-          setDocumentRows([])
-          setRemarkRows([])
-          setScaleRows([])
-          setScaleErrorMessage('')
-          setDocumentsErrorMessage('')
-          setRemarksErrorMessage('')
         }
       } finally {
         if (isLatestRequest()) {
@@ -670,12 +682,12 @@ const FederalApplicationDetailsPage = () => {
       )}
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={`LEXIS application ${detail?.applicationNumber ?? applicationNumber ?? ''}`.trim()}
+          title={`LEXIS application ${currentDetail?.applicationNumber ?? applicationNumber ?? ''}`.trim()}
           subtitle="Check and manage this federal application"
           status={
-            detail ? (
+            currentDetail ? (
               <StatusTag
-                status={detail.statusDescription ?? detail.statusCode ?? ''}
+                status={currentDetail.statusDescription ?? currentDetail.statusCode ?? ''}
                 fallbackLabel="Not provided"
               />
             ) : undefined
@@ -683,7 +695,7 @@ const FederalApplicationDetailsPage = () => {
         />
       </Column>
 
-      {loading && (
+      {loading && !currentDetail && (
         <Column sm={4} md={8} lg={16}>
           <InlineLoading description="Loading federal application detail..." />
         </Column>
@@ -701,7 +713,7 @@ const FederalApplicationDetailsPage = () => {
         </Column>
       )}
 
-      {!loading && detail && (
+      {detail && currentDetail && (
         <>
           {!!documentsErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
@@ -761,7 +773,7 @@ const FederalApplicationDetailsPage = () => {
                 kind="warning"
                 title="Application locked"
                 subtitle={
-                  detail.lockMessage ||
+                  currentDetail.lockMessage ||
                   'This application is currently locked for editing by another user.'
                 }
                 lowContrast
@@ -769,7 +781,20 @@ const FederalApplicationDetailsPage = () => {
             </Column>
           )}
 
-          <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+          <Column
+            sm={4}
+            md={8}
+            lg={16}
+            className={`application-detail-tabs-column content-loading-region${
+              isRefreshingDetail ? ' is-loading' : ''
+            }`}
+            inert={isRefreshingDetail ? true : undefined}
+            aria-busy={isRefreshingDetail}
+          >
+            <ContentLoadingOverlay
+              loading={isRefreshingDetail}
+              loadingDescription="Refreshing federal application detail..."
+            />
             <Tabs
               selectedIndex={selectedFederalApplicationTabIndex}
               onChange={({ selectedIndex }) => setSelectedFederalApplicationTabIndex(selectedIndex)}

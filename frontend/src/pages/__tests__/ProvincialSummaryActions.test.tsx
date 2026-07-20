@@ -184,6 +184,36 @@ describe('Provincial Summary action smoke', () => {
     expect(mockedPreviewApplicationReviews).toHaveBeenCalledTimes(2)
   })
 
+  it('retains summary metrics while a forced refresh is in flight', async () => {
+    renderPage()
+
+    await screen.findByText('901')
+
+    let resolveApplications: ((value: number) => void) | undefined
+    mockedCountProvincialApplications.mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveApplications = resolve
+        }),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh Summary' }))
+
+    await screen.findByText('Refreshing summary metrics...')
+    expect(screen.getByRole('status')).toHaveTextContent('Refreshing summary metrics...')
+    const summaryContent = screen.getByText('501').closest('.content-loading-region')
+    expect(summaryContent).toHaveAttribute('aria-busy', 'true')
+    expect(summaryContent).toHaveAttribute('inert')
+    expect(screen.getByText('501')).toBeVisible()
+
+    resolveApplications?.(510)
+
+    await waitFor(() => {
+      expect(summaryContent).toHaveAttribute('aria-busy', 'false')
+    })
+    expect(screen.getByText('510')).toBeVisible()
+  })
+
   it('hides summary route actions when the user lacks all route permissions', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 

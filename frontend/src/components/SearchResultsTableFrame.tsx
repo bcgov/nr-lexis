@@ -22,7 +22,7 @@ function SearchResultsTableFrame({
   totalItemsLabel,
 }: SearchResultsTableFrameProps) {
   return (
-    <div className="legacy-search-table-frame" aria-busy={loading}>
+    <div className="legacy-search-table-frame">
       {totalItems !== undefined && (
         <div className="legacy-search-table-toolbar">
           <TableToolbar>
@@ -41,6 +41,8 @@ function SearchResultsTableFrame({
         role="region"
         aria-label="Search results table"
         tabIndex={0}
+        inert={loading ? true : undefined}
+        aria-busy={loading}
       >
         {children}
       </div>

@@ -595,16 +595,13 @@ describe('Admin policy action states', () => {
     renderPage('fee')
 
     const resultsRegion = screen.getByRole('region', { name: 'Search results table' })
-    expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveAttribute('aria-busy', 'true')
+    expect(resultsRegion).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByText('Loading fee policies...')).toBeVisible()
 
     resolvePolicies({ rows: [], total: 0, page: 0, size: 100 })
     expect(await screen.findByRole('heading', { name: 'No fee policies found' })).toBeVisible()
     await waitFor(() => {
-      expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveAttribute(
-        'aria-busy',
-        'false',
-      )
+      expect(resultsRegion).toHaveAttribute('aria-busy', 'false')
     })
   })
 
