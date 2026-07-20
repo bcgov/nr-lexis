@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.jdbc.core.CallableStatementCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
@@ -221,6 +225,21 @@ class ApplicationReviewRepositoryTest {
             "A", "00055667", "02", "00077881", "01");
 
     assertThat(repository.findAuthoritativeJurisdictionCode(900101L)).contains("F");
+  }
+
+  @Test
+  void authoritativeCursorShouldNotRequireLegacyApplicationVolumeColumn() throws Exception {
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(statement.getObject(2)).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
+    when(resultSet.getDouble("APPLICATION_VOLUME"))
+        .thenThrow(new SQLException("Invalid column name", "99999", 17006));
+    ApplicationReviewRepository repository =
+        new ApplicationReviewRepository(jdbcTemplateExecuting(statement));
+
+    assertThat(repository.findAuthoritativeJurisdictionCode(900101L)).contains("P");
   }
 
   @Test
@@ -498,6 +517,18 @@ class ApplicationReviewRepositoryTest {
     protected void doRollback(DefaultTransactionStatus status) {
       rollbacks++;
     }
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static JdbcTemplate jdbcTemplateExecuting(CallableStatement statement) {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.execute(anyString(), any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation -> {
+              CallableStatementCallback callback = invocation.getArgument(1);
+              return callback.doInCallableStatement(statement);
+            });
+    return jdbcTemplate;
   }
 
   private static final class TestApplicationReviewRepository extends ApplicationReviewRepository {

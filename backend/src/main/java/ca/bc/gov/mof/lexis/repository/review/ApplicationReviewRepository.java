@@ -406,9 +406,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "APPLICATION_DATE"),
                 getLong(rs, "TERM_DAYS"),
                 getLocalDate(rs, "RECEIVED_DATE"),
-                firstNonNull(
-                    getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
-                    getDouble(rs, "APPLICATION_VOLUME")),
+                getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
                 getDouble(rs, "AVERAGE_LOG_VOLUME"),
                 getString(rs, "PRODUCT_LOCATION"),
                 getString(rs, "ENTRY_USERID"),
