@@ -193,6 +193,13 @@ body {
   --csp-active-side-nav-width: var(--csp-side-nav-collapsed-width);
 }
 
+// Route modules load inside the application shell. Keep Carbon's temporary
+// full-page loader above the fixed header and side navigation until the route
+// is ready to render.
+.app-shell .cds--loading-overlay {
+  z-index: 9001;
+}
+
 .cds--g100 .app-shell {
   --csp-button-primary: var(--csp-brand-blue);
   --csp-interactive: var(--csp-brand-blue);
