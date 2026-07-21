@@ -21,7 +21,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-/** Locks aggregate roots and calculates versions from their persisted child rows. */
+/** Locks aggregate roots and calculates versions from the rows each edit flow owns. */
 @Repository
 @Profile("oracle")
 public class OracleAggregateLockRepository {
@@ -114,62 +114,6 @@ public class OracleAggregateLockRepository {
           + "WHERE e.EXPORT_PERMIT_DETAIL_NUMBER = ? "
           + "ORDER BY e.EXPORT_PERMIT_DETAIL_NUMBER, e.EXPORT_SPECIES_CODE, "
           + "e.EXPORT_END_USE_CODE";
-  private static final String PERMIT_SCALES =
-      "SELECT s.* FROM EXPORT_SCALE_DETAIL s "
-          + "WHERE s.EXPORT_PERMIT_DETAIL_NUMBER = ? ORDER BY s.EXPORT_SCALE_DETAIL_ID";
-  private static final String PERMIT_ATTACHMENTS =
-      "SELECT a.EXPORT_ATTACHMENT_ID AS LINK_ATTACHMENT_ID, "
-          + "a.EXPORT_PERMIT_DETAIL_NUMBER, "
-          + "DBMS_LOB.GETLENGTH(a.EXPORT_PERMIT_FILE) AS CONTENT_LENGTH, "
-          + "f.EXPORT_ATTACHMENT_ID, f.FILE_NAME, f.DESCRIPTION, f.EXPORT_FILE_TYPE_CODE, "
-          + "f.EXPORT_ATTACHMENT_TYPE_CODE, f.EXPORT_FILE_MIME_TYPE_CODE, "
-          + "f.ENTRY_USERID, f.ENTRY_TIMESTAMP, f.UPDATE_USERID, f.UPDATE_TIMESTAMP "
-          + "FROM EXPORT_PERMIT_FILE_ATTACHMENT a "
-          + "INNER JOIN EXPORT_FILE_ATTACHMENT f "
-          + "ON f.EXPORT_ATTACHMENT_ID = a.EXPORT_ATTACHMENT_ID "
-          + "WHERE a.EXPORT_PERMIT_DETAIL_NUMBER = ? ORDER BY a.EXPORT_ATTACHMENT_ID";
-  private static final String PERMIT_SALES_INVOICES =
-      "SELECT i.* FROM EXPORT_SALES_INVOICE i "
-          + "WHERE i.EXPORT_PERMIT_DETAIL_NUMBER = ? "
-          + "ORDER BY i.EXPORT_SALES_INVOICE_NUMBER";
-  private static final String PERMIT_SALES_INVOICE_ATTACHMENTS =
-      "SELECT a.EXPORT_ATTACHMENT_ID AS LINK_ATTACHMENT_ID, "
-          + "a.EXPORT_SALES_INVOICE_NUMBER, a.EXPORT_PERMIT_DETAIL_NUMBER, "
-          + "DBMS_LOB.GETLENGTH(a.EXPORT_INVOICE_FILE) AS CONTENT_LENGTH, "
-          + "f.EXPORT_ATTACHMENT_ID, f.FILE_NAME, f.DESCRIPTION, f.EXPORT_FILE_TYPE_CODE, "
-          + "f.EXPORT_ATTACHMENT_TYPE_CODE, f.EXPORT_FILE_MIME_TYPE_CODE, "
-          + "f.ENTRY_USERID, f.ENTRY_TIMESTAMP, f.UPDATE_USERID, f.UPDATE_TIMESTAMP "
-          + "FROM EXPORT_SALES_INVCE_FILE_ATTACH a "
-          + "INNER JOIN EXPORT_FILE_ATTACHMENT f "
-          + "ON f.EXPORT_ATTACHMENT_ID = a.EXPORT_ATTACHMENT_ID "
-          + "WHERE a.EXPORT_PERMIT_DETAIL_NUMBER = ? ORDER BY a.EXPORT_ATTACHMENT_ID";
-  private static final String PERMIT_INVOICES =
-      "SELECT i.* FROM EXPORT_PERMIT_INVOICE i "
-          + "WHERE i.EXPORT_PERMIT_DETAIL_NUMBER = ? ORDER BY i.PERMIT_INVOICE_NUMBER";
-  private static final String PERMIT_INVOICE_DETAILS =
-      "SELECT d.* FROM EXPORT_PERMIT_INVOICE_DETAIL d "
-          + "INNER JOIN EXPORT_PERMIT_INVOICE i "
-          + "ON i.PERMIT_INVOICE_NUMBER = d.PERMIT_INVOICE_NUMBER "
-          + "WHERE i.EXPORT_PERMIT_DETAIL_NUMBER = ? "
-          + "ORDER BY d.PERMIT_INVOICE_DETAIL_NUMBER";
-  private static final String PERMIT_PACKAGES =
-      "SELECT p.* FROM EXPORT_PACKAGE p WHERE p.PACKAGE_NUMBER IN ("
-          + "SELECT s.PACKAGE_NUMBER FROM EXPORT_SCALE_DETAIL s "
-          + "WHERE s.EXPORT_PERMIT_DETAIL_NUMBER = ?) "
-          + "OR p.APPLICATION_NUMBER = (SELECT d.OIC_APPLICATION_NUMBER "
-          + "FROM EXPORT_PERMIT_DETAIL d WHERE d.EXPORT_PERMIT_DETAIL_NUMBER = ?) "
-          + "ORDER BY p.PACKAGE_NUMBER";
-  private static final String PERMIT_PACKAGE_END_USES =
-      "SELECT e.* FROM EXPORT_EXMPTN_APPL_SPCS_ENDUSE e WHERE e.PACKAGE_NUMBER IN ("
-          + "SELECT p.PACKAGE_NUMBER FROM EXPORT_PACKAGE p WHERE p.PACKAGE_NUMBER IN ("
-          + "SELECT s.PACKAGE_NUMBER FROM EXPORT_SCALE_DETAIL s "
-          + "WHERE s.EXPORT_PERMIT_DETAIL_NUMBER = ?) "
-          + "OR p.APPLICATION_NUMBER = (SELECT d.OIC_APPLICATION_NUMBER "
-          + "FROM EXPORT_PERMIT_DETAIL d WHERE d.EXPORT_PERMIT_DETAIL_NUMBER = ?)) "
-          + "OR e.APPLICATION_NUMBER = (SELECT d.OIC_APPLICATION_NUMBER "
-          + "FROM EXPORT_PERMIT_DETAIL d WHERE d.EXPORT_PERMIT_DETAIL_NUMBER = ?) "
-          + "ORDER BY e.APPLICATION_NUMBER NULLS FIRST, e.PACKAGE_NUMBER NULLS FIRST, "
-          + "e.EXPORT_SPECIES_CODE, e.EXPORT_END_USE_CODE";
 
   private final JdbcTemplate jdbcTemplate;
 
@@ -261,32 +205,14 @@ public class OracleAggregateLockRepository {
   }
 
   private Optional<RootRecordSnapshot> readPermit(String rootSql, Long permitNumber) {
+    // Legacy permit edits lock the permit and its direct end uses. Packages, scales, documents,
+    // and invoices have separate edit flows and must not delay the permit edit context.
     return readAggregate(
         rootSql,
         "EXPORT_PERMIT_DETAIL",
         permitNumber,
         rowSets -> {
           rowSets.add(readRows("EXPORT_PERMIT_APPL_SPCS_ENDUSE", PERMIT_END_USES, permitNumber));
-          rowSets.add(readRows("EXPORT_SCALE_DETAIL", PERMIT_SCALES, permitNumber));
-          rowSets.add(
-              readRows("EXPORT_PERMIT_FILE_ATTACHMENT", PERMIT_ATTACHMENTS, permitNumber));
-          rowSets.add(readRows("EXPORT_SALES_INVOICE", PERMIT_SALES_INVOICES, permitNumber));
-          rowSets.add(
-              readRows(
-                  "EXPORT_SALES_INVCE_FILE_ATTACH",
-                  PERMIT_SALES_INVOICE_ATTACHMENTS,
-                  permitNumber));
-          rowSets.add(readRows("EXPORT_PERMIT_INVOICE", PERMIT_INVOICES, permitNumber));
-          rowSets.add(
-              readRows("EXPORT_PERMIT_INVOICE_DETAIL", PERMIT_INVOICE_DETAILS, permitNumber));
-          rowSets.add(readRows("EXPORT_PACKAGE", PERMIT_PACKAGES, permitNumber, permitNumber));
-          rowSets.add(
-              readRows(
-                  "EXPORT_EXMPTN_APPL_SPCS_ENDUSE",
-                  PERMIT_PACKAGE_END_USES,
-                  permitNumber,
-                  permitNumber,
-                  permitNumber));
         });
   }
 

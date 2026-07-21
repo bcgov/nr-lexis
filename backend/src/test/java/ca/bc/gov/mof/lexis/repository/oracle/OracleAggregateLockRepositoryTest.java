@@ -162,7 +162,7 @@ class OracleAggregateLockRepositoryTest {
   }
 
   @Test
-  void permitVersionShouldReadEveryMutableChildSetInStableOrder() {
+  void permitVersionShouldReadThePermitAndItsDirectEndUsesOnly() {
     stubRoot("EXPORT_PERMIT_DETAIL", 100L);
     OracleAggregateLockRepository repository =
         new OracleAggregateLockRepository(jdbcTemplate);
@@ -172,16 +172,36 @@ class OracleAggregateLockRepositoryTest {
     List<String> sql = executedSql();
     assertThat(sql)
         .anyMatch(value -> value.contains("FROM EXPORT_PERMIT_APPL_SPCS_ENDUSE"))
-        .anyMatch(value -> value.contains("FROM EXPORT_SCALE_DETAIL"))
-        .anyMatch(value -> value.contains("FROM EXPORT_PERMIT_FILE_ATTACHMENT"))
-        .anyMatch(value -> value.contains("FROM EXPORT_SALES_INVOICE"))
-        .anyMatch(value -> value.contains("FROM EXPORT_SALES_INVCE_FILE_ATTACH"))
-        .anyMatch(value -> value.contains("FROM EXPORT_PERMIT_INVOICE"))
-        .anyMatch(value -> value.contains("FROM EXPORT_PERMIT_INVOICE_DETAIL"))
-        .anyMatch(value -> value.contains("FROM EXPORT_PACKAGE"))
-        .anyMatch(value -> value.contains("FROM EXPORT_EXMPTN_APPL_SPCS_ENDUSE"));
+        .noneMatch(value -> value.contains("FROM EXPORT_SCALE_DETAIL"))
+        .noneMatch(value -> value.contains("FROM EXPORT_PERMIT_FILE_ATTACHMENT"))
+        .noneMatch(value -> value.contains("FROM EXPORT_SALES_INVOICE"))
+        .noneMatch(value -> value.contains("FROM EXPORT_SALES_INVCE_FILE_ATTACH"))
+        .noneMatch(value -> value.contains("FROM EXPORT_PERMIT_INVOICE"))
+        .noneMatch(value -> value.contains("FROM EXPORT_PERMIT_INVOICE_DETAIL"))
+        .noneMatch(value -> value.contains("FROM EXPORT_PACKAGE"))
+        .noneMatch(value -> value.contains("FROM EXPORT_EXMPTN_APPL_SPCS_ENDUSE"));
     assertOrderedChildQueries(sql);
     assertBlobQueriesUseLengthOnly(sql);
+  }
+
+  @Test
+  void permitVersionShouldChangeWhenADirectEndUseChanges() {
+    stubRoot("EXPORT_PERMIT_DETAIL", 100L);
+    doReturn(
+            List.of(row("EXPORT_SPECIES_CODE", "BA", "EXPORT_END_USE_CODE", "OT")),
+            List.of(row("EXPORT_SPECIES_CODE", "BA", "EXPORT_END_USE_CODE", "SL")))
+        .when(jdbcTemplate)
+        .query(
+            contains("FROM EXPORT_PERMIT_APPL_SPCS_ENDUSE"),
+            any(RowMapper.class),
+            eq(100L));
+    OracleAggregateLockRepository repository =
+        new OracleAggregateLockRepository(jdbcTemplate);
+
+    String original = repository.findPermitVersion(100L).orElseThrow().fingerprint();
+    String changed = repository.findPermitVersion(100L).orElseThrow().fingerprint();
+
+    assertThat(changed).isNotEqualTo(original);
   }
 
   private void stubRoot(String tableName, Object identifier) {
