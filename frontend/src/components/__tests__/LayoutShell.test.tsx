@@ -594,7 +594,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: /^Review$/i })).toHaveFocus()
+      expect(screen.getByRole('link', { name: /^Notifications$/i })).toHaveFocus()
     })
 
     await userEvent.keyboard('{Escape}')
