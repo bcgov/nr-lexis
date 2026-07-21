@@ -273,7 +273,6 @@ describe('Layout shell', () => {
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
     expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Indian reserve')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Create\/edit permit/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Advertising List (PDF)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Advertising List (CSV)' })).not.toBeInTheDocument()

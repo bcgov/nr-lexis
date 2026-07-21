@@ -24,7 +24,7 @@ import org.springframework.stereotype.Repository;
 @Profile("oracle")
 public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
-  private static final String RESERVE_JURISDICTION_CODE = "I";
+  private static final String RETIRED_RESERVE_JURISDICTION_CODE = "I";
   private static final String FIND_CURRENT_SCHEDULES =
       LEXIS_CODES_PACKAGE + "FIND_CURRENT_SCHEDULES(?)";
   private static final String FIND_ALL_JURISDICTION_CODES =
@@ -265,16 +265,19 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
   public List<CodeNameDto> loadReportJurisdictionOptions() {
     return withAll(
-        withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
+        withoutRetiredReserveJurisdiction(
+            loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadBiweeklyJurisdictionOptions() {
     return withAll(
-        withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
+        withoutRetiredReserveJurisdiction(
+            loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadTeacJurisdictionOptions() {
-    return withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES));
+    return withoutRetiredReserveJurisdiction(
+        loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES));
   }
 
   public List<CodeNameDto> loadReportExemptionTypeOptions() {
@@ -469,9 +472,9 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return reportOptions;
   }
 
-  private List<CodeNameDto> withoutReserveJurisdiction(List<CodeNameDto> options) {
+  private List<CodeNameDto> withoutRetiredReserveJurisdiction(List<CodeNameDto> options) {
     return options.stream()
-        .filter(option -> !RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
+        .filter(option -> !RETIRED_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
         .toList();
   }
 

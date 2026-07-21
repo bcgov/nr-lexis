@@ -1011,7 +1011,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   /**
    * Loads GBMS invoice history using the legacy permit-first, receipt-fallback lookup semantics.
    *
-   * <p>The legacy procedure can resolve a different permit from the receipt/invoice number when
+   * The legacy procedure can resolve a different permit from the receipt/invoice number when
    * the requested permit has no history. This display-oriented lookup preserves that result;
    * mutation callers must use {@link #findGbmsInvoiceHistoryRequired(String, Long, boolean)}.
    */

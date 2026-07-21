@@ -94,7 +94,7 @@ describe('Protected route access matrix', () => {
     expect(detailRoute.requiredActions).toEqual(route.requiredActions)
   })
 
-  it('does not expose retired Indian Reserve or legacy advertising routes', () => {
+  it('does not expose retired reserve jurisdiction or legacy advertising routes', () => {
     const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
       route.path.toLowerCase(),
     )

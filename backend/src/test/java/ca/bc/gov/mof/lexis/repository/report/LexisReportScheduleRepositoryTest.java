@@ -152,7 +152,7 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void jurisdictionOptionsShouldRemoveReserveReports() throws Exception {
+  void jurisdictionOptionsShouldRemoveRetiredReserveJurisdiction() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, true, false);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
@@ -169,7 +169,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void biweeklyJurisdictionOptionsShouldPrependAllAndRemoveReserveLikeLegacy() throws Exception {
+  void biweeklyJurisdictionOptionsShouldPrependAllAndRemoveRetiredReserveJurisdiction()
+      throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, true, false);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
@@ -186,7 +187,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void teacJurisdictionOptionsShouldRemoveReserveWithoutAddingAllLikeLegacy() throws Exception {
+  void teacJurisdictionOptionsShouldRemoveRetiredReserveJurisdictionWithoutAddingAllLikeLegacy()
+      throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, true, false);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
