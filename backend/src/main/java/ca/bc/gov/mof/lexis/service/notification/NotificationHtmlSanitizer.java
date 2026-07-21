@@ -23,8 +23,8 @@ public class NotificationHtmlSanitizer {
   }
 
   public String sanitizePlainText(String value) {
-    String sanitized = sanitize(value).replaceAll("<[^>]*>", "");
-    return HtmlUtils.htmlUnescape(sanitized)
+    String sanitized = HtmlUtils.htmlUnescape(sanitize(value)).replaceAll("<[^>]*>", "");
+    return sanitized
         .replace('\u00a0', ' ')
         .replaceAll("[\\p{Cntrl}&&[^\\r\\n\\t]]", "");
   }

@@ -38,4 +38,12 @@ class NotificationHtmlSanitizerTest {
 
     assertThat(sanitized).isEqualTo("Service update");
   }
+
+  @Test
+  void sanitizePlainTextShouldRemoveEncodedMarkupBeforeStorage() {
+    String sanitized =
+        sanitizer.sanitizePlainText("&lt;img src=\"x\" onerror=\"alert(1)\"&gt;Service update");
+
+    assertThat(sanitized).isEqualTo("Service update");
+  }
 }
