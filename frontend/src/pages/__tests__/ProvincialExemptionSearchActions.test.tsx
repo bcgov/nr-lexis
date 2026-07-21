@@ -158,6 +158,9 @@ describe('Provincial Exemption Search Actions', () => {
     const firstConfirm = within(firstDialog).getByRole('button', { name: 'Approve exemptions' })
     expect(firstCertification).not.toBeChecked()
     expect(firstConfirm).toBeDisabled()
+    expect(firstConfirm).toHaveClass('cds--btn--primary')
+    expect(firstConfirm).not.toHaveClass('cds--btn--danger')
+    expect(firstConfirm.parentElement).toHaveClass('lexis-confirmation-modal__actions')
     await userEvent.click(firstConfirm)
     expect(mockedApproveExemptions).not.toHaveBeenCalled()
 

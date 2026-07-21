@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  Modal,
   Pagination,
   Table,
   TableBody,
@@ -19,6 +18,7 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import ExemptionApprovalEmailModal, {
@@ -1008,21 +1008,18 @@ const ProvincialExemptionPage = () => {
       </Column>
 
       {approvalConfirmationOpen && (
-        <Modal
+        <ConfirmationModal
           open
-          danger
-          modalHeading="Approve selected exemptions"
-          primaryButtonText={approving ? 'Approving...' : 'Approve exemptions'}
-          secondaryButtonText="Cancel"
-          primaryButtonDisabled={approving || !approvalCertified}
-          onRequestClose={closeApprovalConfirmation}
-          onSecondarySubmit={closeApprovalConfirmation}
-          onRequestSubmit={() => void onConfirmApproval()}
+          title="Approve selected exemptions"
+          description={`You are about to approve the following ${
+            selectedRowsCount === 1 ? 'exemption' : 'exemptions'
+          }:`}
+          confirmLabel="Approve exemptions"
+          pendingLabel="Approving..."
+          confirmDisabled={approving || !approvalCertified}
+          onClose={closeApprovalConfirmation}
+          onConfirm={onConfirmApproval}
         >
-          <p>
-            You are about to approve the following{' '}
-            {selectedRowsCount === 1 ? 'exemption' : 'exemptions'}:
-          </p>
           <ul>
             {selectedExemptionNumbers.map((number) => (
               <li key={number}>{number}</li>
@@ -1044,7 +1041,7 @@ const ProvincialExemptionPage = () => {
             disabled={approving}
             onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
           />
-        </Modal>
+        </ConfirmationModal>
       )}
       {approvalEmailRecipients.length > 0 && (
         <ExemptionApprovalEmailModal

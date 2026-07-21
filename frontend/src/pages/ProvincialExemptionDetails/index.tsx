@@ -24,6 +24,7 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
@@ -2004,25 +2005,22 @@ const ProvincialExemptionDetailsPage = () => {
       )}
       {approvalConfirmationOpen &&
         approvalConfirmationTarget === currentDetail?.exemptionNumber && (
-          <Modal
+          <ConfirmationModal
             open
-            danger
-            modalHeading="Approve exemption"
-            primaryButtonText={approving ? 'Approving...' : 'Approve exemption'}
-            secondaryButtonText="Cancel"
-            primaryButtonDisabled={approving || !approvalCertified}
-            onRequestClose={closeApprovalConfirmation}
-            onSecondarySubmit={closeApprovalConfirmation}
-            onRequestSubmit={() => {
+            title="Approve exemption"
+            description={`You are about to approve exemption ${
+              currentDetail?.exemptionNumber ?? exemptionNumber
+            }.`}
+            confirmLabel="Approve exemption"
+            pendingLabel="Approving..."
+            confirmDisabled={approving || !approvalCertified}
+            onClose={closeApprovalConfirmation}
+            onConfirm={() => {
               if (approvalConfirmationTarget === currentDetail?.exemptionNumber) {
-                void onApproveExemption()
+                return onApproveExemption()
               }
             }}
           >
-            <p>
-              You are about to approve exemption {currentDetail?.exemptionNumber ?? exemptionNumber}
-              .
-            </p>
             <p>
               By checking the box below you certify that this exemption has been approved. This
               exemption will be marked with an approval date of {approvalDate}.
@@ -2034,7 +2032,7 @@ const ProvincialExemptionDetailsPage = () => {
               disabled={approving}
               onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
             />
-          </Modal>
+          </ConfirmationModal>
         )}
       {approvalEmailRecipients.length > 0 && (
         <ExemptionApprovalEmailModal
