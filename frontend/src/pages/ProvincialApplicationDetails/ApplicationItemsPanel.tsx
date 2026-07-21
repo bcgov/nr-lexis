@@ -383,7 +383,7 @@ function ProvincialApplicationItemsPanel({
   const [scaleDraftTouched, setScaleDraftTouched] = useState(false)
   const [pendingPackageSelection, setPendingPackageSelection] = useState('')
   const scalesSectionRef = useRef<HTMLElement>(null)
-  const lastScrolledToScalesRequestId = useRef(0)
+  const lastScrolledToScalesRequestIdRef = useRef(0)
   const beginItemsRequest = useLatestRequestGuard()
   const selectedPackageDraftDirty =
     packageDraftTouched &&
@@ -711,13 +711,13 @@ function ProvincialApplicationItemsPanel({
   useEffect(() => {
     if (
       !focusScalesRequestId ||
-      lastScrolledToScalesRequestId.current === focusScalesRequestId ||
+      lastScrolledToScalesRequestIdRef.current === focusScalesRequestId ||
       !packageDataLoaded ||
       (focusedPackageNumber && selectedPackageNumber !== focusedPackageNumber)
     ) {
       return
     }
-    lastScrolledToScalesRequestId.current = focusScalesRequestId
+    lastScrolledToScalesRequestIdRef.current = focusScalesRequestId
     scalesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [focusScalesRequestId, focusedPackageNumber, packageDataLoaded, selectedPackageNumber])
 

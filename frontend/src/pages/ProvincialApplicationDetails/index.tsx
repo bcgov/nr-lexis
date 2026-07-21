@@ -603,10 +603,20 @@ const ProvincialApplicationDetailsPage = () => {
   const seededReviewFieldsApplicationRef = useRef<string | null>(null)
   const [reviewValidationMessage, setReviewValidationMessage] = useState('')
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
-  const [focusedPackageNumber, setFocusedPackageNumber] = useState('')
-  const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(0)
-  const [selectedApplicationTab, setSelectedApplicationTab] =
-    useState<ApplicationDetailTabKey>('owner')
+  const requestedApplicationTab = (searchParams.get('tab') ?? '').trim().toLowerCase()
+  const requestedPackageNumber = (searchParams.get('packageNumber') ?? '').trim()
+  const shouldFocusScaleSection =
+    requestedApplicationTab === 'items' &&
+    (searchParams.get('section') ?? '').trim().toLowerCase() === 'scales'
+  const [focusedPackageNumber, setFocusedPackageNumber] = useState(() =>
+    requestedApplicationTab === 'items' ? requestedPackageNumber : '',
+  )
+  const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(() =>
+    requestedApplicationTab === 'items' ? 1 : 0,
+  )
+  const [selectedApplicationTab, setSelectedApplicationTab] = useState<ApplicationDetailTabKey>(
+    () => (requestedApplicationTab === 'items' ? 'items' : 'owner'),
+  )
   const beginDetailRequest = useLatestRequestGuard()
   const currentApplicationNumberRef = useRef(applicationNumber)
   currentApplicationNumberRef.current = applicationNumber
@@ -616,11 +626,6 @@ const ProvincialApplicationDetailsPage = () => {
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
-  const requestedApplicationTab = (searchParams.get('tab') ?? '').trim().toLowerCase()
-  const requestedPackageNumber = (searchParams.get('packageNumber') ?? '').trim()
-  const shouldFocusScaleSection =
-    requestedApplicationTab === 'items' &&
-    (searchParams.get('section') ?? '').trim().toLowerCase() === 'scales'
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -965,11 +970,6 @@ const ProvincialApplicationDetailsPage = () => {
     0,
     APPLICATION_DETAIL_TAB_SLOTS.indexOf(selectedApplicationTab),
   )
-  useEffect(() => {
-    if (requestedApplicationTab === 'items') {
-      focusPackageInItems(requestedPackageNumber)
-    }
-  }, [focusPackageInItems, requestedApplicationTab, requestedPackageNumber])
   const summaryAgentClientNumber = isSummaryAgentApplicant
     ? (summaryForm?.agentClientNumber.trim() ?? '')
     : ''
