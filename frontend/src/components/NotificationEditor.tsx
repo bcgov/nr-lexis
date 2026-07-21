@@ -41,6 +41,8 @@ export default function NotificationEditor({
         codeBlock: false,
         heading: false,
         horizontalRule: false,
+        link: false,
+        underline: false,
       }),
       Underline,
       LinkExtension.configure({
