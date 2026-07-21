@@ -150,6 +150,11 @@ const EMAIL_NOT_CONFIGURED_MESSAGE =
 const isReviewableSourceStatus = (status: string | null | undefined): boolean =>
   REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(status ?? ''))
 
+const disabledReviewSelectionDescription = (canApproveApplications: boolean): string =>
+  !canApproveApplications
+    ? 'You do not have permission to approve applications.'
+    : 'Only New and Pending applications can be approved.'
+
 const normalizeReviewEmail = (value: string | null | undefined): string => {
   const normalized = normalizeEmail(value ?? '')
   const lowered = normalized.toLowerCase()
@@ -1018,16 +1023,25 @@ const ProvincialReviewPage = () => {
                 <TableHead>
                   <TableRow>
                     <TableHeader>
-                      <Checkbox
-                        id="selectAllCurrentPageRows"
-                        hideLabel
-                        labelText="Select all rows on this page"
-                        checked={allSelectableRowsAreSelected}
+                      <DisabledButtonTooltip
                         disabled={selectableRows.length === 0 || !canApproveApplications}
-                        onChange={(_, payload) =>
-                          toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                        description={
+                          !canApproveApplications
+                            ? 'You do not have permission to approve applications.'
+                            : 'No New or Pending applications are available on this page.'
                         }
-                      />
+                      >
+                        <Checkbox
+                          id="selectAllCurrentPageRows"
+                          hideLabel
+                          labelText="Select all rows on this page"
+                          checked={allSelectableRowsAreSelected}
+                          disabled={selectableRows.length === 0 || !canApproveApplications}
+                          onChange={(_, payload) =>
+                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                          }
+                        />
+                      </DisabledButtonTooltip>
                     </TableHeader>
                     {RESULT_COLUMNS.map((column) => (
                       <TableHeader key={column.id}>
@@ -1054,18 +1068,25 @@ const ProvincialReviewPage = () => {
                   {results.content.map((row) => (
                     <TableRow key={row.applicationNumber}>
                       <TableCell>
-                        <Checkbox
-                          id={`selectRow-${row.applicationNumber}`}
-                          hideLabel
-                          labelText={`Select ${row.applicationNumber}`}
-                          checked={Boolean(selectedRowsById[row.applicationNumber])}
+                        <DisabledButtonTooltip
                           disabled={
                             !canApproveApplications || !isReviewableSourceStatus(row.status)
                           }
-                          onChange={(_, payload) =>
-                            toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
-                          }
-                        />
+                          description={disabledReviewSelectionDescription(canApproveApplications)}
+                        >
+                          <Checkbox
+                            id={`selectRow-${row.applicationNumber}`}
+                            hideLabel
+                            labelText={`Select ${row.applicationNumber}`}
+                            checked={Boolean(selectedRowsById[row.applicationNumber])}
+                            disabled={
+                              !canApproveApplications || !isReviewableSourceStatus(row.status)
+                            }
+                            onChange={(_, payload) =>
+                              toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
+                            }
+                          />
+                        </DisabledButtonTooltip>
                       </TableCell>
                       <TableCell>
                         {canOpenApplicationDetails ? (

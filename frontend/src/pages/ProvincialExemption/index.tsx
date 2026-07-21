@@ -148,6 +148,16 @@ const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialExemptionSearchSortField[]
 
+const disabledApprovalSelectionDescription = (row: ProvincialExemptionSearchItem): string => {
+  if (row.isLocked) {
+    return 'This exemption is currently locked and cannot be approved.'
+  }
+  if (row.statusCode !== 'NEW') {
+    return 'Only new exemptions can be approved.'
+  }
+  return 'This exemption is not eligible for approval.'
+}
+
 const buildSearchParams = (
   filters: ProvincialExemptionSearchFilters,
   sortField: ProvincialExemptionSearchSortField,
@@ -901,16 +911,21 @@ const ProvincialExemptionPage = () => {
                   <TableRow>
                     {canApproveExemption && (
                       <TableHeader>
-                        <Checkbox
-                          id="selectAllCurrentPageRows"
-                          hideLabel
-                          labelText="Select all rows on this page"
-                          checked={allSelectableRowsAreSelected}
+                        <DisabledButtonTooltip
                           disabled={selectableRows.length === 0}
-                          onChange={(_, payload) =>
-                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
-                          }
-                        />
+                          description="No eligible exemptions are available on this page."
+                        >
+                          <Checkbox
+                            id="selectAllCurrentPageRows"
+                            hideLabel
+                            labelText="Select all rows on this page"
+                            checked={allSelectableRowsAreSelected}
+                            disabled={selectableRows.length === 0}
+                            onChange={(_, payload) =>
+                              toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                            }
+                          />
+                        </DisabledButtonTooltip>
                       </TableHeader>
                     )}
                     {SORT_COLUMNS.map((column) => (
@@ -941,16 +956,21 @@ const ProvincialExemptionPage = () => {
                         {canApproveExemption && (
                           <TableCell>
                             <div className="provincial-exemption-search-row-action">
-                              <Checkbox
-                                id={`selectRow-${row.exemptionNumber}`}
-                                hideLabel
-                                labelText={`Select ${row.exemptionNumber}`}
-                                checked={Boolean(selectedRowsById[row.exemptionNumber])}
+                              <DisabledButtonTooltip
                                 disabled={!canSelectRow}
-                                onChange={(_, payload) =>
-                                  toggleRowSelection(row, Boolean(payload.checked))
-                                }
-                              />
+                                description={disabledApprovalSelectionDescription(row)}
+                              >
+                                <Checkbox
+                                  id={`selectRow-${row.exemptionNumber}`}
+                                  hideLabel
+                                  labelText={`Select ${row.exemptionNumber}`}
+                                  checked={Boolean(selectedRowsById[row.exemptionNumber])}
+                                  disabled={!canSelectRow}
+                                  onChange={(_, payload) =>
+                                    toggleRowSelection(row, Boolean(payload.checked))
+                                  }
+                                />
+                              </DisabledButtonTooltip>
                               {row.isLocked && <Tag type="gray">Locked</Tag>}
                             </div>
                           </TableCell>

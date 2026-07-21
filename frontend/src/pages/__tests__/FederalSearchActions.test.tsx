@@ -135,6 +135,25 @@ describe('Federal Search Actions', () => {
     )
   })
 
+  it('explains why an ineligible federal application cannot be selected', async () => {
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    const ineligibleCheckbox = screen.getByRole('checkbox', {
+      name: 'Select federal application FED-1002',
+    })
+    expect(ineligibleCheckbox).toBeDisabled()
+
+    const tooltipTrigger = ineligibleCheckbox.closest('.disabled-button-tooltip') as HTMLElement
+    expect(tooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(tooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This application already has an exemption.',
+    )
+  })
+
   it('renders every federal result header as plain text without sort state', async () => {
     renderPage()
     await screen.findByText('FED-1001')
@@ -241,11 +260,19 @@ describe('Federal Search Actions', () => {
     expect(
       screen.queryByRole('checkbox', { name: 'Select federal application FED-1001' }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('checkbox', {
-        name: 'Select all eligible federal applications on this page',
-      }),
-    ).toBeDisabled()
+    const selectAllCheckbox = screen.getByRole('checkbox', {
+      name: 'Select all eligible federal applications on this page',
+    })
+    expect(selectAllCheckbox).toBeDisabled()
+
+    const tooltipTrigger = selectAllCheckbox.closest('.disabled-button-tooltip') as HTMLElement
+    expect(tooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(tooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'No eligible federal applications are available on this page.',
+    )
   })
 
   it('does not expose federal exemption selection without both required actions', async () => {

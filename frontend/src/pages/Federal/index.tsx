@@ -102,6 +102,11 @@ const RESULT_COLUMNS: {
   { id: 'listingDate', label: 'Listing date' },
 ]
 
+const disabledFederalExemptionSelectionDescription = (row: FederalApplicationSearchItem): string =>
+  row.exemptionNumber
+    ? 'This application already has an exemption.'
+    : 'This application is not eligible to create an exemption.'
+
 const buildSearchParams = (
   filters: FederalApplicationSearchFilters,
   page: number,
@@ -598,16 +603,21 @@ const FederalPage = () => {
                   <TableRow>
                     {canCreateFederalExemption && (
                       <TableHeader>
-                        <Checkbox
-                          id="selectAllCurrentPageFederalRows"
-                          hideLabel
-                          labelText="Select all eligible federal applications on this page"
-                          checked={allSelectableRowsAreSelected}
+                        <DisabledButtonTooltip
                           disabled={selectableRows.length === 0}
-                          onChange={(_, payload) =>
-                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
-                          }
-                        />
+                          description="No eligible federal applications are available on this page."
+                        >
+                          <Checkbox
+                            id="selectAllCurrentPageFederalRows"
+                            hideLabel
+                            labelText="Select all eligible federal applications on this page"
+                            checked={allSelectableRowsAreSelected}
+                            disabled={selectableRows.length === 0}
+                            onChange={(_, payload) =>
+                              toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                            }
+                          />
+                        </DisabledButtonTooltip>
                       </TableHeader>
                     )}
                     {RESULT_COLUMNS.map((column) => (
@@ -633,16 +643,21 @@ const FederalPage = () => {
                               Locked
                             </span>
                           ) : (
-                            <Checkbox
-                              id={`selectFederalRow-${row.applicationNumber}`}
-                              hideLabel
-                              labelText={`Select federal application ${row.federalApplicationNumber}`}
-                              checked={Boolean(selectedRowsById[row.applicationNumber])}
+                            <DisabledButtonTooltip
                               disabled={!row.allowCreateExemption}
-                              onChange={(_, payload) =>
-                                toggleRowSelection(row, Boolean(payload.checked))
-                              }
-                            />
+                              description={disabledFederalExemptionSelectionDescription(row)}
+                            >
+                              <Checkbox
+                                id={`selectFederalRow-${row.applicationNumber}`}
+                                hideLabel
+                                labelText={`Select federal application ${row.federalApplicationNumber}`}
+                                checked={Boolean(selectedRowsById[row.applicationNumber])}
+                                disabled={!row.allowCreateExemption}
+                                onChange={(_, payload) =>
+                                  toggleRowSelection(row, Boolean(payload.checked))
+                                }
+                              />
+                            </DisabledButtonTooltip>
                           )}
                         </TableCell>
                       )}

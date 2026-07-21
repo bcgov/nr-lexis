@@ -143,8 +143,20 @@ describe('Provincial Exemption Search Actions', () => {
     expect(approveButton).toBeDisabled()
 
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeEnabled()
-    expect(screen.getByRole('checkbox', { name: 'Select EX-2002' })).toBeDisabled()
+    const lockedCheckbox = screen.getByRole('checkbox', { name: 'Select EX-2002' })
+    expect(lockedCheckbox).toBeDisabled()
     expect(screen.getByText('Locked')).toBeInTheDocument()
+
+    const lockedCheckboxTooltipTrigger = lockedCheckbox.closest(
+      '.disabled-button-tooltip',
+    ) as HTMLElement
+    expect(lockedCheckboxTooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(lockedCheckboxTooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This exemption is currently locked and cannot be approved.',
+    )
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
     expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeEnabled()
@@ -405,6 +417,52 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByText('Locked')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select EX-LOCKED' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeDisabled()
+  })
+
+  it('explains why select-all is disabled when this page has no approvable exemptions', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        {
+          exemptionNumber: 'EX-APPROVED',
+          type: 'Ministerial',
+          typeCode: 'M',
+          status: 'Approved',
+          statusCode: 'APPROVED',
+          applicantClientNumber: '11111111',
+          ownerClientNumber: '22222222',
+          approvedVolume: 100,
+          balanceRemaining: 80,
+          listingDate: '2026-01-10',
+          expiryDate: '2026-12-31',
+          region: '11',
+          canApprove: false,
+          isLocked: false,
+          canViewExemption: true,
+        },
+      ]),
+    )
+
+    renderPage()
+
+    await screen.findByText('EX-APPROVED')
+    const selectAllCheckbox = screen.getByRole('checkbox', {
+      name: 'Select all rows on this page',
+    })
+    expect(selectAllCheckbox).toBeDisabled()
+
+    const selectAllTooltipTrigger = selectAllCheckbox.closest(
+      '.disabled-button-tooltip',
+    ) as HTMLElement
+    expect(selectAllTooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(selectAllTooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'No eligible exemptions are available on this page.',
+    )
   })
 
   it('passes table sort field and direction through the search request', async () => {

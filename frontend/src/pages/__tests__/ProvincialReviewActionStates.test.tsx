@@ -864,10 +864,54 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000123')
 
-    expect(screen.getByRole('checkbox', { name: 'Select 1000123' })).toBeDisabled()
+    const rowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000123' })
+    expect(rowCheckbox).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: 'Select all rows on this page' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
     expect(screen.getAllByRole('button', { name: 'Reject' })[0]).toBeDisabled()
+
+    const tooltipTrigger = rowCheckbox.closest('.disabled-button-tooltip') as HTMLElement
+    expect(tooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(tooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'You do not have permission to approve applications.',
+    )
+  })
+
+  it('explains when no reviewable applications are available to select', async () => {
+    mockedSearchApplicationReviews.mockResolvedValue({
+      content: [
+        {
+          ...reviewResponse.content[0],
+          status: 'APP',
+        },
+      ],
+      page: {
+        number: 0,
+        size: 100,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+    await screen.findByText('1000123')
+
+    const selectAllCheckbox = screen.getByRole('checkbox', {
+      name: 'Select all rows on this page',
+    })
+    expect(selectAllCheckbox).toBeDisabled()
+
+    const tooltipTrigger = selectAllCheckbox.closest('.disabled-button-tooltip') as HTMLElement
+    expect(tooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(tooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'No New or Pending applications are available on this page.',
+    )
   })
 
   it('shows a request failure instead of a no-results state', async () => {
