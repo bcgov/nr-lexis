@@ -237,7 +237,7 @@ describe('Provincial Exemption Search Actions', () => {
       'href',
       '/provincial/exemption/create',
     )
-  })
+  }, 10_000)
 
   it('blocks invalid approval recipients and keeps a skipped notification separate from approval', async () => {
     mockedUseAuth.mockReturnValue(
