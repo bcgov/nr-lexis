@@ -153,6 +153,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [containsUnmanu, setContainsUnmanu] = useState<boolean | null>(null)
   const [editContext, setEditContext] = useState<ExemptionEditContext>(EMPTY_EDIT_CONTEXT)
   const [editContextLoaded, setEditContextLoaded] = useState(false)
+  const [editContextRefreshing, setEditContextRefreshing] = useState(false)
   const [editForm, setEditForm] = useState<ExemptionEditForm | null>(null)
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
@@ -255,6 +256,7 @@ const ProvincialExemptionDetailsPage = () => {
         setContainsUnmanu(null)
         setEditContext(EMPTY_EDIT_CONTEXT)
         setEditContextLoaded(false)
+        setEditContextRefreshing(false)
         setEditForm(null)
         setDocumentsErrorMessage('')
         setDocumentsErrorDismissed(false)
@@ -284,6 +286,7 @@ const ProvincialExemptionDetailsPage = () => {
         setContainsUnmanu(null)
         setEditContext(EMPTY_EDIT_CONTEXT)
         setEditContextLoaded(false)
+        setEditContextRefreshing(false)
         setEditForm(null)
       }
 
@@ -497,7 +500,7 @@ const ProvincialExemptionDetailsPage = () => {
   const isExemptionDirty =
     isExemptionFormDirty || applicationRelationshipDraftDirty || documentUploadDirty
   const editContextUnavailableMessage =
-    hasExemptionEditPermission && !editContextLoaded
+    hasExemptionEditPermission && !editContextLoaded && !editContextRefreshing
       ? 'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const canApproveExemption =
@@ -690,6 +693,7 @@ const ProvincialExemptionDetailsPage = () => {
   const refreshEditableData = useCallback(
     async (preserveCurrentStateOnFailure = false) => {
       if (!exemptionNumber) return
+      setEditContextRefreshing(true)
       setEditContextLoaded(false)
       try {
         const [nextDetail, nextApplications, nextContext] = await Promise.all([
@@ -720,6 +724,8 @@ const ProvincialExemptionDetailsPage = () => {
           setEditing(false)
         }
         throw error
+      } finally {
+        setEditContextRefreshing(false)
       }
     },
     [exemptionNumber, refreshPermitData],
@@ -1157,7 +1163,14 @@ const ProvincialExemptionDetailsPage = () => {
               (persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport'))) ? (
               <>
                 {!editing && canSaveExemption && (
-                  <Button kind="secondary" size="sm" onClick={() => setEditing(true)}>
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedExemptionTabIndex(EXEMPTION_DETAIL_TAB_INDEX.summary)
+                      setEditing(true)
+                    }}
+                  >
                     Edit exemption
                   </Button>
                 )}
@@ -1696,6 +1709,12 @@ const ProvincialExemptionDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <h2 className="detail-tile-title">Related permits</h2>
+                        {editing && (
+                          <p className="detail-read-only-note">
+                            Permit records are read-only. Edit exemption details on the Summary or
+                            Fees tab.
+                          </p>
+                        )}
                         {canCreateMinisterialPermit && (
                           <div className="legacy-search-actions">
                             <Button
@@ -1999,6 +2018,12 @@ const ProvincialExemptionDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <h2 className="detail-tile-title">Remarks</h2>
+                        {editing && (
+                          <p className="detail-read-only-note">
+                            Remarks are read-only. Edit exemption details on the Summary or Fees
+                            tab.
+                          </p>
+                        )}
                         {(detail.remarks ?? []).length > 0 && (
                           <TextInput
                             id="exemptionDetailRemarkFilter"

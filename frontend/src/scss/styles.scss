@@ -3548,6 +3548,13 @@ legend.cds--label {
   line-height: 1.75rem;
 }
 
+.detail-read-only-note {
+  margin: -0.5rem 0 1rem;
+  color: var(--csp-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
 .detail-section-card__header {
   display: flex;
   align-items: center;
