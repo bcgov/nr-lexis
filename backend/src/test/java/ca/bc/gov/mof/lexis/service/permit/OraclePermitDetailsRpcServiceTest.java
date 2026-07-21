@@ -1467,6 +1467,123 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void createPermitFromExemptionShouldAttachUnassignedScalesWithoutChangingApplicationStatus() {
+    stubValidMinisterialPermitCreationContext();
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L));
+    when(repository.findApplicationStatusCodeByNumber(1000457L)).thenReturn(Optional.of("EXE"));
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000457L,
+                    "EX-700",
+                    1835L,
+                    "00077881",
+                    "01",
+                    "00077880",
+                    "02",
+                    "T",
+                    "S")));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(
+                    withPermitNumber(invocation.getArgument(0), 7000123L)));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-903"),
+                new PackageCandidateRow(1000457L, "PKG-904")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                scaleMutation("101", 1000456L, "PKG-903", null, entryTimestamp),
+                scaleMutation("102", 1000456L, "PKG-903", 7000999L, entryTimestamp)));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000457L)).thenReturn(List.of());
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 34.5d, 12L, "7000123", "PKG-903")));
+    permitTotalsUpdateSucceeds();
+
+    PermitMutationRpcResponseDto response =
+        service.createPermitFromExemption("EX-700", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<ScaleMutationRecord> scaleCaptor =
+        ArgumentCaptor.forClass(ScaleMutationRecord.class);
+    verify(repository, times(1))
+        .updateScaleDetail(scaleCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(scaleCaptor.getValue().scaleDetailId()).isEqualTo("101");
+    assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isEqualTo(7000123L);
+    verify(repository).findScaleMutationDetailsByApplicationNumber(1000457L);
+    verify(applicationReviewRepository, never())
+        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void createPermitFromExemptionShouldRollBackWhenScaleAttachmentFails() {
+    stubValidMinisterialPermitCreationContext();
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(
+                    withPermitNumber(invocation.getArgument(0), 7000123L)));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutation("101", 1000456L, "PKG-903", null)));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(false);
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitMutationRpcResponseDto response =
+        transactionalService(transactionManager)
+            .createPermitFromExemption("EX-700", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Unable to attach exemption scales to the new permit.");
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
+  void createPermitFromExemptionShouldRollBackWhenInitialPermitTotalsCannotBeUpdated() {
+    stubValidMinisterialPermitCreationContext();
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(
+                    withPermitNumber(invocation.getArgument(0), 7000123L)));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutation("101", 1000456L, "PKG-903", null)));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 34.5d, 12L, "7000123", "PKG-903")));
+    when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), any()))
+        .thenReturn(false);
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitMutationRpcResponseDto response =
+        transactionalService(transactionManager)
+            .createPermitFromExemption("EX-700", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Unable to recalculate the new permit totals.");
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
   void createPermitFromExemptionShouldRejectAnInactiveMinisterialExemption() {
     stubPermitCreationExemption(
         "EX-700", "M", "EXP", "00077881", "00077880");

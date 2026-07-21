@@ -3566,6 +3566,25 @@ legend.cds--label {
   line-height: 1.25rem;
 }
 
+.permit-creation-confirmation-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
+.permit-creation-confirmation-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+
+@media (max-width: 671px) {
+  .permit-creation-confirmation-modal__actions .cds--btn {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
+}
+
 .detail-section-card__header {
   display: flex;
   align-items: center;

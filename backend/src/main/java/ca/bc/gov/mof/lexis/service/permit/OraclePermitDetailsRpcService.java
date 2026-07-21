@@ -1074,6 +1074,24 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     PermitMutationRow permit = inserted.get();
+    int attachedScaleCount = 0;
+    for (List<ScaleMutationRow> unassignedScales :
+        findUnassignedScalesByApplication(normalizedExemptionNumber, ignored -> true).values()) {
+      for (ScaleMutationRow scale : unassignedScales) {
+        if (!updateScalePermitAssignment(scale, permit.permitNumber(), normalizedUserId)) {
+          markRollbackOnly();
+          return failureMutationResponse(
+              List.of("Unable to attach exemption scales to the new permit."), permit.permitNumber());
+        }
+        attachedScaleCount++;
+      }
+    }
+    if (attachedScaleCount > 0 && !updatePermitTotals(permit.permitNumber(), normalizedUserId)) {
+      markRollbackOnly();
+      return failureMutationResponse(
+          List.of("Unable to recalculate the new permit totals."), permit.permitNumber());
+    }
+
     return new PermitMutationRpcResponseDto(
         true,
         "The permit was created successfully.",

@@ -2033,23 +2033,34 @@ const ProvincialExemptionDetailsPage = () => {
       {permitCreationConfirmationOpen && canCreateMinisterialPermit && currentDetail && (
         <Modal
           open
+          passiveModal
+          size="sm"
           modalHeading="Apply for new permit"
-          primaryButtonText={creatingPermit ? 'Creating...' : 'Create permit'}
-          secondaryButtonText="Cancel"
-          primaryButtonDisabled={creatingPermit}
+          className="permit-creation-confirmation-modal"
           aria-describedby="permit-creation-confirmation-description"
           onRequestClose={closePermitCreationConfirmation}
-          onSecondarySubmit={closePermitCreationConfirmation}
-          onRequestSubmit={() => void onCreatePermitFromExemption()}
         >
           <p id="permit-creation-confirmation-description">
-            This creates a new active permit shell for Ministerial exemption{' '}
+            This creates a new active permit for Ministerial exemption{' '}
             {currentDetail.exemptionNumber}.
           </p>
-          <p>
-            Applications are not attached automatically. Attach the required applications separately
-            from the new permit.
-          </p>
+          <p>Eligible application scales from this exemption will be added automatically.</p>
+          <div className="permit-creation-confirmation-modal__actions">
+            <Button
+              kind="secondary"
+              disabled={creatingPermit}
+              onClick={closePermitCreationConfirmation}
+            >
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              disabled={creatingPermit}
+              onClick={() => void onCreatePermitFromExemption()}
+            >
+              {creatingPermit ? 'Creating...' : 'Create permit'}
+            </Button>
+          </div>
         </Modal>
       )}
       <UnsavedChangesGuard
