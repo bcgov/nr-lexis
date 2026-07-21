@@ -42,7 +42,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private static final String JURISDICTION_FEDERAL = "F";
   private static final String JURISDICTION_PROVINCIAL = "P";
-  private static final String RETIRED_RESERVE_JURISDICTION_CODE = "I";
+  private static final String RETIRED_INDIAN_RESERVE_JURISDICTION_CODE = "I";
   private static final String EXEMPTION_TYPE_OIC = "O";
   private static final String EXEMPTION_TYPE_BOIC = "B";
   private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
@@ -99,7 +99,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           && !canViewFederalApplications) {
         continue;
       }
-      if (RETIRED_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(row.jurisdictionCode())) {
+      if (RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
+          row.jurisdictionCode())) {
         continue;
       }
       if (!applicationAccess.test(row.applicationNumber())) {
@@ -616,7 +617,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           "Application cannot be added to this exemption because its owner or agent client details do not match the other applications.");
     } else if (!canViewFederalApplications && JURISDICTION_FEDERAL.equalsIgnoreCase(application.exportJurisdictionCode())) {
       errors.add("Insufficient privileges to add this application.");
-    } else if (RETIRED_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
+    } else if (RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
         application.exportJurisdictionCode())) {
       errors.add("Insufficient privileges to add this application.");
     }
@@ -993,7 +994,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                 + displayApplicationNumber(applicationNumber)
                 + ".");
         eligible = false;
-      } else if (RETIRED_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
+      } else if (RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
           application.exportJurisdictionCode())) {
         errors.add(
             "Insufficient privileges to add application "

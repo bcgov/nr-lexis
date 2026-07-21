@@ -24,7 +24,7 @@ import org.springframework.stereotype.Repository;
 @Profile("oracle")
 public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
-  private static final String RETIRED_RESERVE_JURISDICTION_CODE = "I";
+  private static final String RETIRED_INDIAN_RESERVE_JURISDICTION_CODE = "I";
   private static final String FIND_CURRENT_SCHEDULES =
       LEXIS_CODES_PACKAGE + "FIND_CURRENT_SCHEDULES(?)";
   private static final String FIND_ALL_JURISDICTION_CODES =
@@ -265,18 +265,18 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
   public List<CodeNameDto> loadReportJurisdictionOptions() {
     return withAll(
-        withoutRetiredReserveJurisdiction(
+        withoutRetiredIndianReserveJurisdiction(
             loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadBiweeklyJurisdictionOptions() {
     return withAll(
-        withoutRetiredReserveJurisdiction(
+        withoutRetiredIndianReserveJurisdiction(
             loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadTeacJurisdictionOptions() {
-    return withoutRetiredReserveJurisdiction(
+    return withoutRetiredIndianReserveJurisdiction(
         loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES));
   }
 
@@ -472,9 +472,11 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return reportOptions;
   }
 
-  private List<CodeNameDto> withoutRetiredReserveJurisdiction(List<CodeNameDto> options) {
+  private List<CodeNameDto> withoutRetiredIndianReserveJurisdiction(List<CodeNameDto> options) {
     return options.stream()
-        .filter(option -> !RETIRED_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
+        .filter(
+            option ->
+                !RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
         .toList();
   }
 

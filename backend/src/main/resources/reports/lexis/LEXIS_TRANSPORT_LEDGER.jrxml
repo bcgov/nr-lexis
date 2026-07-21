@@ -193,9 +193,7 @@ $P{P_JURISDICTION} == null || $P{P_JURISDICTION}.isEmpty()
     ?   "Provincial"
     :   $P{P_JURISDICTION}.equalsIgnoreCase( "F" )
         ?   "Federal"
-        :   $P{P_JURISDICTION}.equalsIgnoreCase( "I" )
-            ?   "Retired reserve jurisdiction"
-            :   "All"]]></variableExpression>
+        :   "All"]]></variableExpression>
 	</variable>
 	<variable name="Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME)" class="java.math.BigDecimal" calculation="Sum">
 		<variableExpression><![CDATA[$F{PERMIT_VOLUME}]]></variableExpression>

@@ -595,7 +595,7 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void getApplicationsShouldExcludeRetiredReserveJurisdiction() {
+  void getApplicationsShouldExcludeRetiredIndianReserveJurisdiction() {
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
         .thenReturn(
             List.of(
@@ -1597,7 +1597,7 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void addApplicationToExemptionShouldRejectRetiredReserveJurisdiction() {
+  void addApplicationToExemptionShouldRejectRetiredIndianReserveJurisdiction() {
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
     when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application("APP", null, "I")));
