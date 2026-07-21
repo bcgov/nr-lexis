@@ -595,6 +595,20 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void getApplicationsShouldLeaveScaleVolumeBlankWhenTheLegacyCursorDoesNotProvideIt() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.04d, Double.NaN, "00077881", "P", "T")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications()).singleElement().extracting("scaleVolume").isEqualTo("");
+  }
+
+  @Test
   void getApplicationsShouldExcludeRetiredIndianReserveJurisdiction() {
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
         .thenReturn(

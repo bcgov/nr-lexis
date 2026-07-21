@@ -523,10 +523,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     return new ApplicationSummaryRow(
         coalesce(getLong(rs, "APPLICATION_NUMBER"), 0L),
         coalesce(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), 0.0d),
-        coalesce(
-            Optional.ofNullable(getDouble(rs, "TOTAL_SCALE_VOLUME"))
-                .orElse(getDouble(rs, "SCALE_VOLUME")),
-            0.0d),
+        // The legacy cursor does not return aggregate scale volume; legacy leaves it blank.
+        Double.NaN,
         valueOrEmpty(getString(rs, "OWNER_CLIENT_NUMBER")),
         valueOrEmpty(getString(rs, "EXPORT_JURISDICTION_CODE")),
         valueOrEmpty(getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));

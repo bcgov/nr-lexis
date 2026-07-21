@@ -123,7 +123,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           new ApplicationItem(
               row.applicationNumber(),
               formatVolume(row.requestedVolume()),
-              formatVolume(row.scaleVolume()),
+              formatAvailableVolume(row.scaleVolume()),
               false,
               row.jurisdictionCode()));
     }
@@ -859,6 +859,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private String formatVolume(double value) {
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+  }
+
+  private String formatAvailableVolume(double value) {
+    return Double.isNaN(value) ? "" : formatVolume(value);
   }
 
   private boolean appNotPastListingDate(ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
