@@ -18,7 +18,10 @@ describe('DisabledButtonTooltip', () => {
     expect(button).toBeDisabled()
     expect(trigger).toHaveClass('disabled-button-tooltip')
     expect(trigger).toHaveAttribute('tabindex', '0')
-    expect(trigger.closest('.cds--popover-container')).toHaveClass('cds--popover--auto-align')
+    expect(trigger.closest('.cds--popover-container')).toHaveClass(
+      'cds--popover--auto-align',
+      'disabled-button-tooltip-popover',
+    )
 
     await userEvent.hover(trigger)
 

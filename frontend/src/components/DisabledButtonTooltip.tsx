@@ -13,7 +13,12 @@ const DisabledButtonTooltip = ({ disabled, description, children }: DisabledButt
   }
 
   return (
-    <Tooltip align="top" autoAlign description={description}>
+    <Tooltip
+      align="top"
+      autoAlign
+      className="disabled-button-tooltip-popover"
+      description={description}
+    >
       <span className="disabled-button-tooltip" tabIndex={0} aria-disabled="true">
         {children}
       </span>

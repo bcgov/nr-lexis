@@ -1553,6 +1553,13 @@ legend.cds--label {
   pointer-events: none;
 }
 
+// Search result tables scroll beneath the fixed application navigation. Lift
+// disabled-control explanations into the app overlay layer so they remain
+// visible when a checkbox is near the edge of a table.
+.disabled-button-tooltip-popover > .cds--popover {
+  z-index: 9001;
+}
+
 .region-multi-select .cds--multi-select--filterable > .cds--list-box__field > .cds--tag--filter {
   display: none;
 }
