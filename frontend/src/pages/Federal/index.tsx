@@ -19,6 +19,7 @@ import {
 import { AppNotification } from '../../components/AppNotification'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -100,6 +101,11 @@ const RESULT_COLUMNS: {
   { id: 'receivedDate', label: 'Received date' },
   { id: 'listingDate', label: 'Listing date' },
 ]
+
+const disabledFederalExemptionSelectionDescription = (row: FederalApplicationSearchItem): string =>
+  row.exemptionNumber
+    ? 'This application already has an exemption.'
+    : 'This application is not eligible to create an exemption.'
 
 const buildSearchParams = (
   filters: FederalApplicationSearchFilters,
@@ -543,14 +549,19 @@ const FederalPage = () => {
                 Clear Filters
               </Button>
               {canCreateFederalExemption && (
-                <Button
-                  kind="secondary"
-                  size="md"
-                  onClick={onCreateExemptionClick}
+                <DisabledButtonTooltip
                   disabled={selectedRowsCount === 0}
+                  description="Select at least one eligible application."
                 >
-                  Create exemption for Selected Applications
-                </Button>
+                  <Button
+                    kind="secondary"
+                    size="md"
+                    onClick={onCreateExemptionClick}
+                    disabled={selectedRowsCount === 0}
+                  >
+                    Create exemption for Selected Applications
+                  </Button>
+                </DisabledButtonTooltip>
               )}
             </div>
             {exemptionSelectionStatus && (
@@ -592,16 +603,21 @@ const FederalPage = () => {
                   <TableRow>
                     {canCreateFederalExemption && (
                       <TableHeader>
-                        <Checkbox
-                          id="selectAllCurrentPageFederalRows"
-                          hideLabel
-                          labelText="Select all eligible federal applications on this page"
-                          checked={allSelectableRowsAreSelected}
+                        <DisabledButtonTooltip
                           disabled={selectableRows.length === 0}
-                          onChange={(_, payload) =>
-                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
-                          }
-                        />
+                          description="No eligible federal applications are available on this page."
+                        >
+                          <Checkbox
+                            id="selectAllCurrentPageFederalRows"
+                            hideLabel
+                            labelText="Select all eligible federal applications on this page"
+                            checked={allSelectableRowsAreSelected}
+                            disabled={selectableRows.length === 0}
+                            onChange={(_, payload) =>
+                              toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                            }
+                          />
+                        </DisabledButtonTooltip>
                       </TableHeader>
                     )}
                     {RESULT_COLUMNS.map((column) => (
@@ -627,16 +643,21 @@ const FederalPage = () => {
                               Locked
                             </span>
                           ) : (
-                            <Checkbox
-                              id={`selectFederalRow-${row.applicationNumber}`}
-                              hideLabel
-                              labelText={`Select federal application ${row.federalApplicationNumber}`}
-                              checked={Boolean(selectedRowsById[row.applicationNumber])}
+                            <DisabledButtonTooltip
                               disabled={!row.allowCreateExemption}
-                              onChange={(_, payload) =>
-                                toggleRowSelection(row, Boolean(payload.checked))
-                              }
-                            />
+                              description={disabledFederalExemptionSelectionDescription(row)}
+                            >
+                              <Checkbox
+                                id={`selectFederalRow-${row.applicationNumber}`}
+                                hideLabel
+                                labelText={`Select federal application ${row.federalApplicationNumber}`}
+                                checked={Boolean(selectedRowsById[row.applicationNumber])}
+                                disabled={!row.allowCreateExemption}
+                                onChange={(_, payload) =>
+                                  toggleRowSelection(row, Boolean(payload.checked))
+                                }
+                              />
+                            </DisabledButtonTooltip>
                           )}
                         </TableCell>
                       )}

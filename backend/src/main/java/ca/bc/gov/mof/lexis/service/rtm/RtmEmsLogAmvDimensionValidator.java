@@ -16,6 +16,10 @@ final class RtmEmsLogAmvDimensionValidator {
       Set.of(
           "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
           "U", "W", "X", "Y", "Z", "1", "2", "3", "4", "5", "6", "BLANK");
+  static final Set<String> MODERN_GRID_GRADES =
+      Set.of(
+          "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+          "U", "X", "Y", "Z", "1", "2", "3", "4", "5", "6");
   private static final Set<String> EXPANDED_GRADES = Set.of("W", "Z", "1", "2");
 
   private RtmEmsLogAmvDimensionValidator() {}
@@ -49,6 +53,15 @@ final class RtmEmsLogAmvDimensionValidator {
       errors.add("Growth indicator must be O or S.");
     }
 
+    return List.copyOf(errors);
+  }
+
+  static List<String> validateModernGrid(String species, String grade, String growthIndicator) {
+    List<String> errors = new ArrayList<>(validate(species, grade, growthIndicator, null));
+    String normalizedGrade = normalize(grade);
+    if (normalizedGrade != null && !MODERN_GRID_GRADES.contains(normalizedGrade)) {
+      errors.add("Grade is not supported by the modern RTM AMV grid.");
+    }
     return List.copyOf(errors);
   }
 

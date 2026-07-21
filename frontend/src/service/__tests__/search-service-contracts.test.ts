@@ -53,6 +53,7 @@ const applicationRequest = {
     receivedToDate: '2025-12-31',
     listingFromDate: '2026-01-01',
     listingToDate: '2026-01-31',
+    exportScheduleId: '31916',
     applicantClientNumber: '00012345',
     ownerClientNumber: '00054321',
   },
@@ -221,6 +222,7 @@ describe('search-service contracts', () => {
     expect(params.get('region')).toBe('12')
     expect(params.get('receivedFromDate')).toBe('2025-12-01')
     expect(params.get('receivedToDate')).toBe('2025-12-31')
+    expect(params.get('exportScheduleId')).toBe('31916')
     expect(params.get('sortField')).toBe('applicationNumber DESC')
     expect(result.page.totalElements).toBe(12)
     expect(result.content[0]).toEqual(

@@ -1225,23 +1225,6 @@ const ProvincialApplicationCreatePage = () => {
         <PageHeader
           title="Create provincial application"
           subtitle="Enter application details and save a new provincial application."
-          statusPlacement="end"
-          status={
-            <dl
-              className="application-detail-header-metrics"
-              role="group"
-              aria-label="New application state"
-            >
-              <div>
-                <dt>Application number</dt>
-                <dd>New</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>New</dd>
-              </div>
-            </dl>
-          }
         />
       </Column>
 

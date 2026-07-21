@@ -41,6 +41,9 @@ parameters:
   - name: LEXIS_REPORT_STATISTICS_LOG_LEVEL
     description: DEBUG exposes successful report statistics; INFO keeps them hidden
     value: INFO
+  - name: LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL
+    description: DEBUG emits safe failure diagnostics in non-production; INFO keeps them hidden
+    value: INFO
   - name: SPRING_SECURITY_LOG_LEVEL
     value: INFO
   - name: SPRING_WEB_LOG_LEVEL
@@ -243,6 +246,8 @@ objects:
                   value: ${APP_LOG_LEVEL}
                 - name: LEXIS_REPORT_STATISTICS_LOG_LEVEL
                   value: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL}
+                - name: LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL
+                  value: ${LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL}
                 - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY
                   value: ${SPRING_SECURITY_LOG_LEVEL}
                 - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB

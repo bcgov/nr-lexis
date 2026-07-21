@@ -397,9 +397,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    for (const tabName of ['Summary', 'Permits', 'Documents', 'Remarks']) {
+    for (const tabName of ['Summary', 'Permits', 'Documents']) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
     const exemptionHeading = screen.getByRole('heading', {
       name: 'Exemption EX-777',
       level: 1,
@@ -416,13 +417,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       'data-status-variant',
       'positive',
     )
-    const exemptionHighlights = screen.getByLabelText('Exemption highlights')
-    expect(within(exemptionHighlights).getByText('Type')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('Type 1')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('Remaining volume (m³)')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('94')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('Permits')).toBeInTheDocument()
-    expect(within(exemptionHighlights).getByText('1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Exemption highlights')).not.toBeInTheDocument()
     const exemptionSummaryTile = screen
       .getByRole('heading', { name: 'Exemption summary' })
       .closest('.cds--tile')
@@ -432,9 +427,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
     expect(within(exemptionSummaryTile as HTMLElement).getByText('EX-777')).toBeInTheDocument()
     expect(
-      within(exemptionSummaryTile as HTMLElement).getByText('Application status'),
-    ).toBeInTheDocument()
-    expect(within(exemptionSummaryTile as HTMLElement).getByText('OPEN')).toBeInTheDocument()
+      within(exemptionSummaryTile as HTMLElement).queryByText('Application number'),
+    ).not.toBeInTheDocument()
+    expect(
+      within(exemptionSummaryTile as HTMLElement).queryByText('Application status'),
+    ).not.toBeInTheDocument()
     expect(
       within(exemptionSummaryTile as HTMLElement).getByText('Approved volume (m³)'),
     ).toBeInTheDocument()
@@ -519,10 +516,37 @@ describe('Exemption and Federal Detail Document Actions', () => {
       await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
     ).toBeInTheDocument()
 
-    await selectDetailTab('Remarks')
-    expect(
-      await screen.findByRole('heading', { name: 'No remarks found', level: 3 }),
-    ).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+  })
+
+  it('explains why adding an associated application is unavailable until a number is entered', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+
+    const applicationInput = await screen.findByLabelText('Application number')
+    const addButton = screen.getByRole('button', { name: 'Add application' })
+    const tooltipTrigger = addButton.parentElement as HTMLElement
+
+    expect(applicationInput.closest('.exemption-application-add-form')).toBeTruthy()
+    expect(addButton).toBeDisabled()
+
+    await userEvent.hover(tooltipTrigger)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Enter an application number to add it.',
+    )
+
+    await userEvent.type(applicationInput, '654')
+    expect(screen.getByRole('button', { name: 'Add application' })).toBeEnabled()
   })
 
   it('renders authoritative permit metadata and omits rows without record access', async () => {
@@ -675,11 +699,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(await screen.findAllByText('Documents unavailable')).not.toHaveLength(0)
-    const highlights = screen.getByLabelText('Exemption highlights')
-    const documentMetric = within(highlights).getByText('Documents').closest('div')
-    expect(documentMetric).toBeTruthy()
-    expect(within(documentMetric as HTMLElement).getByText('Unavailable')).toBeInTheDocument()
-    expect(within(documentMetric as HTMLElement).queryByText('0')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Exemption highlights')).not.toBeInTheDocument()
 
     await selectDetailTab('Documents')
     expect(
@@ -1105,7 +1125,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' })).toBeEnabled()
 
     await selectDetailTab('Shipping Details')
-    expect(screen.queryByRole('heading', { name: 'Update federal permit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit shipping details' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
     expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
@@ -1157,6 +1177,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       arrange: () => undefined,
       edit: async () => {
         await selectDetailTab('Shipping Details')
+        await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
         await userEvent.clear(screen.getByLabelText('Transport name'))
         await userEvent.type(screen.getByLabelText('Transport name'), 'Changed transport')
       },
@@ -1195,6 +1216,39 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
   })
 
+  it('keeps federal shipping details read-only until editing is requested', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Shipping Details')
+    const shippingTile = screen
+      .getByRole('heading', { name: 'Shipping details', level: 2 })
+      .closest('.cds--tile')
+    expect(shippingTile).toHaveClass('federal-shipping-details')
+    expect(within(shippingTile as HTMLElement).getByText('Truck')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+    expect(
+      screen.getByRole('heading', { name: 'Edit shipping details', level: 2 }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Transport name')).toHaveValue('Truck')
+
+    await userEvent.clear(screen.getByLabelText('Transport name'))
+    await userEvent.type(screen.getByLabelText('Transport name'), 'Rail')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.getByRole('heading', { name: 'Shipping details', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
+    expect(screen.getByText('Truck')).toBeInTheDocument()
+  })
+
   it('uses shared shipping selectors, descriptions, and conditional Other Port', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>
@@ -1210,6 +1264,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getAllByText('Vancouver (VA)')).not.toHaveLength(0)
     expect(screen.queryByLabelText('Other port of export')).not.toBeInTheDocument()
 
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
     await userEvent.selectOptions(screen.getByLabelText('Port of export'), 'OT')
     await userEvent.type(screen.getByLabelText('Other port of export'), 'Boundary Bay')
     await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
@@ -1239,7 +1294,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
       ),
     ).toBeInTheDocument()
     await selectDetailTab('Shipping Details')
-    expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit shipping details' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
     expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
   })
 
@@ -1260,6 +1316,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Shipping Details')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
     expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
     expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
   })
@@ -1811,6 +1868,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Remarks')
     expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
     await selectDetailTab('Shipping Details')
+    expect(screen.queryByRole('button', { name: 'Edit shipping details' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
   })
 

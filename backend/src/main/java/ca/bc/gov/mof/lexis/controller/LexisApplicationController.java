@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseApplicationNumbers;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
@@ -98,6 +99,7 @@ public class LexisApplicationController {
       @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
       @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
       @RequestParam(name = "listingToDate", required = false) String listingToDate,
+      @RequestParam(name = "exportScheduleId", required = false) String exportScheduleId,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
@@ -132,6 +134,7 @@ public class LexisApplicationController {
             receivedToDate,
             listingFromDate,
             listingToDate,
+            exportScheduleId,
             regionNumbers,
             scopedClientNumber != null,
             sortField,
@@ -156,6 +159,7 @@ public class LexisApplicationController {
       @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
       @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
       @RequestParam(name = "listingToDate", required = false) String listingToDate,
+      @RequestParam(name = "exportScheduleId", required = false) String exportScheduleId,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       Authentication authentication) {
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
@@ -185,6 +189,7 @@ public class LexisApplicationController {
             receivedToDate,
             listingFromDate,
             listingToDate,
+            exportScheduleId,
             regionNumbers,
             scopedClientNumber != null,
             null,
@@ -234,6 +239,7 @@ public class LexisApplicationController {
       String receivedToDate,
       String listingFromDate,
       String listingToDate,
+      String exportScheduleId,
       List<Long> regionNumbers,
       boolean broadClientMatch,
       String sortField,
@@ -252,6 +258,7 @@ public class LexisApplicationController {
         parseSearchDate(receivedToDate),
         parseSearchDate(listingFromDate),
         parseSearchDate(listingToDate),
+        parsePositiveLong(exportScheduleId),
         regionNumbers == null ? List.of() : regionNumbers,
         broadClientMatch,
         sortField,

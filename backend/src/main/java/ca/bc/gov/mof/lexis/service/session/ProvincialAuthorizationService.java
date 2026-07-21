@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.session;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
@@ -191,7 +192,7 @@ public class ProvincialAuthorizationService {
       return false;
     }
     return service
-        .findByPermitNumber(permitNumber)
+        .findAccessByPermitNumber(permitNumber)
         .map(detail -> canAccessPermit(authentication, detail))
         .orElse(false);
   }
@@ -201,21 +202,44 @@ public class ProvincialAuthorizationService {
     if (permit == null) {
       return false;
     }
+    return canAccessPermit(
+        authentication,
+        permit.permitNumber(),
+        permit.ownerClientNumber(),
+        permit.applicantClientNumber(),
+        permit.orgUnitNumber());
+  }
+
+  private boolean canAccessPermit(Authentication authentication, PermitAccessDto permit) {
+    return canAccessPermit(
+        authentication,
+        permit.permitNumber(),
+        permit.ownerClientNumber(),
+        permit.applicantClientNumber(),
+        permit.orgUnitNumber());
+  }
+
+  private boolean canAccessPermit(
+      Authentication authentication,
+      Long permitNumber,
+      String ownerClientNumber,
+      String applicantClientNumber,
+      Long orgUnitNumber) {
     String scopedClientNumber = scopedClientNumber(authentication);
     if (scopedClientNumber != null) {
       return matchesClient(
               scopedClientNumber,
-              permit.ownerClientNumber(),
-              permit.applicantClientNumber())
+              ownerClientNumber,
+              applicantClientNumber)
           || canAccessLinkedPermitApplication(
-              scopedClientNumber, permit.permitNumber());
+              scopedClientNumber, permitNumber);
     }
     if (!isOrgUnitRestricted(roles(authentication), OrgUnitSurface.PERMIT_DETAIL)) {
       return true;
     }
     return canAccessOrgUnits(
         authentication,
-        permit.orgUnitNumber() == null ? List.of() : List.of(permit.orgUnitNumber()),
+        orgUnitNumber == null ? List.of() : List.of(orgUnitNumber),
         OrgUnitSurface.PERMIT_DETAIL);
   }
 

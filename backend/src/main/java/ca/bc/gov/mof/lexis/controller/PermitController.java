@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
@@ -167,15 +168,50 @@ public class PermitController {
   public ResponseEntity<PermitDetailDto> getByPermitNumber(
       @PathVariable("permitNumber") @Positive Long permitNumber,
       Authentication authentication) {
+    long startedAtNanos = System.nanoTime();
     PermitService service = serviceProvider.getIfAvailable();
     if (service == null) {
-      LOGGER.warn("Permit service unavailable - returning no content for detail");
+      LOGGER.warn(
+          "event=lexis_permit_detail operation=get outcome=service_unavailable permitNumber={} durationMs={}",
+          permitNumber,
+          elapsedMillis(startedAtNanos));
       return ResponseEntity.noContent().build();
     }
-    return service.findByPermitNumber(permitNumber)
-        .filter(detail -> provincialAuthorizationService.canAccessPermit(authentication, detail))
-        .map(ResponseEntity::ok)
-        .orElseGet(() -> ResponseEntity.notFound().build());
+
+    LOGGER.info("event=lexis_permit_detail operation=get outcome=started permitNumber={}", permitNumber);
+    try {
+      long lookupStartedAtNanos = System.nanoTime();
+      PermitDetailDto detail = service.findByPermitNumber(permitNumber).orElse(null);
+      long lookupDurationMillis = elapsedMillis(lookupStartedAtNanos);
+
+      long authorizationStartedAtNanos = System.nanoTime();
+      boolean authorized =
+          detail != null && provincialAuthorizationService.canAccessPermit(authentication, detail);
+      long authorizationDurationMillis = elapsedMillis(authorizationStartedAtNanos);
+      String outcome = detail == null ? "not_found" : authorized ? "found" : "access_denied";
+      ResponseEntity<PermitDetailDto> response =
+          authorized ? ResponseEntity.ok(detail) : ResponseEntity.notFound().build();
+
+      LOGGER.info(
+          "event=lexis_permit_detail operation=get outcome={} permitNumber={} lookupDurationMs={} authorizationDurationMs={} durationMs={}",
+          outcome,
+          permitNumber,
+          lookupDurationMillis,
+          authorizationDurationMillis,
+          elapsedMillis(startedAtNanos));
+      return response;
+    } catch (RuntimeException exception) {
+      LOGGER.warn(
+          "event=lexis_permit_detail operation=get outcome=failed permitNumber={} durationMs={} failureType={}",
+          permitNumber,
+          elapsedMillis(startedAtNanos),
+          exceptionType(exception));
+      throw exception;
+    }
+  }
+
+  private static long elapsedMillis(long startedAtNanos) {
+    return Math.max(0L, (System.nanoTime() - startedAtNanos) / 1_000_000L);
   }
 
   private PermitSearchCriteria buildCriteria(

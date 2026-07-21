@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -119,13 +120,192 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldRejectDayLevelLatestEffectiveDateWithoutOracleLookup() {
+  void shouldAtomicallyFanOutPineToBothGrowthTypes() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any()))
+        .thenReturn(new int[] {1, 1, 1, 1, 1, 1});
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "PINE",
+                    "A",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("12.50"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.rows()).hasSize(6);
+    assertThat(result.rows())
+        .extracting(RtmEmsLogAmvRowDto::species)
+        .containsExactlyInAnyOrder("WH", "WH", "LO", "LO", "YE", "YE");
+    assertThat(result.rows())
+        .extracting(RtmEmsLogAmvRowDto::growthIndicator)
+        .containsExactlyInAnyOrder("O", "S", "O", "S", "O", "S");
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 6
+                        && targets.stream()
+                            .allMatch(
+                                target ->
+                                    target.effectiveDate().equals(LocalDate.of(2026, 7, 1))
+                                        && target.newValue().compareTo(new BigDecimal("12.50")) == 0)));
+    verify(repository, never())
+        .update(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+    verify(repository, never())
+        .insert(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(BigDecimal.class));
+  }
+
+  @Test
+  void shouldAtomicallyFanOutSpruceToBothGrowthTypesWithoutPineExpansion() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1});
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "SP",
+                    "A",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("12.50"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.message()).isEqualTo("Saved 1 table value.");
+    assertThat(result.rows()).hasSize(2);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvRowDto::species).containsOnly("SP");
+    assertThat(result.rows())
+        .extracting(RtmEmsLogAmvRowDto::growthIndicator)
+        .containsExactlyInAnyOrder("O", "S");
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 2
+                        && targets.stream()
+                            .allMatch(
+                                target ->
+                                    target.species().equals("SP")
+                                        && target.grade().equals("A")
+                                        && target
+                                            .effectiveDate()
+                                            .equals(LocalDate.of(2026, 7, 1))
+                                        && target.newValue().compareTo(new BigDecimal("12.50"))
+                                            == 0)));
+  }
+
+  @Test
+  void shouldAcceptModernGridGradesForHistoricMonths() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1});
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "Z",
+                    "O",
+                    "2000-02-01",
+                    "2000-02-01",
+                    new BigDecimal("12.50"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("accepted");
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 2
+                        && targets.stream()
+                            .allMatch(
+                                target ->
+                                    target.grade().equals("Z")
+                                        && target.effectiveDate().equals(LocalDate.of(2000, 2, 1)))));
+  }
+
+  @Test
+  void shouldRollBackTheFullBatchWhenAnyAtomicWriteIsNotApplied() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 0});
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+    RtmEmsLogAmvService service = transactionalService(repository, transactionManager);
+
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "A",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("12.50"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    assertThat(transactionManager.commits).isZero();
+  }
+
+  @Test
+  void shouldRollBackTheFullBatchWhenOracleWriteFails() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.upsertAtomically(any()))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+    RtmEmsLogAmvService service = transactionalService(repository, transactionManager);
+
+    assertThatThrownBy(
+            () ->
+                service.saveBatch(
+                    List.of(
+                        new RtmEmsLogAmvSaveRequestDto(
+                            "BA",
+                            "A",
+                            "O",
+                            "2026-07-01",
+                            "2026-07-01",
+                            new BigDecimal("12.50"),
+                            "update"))))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    assertThat(transactionManager.commits).isZero();
+  }
+
+  @Test
+  void shouldNormalizeDayLevelLatestEffectiveDateBeforeOracleLookup() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    LocalDate normalizedDate = LocalDate.of(2026, 7, 1);
+    when(repository.findLatestEffectiveDateRowsBefore(normalizedDate)).thenReturn(List.of());
 
     assertThat(service.findLatestBefore("2026-07-10")).isEmpty();
 
-    verifyNoInteractions(repository);
+    verify(repository).findLatestEffectiveDateRowsBefore(normalizedDate);
   }
 
   @Test
@@ -689,14 +869,21 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldRejectDayLevelSaveDatesWithoutCallingOracle() {
+  void shouldNormalizeDayLevelSaveDatesBeforeCallingOracle() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    BigDecimal value = new BigDecimal("10.25");
+    LocalDate retrievalDate = LocalDate.of(2026, 7, 1);
+    LocalDate updateDate = LocalDate.of(2026, 8, 1);
+    when(repository.insert("BA", "A", "O", retrievalDate, value)).thenReturn("0");
+    when(repository.update("BA", "A", "O", retrievalDate, updateDate, value)).thenReturn("0");
+    when(repository.hasExactValue("BA", "A", "O", retrievalDate, value)).thenReturn(true);
+    when(repository.hasExactValue("BA", "A", "O", updateDate, value)).thenReturn(true);
 
     var retrievalResult =
         service.save(
             new RtmEmsLogAmvSaveRequestDto(
-                "BA", "A", "O", "2026-07-10", null, new BigDecimal("10.25"), "create"));
+                "BA", "A", "O", "2026-07-10", null, value, "create"));
     var updateResult =
         service.save(
             new RtmEmsLogAmvSaveRequestDto(
@@ -705,14 +892,13 @@ class OracleRtmEmsLogAmvServiceTest {
                 "O",
                 "2026-07-01",
                 "2026-08-10",
-                new BigDecimal("10.25"),
+                value,
                 "update"));
 
-    assertThat(retrievalResult.status()).isEqualTo("validation_failed");
-    assertThat(retrievalResult.errors()).anyMatch(error -> error.startsWith("Retrieval date"));
-    assertThat(updateResult.status()).isEqualTo("validation_failed");
-    assertThat(updateResult.errors()).anyMatch(error -> error.startsWith("Update date"));
-    verifyNoInteractions(repository);
+    assertThat(retrievalResult.status()).isEqualTo("accepted");
+    assertThat(updateResult.status()).isEqualTo("accepted");
+    verify(repository).insert("BA", "A", "O", retrievalDate, value);
+    verify(repository).update("BA", "A", "O", retrievalDate, updateDate, value);
   }
 
   @Test

@@ -7,6 +7,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
@@ -32,6 +33,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.TreeSet;
 import org.slf4j.Logger;
@@ -57,6 +59,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class OfferDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OfferDetailsRpcController.class);
+  private static final Logger FAILURE_DIAGNOSTIC_LOGGER =
+      LoggerFactory.getLogger("ca.bc.gov.mof.lexis.audit.failure");
   private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
@@ -128,12 +132,18 @@ public class OfferDetailsRpcController {
     Long parsed = parseApplicationNumber(normalized);
     if (parsed == null) {
       errors.add("Application " + fallbackApplicationNumber(applicationNumber) + " does not exist");
+      auditOfferFailure(
+          "validate", "validation", null, null, "invalid_application_number", errors.size());
       return ResponseEntity.ok(new OfferValidationResponseDto(false, errors));
     }
 
     Optional<LexisApplicationDetailDto> detail = applicationService.findByApplicationNumber(parsed);
     requireOfferApplicationAccess(parsed, detail, currentAuthentication(), false);
     errors.addAll(validateOfferApplication(parsed, detail));
+    if (!errors.isEmpty()) {
+      auditOfferFailure(
+          "validate", "validation", parsed, null, offerFailureReason(errors, null), errors.size());
+    }
 
     return ResponseEntity.ok(new OfferValidationResponseDto(errors.isEmpty(), errors));
   }
@@ -397,6 +407,15 @@ public class OfferDetailsRpcController {
     }
     PurchaseOfferService.CreateOfferResult result =
         service.addOffer(request, userId);
+    if (!result.success()) {
+      auditOfferFailure(
+          "create",
+          "persistence",
+          result.applicationNumber(),
+          result.exportPurchaseOfferNumber(),
+          offerFailureReason(result.errors(), result.message()),
+          errorCount(result.errors()));
+    }
     return ResponseEntity.ok(toPersistenceResponse(result));
   }
 
@@ -488,6 +507,15 @@ public class OfferDetailsRpcController {
     String userId = userId(authentication);
     PurchaseOfferService.CreateOfferResult result =
         service.updateOfferSnapshot(request, userId);
+    if (!result.success()) {
+      auditOfferFailure(
+          "update",
+          "persistence",
+          result.applicationNumber(),
+          result.exportPurchaseOfferNumber(),
+          offerFailureReason(result.errors(), result.message()),
+          errorCount(result.errors()));
+    }
     return ResponseEntity.ok(toPersistenceResponse(result));
   }
 
@@ -678,6 +706,13 @@ public class OfferDetailsRpcController {
 
   private ResponseEntity<OfferPersistenceResponseDto> invalidPersistence(
       Long applicationNumber, Long offerNumber, boolean update, List<String> errors) {
+    auditOfferFailure(
+        update ? "update" : "create",
+        "validation",
+        applicationNumber,
+        offerNumber,
+        offerFailureReason(errors, null),
+        errorCount(errors));
     return ResponseEntity.ok(
         new OfferPersistenceResponseDto(
             false,
@@ -690,6 +725,71 @@ public class OfferDetailsRpcController {
             update,
             List.copyOf(errors),
             List.of()));
+  }
+
+  private static void auditOfferFailure(
+      String operation,
+      String stage,
+      Long applicationNumber,
+      Long offerNumber,
+      String reason,
+      int errorCount) {
+    if (!FAILURE_DIAGNOSTIC_LOGGER.isDebugEnabled()) {
+      return;
+    }
+    FAILURE_DIAGNOSTIC_LOGGER.debug(
+        "event=lexis_offer_save operation={} outcome=rejected applicationRef={} offerRef={} "
+            + "stage={} reason={} errorCount={}",
+        operation,
+        fingerprint(applicationNumber == null ? null : applicationNumber.toString()),
+        fingerprint(offerNumber == null ? null : offerNumber.toString()),
+        stage,
+        reason,
+        errorCount);
+  }
+
+  private static int errorCount(List<String> errors) {
+    return errors == null ? 0 : errors.size();
+  }
+
+  private static String offerFailureReason(List<String> errors, String message) {
+    String candidate = errors != null && !errors.isEmpty() ? errors.get(0) : message;
+    if (candidate == null || candidate.isBlank()) {
+      return "persistence_rejected";
+    }
+
+    String normalized = candidate.toLowerCase(Locale.ROOT);
+    if (normalized.contains("valid jurisdiction")) {
+      return "invalid_jurisdiction";
+    }
+    if (normalized.contains("valid status")) {
+      return "invalid_status";
+    }
+    if (normalized.contains("not accepting offers")) {
+      return "not_accepting_offers";
+    }
+    if (normalized.contains("can not accept offers until")) {
+      return "not_open_yet";
+    }
+    if (normalized.contains("valid listing date")) {
+      return "invalid_listing_date";
+    }
+    if (normalized.contains("does not exist")) {
+      return "application_not_found";
+    }
+    if (normalized.contains("current date")) {
+      return "invalid_withdrawal_date";
+    }
+    if (normalized.contains("no longer eligible")) {
+      return "withdrawal_not_eligible";
+    }
+    if (normalized.contains("could not be resolved")) {
+      return "offering_client_unavailable";
+    }
+    if (normalized.contains("required")) {
+      return "required_value_missing";
+    }
+    return "persistence_rejected";
   }
 
   private PurchaseOfferService.CreateOfferRequest withOfferingClientIdentity(

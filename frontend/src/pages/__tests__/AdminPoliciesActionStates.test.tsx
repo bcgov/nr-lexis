@@ -377,6 +377,7 @@ describe('Admin policy action states', () => {
     {
       area: 'fee',
       heading: 'Fee policy administration',
+      editorHeading: 'Policy details',
       subtitle: 'Manage regional fee policy percentages and effective dates.',
       absentHeadings: [
         'Fee in lieu percent policy administration',
@@ -388,6 +389,7 @@ describe('Admin policy action states', () => {
     {
       area: 'fil',
       heading: 'Fee in lieu percent policy administration',
+      editorHeading: 'Policy details',
       subtitle: 'Manage fee-in-lieu percentages and effective dates.',
       absentHeadings: ['Fee policy administration', 'Export schedule administration'],
       fetchPage: mockedFetchFilPolicyPage,
@@ -396,6 +398,7 @@ describe('Admin policy action states', () => {
     {
       area: 'schedule',
       heading: 'Export schedule administration',
+      editorHeading: 'Schedule details',
       subtitle: 'Manage advertising, receipt, offer, and TEAC schedule dates.',
       absentHeadings: ['Fee policy administration', 'Fee in lieu percent policy administration'],
       fetchPage: mockedFetchExportSchedulePage,
@@ -403,12 +406,21 @@ describe('Admin policy action states', () => {
     },
   ])(
     'loads only the selected $area admin area',
-    async ({ area, heading, subtitle, absentHeadings, fetchPage, untouchedFetches }) => {
+    async ({
+      area,
+      heading,
+      editorHeading,
+      subtitle,
+      absentHeadings,
+      fetchPage,
+      untouchedFetches,
+    }) => {
       const { container } = renderPage(area as AdminPolicyArea)
 
       await screen.findByRole('heading', { level: 1, name: heading })
       expect(screen.getByText(subtitle)).toBeVisible()
-      expect(screen.getByRole('heading', { level: 2, name: heading })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { level: 2, name: editorHeading })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { level: 2, name: heading })).not.toBeInTheDocument()
       expect(container.querySelectorAll('.cds--tile')).toHaveLength(1)
       const resultsRegion = await screen.findByRole('region', { name: 'Search results table' })
       expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveTextContent(
@@ -583,16 +595,13 @@ describe('Admin policy action states', () => {
     renderPage('fee')
 
     const resultsRegion = screen.getByRole('region', { name: 'Search results table' })
-    expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveAttribute('aria-busy', 'true')
+    expect(resultsRegion).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByText('Loading fee policies...')).toBeVisible()
 
     resolvePolicies({ rows: [], total: 0, page: 0, size: 100 })
     expect(await screen.findByRole('heading', { name: 'No fee policies found' })).toBeVisible()
     await waitFor(() => {
-      expect(resultsRegion.closest('.legacy-search-table-frame')).toHaveAttribute(
-        'aria-busy',
-        'false',
-      )
+      expect(resultsRegion).toHaveAttribute('aria-busy', 'false')
     })
   })
 
@@ -782,6 +791,7 @@ describe('Admin policy action states', () => {
     fireEvent.change(screen.getByLabelText('Offer end date'), {
       target: { value: '2026-07-23' },
     })
+    fireEvent.blur(screen.getByLabelText('Offer end date'))
     fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
       target: { value: '2026-07-24' },
     })
@@ -803,6 +813,8 @@ describe('Admin policy action states', () => {
 
     expect(await screen.findByText('Export schedule added.')).toBeInTheDocument()
     expect(await screen.findByText('1002')).toBeInTheDocument()
+    expect(screen.queryByText('Offer end date is required.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Offer end date')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
   it('shows schedule validation errors before creating export schedule rows', async () => {
@@ -847,6 +859,7 @@ describe('Admin policy action states', () => {
           teacMeetingDate: '2026-08-07',
           applicationCount: 3,
           mutable: false,
+          provincialApplicationCount: 2,
         },
       ],
       total: 1,
@@ -857,12 +870,9 @@ describe('Admin policy action states', () => {
     renderPage('schedule')
 
     const applicationLink = await screen.findByRole('link', {
-      name: 'View 3 applications advertised on 2026-07-15',
+      name: 'View 2 provincial applications assigned to export schedule 1002',
     })
-    expect(applicationLink).toHaveAttribute(
-      'href',
-      '/provincial/application?listingFromDate=2026-07-15&listingToDate=2026-07-15',
-    )
+    expect(applicationLink).toHaveAttribute('href', '/provincial/application?exportScheduleId=1002')
   })
 
   it('shows backend schedule guardrail messages without reloading the table', async () => {

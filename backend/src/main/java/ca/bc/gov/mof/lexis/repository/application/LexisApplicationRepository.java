@@ -147,6 +147,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     where.addDateLte("v.RECEIVED_DATE", criteria.receivedToDate());
     where.addDateGte("v.ADVERTISING_DATE", criteria.listingFromDate());
     where.addDateLte("v.ADVERTISING_DATE", criteria.listingToDate());
+    where.addEqualsNumber("v.EXPORT_SCHEDULE_ID", criteria.exportScheduleId());
     where.addLike("v.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
     where.addRaw(" AND v.EXPORT_JURISDICTION_CODE <> '" + JURISDICTION_FEDERAL + "'");
     where.addEquals("v.OIC_INDICATOR", OIC_INDICATOR_NO);

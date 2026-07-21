@@ -18,6 +18,8 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseD
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCorePackageRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
@@ -51,6 +53,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.BoicScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCorePackageRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
@@ -90,13 +93,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataRetrievalFailureException;
+import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,8 +119,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OraclePermitDetailsRpcService.class);
 
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
+  private static final DateTimeFormatter LEGACY_GBMS_DATE_FORMATTER =
+      DateTimeFormatter.ISO_LOCAL_DATE;
   private static final LocalDate FEE_MASK_EFFECTIVE_DATE = LocalDate.of(2024, 6, 27);
   private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
@@ -166,6 +177,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private final ProvincialPermitMutationValidator permitMutationValidator;
   private final ObjectProvider<PermitInvoiceOrchestrationService>
       permitInvoiceOrchestrationServiceProvider;
+  private Executor permitCoreTabsExecutor = new SyncTaskExecutor();
 
   public OraclePermitDetailsRpcService(
       PermitRpcRepository repository,
@@ -190,6 +202,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         permitInvoiceOrchestrationServiceProvider;
     this.permitMutationValidator =
         new ProvincialPermitMutationValidator(repository, clientLookupService);
+  }
+
+  @Autowired
+  void setPermitCoreTabsExecutor(
+      @Qualifier("oracleLegacyDynamicFetchExecutor") Executor permitCoreTabsExecutor) {
+    this.permitCoreTabsExecutor = permitCoreTabsExecutor;
   }
 
   @Override
@@ -387,7 +405,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   @Override
   public PermitEditContext getEditContext(Long permitNumber) {
     return repository
-        .findPermitMutationByPermitNumber(permitNumber)
+        .findPermitFeeOverrideByPermitNumber(permitNumber)
         .map(
             permit -> {
               Double overrideFee = permit.overrideFee();
@@ -541,34 +559,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return new PermitScalesForPackageRpcResponseDto(List.of());
     }
 
-    Map<Long, String> regionByApplication = new HashMap<>();
-    Map<String, String> speciesDescriptionByCode = new HashMap<>();
-    Map<String, String> gradeDescriptionByCode = new HashMap<>();
-    List<PermitScaleItemRpcResponseDto> scaleList =
-        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber).stream()
-            .map(
-                scale -> {
-                  String species =
-                      resolveSpeciesDescription(scale.exportSpeciesCode(), speciesDescriptionByCode);
-                  String grade =
-                      resolveGradeDescription(scale.exportGradeCode(), gradeDescriptionByCode);
-                  String region =
-                      resolveRegionForApplication(scale.applicationNumber(), regionByApplication);
-                  String permit = firstNonNull(trimToNull(scale.exportPermitDetailNumber()), "");
-                  return new PermitScaleItemRpcResponseDto(
-                      nonNull(scale.timberMark()),
-                      scale.piecesCount(),
-                      species,
-                      grade,
-                      formatVolume(scale.speciesGradeVolume()),
-                      permit,
-                      nonNull(scale.exportScaleDetailId()),
-                      nonNull(scale.cascadeSplitCode()),
-                      region);
-                })
-            .toList();
-
-    return new PermitScalesForPackageRpcResponseDto(scaleList);
+    return new PermitScalesForPackageRpcResponseDto(
+        toPermitScaleItems(
+            repository.findScaleDetailsByPackageNumber(normalizedPackageNumber),
+            new PermitCoreLookupContext()));
   }
 
   @Override
@@ -623,56 +617,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     PackageInfoRow packageInfo = repository.findPackageInfoByPackageNumber(normalizedPackageNumber).orElse(null);
-    if (packageInfo == null) {
-      return emptyPackageInfo();
-    }
-
-    ApplicationInfoRow applicationInfo =
-        repository.findApplicationInfoByNumber(packageInfo.applicationNumber()).orElse(null);
-    if (applicationInfo == null) {
-      return new PermitPackageInfoRpcResponseDto(
-          "",
-          "",
-          "",
-          formatVolume(packageInfo.packageVolume()),
-          formatVolume(packageInfo.averageLength()),
-          formatVolume(packageInfo.averageDiameter()),
-          "");
-    }
-
-    String exemptionTypeCode =
-        repository.findExemptionTypeCode(applicationInfo.exemptionNumber()).orElse(null);
-    boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(trimToNull(exemptionTypeCode));
-
-    String productTypeCode =
-        firstNonNull(trimToNull(applicationInfo.productTypeCode()), trimToNull(packageInfo.productTypeCode()));
-    String productTypeDescription =
-        productTypeCode == null
-            ? ""
-            : repository.findProductTypeDescription(productTypeCode).orElse(productTypeCode);
-
-    String growthTypeCode =
-        blanketOic
-            ? firstNonNull(trimToNull(packageInfo.growthTypeCode()), trimToNull(applicationInfo.growthTypeCode()))
-            : firstNonNull(trimToNull(applicationInfo.growthTypeCode()), trimToNull(packageInfo.growthTypeCode()));
-    String growthTypeDescription =
-        growthTypeCode == null
-            ? ""
-            : repository.findGrowthTypeDescription(growthTypeCode).orElse(growthTypeCode);
-
-    String endUseDescription =
-        blanketOic
-            ? buildBlanketPackageEndUseSort(normalizedPackageNumber)
-            : buildApplicationEndUseSort(applicationInfo);
-
-    return new PermitPackageInfoRpcResponseDto(
-        nonNull(applicationInfo.regionName()),
-        nonNull(endUseDescription),
-        nonNull(growthTypeDescription),
-        formatVolume(packageInfo.packageVolume()),
-        formatVolume(packageInfo.averageLength()),
-        formatVolume(packageInfo.averageDiameter()),
-        nonNull(productTypeDescription));
+    return toPermitPackageInfo(packageInfo, new PermitCoreLookupContext());
   }
 
   @Override
@@ -684,38 +629,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     PackageDetailsRow packageDetails =
         repository.findPackageDetailsByPackageNumberRequired(normalizedPackageNumber).orElse(null);
-    if (packageDetails == null) {
-      return emptyPackageDetails();
-    }
-
-    BigDecimal scaledVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
-    for (PermitScaleDetailRow scale : repository.findScaleDetailsByPackageNumber(normalizedPackageNumber)) {
-      BigDecimal speciesGradeVolume =
-          BigDecimal.valueOf(scale.speciesGradeVolume()).setScale(1, RoundingMode.HALF_UP);
-      scaledVolume = scaledVolume.add(speciesGradeVolume).setScale(1, RoundingMode.HALF_UP);
-    }
-
-    String growthTypeDescription =
-        repository
-            .findGrowthTypeDescription(packageDetails.growthTypeCode())
-            .orElse(nonNull(trimToNull(packageDetails.growthTypeCode())));
-    String packageStatusDescription =
-        repository
-            .findPackageStatusDescription(packageDetails.packageStatusCode())
-            .orElse(nonNull(trimToNull(packageDetails.packageStatusCode())));
-
-    return new PermitPackageDetailsRpcResponseDto(
-        true,
-        nonNull(packageDetails.packageNumber()),
-        formatVolume(packageDetails.packageVolume()),
-        scaledVolume.doubleValue(),
-        formatVolume(packageDetails.averageLength()),
-        formatVolume(packageDetails.averageDiameter()),
-        nonNull(trimToNull(packageDetails.packageStatusCode())),
-        nonNull(packageDetails.comments()),
-        packageStatusDescription,
-        nonNull(trimToNull(packageDetails.reprocessedIndicator())),
-        nonNull(growthTypeDescription));
+    return toPermitPackageDetails(
+        packageDetails,
+        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber),
+        new PermitCoreLookupContext());
   }
 
   @Override
@@ -734,6 +651,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return new PermitPackageListRpcResponseDto(List.of("No Packages"));
     }
     return new PermitPackageListRpcResponseDto(packageList);
+  }
+
+  @Override
+  public boolean packageBelongsToPermit(String packageNumber, Long permitNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null || permitNumber == null || permitNumber < 1) {
+      return false;
+    }
+    return repository.isPackageAssignedToPermitRequired(normalizedPackageNumber, permitNumber);
   }
 
   @Override
@@ -782,6 +708,101 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .map(String::valueOf)
             .toList();
     return new PermitApplicationListRpcResponseDto(applications);
+  }
+
+  @Override
+  public PermitCoreTabsRpcResponseDto getCoreTabs(
+      Long permitNumber, boolean blanketOic, Predicate<Long> applicationAccess) {
+    if (permitNumber == null || permitNumber < 1) {
+      return new PermitCoreTabsRpcResponseDto(List.of(), List.of());
+    }
+
+    List<PermitCorePackageRow> packageRows =
+        blanketOic
+            ? repository.findCorePackageRowsByOicPermitNumber(permitNumber)
+            : repository.findCorePackageRowsByPermitNumberRequired(permitNumber);
+    List<String> applicationList =
+        blanketOic
+            ? getApplicationList(permitNumber, applicationAccess).applicationList()
+            : getApplicationList(packageRows, permitNumber, applicationAccess);
+
+    return new PermitCoreTabsRpcResponseDto(
+        applicationList,
+        loadCorePackages(permitNumber, blanketOic, packageRows, new PermitCoreLookupContext()));
+  }
+
+  private List<PermitCorePackageRpcResponseDto> loadCorePackages(
+      Long permitNumber,
+      boolean blanketOic,
+      List<PermitCorePackageRow> packageRows,
+      PermitCoreLookupContext lookupContext) {
+    List<PermitCorePackageRpcResponseDto> packages = new ArrayList<>(packageRows.size());
+    for (int startIndex = 0; startIndex < packageRows.size(); startIndex += 4) {
+      int endIndex = Math.min(startIndex + 4, packageRows.size());
+      List<CompletableFuture<PermitCorePackageRpcResponseDto>> futures =
+          packageRows.subList(startIndex, endIndex).stream()
+              .map(
+                  packageRow ->
+                      CompletableFuture.supplyAsync(
+                          () -> buildCorePackage(permitNumber, blanketOic, packageRow, lookupContext),
+                          permitCoreTabsExecutor))
+              .toList();
+      try {
+        packages.addAll(futures.stream().map(CompletableFuture::join).toList());
+      } catch (CompletionException exception) {
+        if (exception.getCause() instanceof RuntimeException runtimeException) {
+          throw runtimeException;
+        }
+        throw exception;
+      }
+    }
+    return packages;
+  }
+
+  private PermitCorePackageRpcResponseDto buildCorePackage(
+      Long permitNumber,
+      boolean blanketOic,
+      PermitCorePackageRow packageRow,
+      PermitCoreLookupContext lookupContext) {
+    String packageNumber = packageRow.packageNumber();
+    List<PermitScaleDetailRow> scaleRows = findCorePackageScaleRows(packageRow, lookupContext);
+    PermitPackageInfoRpcResponseDto packageInfo =
+        toPermitPackageInfo(toPackageInfoRow(packageRow), lookupContext);
+    PermitPackageDetailsRpcResponseDto packageDetails =
+        blanketOic
+            ? toPermitPackageDetails(toPackageDetailsRow(packageRow), scaleRows, lookupContext)
+            : null;
+    String permitNumberString = permitNumber.toString();
+    List<PermitScaleItemRpcResponseDto> scaleList = toPermitScaleItems(scaleRows, lookupContext);
+    if (!blanketOic) {
+      scaleList =
+          scaleList.stream()
+              .filter(
+                  scale -> {
+                    String scalePermitNumber = trimToNull(scale.permit());
+                    return scalePermitNumber == null || permitNumberString.equals(scalePermitNumber);
+                  })
+              .toList();
+    }
+    return new PermitCorePackageRpcResponseDto(packageNumber, packageInfo, packageDetails, scaleList);
+  }
+
+  private List<String> getApplicationList(
+      List<PermitCorePackageRow> packageRows,
+      Long permitNumber,
+      Predicate<Long> applicationAccess) {
+    if (packageRows.stream()
+        .anyMatch(row -> row.applicationNumber() == null || row.applicationNumber() < 1)) {
+      throw new DataRetrievalFailureException(
+          "An invalid application relationship was returned for permit " + permitNumber + ".");
+    }
+    return packageRows.stream()
+        .map(PermitCorePackageRow::applicationNumber)
+        .distinct()
+        .sorted()
+        .filter(applicationAccess)
+        .map(String::valueOf)
+        .toList();
   }
 
   @Override
@@ -928,7 +949,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   public List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
       String receiptNumber, Long permitNumber, boolean readOnlyUser) {
     return repository
-        .findGbmsInvoiceHistoryRequired(receiptNumber, permitNumber, readOnlyUser)
+        .findGbmsInvoiceHistoryForDisplay(receiptNumber, permitNumber, readOnlyUser)
         .stream()
         .map(this::toGbmsInvoiceHistoryItem)
         .toList();
@@ -1053,6 +1074,24 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     PermitMutationRow permit = inserted.get();
+    int attachedScaleCount = 0;
+    for (List<ScaleMutationRow> unassignedScales :
+        findUnassignedScalesByApplication(normalizedExemptionNumber, ignored -> true).values()) {
+      for (ScaleMutationRow scale : unassignedScales) {
+        if (!updateScalePermitAssignment(scale, permit.permitNumber(), normalizedUserId)) {
+          markRollbackOnly();
+          return failureMutationResponse(
+              List.of("Unable to attach exemption scales to the new permit."), permit.permitNumber());
+        }
+        attachedScaleCount++;
+      }
+    }
+    if (attachedScaleCount > 0 && !updatePermitTotals(permit.permitNumber(), normalizedUserId)) {
+      markRollbackOnly();
+      return failureMutationResponse(
+          List.of("Unable to recalculate the new permit totals."), permit.permitNumber());
+    }
+
     return new PermitMutationRpcResponseDto(
         true,
         "The permit was created successfully.",
@@ -2844,6 +2883,251 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         false, "", "", 0.0d, "", "", "", "", "", "", "");
   }
 
+  private PermitPackageInfoRpcResponseDto toPermitPackageInfo(
+      PackageInfoRow packageInfo, PermitCoreLookupContext lookupContext) {
+    if (packageInfo == null) {
+      return emptyPackageInfo();
+    }
+
+    ApplicationInfoRow applicationInfo =
+        findCoreApplicationInfo(packageInfo.applicationNumber(), lookupContext);
+    if (applicationInfo == null) {
+      return new PermitPackageInfoRpcResponseDto(
+          "",
+          "",
+          "",
+          formatVolume(packageInfo.packageVolume()),
+          formatVolume(packageInfo.averageLength()),
+          formatVolume(packageInfo.averageDiameter()),
+          "");
+    }
+
+    boolean blanketOic =
+        EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(
+            resolveExemptionTypeCode(applicationInfo.exemptionNumber(), lookupContext));
+    String productTypeCode =
+        firstNonNull(trimToNull(applicationInfo.productTypeCode()), trimToNull(packageInfo.productTypeCode()));
+    String growthTypeCode =
+        blanketOic
+            ? firstNonNull(trimToNull(packageInfo.growthTypeCode()), trimToNull(applicationInfo.growthTypeCode()))
+            : firstNonNull(trimToNull(applicationInfo.growthTypeCode()), trimToNull(packageInfo.growthTypeCode()));
+    String endUseDescription =
+        blanketOic
+            ? resolveBlanketPackageEndUseSort(packageInfo.packageNumber(), lookupContext)
+            : resolveApplicationEndUseSort(applicationInfo, lookupContext);
+
+    return new PermitPackageInfoRpcResponseDto(
+        nonNull(applicationInfo.regionName()),
+        nonNull(endUseDescription),
+        resolveGrowthTypeDescription(growthTypeCode, lookupContext),
+        formatVolume(packageInfo.packageVolume()),
+        formatVolume(packageInfo.averageLength()),
+        formatVolume(packageInfo.averageDiameter()),
+        resolveProductTypeDescription(productTypeCode, lookupContext));
+  }
+
+  private PermitPackageDetailsRpcResponseDto toPermitPackageDetails(
+      PackageDetailsRow packageDetails,
+      List<PermitScaleDetailRow> scaleRows,
+      PermitCoreLookupContext lookupContext) {
+    if (packageDetails == null) {
+      return emptyPackageDetails();
+    }
+
+    BigDecimal scaledVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    for (PermitScaleDetailRow scale : scaleRows) {
+      BigDecimal speciesGradeVolume =
+          BigDecimal.valueOf(scale.speciesGradeVolume()).setScale(1, RoundingMode.HALF_UP);
+      scaledVolume = scaledVolume.add(speciesGradeVolume).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    return new PermitPackageDetailsRpcResponseDto(
+        true,
+        nonNull(packageDetails.packageNumber()),
+        formatVolume(packageDetails.packageVolume()),
+        scaledVolume.doubleValue(),
+        formatVolume(packageDetails.averageLength()),
+        formatVolume(packageDetails.averageDiameter()),
+        nonNull(trimToNull(packageDetails.packageStatusCode())),
+        nonNull(packageDetails.comments()),
+        resolvePackageStatusDescription(packageDetails.packageStatusCode(), lookupContext),
+        nonNull(trimToNull(packageDetails.reprocessedIndicator())),
+        resolveGrowthTypeDescription(packageDetails.growthTypeCode(), lookupContext));
+  }
+
+  private PackageInfoRow toPackageInfoRow(PermitCorePackageRow packageRow) {
+    return new PackageInfoRow(
+        packageRow.packageNumber(),
+        packageRow.applicationNumber(),
+        packageRow.packageVolume(),
+        packageRow.averageLength(),
+        packageRow.averageDiameter(),
+        packageRow.growthTypeCode(),
+        packageRow.productTypeCode());
+  }
+
+  private PackageDetailsRow toPackageDetailsRow(PermitCorePackageRow packageRow) {
+    return new PackageDetailsRow(
+        packageRow.packageNumber(),
+        packageRow.packageVolume(),
+        packageRow.averageLength(),
+        packageRow.averageDiameter(),
+        packageRow.packageStatusCode(),
+        packageRow.comments(),
+        packageRow.reprocessedIndicator(),
+        packageRow.growthTypeCode());
+  }
+
+  private List<PermitScaleDetailRow> findCorePackageScaleRows(
+      PermitCorePackageRow packageRow, PermitCoreLookupContext lookupContext) {
+    String packageNumber = trimToNull(packageRow.packageNumber());
+    if (packageNumber == null) {
+      return List.of();
+    }
+    Long applicationNumber = packageRow.applicationNumber();
+    if (applicationNumber == null || applicationNumber < 1) {
+      return repository.findScaleDetailsByPackageNumber(packageNumber);
+    }
+
+    return lookupContext.scalesByApplication
+        .computeIfAbsent(applicationNumber, repository::findPermitScaleDetailsByApplicationNumber)
+        .stream()
+        .filter(scale -> packageNumber.equals(trimToNull(scale.packageNumber())))
+        .sorted(
+            Comparator.comparing(
+                    (PermitScaleDetailRow scale) -> trimToNull(scale.timberMark()),
+                    Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(
+                    scale -> trimToNull(scale.exportGradeCode()),
+                    Comparator.nullsLast(Comparator.naturalOrder())))
+        .toList();
+  }
+
+  private List<PermitScaleItemRpcResponseDto> toPermitScaleItems(
+      List<PermitScaleDetailRow> scaleRows, PermitCoreLookupContext lookupContext) {
+    return scaleRows.stream()
+        .map(
+            scale ->
+                new PermitScaleItemRpcResponseDto(
+                    nonNull(scale.timberMark()),
+                    scale.piecesCount(),
+                    resolveSpeciesDescription(
+                        scale.exportSpeciesCode(), lookupContext.speciesDescriptionByCode),
+                    resolveGradeDescription(scale.exportGradeCode(), lookupContext.gradeDescriptionByCode),
+                    formatVolume(scale.speciesGradeVolume()),
+                    firstNonNull(trimToNull(scale.exportPermitDetailNumber()), ""),
+                    nonNull(scale.exportScaleDetailId()),
+                    nonNull(scale.cascadeSplitCode()),
+                    resolveRegionForApplication(scale.applicationNumber(), lookupContext)))
+        .toList();
+  }
+
+  private ApplicationInfoRow findCoreApplicationInfo(
+      Long applicationNumber, PermitCoreLookupContext lookupContext) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return null;
+    }
+    return lookupContext.applicationInfoByNumber
+        .computeIfAbsent(applicationNumber, repository::findApplicationInfoByNumber)
+        .orElse(null);
+  }
+
+  private String resolveExemptionTypeCode(
+      String exemptionNumber, PermitCoreLookupContext lookupContext) {
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      return "";
+    }
+    return lookupContext.exemptionTypeByNumber.computeIfAbsent(
+        normalizedExemptionNumber,
+        value -> repository.findExemptionTypeCode(value).orElse(""));
+  }
+
+  private String resolveProductTypeDescription(
+      String productTypeCode, PermitCoreLookupContext lookupContext) {
+    String normalizedProductTypeCode = trimToNull(productTypeCode);
+    if (normalizedProductTypeCode == null) {
+      return "";
+    }
+    return lookupContext.productTypeDescriptionByCode.computeIfAbsent(
+        normalizedProductTypeCode,
+        value -> repository.findProductTypeDescription(value).orElse(value));
+  }
+
+  private String resolveGrowthTypeDescription(
+      String growthTypeCode, PermitCoreLookupContext lookupContext) {
+    String normalizedGrowthTypeCode = trimToNull(growthTypeCode);
+    if (normalizedGrowthTypeCode == null) {
+      return "";
+    }
+    return lookupContext.growthTypeDescriptionByCode.computeIfAbsent(
+        normalizedGrowthTypeCode,
+        value -> repository.findGrowthTypeDescription(value).orElse(value));
+  }
+
+  private String resolvePackageStatusDescription(
+      String packageStatusCode, PermitCoreLookupContext lookupContext) {
+    String normalizedPackageStatusCode = trimToNull(packageStatusCode);
+    if (normalizedPackageStatusCode == null) {
+      return "";
+    }
+    return lookupContext.packageStatusDescriptionByCode.computeIfAbsent(
+        normalizedPackageStatusCode,
+        value -> repository.findPackageStatusDescription(value).orElse(value));
+  }
+
+  private String resolveApplicationEndUseSort(
+      ApplicationInfoRow applicationInfo, PermitCoreLookupContext lookupContext) {
+    Long applicationNumber = applicationInfo.applicationNumber();
+    if (applicationNumber == null || applicationNumber < 1) {
+      return buildApplicationEndUseSort(applicationInfo);
+    }
+    return lookupContext.applicationEndUseByNumber.computeIfAbsent(
+        applicationNumber, value -> buildApplicationEndUseSort(applicationInfo));
+  }
+
+  private String resolveBlanketPackageEndUseSort(
+      String packageNumber, PermitCoreLookupContext lookupContext) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return "";
+    }
+    return lookupContext.packageEndUseByNumber.computeIfAbsent(
+        normalizedPackageNumber, this::buildBlanketPackageEndUseSort);
+  }
+
+  private String resolveRegionForApplication(
+      Long applicationNumber, PermitCoreLookupContext lookupContext) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return "";
+    }
+    return lookupContext.regionByApplication.computeIfAbsent(
+        applicationNumber,
+        value -> {
+          ApplicationInfoRow applicationInfo = findCoreApplicationInfo(value, lookupContext);
+          return applicationInfo == null ? "" : nonNull(applicationInfo.regionName());
+        });
+  }
+
+  private static final class PermitCoreLookupContext {
+    private final ConcurrentMap<Long, Optional<ApplicationInfoRow>> applicationInfoByNumber =
+        new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, List<PermitScaleDetailRow>> scalesByApplication =
+        new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, String> regionByApplication = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> exemptionTypeByNumber = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> productTypeDescriptionByCode =
+        new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> growthTypeDescriptionByCode =
+        new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> packageStatusDescriptionByCode =
+        new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> speciesDescriptionByCode = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> gradeDescriptionByCode = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, String> applicationEndUseByNumber = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> packageEndUseByNumber = new ConcurrentHashMap<>();
+  }
+
   private String buildApplicationEndUseSort(ApplicationInfoRow applicationInfo) {
     String endUseSort = trimToNull(applicationInfo.endUseSort());
     if (endUseSort != null) {
@@ -2920,39 +3204,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return resolved;
   }
 
-  private String resolveRegionForApplication(
-      Long applicationNumber, Map<Long, String> regionByApplication) {
-    if (applicationNumber == null || applicationNumber < 1) {
-      return "";
-    }
-    String cached = regionByApplication.get(applicationNumber);
-    if (cached != null) {
-      return cached;
-    }
-
-    String resolved =
-        repository
-            .findApplicationInfoByNumber(applicationNumber)
-            .map(ApplicationInfoRow::regionName)
-            .map(this::nonNull)
-            .orElse("");
-    regionByApplication.put(applicationNumber, resolved);
-    return resolved;
-  }
-
   private String resolveSpeciesDescription(String speciesCode, Map<String, String> speciesDescriptionByCode) {
     String normalizedCode = trimToNull(speciesCode);
     if (normalizedCode == null) {
       return "";
     }
-    String cached = speciesDescriptionByCode.get(normalizedCode);
-    if (cached != null) {
-      return cached;
-    }
-
-    String resolved = repository.findSpeciesDescription(normalizedCode).orElse(normalizedCode);
-    speciesDescriptionByCode.put(normalizedCode, resolved);
-    return resolved;
+    return speciesDescriptionByCode.computeIfAbsent(
+        normalizedCode, value -> repository.findSpeciesDescription(value).orElse(value));
   }
 
   private String resolveGradeDescription(String gradeCode, Map<String, String> gradeDescriptionByCode) {
@@ -2960,14 +3218,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (normalizedCode == null) {
       return "";
     }
-    String cached = gradeDescriptionByCode.get(normalizedCode);
-    if (cached != null) {
-      return cached;
-    }
-
-    String resolved = repository.findGradeDescription(normalizedCode).orElse(normalizedCode);
-    gradeDescriptionByCode.put(normalizedCode, resolved);
-    return resolved;
+    return gradeDescriptionByCode.computeIfAbsent(
+        normalizedCode, value -> repository.findGradeDescription(value).orElse(value));
   }
 
   private PermitGbmsInvoiceHistoryItemRpcResponseDto toGbmsInvoiceHistoryItem(
@@ -2977,13 +3229,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         nonNull(row.cancelledByInvoice()),
         nonNull(row.replacedByInvoice()),
         formatDecimal(BigDecimal.valueOf(row.invoiceAmount()), 2),
-        formatDate(row.printedDate()),
-        formatDate(row.entryDate()),
-        formatDate(row.updateDate()));
+        formatLegacyGbmsDate(row.printedDate()),
+        formatLegacyGbmsDate(row.entryDate()),
+        formatLegacyGbmsDate(row.updateDate()));
   }
 
-  private String formatDate(LocalDate value) {
-    return value == null ? "" : LEGACY_DATE_FORMATTER.format(value);
+  private String formatLegacyGbmsDate(LocalDate value) {
+    return value == null ? "" : LEGACY_GBMS_DATE_FORMATTER.format(value);
   }
 
   private long sortGroup(long groupBy) {

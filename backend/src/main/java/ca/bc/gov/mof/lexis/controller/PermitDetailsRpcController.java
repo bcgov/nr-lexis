@@ -9,6 +9,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.firstPresent;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
@@ -257,18 +258,15 @@ public class PermitDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
     requirePermitAccess(permitNumber, authentication);
-    ApplicationEditLockDto lock = null;
-    if (canSavePermit(authentication)) {
-      lock = acquirePermitLock(permitNumber, authentication);
-    }
+    // The compatibility lock facade never creates a lease; record versions coordinate saves.
     PermitDetailsRpcService.PermitEditContext context = service.getEditContext(permitNumber);
     return ResponseEntity.ok(
         new PermitEditContextResponseDto(
             context.overrideEnabled(),
             context.overrideFee(),
             context.overrideComment(),
-            lock != null && lock.locked(),
-            lock == null ? null : lock.message()));
+            false,
+            null));
   }
 
   @GetMapping("/scale-fees-for-package")
@@ -352,6 +350,21 @@ public class PermitDetailsRpcController {
     requirePermitAccess(permitNumber);
 
     return ResponseEntity.ok(service.getOicPackageList(permitNumber));
+  }
+
+  @GetMapping("/core-tabs")
+  public ResponseEntity<PermitCoreTabsRpcResponseDto> getCoreTabs(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "blanketOic", defaultValue = "false") boolean blanketOic,
+      Authentication authentication) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for core tabs");
+      return ResponseEntity.noContent().build();
+    }
+    requirePermitAccess(permitNumber, authentication);
+    return ResponseEntity.ok(
+        service.getCoreTabs(permitNumber, blanketOic, applicationAccessPredicate(authentication)));
   }
 
   @GetMapping("/package-info")

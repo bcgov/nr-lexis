@@ -24,7 +24,7 @@ import org.springframework.stereotype.Repository;
 @Profile("oracle")
 public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
-  private static final String RESERVE_JURISDICTION_CODE = "I";
+  private static final String RETIRED_INDIAN_RESERVE_JURISDICTION_CODE = "I";
   private static final String FIND_CURRENT_SCHEDULES =
       LEXIS_CODES_PACKAGE + "FIND_CURRENT_SCHEDULES(?)";
   private static final String FIND_ALL_JURISDICTION_CODES =
@@ -59,7 +59,26 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
              ES.TEAC_MEETING_DATE,
              (SELECT COUNT(*)
                FROM EXPORT_EXEMPTION_APPLICATION EEA
-               WHERE EEA.EXPORT_SCHEDULE_ID = ES.EXPORT_SCHEDULE_ID) AS APPLICATION_COUNT
+               WHERE EEA.EXPORT_SCHEDULE_ID = ES.EXPORT_SCHEDULE_ID) AS APPLICATION_COUNT,
+             (SELECT COUNT(*)
+                FROM EXPORT_EXEMPTION_APPLICATION EEA
+               WHERE EEA.EXPORT_SCHEDULE_ID = ES.EXPORT_SCHEDULE_ID
+                 AND EEA.APPLICATION_NUMBER > TO_NUMBER(0)
+                 AND EEA.EXPORT_JURISDICTION_CODE <> 'F'
+                 AND EEA.OIC_INDICATOR = 'N'
+                 AND EXISTS (
+                   SELECT 1
+                     FROM EXPORT_APPLICATION_STATUS_CODE EASC
+                    WHERE EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE)
+                 AND EXISTS (
+                   SELECT 1
+                     FROM EXPORT_EXEMPTION_REASON_CODE EERC
+                    WHERE EERC.EXPORT_EXEMPTION_REASON_CODE = EEA.EXPORT_EXEMPTION_REASON_CODE)
+                 AND EXISTS (
+                   SELECT 1
+                     FROM EXPORT_APPLICANT_TYPE_CODE EATC
+                    WHERE EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE))
+               AS PROVINCIAL_APPLICATION_COUNT
         FROM EXPORT_SCHEDULE ES
       """;
   private static final String UPCOMING_EXPORT_SCHEDULE_CONDITION =
@@ -81,36 +100,10 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       """;
   private static final String COUNT_EXPORT_SCHEDULES = "SELECT COUNT(*) FROM EXPORT_SCHEDULE";
   private static final String FIND_EXPORT_SCHEDULE_BY_ID =
-      """
-      SELECT ES.EXPORT_SCHEDULE_ID,
-             ES.ADVERTISING_DATE,
-             ES.APPLICATION_RECEIPT_DATE,
-             ES.OFFER_RECEIPT_DATE,
-             ES.OFFER_END_DATE,
-             ES.OFFER_WITHDRAWAL_DATE,
-             ES.TEAC_MEETING_DATE,
-             (SELECT COUNT(*)
-                FROM EXPORT_EXEMPTION_APPLICATION EEA
-               WHERE EEA.EXPORT_SCHEDULE_ID = ES.EXPORT_SCHEDULE_ID) AS APPLICATION_COUNT
-        FROM EXPORT_SCHEDULE ES
-       WHERE ES.EXPORT_SCHEDULE_ID = ?
-      """;
+      EXPORT_SCHEDULE_SELECT + " WHERE ES.EXPORT_SCHEDULE_ID = ?";
   private static final String FIND_EXPORT_SCHEDULE_BY_ADVERTISING_DATE =
-      """
-      SELECT ES.EXPORT_SCHEDULE_ID,
-             ES.ADVERTISING_DATE,
-             ES.APPLICATION_RECEIPT_DATE,
-             ES.OFFER_RECEIPT_DATE,
-             ES.OFFER_END_DATE,
-             ES.OFFER_WITHDRAWAL_DATE,
-             ES.TEAC_MEETING_DATE,
-             (SELECT COUNT(*)
-                FROM EXPORT_EXEMPTION_APPLICATION EEA
-               WHERE EEA.EXPORT_SCHEDULE_ID = ES.EXPORT_SCHEDULE_ID) AS APPLICATION_COUNT
-        FROM EXPORT_SCHEDULE ES
-       WHERE TRUNC(ES.ADVERTISING_DATE) = ?
-       ORDER BY ES.EXPORT_SCHEDULE_ID
-      """;
+      EXPORT_SCHEDULE_SELECT
+          + " WHERE TRUNC(ES.ADVERTISING_DATE) = ? ORDER BY ES.EXPORT_SCHEDULE_ID";
   private static final String COUNT_APPLICATIONS_FOR_EXPORT_SCHEDULE =
       "SELECT COUNT(*) FROM EXPORT_EXEMPTION_APPLICATION WHERE EXPORT_SCHEDULE_ID = ?";
   private static final String INSERT_EXPORT_SCHEDULE =
@@ -272,16 +265,19 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
   public List<CodeNameDto> loadReportJurisdictionOptions() {
     return withAll(
-        withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
+        withoutRetiredIndianReserveJurisdiction(
+            loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadBiweeklyJurisdictionOptions() {
     return withAll(
-        withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
+        withoutRetiredIndianReserveJurisdiction(
+            loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadTeacJurisdictionOptions() {
-    return withoutReserveJurisdiction(loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES));
+    return withoutRetiredIndianReserveJurisdiction(
+        loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES));
   }
 
   public List<CodeNameDto> loadReportExemptionTypeOptions() {
@@ -340,6 +336,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
   private ExportScheduleRowDto mapExportScheduleRow(ResultSet rs, int rowNum) throws SQLException {
     long applicationCount = applicationCount(rs);
+    long provincialApplicationCount = provincialApplicationCount(rs);
     return new ExportScheduleRowDto(
         getLong(rs, "EXPORT_SCHEDULE_ID"),
         toLocalDate(rs.getDate("ADVERTISING_DATE")),
@@ -349,7 +346,8 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
         toLocalDate(rs.getDate("OFFER_WITHDRAWAL_DATE")),
         toLocalDate(rs.getDate("TEAC_MEETING_DATE")),
         applicationCount,
-        applicationCount == 0L);
+        applicationCount == 0L,
+        provincialApplicationCount);
   }
 
   private String findExportSchedulesPageSql(String sortField, String sortDirection) {
@@ -373,7 +371,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       case "offerEndDate" -> "ES.OFFER_END_DATE";
       case "offerWithdrawalDate" -> "ES.OFFER_WITHDRAWAL_DATE";
       case "teacMeetingDate" -> "ES.TEAC_MEETING_DATE";
-      case "applicationCount" -> "APPLICATION_COUNT";
+      case "applicationCount" -> "PROVINCIAL_APPLICATION_COUNT";
       case "advertisingDate" -> "ES.ADVERTISING_DATE";
       default -> "ES.ADVERTISING_DATE";
     };
@@ -424,6 +422,11 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return rs.wasNull() ? 0L : value;
   }
 
+  private long provincialApplicationCount(ResultSet rs) throws SQLException {
+    long value = rs.getLong("PROVINCIAL_APPLICATION_COUNT");
+    return rs.wasNull() ? 0L : value;
+  }
+
   private void setDateOrNull(PreparedStatement ps, int index, LocalDate value) throws SQLException {
     if (value == null) {
       ps.setNull(index, java.sql.Types.DATE);
@@ -469,9 +472,11 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return reportOptions;
   }
 
-  private List<CodeNameDto> withoutReserveJurisdiction(List<CodeNameDto> options) {
+  private List<CodeNameDto> withoutRetiredIndianReserveJurisdiction(List<CodeNameDto> options) {
     return options.stream()
-        .filter(option -> !RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
+        .filter(
+            option ->
+                !RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
         .toList();
   }
 

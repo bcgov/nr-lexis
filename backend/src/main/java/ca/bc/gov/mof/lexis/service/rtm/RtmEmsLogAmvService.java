@@ -20,6 +20,8 @@ public interface RtmEmsLogAmvService {
 
   RtmEmsLogAmvMutationResultDto save(RtmEmsLogAmvSaveRequestDto request);
 
+  RtmEmsLogAmvMutationResultDto saveBatch(List<RtmEmsLogAmvSaveRequestDto> requests);
+
   RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file);
 
   RtmEmsLogAmvUploadResultDto upload(MultipartFile file);

@@ -162,13 +162,15 @@ describe('Ministerial permit creation from an exemption', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Apply for new permit' })
     expect(
-      within(dialog).getByText(
-        /creates a new active permit shell for Ministerial exemption EX-205/i,
-      ),
+      within(dialog).getByText(/creates a new active permit for Ministerial exemption EX-205/i),
     ).toBeInTheDocument()
     expect(
-      within(dialog).getByText(/Applications are not attached automatically/i),
+      within(dialog).getByText(
+        /Eligible application scales from this exemption will be added automatically/i,
+      ),
     ).toBeInTheDocument()
+    expect(dialog.querySelector('.permit-creation-confirmation-modal__actions')).toBeInTheDocument()
+    expect(dialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
 
     await waitFor(() => expect(createPermitFromExemption).toHaveBeenCalledWith('EX-205'))

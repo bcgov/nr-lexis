@@ -26,6 +26,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import EmptyState from '@/components/EmptyState'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -56,7 +57,10 @@ import {
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialPermitDetail,
+  fetchProvincialPermitExemptionContext,
+} from '@/service/lexis-detail-service'
 import {
   fetchApplicationClientData,
   type ApplicationClientData,
@@ -90,12 +94,15 @@ import {
   deleteBlanketOicScale,
   fetchBlanketOicPackageEditContext,
   fetchAvailablePermitApplications,
-  fetchProvincialPermitDetailTabs,
+  fetchProvincialPermitGbmsEvents,
+  fetchProvincialPermitDetailCoreTabs,
+  fetchProvincialPermitFees,
   removeApplicationFromPermit,
   updateBlanketOicPackage,
   updatePermitScaleAttachment,
   type BlanketOicPackageMutationRequest,
   type ProvincialPermitDetailTabsData,
+  type ProvincialPermitDetailTabsRequest,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import {
@@ -189,6 +196,13 @@ const PERMIT_DETAIL_TABS = [
 ] as const
 
 type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
+type DeferredPermitTabId = Extract<PermitDetailTabId, 'fees' | 'documents' | 'invoices'>
+
+const EMPTY_DEFERRED_PERMIT_TAB_STATE: Record<DeferredPermitTabId, boolean> = {
+  fees: false,
+  documents: false,
+  invoices: false,
+}
 
 const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
   packageNumber: '',
@@ -392,6 +406,12 @@ const buildPermitDetailForm = (permitDetail: ProvincialPermitDetail): PermitDeta
   otherPortOfExport: detailValue(permitDetail.otherPortOfExport),
 })
 
+const hasPermitExemptionContext = (permitDetail: ProvincialPermitDetail): boolean =>
+  permitDetail.blanketOic ||
+  permitDetail.approvedExemptionVolume !== null ||
+  permitDetail.exemptionVolumeRemaining !== null ||
+  permitDetail.exemptionTypeDescription !== null
+
 const withUpdatedPermitDetail = (
   currentDetail: ProvincialPermitDetail,
   form: PermitDetailForm,
@@ -485,6 +505,7 @@ const ProvincialPermitDetailsPage = () => {
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [isClientDataLoading, setIsClientDataLoading] = useState(false)
+  const [shouldLoadClientData, setShouldLoadClientData] = useState(false)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
   const [permitForm, setPermitForm] = useState<PermitDetailForm | null>(null)
@@ -492,6 +513,7 @@ const ProvincialPermitDetailsPage = () => {
     null,
   )
   const [editContextLoaded, setEditContextLoaded] = useState(false)
+  const [editContextLoadFailed, setEditContextLoadFailed] = useState(false)
   const [feeOverrideForm, setFeeOverrideForm] = useState<PermitFeeOverrideForm | null>(null)
   const [isEditingPermit, setIsEditingPermit] = useState(false)
   const [isEditingShipping, setIsEditingShipping] = useState(false)
@@ -505,9 +527,23 @@ const ProvincialPermitDetailsPage = () => {
   const [permitApprovalEmailAddress, setPermitApprovalEmailAddress] = useState('')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [permitExemptionContextReady, setPermitExemptionContextReady] = useState(false)
+  const [isPermitTablesLoading, setIsPermitTablesLoading] = useState(false)
   const [permitTablesErrorMessage, setPermitTablesErrorMessage] = useState('')
-  const [documentsInvoicesErrorMessage, setDocumentsInvoicesErrorMessage] = useState('')
+  const [gbmsErrorMessage, setGbmsErrorMessage] = useState('')
+  const [permitFeesErrorMessage, setPermitFeesErrorMessage] = useState('')
+  const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
+  const [invoicesErrorMessage, setInvoicesErrorMessage] = useState('')
   const [documentsInvoicesErrorDismissed, setDocumentsInvoicesErrorDismissed] = useState(false)
+  const [deferredPermitTabLoaded, setDeferredPermitTabLoaded] = useState(
+    EMPTY_DEFERRED_PERMIT_TAB_STATE,
+  )
+  const [deferredPermitTabLoading, setDeferredPermitTabLoading] = useState(
+    EMPTY_DEFERRED_PERMIT_TAB_STATE,
+  )
+  const documentsInvoicesErrorMessage = [documentsErrorMessage, invoicesErrorMessage]
+    .filter(Boolean)
+    .join(' ')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -531,6 +567,8 @@ const ProvincialPermitDetailsPage = () => {
   >(null)
   const [availablePermitApplications, setAvailablePermitApplications] = useState<string[]>([])
   const [permitApplicationToAdd, setPermitApplicationToAdd] = useState('')
+  const [hasLoadedAvailablePermitApplications, setHasLoadedAvailablePermitApplications] =
+    useState(false)
   const [isLoadingAvailableApplications, setIsLoadingAvailableApplications] = useState(false)
   const [isSavingPermitApplication, setIsSavingPermitApplication] = useState(false)
   const [isRemovingPermitApplication, setIsRemovingPermitApplication] = useState<string | null>(
@@ -564,9 +602,15 @@ const ProvincialPermitDetailsPage = () => {
   const [permitOptionsErrorMessage, setPermitOptionsErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
+  const beginPermitFeesRequest = useLatestRequestGuard()
+  const beginPermitDocumentsRequest = useLatestRequestGuard()
+  const beginPermitInvoicesRequest = useLatestRequestGuard()
+  const beginPermitGbmsRequest = useLatestRequestGuard()
   const beginPermitMutationRequest = useLatestRequestGuard()
   const beginBoicPackageEditRequest = useLatestRequestGuard()
   const beginAvailablePermitApplicationsRequest = useLatestRequestGuard()
+  const deferredPermitTabLoadsRef = useRef(new Set<DeferredPermitTabId>())
+  const loadedDeferredPermitTabsRef = useRef(new Set<DeferredPermitTabId>())
   const permitMutationInFlightRef = useRef(false)
   const tryBeginPermitMutation = useCallback(() => {
     if (permitMutationInFlightRef.current) return null
@@ -578,14 +622,10 @@ const ProvincialPermitDetailsPage = () => {
   }, [])
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
-  const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const invoicesFilter = searchParams.get('invoicesFilter') ?? ''
   const updateFilterParam = useCallback(
-    (
-      key: 'itemsFilter' | 'feesFilter' | 'gbmsFilter' | 'documentsFilter' | 'invoicesFilter',
-      value: string,
-    ) => {
+    (key: 'itemsFilter' | 'feesFilter' | 'documentsFilter' | 'invoicesFilter', value: string) => {
       const nextSearchParams = searchParamsWithValue(searchParams, key, value)
 
       if (nextSearchParams.toString() !== searchParams.toString()) {
@@ -596,6 +636,16 @@ const ProvincialPermitDetailsPage = () => {
   )
 
   const resetPermitRouteDrafts = useCallback(() => {
+    beginPermitFeesRequest()
+    beginPermitDocumentsRequest()
+    beginPermitInvoicesRequest()
+    beginPermitGbmsRequest()
+    deferredPermitTabLoadsRef.current.clear()
+    loadedDeferredPermitTabsRef.current.clear()
+    setDeferredPermitTabLoaded(EMPTY_DEFERRED_PERMIT_TAB_STATE)
+    setDeferredPermitTabLoading(EMPTY_DEFERRED_PERMIT_TAB_STATE)
+    setIsPermitTablesLoading(false)
+    setGbmsErrorMessage('')
     void beginBoicPackageEditRequest()
     void beginAvailablePermitApplicationsRequest()
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -614,12 +664,47 @@ const ProvincialPermitDetailsPage = () => {
     setInvoiceDocumentUploadDirty(false)
     setInvoiceDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
+    setDocumentRows([])
+    setInvoiceRows([])
+    setSelectedPermitTabId('permit')
+    setShouldLoadClientData(false)
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
+    setHasLoadedAvailablePermitApplications(false)
     setIsLoadingAvailableApplications(false)
     setPermitApprovalEmailOpen(false)
     setPermitApprovalEmailAddress('')
-  }, [beginAvailablePermitApplicationsRequest, beginBoicPackageEditRequest])
+  }, [
+    beginAvailablePermitApplicationsRequest,
+    beginBoicPackageEditRequest,
+    beginPermitDocumentsRequest,
+    beginPermitFeesRequest,
+    beginPermitGbmsRequest,
+    beginPermitInvoicesRequest,
+  ])
+
+  const loadPermitGbmsEvents = useCallback(
+    (request: ProvincialPermitDetailTabsRequest) => {
+      const isLatestRequest = beginPermitGbmsRequest()
+      void fetchProvincialPermitGbmsEvents(request)
+        .then((gbmsEvents) => {
+          if (!isLatestRequest()) {
+            return
+          }
+          setTabsData((current) => (current ? { ...current, gbmsEvents } : current))
+          setGbmsErrorMessage('')
+        })
+        .catch((error: unknown) => {
+          if (!isLatestRequest()) {
+            return
+          }
+          console.error(error)
+          setTabsData((current) => (current ? { ...current, gbmsEvents: [] } : current))
+          setGbmsErrorMessage('GBMS invoice history could not be loaded. Please try again later.')
+        })
+    },
+    [beginPermitGbmsRequest],
+  )
 
   useEffect(() => {
     let active = true
@@ -689,6 +774,8 @@ const ProvincialPermitDetailsPage = () => {
         setFeeOverrideContext(null)
         setFeeOverrideForm(null)
         setEditContextLoaded(false)
+        setEditContextLoadFailed(false)
+        setPermitExemptionContextReady(false)
         setIsEditingFeeOverride(false)
         setIsEditingPermit(false)
         setIsEditingShipping(false)
@@ -696,7 +783,8 @@ const ProvincialPermitDetailsPage = () => {
         setPermitTablesErrorMessage('')
         setDocumentRows([])
         setInvoiceRows([])
-        setDocumentsInvoicesErrorMessage('')
+        setDocumentsErrorMessage('')
+        setInvoicesErrorMessage('')
         setDocumentsInvoicesErrorDismissed(false)
         setLoading(false)
         return
@@ -705,12 +793,17 @@ const ProvincialPermitDetailsPage = () => {
       setLoading(true)
       setErrorMessage('')
       setPermitTablesErrorMessage('')
-      setDocumentsInvoicesErrorMessage('')
+      setPermitFeesErrorMessage('')
+      setIsPermitTablesLoading(false)
+      setPermitExemptionContextReady(false)
+      setDocumentsErrorMessage('')
+      setInvoicesErrorMessage('')
       setDocumentsInvoicesErrorDismissed(false)
       setTabsData(null)
       setFeeOverrideContext(null)
       setFeeOverrideForm(null)
       setEditContextLoaded(false)
+      setEditContextLoadFailed(false)
       setIsEditingFeeOverride(false)
 
       try {
@@ -729,6 +822,7 @@ const ProvincialPermitDetailsPage = () => {
           setFeeOverrideContext(null)
           setFeeOverrideForm(null)
           setEditContextLoaded(false)
+          setEditContextLoadFailed(false)
           setTabsData(null)
           setPermitTablesErrorMessage('')
           setDocumentRows([])
@@ -736,61 +830,91 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
 
-        try {
-          const feeContext = await fetchPermitFeeOverrideContext(permitNumber)
-          if (isLatestRequest()) {
+        void fetchPermitFeeOverrideContext(permitNumber)
+          .then((feeContext) => {
+            if (!isLatestRequest()) {
+              return
+            }
             setFeeOverrideContext(feeContext)
             setFeeOverrideForm(feeContext)
             setEditContextLoaded(true)
-          }
-        } catch (error) {
-          if (isLatestRequest()) {
+            setEditContextLoadFailed(false)
+          })
+          .catch((error) => {
+            if (!isLatestRequest()) {
+              return
+            }
             console.error(error)
             setFeeOverrideContext(null)
             setFeeOverrideForm(null)
             setEditContextLoaded(false)
+            setEditContextLoadFailed(true)
             setIsEditingFeeOverride(false)
             setIsEditingPermit(false)
             setIsEditingShipping(false)
-          }
+          })
+
+        const loadPermitTables = (permitDetail: ProvincialPermitDetail) => {
+          void fetchProvincialPermitDetailCoreTabs({
+            permitNumber,
+            receiptNumber: permitDetail.receiptNumber,
+            blanketOic: permitDetail.blanketOic,
+          })
+            .then((tabsResult) => {
+              if (!isLatestRequest()) {
+                return
+              }
+              setTabsData(tabsResult)
+              setPermitTablesErrorMessage('')
+              loadPermitGbmsEvents({
+                permitNumber,
+                receiptNumber: permitDetail.receiptNumber,
+                blanketOic: permitDetail.blanketOic,
+              })
+            })
+            .catch((error) => {
+              if (!isLatestRequest()) {
+                return
+              }
+              console.error(error)
+              setTabsData(EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS)
+              setPermitTablesErrorMessage('Unable to retrieve permit table details.')
+            })
+            .finally(() => {
+              if (isLatestRequest()) {
+                setIsPermitTablesLoading(false)
+              }
+            })
         }
 
-        try {
-          const tabsResult = await fetchProvincialPermitDetailTabs({
-            permitNumber,
-            receiptNumber: response.receiptNumber,
-            blanketOic: response.blanketOic,
+        setIsPermitTablesLoading(true)
+        if (!response.exemptionNumber || hasPermitExemptionContext(response)) {
+          setPermitExemptionContextReady(true)
+          loadPermitTables(response)
+          return
+        }
+
+        void fetchProvincialPermitExemptionContext(response.exemptionNumber)
+          .then((exemptionContext) => {
+            if (!isLatestRequest()) {
+              return
+            }
+            const permitDetail = { ...response, ...exemptionContext }
+            setDetail(permitDetail)
+            setPermitExemptionContextReady(true)
+            loadPermitTables(permitDetail)
           })
-          if (isLatestRequest()) {
-            setTabsData(tabsResult)
-            setPermitTablesErrorMessage('')
-          }
-        } catch (error) {
-          if (isLatestRequest()) {
+          .catch((error) => {
+            if (!isLatestRequest()) {
+              return
+            }
             console.error(error)
             setTabsData(EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS)
-            setPermitTablesErrorMessage('Unable to retrieve permit table details.')
-          }
-        }
-
-        try {
-          const documentsResult = await fetchPermitDocuments(permitNumber)
-          const invoicesResult = await fetchPermitInvoices(permitNumber)
-          if (isLatestRequest()) {
-            setDocumentRows(documentsResult.rows)
-            setInvoiceRows(invoicesResult.rows)
-          }
-        } catch (error) {
-          if (isLatestRequest()) {
-            console.error(error)
-            setDocumentRows([])
-            setInvoiceRows([])
-            setDocumentsInvoicesErrorMessage(
-              'Unable to retrieve permit documents or invoice details.',
+            setPermitTablesErrorMessage(
+              'Unable to retrieve the exemption context required for this permit.',
             )
-            setDocumentsInvoicesErrorDismissed(false)
-          }
-        }
+            setIsPermitTablesLoading(false)
+          })
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
@@ -800,6 +924,8 @@ const ProvincialPermitDetailsPage = () => {
           setFeeOverrideContext(null)
           setFeeOverrideForm(null)
           setEditContextLoaded(false)
+          setEditContextLoadFailed(false)
+          setIsPermitTablesLoading(false)
           setIsEditingFeeOverride(false)
           setIsEditingPermit(false)
           setIsEditingShipping(false)
@@ -807,7 +933,8 @@ const ProvincialPermitDetailsPage = () => {
           setPermitTablesErrorMessage('')
           setDocumentRows([])
           setInvoiceRows([])
-          setDocumentsInvoicesErrorMessage('')
+          setDocumentsErrorMessage('')
+          setInvoicesErrorMessage('')
           setDocumentsInvoicesErrorDismissed(false)
         }
       } finally {
@@ -818,7 +945,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     void load()
-  }, [permitNumber, beginDetailRequest, resetPermitRouteDrafts])
+  }, [permitNumber, beginDetailRequest, loadPermitGbmsEvents, resetPermitRouteDrafts])
 
   useEffect(() => {
     return () => {
@@ -835,7 +962,7 @@ const ProvincialPermitDetailsPage = () => {
       setOwnerClientData(null)
       setAgentClientData(null)
 
-      if (!detail) {
+      if (!detail || !shouldLoadClientData) {
         setIsClientDataLoading(false)
         return
       }
@@ -879,7 +1006,99 @@ const ProvincialPermitDetailsPage = () => {
     return () => {
       isCancelled = true
     }
-  }, [detail])
+  }, [detail, shouldLoadClientData])
+
+  const loadDeferredPermitTab = useCallback(
+    async (
+      tab: DeferredPermitTabId,
+      options: { force?: boolean; packageNumbers?: string[] } = {},
+    ) => {
+      const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+      if (
+        !resolvedPermitNumber ||
+        deferredPermitTabLoadsRef.current.has(tab) ||
+        (!options.force && loadedDeferredPermitTabsRef.current.has(tab)) ||
+        (tab === 'fees' && !options.force && (!tabsData || !!permitTablesErrorMessage))
+      ) {
+        return
+      }
+
+      const isLatestRequest =
+        tab === 'fees'
+          ? beginPermitFeesRequest()
+          : tab === 'documents'
+            ? beginPermitDocumentsRequest()
+            : beginPermitInvoicesRequest()
+      deferredPermitTabLoadsRef.current.add(tab)
+      setDeferredPermitTabLoading((current) => ({ ...current, [tab]: true }))
+
+      try {
+        if (tab === 'fees') {
+          const fees = await fetchProvincialPermitFees({
+            permitNumber: resolvedPermitNumber,
+            blanketOic: detail?.blanketOic,
+            packageNumbers:
+              options.packageNumbers ?? tabsData?.packages.map((row) => row.packageNumber),
+          })
+          if (!isLatestRequest()) return
+          setTabsData((current) => (current ? { ...current, fees } : current))
+          setPermitFeesErrorMessage('')
+        } else if (tab === 'documents') {
+          const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
+          if (!isLatestRequest()) return
+          setDocumentRows(documentsResult.rows)
+          setDocumentsErrorMessage('')
+        } else {
+          const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+          if (!isLatestRequest()) return
+          setInvoiceRows(invoicesResult.rows)
+          setInvoicesErrorMessage('')
+        }
+
+        loadedDeferredPermitTabsRef.current.add(tab)
+        setDeferredPermitTabLoaded((current) => ({ ...current, [tab]: true }))
+      } catch (error) {
+        if (!isLatestRequest()) return
+        console.error(error)
+        if (tab === 'fees') {
+          setPermitFeesErrorMessage('Unable to retrieve permit fee details.')
+        } else {
+          if (tab === 'documents') {
+            setDocumentRows([])
+          } else {
+            setInvoiceRows([])
+          }
+          if (tab === 'documents') {
+            setDocumentsErrorMessage('Unable to retrieve permit documents.')
+          } else {
+            setInvoicesErrorMessage('Unable to retrieve permit invoice details.')
+          }
+          setDocumentsInvoicesErrorDismissed(false)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          deferredPermitTabLoadsRef.current.delete(tab)
+          setDeferredPermitTabLoading((current) => ({ ...current, [tab]: false }))
+        }
+      }
+    },
+    [
+      beginPermitDocumentsRequest,
+      beginPermitFeesRequest,
+      beginPermitInvoicesRequest,
+      detail?.blanketOic,
+      detail?.permitNumber,
+      permitNumber,
+      permitTablesErrorMessage,
+      tabsData,
+    ],
+  )
+
+  useEffect(() => {
+    if (selectedPermitTabId === 'fees' && tabsData && !permitTablesErrorMessage) {
+      void loadDeferredPermitTab('fees')
+    }
+  }, [loadDeferredPermitTab, permitTablesErrorMessage, selectedPermitTabId, tabsData])
 
   const filteredItems = useMemo(() => {
     if (!tabsData) {
@@ -952,35 +1171,12 @@ const ProvincialPermitDetailsPage = () => {
   }, [feesFilter, tabsData])
   const showMinistryFeeColumn = filteredFees.some((row) => row.ministryUser)
 
-  const filteredGbmsEvents = useMemo(() => {
-    if (!tabsData) {
-      return []
-    }
-
-    return tabsData.gbmsEvents.filter((row) =>
-      matchesFilter(
-        [row.id, row.eventDate, row.eventType, row.status, row.reference, row.notes],
-        gbmsFilter,
-      ),
-    )
-  }, [gbmsFilter, tabsData])
+  const gbmsHistory = tabsData?.gbmsEvents ?? []
 
   const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0
-  const availablePermitDetailTabs = useMemo(
-    () =>
-      PERMIT_DETAIL_TABS.filter(
-        ({ id }) => (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
-      ),
-    [hasGbmsHistory, hasPermitAgent],
-  )
-  const effectiveSelectedPermitTabId = availablePermitDetailTabs.some(
-    ({ id }) => id === selectedPermitTabId,
-  )
-    ? selectedPermitTabId
-    : 'permit'
   const selectedPermitTabIndex = PERMIT_DETAIL_TABS.findIndex(
-    ({ id }) => id === effectiveSelectedPermitTabId,
+    ({ id }) => id === selectedPermitTabId,
   )
 
   const filteredDocumentRows = useMemo(() => {
@@ -1020,7 +1216,7 @@ const ProvincialPermitDetailsPage = () => {
       'This permit is currently locked for editing by another user.'
     : ''
   const permitEditContextUnavailableMessage =
-    hasPermitMutationPermission && !editContextLoaded
+    hasPermitMutationPermission && editContextLoadFailed
       ? 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
@@ -1069,14 +1265,23 @@ const ProvincialPermitDetailsPage = () => {
   }, [detail?.orgUnitNumber, detail?.region, permitRegionOptions])
   const permitExpired = permitStatusCode === 'EXP'
   const canUploadPermitDocuments =
-    canPerform('/filePermitUpload') && editContextLoaded && !permitEditLocked && !permitExpired
+    permitExemptionContextReady &&
+    canPerform('/filePermitUpload') &&
+    editContextLoaded &&
+    !permitEditLocked &&
+    !permitExpired
   const canUploadInvoiceDocuments =
+    permitExemptionContextReady &&
     canPerform('/fileInvoiceUpload') &&
     editContextLoaded &&
     !permitEditLocked &&
     permitStatusCode === 'ACT'
   const canSavePermit =
-    canPerform('savePermit') && editContextLoaded && !permitEditLocked && !permitExpired
+    permitExemptionContextReady &&
+    canPerform('savePermit') &&
+    editContextLoaded &&
+    !permitEditLocked &&
+    !permitExpired
   const canEditShipping = canSavePermit && permitStatusCode !== 'CAN'
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
   const canEnterPaymentReceipt = permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
@@ -1084,6 +1289,7 @@ const ProvincialPermitDetailsPage = () => {
     canSavePermit && (permitStatusCode === 'COM' || permitStatusCode === 'PPD')
   const canRequestPermitReview =
     hasProvincialSubmitterRole(capabilities.roles) &&
+    permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
     !permitExpired
@@ -1094,12 +1300,14 @@ const ProvincialPermitDetailsPage = () => {
     hasRole(capabilities.roles, 'APPLICATION_APPROVER') ||
     hasProvincialSubmitterRole(capabilities.roles)
   const canDeletePermitDocuments =
+    permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
     !!permitStatusCode &&
     ((adminUser && permitStatusCode !== 'EXP') ||
       (hasDocumentActorRole && !readOnlyUser && permitStatusCode === 'ACT'))
   const canDeleteInvoiceDocuments =
+    permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
     hasDocumentActorRole &&
@@ -1108,7 +1316,8 @@ const ProvincialPermitDetailsPage = () => {
   const scaleAttachmentLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const feeOverrideLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const canOpenPermitReport = canPerform('/permitReport') && permitStatusCode === 'COM'
-  const permitTablesAvailable = tabsData !== null && !permitTablesErrorMessage
+  const permitTablesAvailable =
+    !isPermitTablesLoading && tabsData !== null && !permitTablesErrorMessage
   const canEditPermitApplications =
     permitTablesAvailable &&
     canSavePermit &&
@@ -1184,6 +1393,7 @@ const ProvincialPermitDetailsPage = () => {
   const permitReviewReady =
     canRequestPermitReview &&
     permitStatusCode === 'ACT' &&
+    !isPermitTablesLoading &&
     !!tabsData &&
     (detail?.blanketOic ? !!detail.oicApplicationNumber : tabsData.applications.length > 0) &&
     tabsData.packages.length > 0 &&
@@ -1191,6 +1401,14 @@ const ProvincialPermitDetailsPage = () => {
   const totalFeeVolume = (tabsData?.fees ?? []).reduce((total, row) => total + row.volume, 0)
   const calculatedPermitFee = (tabsData?.fees ?? []).reduce((total, row) => total + row.amount, 0)
   const permitFeesMasked = (tabsData?.fees ?? []).some((row) => row.amountDisplay.trim() === '$')
+  const feeSummaryStatus =
+    permitTablesErrorMessage || permitFeesErrorMessage
+      ? 'Unavailable'
+      : deferredPermitTabLoading.fees
+        ? 'Loading…'
+        : deferredPermitTabLoaded.fees
+          ? null
+          : '—'
   const reloadPermitTabs = useCallback(async () => {
     const resolvedPermitNumber = detail?.permitNumber
       ? String(detail.permitNumber)
@@ -1199,14 +1417,31 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
-    const tabsResult = await fetchProvincialPermitDetailTabs({
-      permitNumber: resolvedPermitNumber,
-      receiptNumber: detail.receiptNumber,
-      blanketOic: detail.blanketOic,
-    })
-    setTabsData(tabsResult)
-    setPermitTablesErrorMessage('')
-  }, [detail, permitNumber])
+    beginPermitGbmsRequest()
+    setIsPermitTablesLoading(true)
+    try {
+      const tabsResult = await fetchProvincialPermitDetailCoreTabs({
+        permitNumber: resolvedPermitNumber,
+        receiptNumber: detail.receiptNumber,
+        blanketOic: detail.blanketOic,
+      })
+      setTabsData(tabsResult)
+      setPermitTablesErrorMessage('')
+      loadPermitGbmsEvents({
+        permitNumber: resolvedPermitNumber,
+        receiptNumber: detail.receiptNumber,
+        blanketOic: detail.blanketOic,
+      })
+      if (loadedDeferredPermitTabsRef.current.has('fees')) {
+        await loadDeferredPermitTab('fees', {
+          force: true,
+          packageNumbers: tabsResult.packages.map((row) => row.packageNumber),
+        })
+      }
+    } finally {
+      setIsPermitTablesLoading(false)
+    }
+  }, [beginPermitGbmsRequest, detail, loadDeferredPermitTab, loadPermitGbmsEvents, permitNumber])
 
   const reloadAvailablePermitApplications = useCallback(async () => {
     const isLatestRequest = beginAvailablePermitApplicationsRequest()
@@ -1214,6 +1449,7 @@ const ProvincialPermitDetailsPage = () => {
       if (isLatestRequest()) {
         setAvailablePermitApplications([])
         setPermitApplicationToAdd('')
+        setHasLoadedAvailablePermitApplications(false)
         setIsLoadingAvailableApplications(false)
       }
       return
@@ -1230,10 +1466,12 @@ const ProvincialPermitDetailsPage = () => {
       setPermitApplicationToAdd((current) =>
         result.applicationList.includes(current) ? current : '',
       )
+      setHasLoadedAvailablePermitApplications(true)
     } catch (error) {
       if (!isLatestRequest()) return
       console.error(error)
       setAvailablePermitApplications([])
+      setHasLoadedAvailablePermitApplications(false)
     } finally {
       if (isLatestRequest()) {
         setIsLoadingAvailableApplications(false)
@@ -1246,9 +1484,16 @@ const ProvincialPermitDetailsPage = () => {
     detail?.exemptionNumber,
   ])
 
-  useEffect(() => {
+  const loadAvailablePermitApplicationsOnFocus = useCallback(() => {
+    if (hasLoadedAvailablePermitApplications || isLoadingAvailableApplications) {
+      return
+    }
     void reloadAvailablePermitApplications()
-  }, [reloadAvailablePermitApplications])
+  }, [
+    hasLoadedAvailablePermitApplications,
+    isLoadingAvailableApplications,
+    reloadAvailablePermitApplications,
+  ])
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
     if (!permitForm) {
       return {}
@@ -1795,6 +2040,7 @@ const ProvincialPermitDetailsPage = () => {
               }
             : current,
         )
+        setHasLoadedAvailablePermitApplications(false)
         try {
           await reloadPermitTabs()
           setActionInfoMessage(result.message || 'Application was removed from the permit.')
@@ -2138,12 +2384,31 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
-    const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
-    const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+    beginPermitDocumentsRequest()
+    beginPermitInvoicesRequest()
+    deferredPermitTabLoadsRef.current.delete('documents')
+    deferredPermitTabLoadsRef.current.delete('invoices')
+    setDeferredPermitTabLoading((current) => ({
+      ...current,
+      documents: false,
+      invoices: false,
+    }))
+    const [documentsResult, invoicesResult] = await Promise.all([
+      fetchPermitDocuments(resolvedPermitNumber),
+      fetchPermitInvoices(resolvedPermitNumber),
+    ])
     setDocumentRows(documentsResult.rows)
     setInvoiceRows(invoicesResult.rows)
-    setDocumentsInvoicesErrorMessage('')
-  }, [detail?.permitNumber, permitNumber])
+    loadedDeferredPermitTabsRef.current.add('documents')
+    loadedDeferredPermitTabsRef.current.add('invoices')
+    setDeferredPermitTabLoaded((current) => ({
+      ...current,
+      documents: true,
+      invoices: true,
+    }))
+    setDocumentsErrorMessage('')
+    setInvoicesErrorMessage('')
+  }, [beginPermitDocumentsRequest, beginPermitInvoicesRequest, detail?.permitNumber, permitNumber])
 
   const onOpenDocument = useCallback(
     async (row: PermitDocumentRow) => {
@@ -2292,12 +2557,31 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
 
-        const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
-        const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+        beginPermitDocumentsRequest()
+        beginPermitInvoicesRequest()
+        deferredPermitTabLoadsRef.current.delete('documents')
+        deferredPermitTabLoadsRef.current.delete('invoices')
+        setDeferredPermitTabLoading((current) => ({
+          ...current,
+          documents: false,
+          invoices: false,
+        }))
+        const [documentsResult, invoicesResult] = await Promise.all([
+          fetchPermitDocuments(resolvedPermitNumber),
+          fetchPermitInvoices(resolvedPermitNumber),
+        ])
         if (isLatestRequest()) {
           setDocumentRows(documentsResult.rows)
           setInvoiceRows(invoicesResult.rows)
-          setDocumentsInvoicesErrorMessage('')
+          loadedDeferredPermitTabsRef.current.add('documents')
+          loadedDeferredPermitTabsRef.current.add('invoices')
+          setDeferredPermitTabLoaded((current) => ({
+            ...current,
+            documents: true,
+            invoices: true,
+          }))
+          setDocumentsErrorMessage('')
+          setInvoicesErrorMessage('')
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -2312,6 +2596,8 @@ const ProvincialPermitDetailsPage = () => {
     },
     [
       beginDocumentRefreshRequest,
+      beginPermitDocumentsRequest,
+      beginPermitInvoicesRequest,
       canDeleteInvoiceDocuments,
       canDeletePermitDocuments,
       detail?.permitNumber,
@@ -2424,90 +2710,88 @@ const ProvincialPermitDetailsPage = () => {
     />
   )
 
+  const detailMatchesRoute =
+    !!detail && !!permitNumber && String(detail.permitNumber) === permitNumber
+  const isRefreshingDetail = loading && detailMatchesRoute
+
   return (
-    <Grid fullWidth className="default-grid detail-page-grid">
+    <Grid
+      fullWidth
+      className={`default-grid detail-page-grid content-loading-region${
+        isRefreshingDetail ? ' is-loading' : ''
+      }`}
+      inert={isRefreshingDetail ? true : undefined}
+      aria-busy={isRefreshingDetail}
+    >
+      <ContentLoadingOverlay
+        loading={isRefreshingDetail}
+        loadingDescription="Refreshing provincial permit detail..."
+      />
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb label="Provincial permit search" to="/provincial/permit" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <div className="application-detail-title-row">
-          <PageHeader
-            title={`Permit ${detail?.permitNumber ?? permitNumber ?? ''}`.trim()}
-            subtitle="Check and manage this provincial permit"
-            status={
-              detail ? (
-                <StatusTag
-                  status={detail.permitStatusDescription ?? detail.permitStatusCode ?? ''}
-                  fallbackLabel="Not provided"
-                />
-              ) : undefined
-            }
-            actions={
-              canRequestPermitReview || canSendPermitApproval || canOpenPermitReport ? (
-                <>
-                  {canRequestPermitReview && (
-                    <Button
-                      kind="secondary"
-                      size="sm"
-                      disabled={isSendingPermitEmail || !permitReviewReady}
-                      title={
-                        permitReviewReady
-                          ? undefined
+        <PageHeader
+          title={`Permit ${
+            detailMatchesRoute ? (detail?.permitNumber ?? '') : (permitNumber ?? '')
+          }`.trim()}
+          subtitle="Check and manage this provincial permit"
+          status={
+            detail && detailMatchesRoute ? (
+              <StatusTag
+                status={detail.permitStatusDescription ?? detail.permitStatusCode ?? ''}
+                fallbackLabel="Not provided"
+              />
+            ) : undefined
+          }
+          actions={
+            detailMatchesRoute &&
+            (canRequestPermitReview || canSendPermitApproval || canOpenPermitReport) ? (
+              <>
+                {canRequestPermitReview && (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    disabled={isSendingPermitEmail || !permitReviewReady}
+                    title={
+                      permitReviewReady
+                        ? undefined
+                        : isPermitTablesLoading
+                          ? 'Checking permit review readiness...'
                           : 'An active permit requires an application, package, and scale detail before review can be requested.'
-                      }
-                      onClick={() => void onSendPermitEmail('request')}
-                    >
-                      Email review request
-                    </Button>
-                  )}
-                  {canSendPermitApproval && (
-                    <Button
-                      kind="secondary"
-                      size="sm"
-                      disabled={isSendingPermitEmail}
-                      onClick={() => void onOpenPermitApprovalEmail()}
-                    >
-                      Email approval
-                    </Button>
-                  )}
-                  {canOpenPermitReport && (
-                    <Button
-                      kind="primary"
-                      size="sm"
-                      disabled={isOpeningPermitReport}
-                      onClick={() => void onOpenPermitReport()}
-                    >
-                      {isOpeningPermitReport ? 'Opening...' : 'Print permit'}
-                    </Button>
-                  )}
-                </>
-              ) : undefined
-            }
-          />
-          {detail && (
-            <dl className="application-detail-header-metrics" aria-label="Permit highlights">
-              <div>
-                <dt>Application</dt>
-                <dd>{displayValue(detail.applicationNumber)}</dd>
-              </div>
-              <div>
-                <dt>Exemption</dt>
-                <dd>{displayValue(detail.exemptionNumber)}</dd>
-              </div>
-              <div>
-                <dt>Documents</dt>
-                <dd>
-                  {documentsInvoicesErrorMessage
-                    ? 'Unavailable'
-                    : documentRows.length.toLocaleString()}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
+                    }
+                    onClick={() => void onSendPermitEmail('request')}
+                  >
+                    Email review request
+                  </Button>
+                )}
+                {canSendPermitApproval && (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    disabled={isSendingPermitEmail}
+                    onClick={() => void onOpenPermitApprovalEmail()}
+                  >
+                    Email approval
+                  </Button>
+                )}
+                {canOpenPermitReport && (
+                  <Button
+                    kind="primary"
+                    size="sm"
+                    disabled={isOpeningPermitReport}
+                    onClick={() => void onOpenPermitReport()}
+                  >
+                    {isOpeningPermitReport ? 'Opening...' : 'Print permit'}
+                  </Button>
+                )}
+              </>
+            ) : undefined
+          }
+        />
       </Column>
 
-      {loading && (
+      {loading && !detailMatchesRoute && (
         <Column sm={4} md={8} lg={16}>
           <InlineLoading description="Loading provincial permit detail..." />
         </Column>
@@ -2537,7 +2821,7 @@ const ProvincialPermitDetailsPage = () => {
         </Column>
       )}
 
-      {!loading && detail && (
+      {detail && detailMatchesRoute && (
         <>
           {!!permitTablesErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
@@ -2546,6 +2830,17 @@ const ProvincialPermitDetailsPage = () => {
                 title="Permit tables unavailable"
                 subtitle={permitTablesErrorMessage}
                 lowContrast
+              />
+            </Column>
+          )}
+          {!!gbmsErrorMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="warning"
+                title="GBMS history unavailable"
+                subtitle={gbmsErrorMessage}
+                lowContrast
+                onCloseButtonClick={() => setGbmsErrorMessage('')}
               />
             </Column>
           )}
@@ -2630,6 +2925,16 @@ const ProvincialPermitDetailsPage = () => {
                 const selectedTab = PERMIT_DETAIL_TABS[selectedIndex]
                 if (selectedTab) {
                   setSelectedPermitTabId(selectedTab.id)
+                  if (selectedTab.id === 'owner' || selectedTab.id === 'agent') {
+                    setShouldLoadClientData(true)
+                  }
+                  if (
+                    selectedTab.id === 'fees' ||
+                    selectedTab.id === 'documents' ||
+                    selectedTab.id === 'invoices'
+                  ) {
+                    void loadDeferredPermitTab(selectedTab.id)
+                  }
                 }
               }}
             >
@@ -2755,7 +3060,10 @@ const ProvincialPermitDetailsPage = () => {
                               label: 'Application number',
                               value: displayValue(detail.applicationNumber),
                             },
-                            { label: 'Package number', value: displayValue(detail.packageNumber) },
+                            {
+                              label: 'Package number',
+                              value: displayValue(detail.packageNumber),
+                            },
                             {
                               label: 'Exemption number',
                               value: displayValue(detail.exemptionNumber),
@@ -2898,8 +3206,14 @@ const ProvincialPermitDetailsPage = () => {
                               label: 'Number of pieces',
                               value: displayValue(detail.numberOfPieces),
                             },
-                            { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
-                            { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
+                            {
+                              label: 'Receipt number',
+                              value: displayValue(detail.receiptNumber),
+                            },
+                            {
+                              label: 'Invoice number',
+                              value: displayValue(detail.invoiceNumber),
+                            },
                             {
                               label: 'Federal permit number',
                               value: displayValue(detail.federalPermitNumber),
@@ -2929,7 +3243,10 @@ const ProvincialPermitDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <h2 className="detail-tile-title">Associated applications</h2>
-                          {!permitTablesErrorMessage &&
+                          {isPermitTablesLoading ? (
+                            <InlineLoading description="Loading associated permit applications..." />
+                          ) : (
+                            !permitTablesErrorMessage &&
                             (associatedPermitApplications.length > 0 ? (
                               <TableFrame ariaLabel="Associated permit applications">
                                 <Table useZebraStyles>
@@ -2974,7 +3291,8 @@ const ProvincialPermitDetailsPage = () => {
                                 description="No applications are associated with this permit."
                                 headingLevel={3}
                               />
-                            ))}
+                            ))
+                          )}
                           {canEditPermitApplications && (
                             <>
                               <div className="legacy-search-grid">
@@ -2986,13 +3304,16 @@ const ProvincialPermitDetailsPage = () => {
                                   placeholder={
                                     isLoadingAvailableApplications
                                       ? 'Loading applications'
-                                      : 'Select application'
+                                      : hasLoadedAvailablePermitApplications
+                                        ? availablePermitApplicationOptions.length > 0
+                                          ? 'Select application'
+                                          : 'No applications available'
+                                        : 'Select to load applications'
                                   }
                                   disabled={
-                                    isSavingPermitApplication ||
-                                    isLoadingAvailableApplications ||
-                                    availablePermitApplicationOptions.length === 0
+                                    isSavingPermitApplication || isLoadingAvailableApplications
                                   }
+                                  onFocus={loadAvailablePermitApplicationsOnFocus}
                                   onChange={setPermitApplicationToAdd}
                                 />
                               </div>
@@ -3227,7 +3548,10 @@ const ProvincialPermitDetailsPage = () => {
                                 ),
                               ),
                             },
-                            { label: 'Transport name', value: displayValue(detail.transportName) },
+                            {
+                              label: 'Transport name',
+                              value: displayValue(detail.transportName),
+                            },
                             {
                               label: 'Port of export',
                               value: displayValue(
@@ -3310,7 +3634,10 @@ const ProvincialPermitDetailsPage = () => {
                           <legend>
                             {detail.blanketOic ? 'Blanket OIC package details' : 'Package details'}
                           </legend>
-                          {!permitTablesErrorMessage &&
+                          {isPermitTablesLoading ? (
+                            <InlineLoading description="Loading permit items..." />
+                          ) : (
+                            !permitTablesErrorMessage &&
                             ((tabsData?.packages ?? []).length > 0 ? (
                               <TableFrame ariaLabel="Permit packages">
                                 <Table useZebraStyles>
@@ -3412,7 +3739,8 @@ const ProvincialPermitDetailsPage = () => {
                                 description="No package detail rows are available for this permit."
                                 headingLevel={3}
                               />
-                            ))}
+                            ))
+                          )}
                           {canEditBlanketOicPackages && (
                             <div className="application-detail-edit-section">
                               <h3>
@@ -3772,22 +4100,15 @@ const ProvincialPermitDetailsPage = () => {
                             <TextInput
                               id="permitFeeTotalVolume"
                               labelText="Total volume (m³)"
-                              value={
-                                permitTablesErrorMessage
-                                  ? 'Unavailable'
-                                  : totalFeeVolume.toLocaleString()
-                              }
+                              value={feeSummaryStatus ?? totalFeeVolume.toLocaleString()}
                               disabled
                             />
                             <TextInput
                               id="permitCalculatedFee"
                               labelText="Calculated fee (CAD)"
                               value={
-                                permitTablesErrorMessage
-                                  ? 'Unavailable'
-                                  : permitFeesMasked
-                                    ? '$'
-                                    : `$${formatAmount(calculatedPermitFee)}`
+                                feeSummaryStatus ??
+                                (permitFeesMasked ? '$' : `$${formatAmount(calculatedPermitFee)}`)
                               }
                               disabled
                             />
@@ -3795,13 +4116,12 @@ const ProvincialPermitDetailsPage = () => {
                               id="permitEffectiveFee"
                               labelText="Effective fee (CAD)"
                               value={
-                                permitTablesErrorMessage
-                                  ? 'Unavailable'
-                                  : feeOverrideContext?.overrideEnabled
-                                    ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
-                                    : permitFeesMasked
-                                      ? '$'
-                                      : `$${formatAmount(calculatedPermitFee)}`
+                                feeSummaryStatus ??
+                                (feeOverrideContext?.overrideEnabled
+                                  ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
+                                  : permitFeesMasked
+                                    ? '$'
+                                    : `$${formatAmount(calculatedPermitFee)}`)
                               }
                               disabled
                             />
@@ -3809,8 +4129,9 @@ const ProvincialPermitDetailsPage = () => {
 
                           {!feeOverrideContext || !feeOverrideForm ? (
                             <p>
-                              Fee override details are unavailable. No override changes can be
-                              saved.
+                              {editContextLoadFailed
+                                ? 'Fee override details are unavailable. No override changes can be saved.'
+                                : 'Loading fee override details...'}
                             </p>
                           ) : isEditingFeeOverride ? (
                             <>
@@ -3922,7 +4243,17 @@ const ProvincialPermitDetailsPage = () => {
                           onChange={(event) => updateFilterParam('feesFilter', event.target.value)}
                           placeholder="Filter by package, timber mark, species, grade, or amount"
                         />
-                        {!permitTablesErrorMessage &&
+                        {permitFeesErrorMessage ? (
+                          <EmptyState
+                            title="Fee details unavailable"
+                            description={permitFeesErrorMessage}
+                            headingLevel={3}
+                            role="alert"
+                          />
+                        ) : deferredPermitTabLoading.fees ? (
+                          <InlineLoading description="Loading permit fee details..." />
+                        ) : (
+                          !permitTablesErrorMessage &&
                           (filteredFees.length > 0 ? (
                             <TableFrame ariaLabel="Permit fee rows">
                               <Table useZebraStyles>
@@ -3978,7 +4309,8 @@ const ProvincialPermitDetailsPage = () => {
                               }
                               headingLevel={3}
                             />
-                          ))}
+                          ))
+                        )}
                       </Tile>
                     </Column>
                   </Grid>
@@ -3987,39 +4319,32 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          General Billing Management System events
-                        </h2>
-                        <TextInput
-                          id="permitGbmsFilter"
-                          labelText="Filter General Billing Management System rows"
-                          value={gbmsFilter}
-                          onChange={(event) => updateFilterParam('gbmsFilter', event.target.value)}
-                          placeholder="Filter by type, status, date, reference, or notes"
-                        />
+                        <h2 className="detail-tile-title">GBMS invoice history</h2>
                         {!permitTablesErrorMessage &&
-                          (filteredGbmsEvents.length > 0 ? (
-                            <TableFrame ariaLabel="Permit billing events">
+                          (gbmsHistory.length > 0 ? (
+                            <TableFrame ariaLabel="GBMS invoice history">
                               <Table useZebraStyles>
                                 <TableHead>
                                   <TableRow>
-                                    <TableHeader>Date</TableHeader>
-                                    <TableHeader>Type</TableHeader>
-                                    <TableHeader>Status</TableHeader>
-                                    <TableHeader>Reference</TableHeader>
-                                    <TableHeader>Notes</TableHeader>
+                                    <TableHeader>GBMS Invoice Number</TableHeader>
+                                    <TableHeader>Cancelled By Invoice</TableHeader>
+                                    <TableHeader>Replaced By Invoice</TableHeader>
+                                    <TableHeader>Invoice Amount</TableHeader>
+                                    <TableHeader>Printed Date</TableHeader>
+                                    <TableHeader>Entry Date</TableHeader>
+                                    <TableHeader>Update Date</TableHeader>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {filteredGbmsEvents.map((row) => (
+                                  {gbmsHistory.map((row) => (
                                     <TableRow key={row.id}>
-                                      <TableCell>{row.eventDate || '-'}</TableCell>
-                                      <TableCell>{row.eventType || '-'}</TableCell>
-                                      <TableCell>
-                                        {row.status ? <StatusTag status={row.status} /> : '-'}
-                                      </TableCell>
-                                      <TableCell>{row.reference || '-'}</TableCell>
-                                      <TableCell>{row.notes || '-'}</TableCell>
+                                      <TableCell>{row.gbmsInvoiceNumber}</TableCell>
+                                      <TableCell>{row.cancelledByInvoice}</TableCell>
+                                      <TableCell>{row.replacedByInvoice}</TableCell>
+                                      <TableCell>{row.invoiceAmount}</TableCell>
+                                      <TableCell>{row.printedDate}</TableCell>
+                                      <TableCell>{row.entryDate}</TableCell>
+                                      <TableCell>{row.updateDate}</TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -4027,8 +4352,8 @@ const ProvincialPermitDetailsPage = () => {
                             </TableFrame>
                           ) : (
                             <EmptyState
-                              title="No matching billing events"
-                              description="No billing system rows matched the current filter."
+                              title="No GBMS invoice history available"
+                              description="No GBMS invoice history is available for this permit."
                               headingLevel={3}
                             />
                           ))}
@@ -4062,10 +4387,12 @@ const ProvincialPermitDetailsPage = () => {
                           }
                           placeholder="Filter by file name, description, type, source, or id"
                         />
-                        {documentsInvoicesErrorMessage ? (
+                        {deferredPermitTabLoading.documents ? (
+                          <InlineLoading description="Loading permit documents..." />
+                        ) : documentsErrorMessage ? (
                           <EmptyState
                             title="Permit documents unavailable"
-                            description={documentsInvoicesErrorMessage}
+                            description={documentsErrorMessage}
                             headingLevel={3}
                             role="alert"
                           />
@@ -4175,10 +4502,12 @@ const ProvincialPermitDetailsPage = () => {
                           }
                           placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
                         />
-                        {documentsInvoicesErrorMessage ? (
+                        {deferredPermitTabLoading.invoices ? (
+                          <InlineLoading description="Loading permit invoices..." />
+                        ) : invoicesErrorMessage ? (
                           <EmptyState
                             title="Invoices unavailable"
-                            description={documentsInvoicesErrorMessage}
+                            description={invoicesErrorMessage}
                             headingLevel={3}
                             role="alert"
                           />

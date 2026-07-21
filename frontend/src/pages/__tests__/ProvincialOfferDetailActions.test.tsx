@@ -305,14 +305,14 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.getByLabelText('Species/grade')).toHaveDisplayValue('FI/HE/LUM')
   })
 
-  it('opens the parent application scale detail filtered to the offer package', async () => {
+  it('opens the parent application Items tab at the offer package scales', async () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
 
     expect(screen.getByTestId('location')).toHaveTextContent(
-      '/provincial/application/1000456?packageFilter=PKG-903',
+      '/provincial/application/1000456?tab=items&packageNumber=PKG-903&section=scales',
     )
   })
 

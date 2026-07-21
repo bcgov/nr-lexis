@@ -1810,37 +1810,28 @@ test.describe('TEST IDIR admin regression', () => {
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
-    await expect(
-      page.getByText(
-        'Maintain one monthly value for each physical species, grade, and growth type.',
-      ),
-    ).toBeVisible()
+    await expect(page.getByText('Maintain one monthly value for each species and grade.')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Upload' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Download template' })).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
     ).toHaveCount(0)
     await expect(page.getByLabel('Effective month')).toBeVisible()
-    await expect(page.getByRole('radio', { name: 'Old growth' })).toBeChecked()
-    await expect(page.getByRole('radio', { name: 'Second growth' })).not.toBeChecked()
+    await expect(page.getByRole('radio')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
 
-    const table = page.getByRole('table', { name: 'Old growth average monthly value table' })
+    const table = page.getByRole('table', { name: 'Average monthly value table' })
     await expect(table).toBeVisible()
     await expect(table.getByRole('columnheader', { name: 'Balsam (BA)' })).toBeVisible()
-    await expect(table.getByRole('columnheader', { name: 'Western white pine (WH)' })).toBeVisible()
-    await expect(table.getByRole('columnheader', { name: 'Lodgepole pine (LO)' })).toBeVisible()
-    await expect(table.getByRole('columnheader', { name: 'Yellow pine (YE)' })).toBeVisible()
-    await expect(table.getByRole('columnheader', { name: 'Pine' })).toHaveCount(0)
+    await expect(table.getByRole('columnheader', { name: 'Pine' })).toBeVisible()
+    await expect(table.getByRole('columnheader', { name: /white pine|lodgepole|yellow pine/i })).toHaveCount(0)
     await expect(
-      page.getByText(
-        'Editing old growth. Each cell maps to one physical species, grade, growth type, and month.',
-      ),
+      page.getByText('Each cell represents one species and grade for the selected effective month.'),
     ).toBeVisible()
-    const balsamGradeA = page.getByLabel('Balsam (BA) grade A, Old growth')
-    const balsamGradeB = page.getByLabel('Balsam (BA) grade B, Old growth')
+    const balsamGradeA = page.getByLabel('Balsam (BA) grade A')
+    const balsamGradeB = page.getByLabel('Balsam (BA) grade B')
     await expect(balsamGradeA).toBeVisible()
     await expect(balsamGradeB).toBeVisible()
 
@@ -1871,7 +1862,12 @@ test.describe('TEST IDIR admin regression', () => {
 
   test('uses copied AMV values as the warning baseline', async () => {
     const page = await authenticatedIdirPage()
-    const sourceDate = '2000-01-01'
+    const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
+    const [currentYear, currentMonthNumber] = currentMonth.split('-').map(Number)
+    const previousCurrentMonth = new Date(
+      Date.UTC(currentYear, currentMonthNumber - 2, 1),
+    ).toISOString().slice(0, 10)
+    const sourceDate = previousCurrentMonth
     const copiedRows = [
       ['BA', 'O', 10.25],
       ['BA', 'S', 10.25],
@@ -1895,20 +1891,24 @@ test.describe('TEST IDIR admin regression', () => {
         return
       }
 
-      const latestBeforeDate = new URL(request.url()).searchParams.get('latestBeforeDate')
+      const searchParams = new URL(request.url()).searchParams
+      const latestBeforeDate = searchParams.get('latestBeforeDate')
+      const isImmediatePreviousMonth =
+        searchParams.get('retrievalDate') === previousCurrentMonth &&
+        searchParams.get('updateDate') === previousCurrentMonth
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(latestBeforeDate ? copiedRows : []),
+        body: JSON.stringify(latestBeforeDate || isImmediatePreviousMonth ? copiedRows : []),
       })
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
     await expect(page.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
-    await expect(page.getByText(/Prefilled from January 2000/)).toBeVisible()
+    await expect(page.getByText(/Prefilled from the previous month/)).toBeVisible()
 
-    const balsamGradeA = page.getByLabel('Balsam (BA) grade A, Old growth')
-    const cedarGradeA = page.getByLabel('Cedar (CE) grade A, Old growth')
+    const balsamGradeA = page.getByLabel('Balsam (BA) grade A')
+    const cedarGradeA = page.getByLabel('Cedar (CE) grade A')
     await expect(balsamGradeA).toHaveValue('10.25')
     await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/is-dirty/)
     await expect(balsamGradeA.locator('xpath=ancestor::td')).not.toHaveClass(/has-warning/)
@@ -1986,7 +1986,7 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
 
-    const balsamGradeA = page.getByLabel('Balsam (BA) grade A, Old growth')
+    const balsamGradeA = page.getByLabel('Balsam (BA) grade A')
     await balsamGradeA.fill('123.45')
     await expect(balsamGradeA.locator('xpath=ancestor::td')).toHaveClass(/has-warning/)
     expect(await balsamGradeA.evaluate((element) => getComputedStyle(element).borderColor)).toBe(
@@ -2002,10 +2002,14 @@ test.describe('TEST IDIR admin regression', () => {
     await expect.poll(() => saveRequests.length).toBe(1)
     expect(saveRequests).toEqual([
       expect.objectContaining({
-        species: 'BA',
-        grade: 'A',
-        growthIndicator: 'O',
-        newValue: 123.45,
+        values: [
+          expect.objectContaining({
+            species: 'BA',
+            grade: 'A',
+            growthIndicator: 'O',
+            newValue: 123.45,
+          }),
+        ],
       }),
     ])
   })

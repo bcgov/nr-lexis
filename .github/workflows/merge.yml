@@ -55,10 +55,10 @@ jobs:
       backend_min_replicas: "2"
       backend_max_replicas: "6"
       frontend_replicas: "2"
-      backend_cpu_request: "500m"
-      backend_memory_request: "1Gi"
-      backend_cpu_limit: "1500m"
-      backend_memory_limit: "2Gi"
+      backend_cpu_request: "750m"
+      backend_memory_request: "1536Mi"
+      backend_cpu_limit: "2"
+      backend_memory_limit: "3Gi"
       frontend_cpu_request: "100m"
       frontend_memory_request: "128Mi"
       frontend_cpu_limit: "500m"
@@ -106,6 +106,10 @@ jobs:
       backend_min_replicas: "3"
       backend_max_replicas: "10"
       frontend_replicas: "3"
+      backend_cpu_request: "400m"
+      backend_memory_request: "1Gi"
+      backend_cpu_limit: "1500m"
+      backend_memory_limit: "1536Mi"
       expiry_enabled: true
 
   # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is

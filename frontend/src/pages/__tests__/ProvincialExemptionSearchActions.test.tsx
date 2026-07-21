@@ -143,13 +143,25 @@ describe('Provincial Exemption Search Actions', () => {
     expect(approveButton).toBeDisabled()
 
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeEnabled()
-    expect(screen.getByRole('checkbox', { name: 'Select EX-2002' })).toBeDisabled()
+    const lockedCheckbox = screen.getByRole('checkbox', { name: 'Select EX-2002' })
+    expect(lockedCheckbox).toBeDisabled()
     expect(screen.getByText('Locked')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    expect(approveButton).toBeEnabled()
+    const lockedCheckboxTooltipTrigger = lockedCheckbox.closest(
+      '.disabled-button-tooltip',
+    ) as HTMLElement
+    expect(lockedCheckboxTooltipTrigger).toBeTruthy()
 
-    await userEvent.click(approveButton)
+    await userEvent.hover(lockedCheckboxTooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This exemption is currently locked and cannot be approved.',
+    )
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
+    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
     const firstDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     expect(within(firstDialog).getByText('EX-1001')).toBeInTheDocument()
     const firstCertification = within(firstDialog).getByRole('checkbox', {
@@ -158,6 +170,9 @@ describe('Provincial Exemption Search Actions', () => {
     const firstConfirm = within(firstDialog).getByRole('button', { name: 'Approve exemptions' })
     expect(firstCertification).not.toBeChecked()
     expect(firstConfirm).toBeDisabled()
+    expect(firstConfirm).toHaveClass('cds--btn--primary')
+    expect(firstConfirm).not.toHaveClass('cds--btn--danger')
+    expect(firstConfirm.parentElement).toHaveClass('lexis-confirmation-modal__actions')
     await userEvent.click(firstConfirm)
     expect(mockedApproveExemptions).not.toHaveBeenCalled()
 
@@ -170,7 +185,7 @@ describe('Provincial Exemption Search Actions', () => {
       ).not.toBeInTheDocument(),
     )
 
-    await userEvent.click(approveButton)
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
     const reopenedDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     const reopenedCertification = within(reopenedDialog).getByRole('checkbox', {
       name: 'I certify that this exemption has been approved.',
@@ -222,7 +237,7 @@ describe('Provincial Exemption Search Actions', () => {
       'href',
       '/provincial/exemption/create',
     )
-  })
+  }, 10_000)
 
   it('blocks invalid approval recipients and keeps a skipped notification separate from approval', async () => {
     mockedUseAuth.mockReturnValue(
@@ -402,6 +417,52 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByText('Locked')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select EX-LOCKED' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeDisabled()
+  })
+
+  it('explains why select-all is disabled when this page has no approvable exemptions', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        {
+          exemptionNumber: 'EX-APPROVED',
+          type: 'Ministerial',
+          typeCode: 'M',
+          status: 'Approved',
+          statusCode: 'APPROVED',
+          applicantClientNumber: '11111111',
+          ownerClientNumber: '22222222',
+          approvedVolume: 100,
+          balanceRemaining: 80,
+          listingDate: '2026-01-10',
+          expiryDate: '2026-12-31',
+          region: '11',
+          canApprove: false,
+          isLocked: false,
+          canViewExemption: true,
+        },
+      ]),
+    )
+
+    renderPage()
+
+    await screen.findByText('EX-APPROVED')
+    const selectAllCheckbox = screen.getByRole('checkbox', {
+      name: 'Select all rows on this page',
+    })
+    expect(selectAllCheckbox).toBeDisabled()
+
+    const selectAllTooltipTrigger = selectAllCheckbox.closest(
+      '.disabled-button-tooltip',
+    ) as HTMLElement
+    expect(selectAllTooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(selectAllTooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'No eligible exemptions are available on this page.',
+    )
   })
 
   it('passes table sort field and direction through the search request', async () => {

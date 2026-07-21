@@ -20,6 +20,7 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
@@ -45,6 +46,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
@@ -89,6 +91,7 @@ class PermitDetailsRpcControllerTest {
   @Mock private LexisAuthorizationService authorizationService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private ApplicationEditLockService editLockService;
+  @Mock private LexisPrincipalService principalService;
   @Mock private PermitService permitService;
   @Mock private HttpServletRequest request;
   @Mock private HttpSession session;
@@ -140,6 +143,31 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
+  }
+
+  @Test
+  void permitEditContextShouldNotResolveIdentityForCompatibilityLock() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getEditContext(7000123L))
+        .thenReturn(new PermitDetailsRpcService.PermitEditContext(true, "12.50", "Reviewed"));
+    controller.setApplicationEditLockService(editLockService);
+    controller.setLexisPrincipalService(principalService);
+
+    ResponseEntity<PermitDetailsRpcController.PermitEditContextResponseDto> response =
+        controller.getPermitEditContext(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().overrideEnabled()).isTrue();
+    assertThat(response.getBody().overrideFee()).isEqualTo("12.50");
+    assertThat(response.getBody().overrideComment()).isEqualTo("Reviewed");
+    assertThat(response.getBody().locked()).isFalse();
+    assertThat(response.getBody().lockMessage()).isNull();
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+    verify(service).getEditContext(7000123L);
+    verifyNoInteractions(editLockService, principalService);
   }
 
   @Test
@@ -400,11 +428,23 @@ class PermitDetailsRpcControllerTest {
     assertThatThrownBy(
             () -> controller.getPackageVolumeSum(7000123L, "OTHER-PKG"))
         .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.getScalesForPackage("OTHER-PKG", 7000123L))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.getPackageInfo("OTHER-PKG", 7000123L))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.getPackageDetails("OTHER-PKG", 7000123L))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
 
     verify(service, never())
         .getPermitSummary(7000123L, "US", "2026-01-15", "OTHER-PKG", false);
     verify(service, never()).getScaleFeesForPackage("OTHER-PKG", 7000123L, false);
     verify(service, never()).getPackageVolumeSum(7000123L, "OTHER-PKG");
+    verify(service, never()).getScalesForPackage("OTHER-PKG");
+    verify(service, never()).getPackageInfo("OTHER-PKG");
+    verify(service, never()).getPackageDetails("OTHER-PKG");
   }
 
   @Test
@@ -435,6 +475,44 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getOicPackageList(7000123L);
+  }
+
+  @Test
+  void coreTabsShouldAuthorizePermitAndForwardOicFlagAndApplicationPredicate() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    PermitCoreTabsRpcResponseDto dto = new PermitCoreTabsRpcResponseDto(List.of("1000456"), List.of());
+    when(service.getCoreTabs(eq(7000123L), eq(true), any())).thenReturn(dto);
+
+    ResponseEntity<PermitCoreTabsRpcResponseDto> response =
+        controller.getCoreTabs(7000123L, true, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<Predicate<Long>> accessCaptor =
+        org.mockito.ArgumentCaptor.forClass(Predicate.class);
+    verify(service).getCoreTabs(eq(7000123L), eq(true), accessCaptor.capture());
+    when(provincialAuthorizationService.canAccessApplication(authentication, 1000456L))
+        .thenReturn(true);
+    assertThat(accessCaptor.getValue().test(1000456L)).isTrue();
+  }
+
+  @Test
+  void coreTabsShouldRejectUnauthorizedPermitBeforeCallingService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requirePermit(authentication, 7000123L);
+
+    assertThatThrownBy(() -> controller.getCoreTabs(7000123L, false, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("denied");
+
+    verify(service, never()).getCoreTabs(eq(7000123L), eq(false), any());
   }
 
   @Test
@@ -709,7 +787,7 @@ class PermitDetailsRpcControllerTest {
     List<PermitGbmsInvoiceHistoryItemRpcResponseDto> dto =
         List.of(
             new PermitGbmsInvoiceHistoryItemRpcResponseDto(
-                "GBMS-1", "", "", "125.00", "03/01/2026", "03/01/2026", "03/02/2026"));
+                "GBMS-1", "", "", "125.00", "2026-03-01", "2026-03-01", "2026-03-02"));
     when(service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true)).thenReturn(dto);
 
     TestingAuthenticationToken authentication =

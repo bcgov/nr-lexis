@@ -24,6 +24,7 @@ import {
   fetchOfferClientData,
   fetchOfferPackageList,
   fetchOfferPackageVolume,
+  validateOfferApplication,
   type OfferApplicationDetails,
 } from '@/service/provincial-offer-create-service'
 import type { SearchOption } from '@/service/search-options-service'
@@ -136,6 +137,7 @@ type OfferApplicationContextState = {
   applicationVolume: string
   packageOptions: SearchOption[]
   packageVolume: string
+  applicationValidationError: string
   isLoading: boolean
 }
 
@@ -148,7 +150,7 @@ type OfferApplicationContextAction =
       applicationVolume: string
       packageOptions: SearchOption[]
     }
-  | { type: 'loadFailure' }
+  | { type: 'loadFailure'; applicationValidationError?: string }
   | { type: 'setPackageVolume'; packageVolume: string }
 
 const createOfferApplicationContextState = (
@@ -158,6 +160,7 @@ const createOfferApplicationContextState = (
   applicationVolume: '',
   packageOptions,
   packageVolume: '',
+  applicationValidationError: '',
   isLoading: false,
 })
 
@@ -169,13 +172,14 @@ const offerApplicationContextReducer = (
     case 'reset':
       return createOfferApplicationContextState(action.packageOptions)
     case 'loadStart':
-      return { ...state, isLoading: true }
+      return { ...state, applicationValidationError: '', isLoading: true }
     case 'loadSuccess':
       return {
         ...state,
         applicationDetails: action.applicationDetails,
         applicationVolume: action.applicationVolume,
         packageOptions: action.packageOptions,
+        applicationValidationError: '',
         isLoading: false,
       }
     case 'loadFailure':
@@ -184,6 +188,7 @@ const offerApplicationContextReducer = (
         applicationDetails: null,
         applicationVolume: '',
         packageOptions: [],
+        applicationValidationError: action.applicationValidationError ?? '',
         isLoading: false,
       }
     case 'setPackageVolume':
@@ -218,6 +223,7 @@ const ProvincialOfferCreatePage = () => {
   const {
     applicationDetails,
     applicationVolume,
+    applicationValidationError,
     packageOptions,
     packageVolume,
     isLoading: isLoadingApplicationContext,
@@ -322,12 +328,31 @@ const ProvincialOfferCreatePage = () => {
 
     let isActive = true
     dispatchApplicationContext({ type: 'loadStart' })
-    void Promise.allSettled([
-      fetchOfferApplicationDetails(applicationNumber),
-      fetchOfferPackageList(applicationNumber),
-      fetchOfferApplicationVolume(applicationNumber),
-    ])
-      .then(([detailsResult, packagesResult, volumeResult]) => {
+    void (async () => {
+      try {
+        const validation = await validateOfferApplication(applicationNumber)
+        if (!isActive) {
+          return
+        }
+        if (!validation.isValid) {
+          dispatchApplicationContext({
+            type: 'loadFailure',
+            applicationValidationError:
+              validation.errors[0] ?? 'This application cannot accept purchase offers.',
+          })
+          setForm((current) =>
+            current.applicationNumber.trim() === applicationNumber
+              ? { ...current, packageNumber: '' }
+              : current,
+          )
+          return
+        }
+
+        const [detailsResult, packagesResult, volumeResult] = await Promise.allSettled([
+          fetchOfferApplicationDetails(applicationNumber),
+          fetchOfferPackageList(applicationNumber),
+          fetchOfferApplicationVolume(applicationNumber),
+        ])
         if (!isActive) {
           return
         }
@@ -363,17 +388,22 @@ const ProvincialOfferCreatePage = () => {
           }
           return { ...current, packageNumber: firstPackageNumber }
         })
-      })
-      .catch(() => {
+      } catch (error) {
+        console.error(error)
         if (isActive) {
-          dispatchApplicationContext({ type: 'loadFailure' })
+          dispatchApplicationContext({
+            type: 'loadFailure',
+            applicationValidationError:
+              'Application eligibility could not be verified. Reload the page and try again.',
+          })
           setForm((current) =>
             current.applicationNumber.trim() === applicationNumber
               ? { ...current, packageNumber: '' }
               : current,
           )
         }
-      })
+      }
+    })()
 
     return () => {
       isActive = false
@@ -412,6 +442,7 @@ const ProvincialOfferCreatePage = () => {
       applicationNumber: firstValidationError(
         () => requiredFieldError(form.applicationNumber, 'Application number'),
         () => positiveNumericFieldError(form.applicationNumber),
+        () => applicationValidationError || null,
       ),
       packageNumber: firstValidationError(
         () => (isLoadingApplicationContext ? 'Wait for package list to load.' : null),
@@ -473,6 +504,7 @@ const ProvincialOfferCreatePage = () => {
         : undefined,
     }),
     [
+      applicationValidationError,
       canManageOfferApproval,
       effectiveCompanyName,
       effectiveContactName,
@@ -493,6 +525,7 @@ const ProvincialOfferCreatePage = () => {
 
   const fieldError = (field: ProvincialOfferCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+  const applicationNumberError = applicationValidationError || fieldError('applicationNumber')
 
   const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
     if (isLoadingApplicationContext || scopedClientLookupPending) {
@@ -549,6 +582,8 @@ const ProvincialOfferCreatePage = () => {
         kind: 'error',
         title: 'Save failed',
         message:
+          result.errors[0] ||
+          result.message ||
           'Offer save failed. Please review the form and try again. If the problem persists, contact support.',
       })
       return false
@@ -594,19 +629,6 @@ const ProvincialOfferCreatePage = () => {
         <PageHeader
           title="Create provincial offer"
           subtitle="Enter offer details and save a new provincial offer."
-          statusPlacement="end"
-          status={
-            <dl
-              className="application-detail-header-metrics"
-              role="group"
-              aria-label="New offer state"
-            >
-              <div>
-                <dt>Offer number</dt>
-                <dd>New</dd>
-              </div>
-            </dl>
-          }
         />
       </Column>
 
@@ -643,8 +665,8 @@ const ProvincialOfferCreatePage = () => {
                 id="applicationNumber"
                 labelText="Application number"
                 value={form.applicationNumber}
-                invalid={!!fieldError('applicationNumber')}
-                invalidText={fieldError('applicationNumber')}
+                invalid={!!applicationNumberError}
+                invalidText={applicationNumberError}
                 onBlur={() => markFieldTouched('applicationNumber')}
                 onChange={(event) => {
                   markFormEdited()
@@ -691,7 +713,11 @@ const ProvincialOfferCreatePage = () => {
                 size="sm"
                 disabled={!form.applicationNumber.trim() || !form.packageNumber.trim()}
                 onClick={() => {
-                  const params = new URLSearchParams({ packageFilter: form.packageNumber.trim() })
+                  const params = new URLSearchParams({
+                    tab: 'items',
+                    packageNumber: form.packageNumber.trim(),
+                    section: 'scales',
+                  })
                   navigate(`/provincial/application/${form.applicationNumber.trim()}?${params}`)
                 }}
               >
@@ -989,7 +1015,12 @@ const ProvincialOfferCreatePage = () => {
                 type="button"
                 kind="primary"
                 onClick={() => void onSave(true)}
-                disabled={isSubmitting || isLoadingApplicationContext || scopedClientLookupPending}
+                disabled={
+                  isSubmitting ||
+                  isLoadingApplicationContext ||
+                  scopedClientLookupPending ||
+                  !!applicationValidationError
+                }
               >
                 Save
               </Button>

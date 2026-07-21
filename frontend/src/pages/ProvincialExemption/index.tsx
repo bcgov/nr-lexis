@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  Modal,
   Pagination,
   Table,
   TableBody,
@@ -19,7 +18,9 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import ExemptionApprovalEmailModal, {
   type ExemptionApprovalRecipient,
 } from '@/components/ExemptionApprovalEmailModal'
@@ -146,6 +147,16 @@ const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialExemptionSearchSortField[]
+
+const disabledApprovalSelectionDescription = (row: ProvincialExemptionSearchItem): string => {
+  if (row.isLocked) {
+    return 'This exemption is currently locked and cannot be approved.'
+  }
+  if (row.statusCode !== 'NEW') {
+    return 'Only new exemptions can be approved.'
+  }
+  return 'This exemption is not eligible for approval.'
+}
 
 const buildSearchParams = (
   filters: ProvincialExemptionSearchFilters,
@@ -830,14 +841,23 @@ const ProvincialExemptionPage = () => {
                 Clear Filters
               </Button>
               {canApproveExemption && (
-                <Button
-                  kind="secondary"
-                  size="md"
-                  onClick={onApproveSelectedClick}
+                <DisabledButtonTooltip
                   disabled={selectedRowsCount === 0 || approving}
+                  description={
+                    approving
+                      ? 'Wait for the approval request to finish.'
+                      : 'Select at least one exemption to approve.'
+                  }
                 >
-                  {approving ? 'Approving...' : 'Approve Selected Exemption'}
-                </Button>
+                  <Button
+                    kind="secondary"
+                    size="md"
+                    onClick={onApproveSelectedClick}
+                    disabled={selectedRowsCount === 0 || approving}
+                  >
+                    {approving ? 'Approving...' : 'Approve Selected Exemption'}
+                  </Button>
+                </DisabledButtonTooltip>
               )}
               {canCreateExemption && (
                 <Link className="cds--link" to="/provincial/exemption/create">
@@ -891,16 +911,21 @@ const ProvincialExemptionPage = () => {
                   <TableRow>
                     {canApproveExemption && (
                       <TableHeader>
-                        <Checkbox
-                          id="selectAllCurrentPageRows"
-                          hideLabel
-                          labelText="Select all rows on this page"
-                          checked={allSelectableRowsAreSelected}
+                        <DisabledButtonTooltip
                           disabled={selectableRows.length === 0}
-                          onChange={(_, payload) =>
-                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
-                          }
-                        />
+                          description="No eligible exemptions are available on this page."
+                        >
+                          <Checkbox
+                            id="selectAllCurrentPageRows"
+                            hideLabel
+                            labelText="Select all rows on this page"
+                            checked={allSelectableRowsAreSelected}
+                            disabled={selectableRows.length === 0}
+                            onChange={(_, payload) =>
+                              toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                            }
+                          />
+                        </DisabledButtonTooltip>
                       </TableHeader>
                     )}
                     {SORT_COLUMNS.map((column) => (
@@ -931,16 +956,21 @@ const ProvincialExemptionPage = () => {
                         {canApproveExemption && (
                           <TableCell>
                             <div className="provincial-exemption-search-row-action">
-                              <Checkbox
-                                id={`selectRow-${row.exemptionNumber}`}
-                                hideLabel
-                                labelText={`Select ${row.exemptionNumber}`}
-                                checked={Boolean(selectedRowsById[row.exemptionNumber])}
+                              <DisabledButtonTooltip
                                 disabled={!canSelectRow}
-                                onChange={(_, payload) =>
-                                  toggleRowSelection(row, Boolean(payload.checked))
-                                }
-                              />
+                                description={disabledApprovalSelectionDescription(row)}
+                              >
+                                <Checkbox
+                                  id={`selectRow-${row.exemptionNumber}`}
+                                  hideLabel
+                                  labelText={`Select ${row.exemptionNumber}`}
+                                  checked={Boolean(selectedRowsById[row.exemptionNumber])}
+                                  disabled={!canSelectRow}
+                                  onChange={(_, payload) =>
+                                    toggleRowSelection(row, Boolean(payload.checked))
+                                  }
+                                />
+                              </DisabledButtonTooltip>
                               {row.isLocked && <Tag type="gray">Locked</Tag>}
                             </div>
                           </TableCell>
@@ -998,21 +1028,18 @@ const ProvincialExemptionPage = () => {
       </Column>
 
       {approvalConfirmationOpen && (
-        <Modal
+        <ConfirmationModal
           open
-          danger
-          modalHeading="Approve selected exemptions"
-          primaryButtonText={approving ? 'Approving...' : 'Approve exemptions'}
-          secondaryButtonText="Cancel"
-          primaryButtonDisabled={approving || !approvalCertified}
-          onRequestClose={closeApprovalConfirmation}
-          onSecondarySubmit={closeApprovalConfirmation}
-          onRequestSubmit={() => void onConfirmApproval()}
+          title="Approve selected exemptions"
+          description={`You are about to approve the following ${
+            selectedRowsCount === 1 ? 'exemption' : 'exemptions'
+          }:`}
+          confirmLabel="Approve exemptions"
+          pendingLabel="Approving..."
+          confirmDisabled={approving || !approvalCertified}
+          onClose={closeApprovalConfirmation}
+          onConfirm={onConfirmApproval}
         >
-          <p>
-            You are about to approve the following{' '}
-            {selectedRowsCount === 1 ? 'exemption' : 'exemptions'}:
-          </p>
           <ul>
             {selectedExemptionNumbers.map((number) => (
               <li key={number}>{number}</li>
@@ -1034,7 +1061,7 @@ const ProvincialExemptionPage = () => {
             disabled={approving}
             onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
           />
-        </Modal>
+        </ConfirmationModal>
       )}
       {approvalEmailRecipients.length > 0 && (
         <ExemptionApprovalEmailModal

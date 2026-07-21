@@ -72,10 +72,10 @@ describe('Layout shell', () => {
   it('uses and persists public-safe defaults when no preferences exist', () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
-      'aria-checked',
-      'false',
-    )
+    const themeSwitch = screen.getByRole('switch', { name: 'Toggle dark mode' })
+    expect(themeSwitch).toHaveAttribute('aria-checked', 'false')
+    expect(document.querySelector('.csp-header-theme-toggle')).toHaveTextContent('')
+    expect(themeSwitch.querySelector('.csp-theme-switch__thumb svg')).toBeInTheDocument()
     expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'white')
     expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
     expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
@@ -273,7 +273,6 @@ describe('Layout shell', () => {
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
     expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Indian reserve')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Create\/edit permit/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Advertising List (PDF)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Advertising List (CSV)' })).not.toBeInTheDocument()
@@ -462,6 +461,21 @@ describe('Layout shell', () => {
     expect(screen.getByRole('button', { name: 'Expand side navigation' })).not.toHaveAttribute(
       'aria-expanded',
     )
+  })
+
+  it('dismisses the profile panel when clicking outside it', async () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    const profileToggle = screen.getByRole('button', { name: 'Open profile panel' })
+    await userEvent.click(profileToggle)
+
+    expect(profileToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('dialog', { name: 'Profile' })).toHaveClass('is-open')
+
+    await userEvent.click(screen.getByRole('heading', { name: 'Current page content' }))
+
+    expect(profileToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('dialog', { name: 'Profile' })).not.toHaveClass('is-open')
   })
 
   it('keeps the persisted desktop preference separate from the closed mobile drawer', async () => {

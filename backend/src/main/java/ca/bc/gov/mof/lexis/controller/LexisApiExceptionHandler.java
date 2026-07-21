@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
@@ -7,6 +8,8 @@ import ca.bc.gov.mof.lexis.service.coordination.InvalidRecordVersionException;
 import ca.bc.gov.mof.lexis.service.coordination.MissingRecordVersionException;
 import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
+import jakarta.servlet.http.HttpServletRequest;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
 import org.slf4j.Logger;
@@ -26,6 +29,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class LexisApiExceptionHandler {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisApiExceptionHandler.class);
+  private static final Logger FAILURE_DIAGNOSTIC_LOGGER =
+      LoggerFactory.getLogger("ca.bc.gov.mof.lexis.audit.failure");
   private static final String DATABASE_UNAVAILABLE_TITLE = "Service temporarily unavailable";
   private static final String DATABASE_UNAVAILABLE_DETAIL =
       "LEXIS could not complete the request. Please try again later.";
@@ -110,10 +115,12 @@ class LexisApiExceptionHandler {
   }
 
   @ExceptionHandler(DataAccessException.class)
-  ResponseEntity<ProblemDetail> handleDataAccessException(DataAccessException exception) {
+  ResponseEntity<ProblemDetail> handleDataAccessException(
+      DataAccessException exception, HttpServletRequest request) {
     LOGGER.error(
         "event=lexis_database operation=request outcome=unavailable failureType={}",
         exceptionType(exception));
+    logDataAccessDiagnostic(request, exception);
 
     ProblemDetail problem =
         ProblemDetail.forStatusAndDetail(
@@ -153,5 +160,54 @@ class LexisApiExceptionHandler {
         .header(HttpHeaders.RETRY_AFTER, "5")
         .contentType(MediaType.APPLICATION_PROBLEM_JSON)
         .body(problem);
+  }
+
+  private static void logDataAccessDiagnostic(
+      HttpServletRequest request, DataAccessException exception) {
+    if (!FAILURE_DIAGNOSTIC_LOGGER.isDebugEnabled()) {
+      return;
+    }
+
+    SQLException sqlException = findSqlException(exception);
+    Throwable rootCause = rootCause(exception);
+    FAILURE_DIAGNOSTIC_LOGGER.debug(
+        "event=lexis_api_failure operation=request outcome=database_unavailable method={} route={} "
+            + "failureType={} rootFailureType={} sqlState={} databaseErrorCode={}",
+        requestMethod(request),
+        requestRoute(request),
+        exceptionType(exception),
+        exceptionType(rootCause),
+        sqlException == null ? "-" : controlSafe(sqlException.getSQLState()),
+        sqlException == null ? "-" : sqlException.getErrorCode());
+  }
+
+  private static SQLException findSqlException(Throwable exception) {
+    for (Throwable current = exception;
+        current != null && current.getCause() != current;
+        current = current.getCause()) {
+      if (current instanceof SQLException sqlException) {
+        return sqlException;
+      }
+    }
+    return null;
+  }
+
+  private static Throwable rootCause(Throwable exception) {
+    Throwable current = exception;
+    while (current != null && current.getCause() != null && current.getCause() != current) {
+      current = current.getCause();
+    }
+    return current;
+  }
+
+  private static String requestMethod(HttpServletRequest request) {
+    return request == null ? "-" : controlSafe(request.getMethod());
+  }
+
+  private static String requestRoute(HttpServletRequest request) {
+    if (request == null || request.getRequestURI() == null) {
+      return "-";
+    }
+    return controlSafe(request.getRequestURI().replaceAll("/[^/]*\\d[^/]*(?=/|$)", "/:id"));
   }
 }

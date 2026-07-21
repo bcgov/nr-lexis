@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
@@ -70,6 +71,14 @@ public class PermitOracleService implements PermitService {
       return Optional.empty();
     }
     return repository.findByPermitNumber(permitNumber);
+  }
+
+  @Override
+  public Optional<PermitAccessDto> findAccessByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+    return repository.findAccessByPermitNumber(permitNumber);
   }
 
   @Override

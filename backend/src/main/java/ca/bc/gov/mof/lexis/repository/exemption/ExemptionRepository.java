@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.repository.exemption;
 
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
@@ -16,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.StringJoiner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
@@ -25,6 +28,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 @Profile("oracle")
 public class ExemptionRepository extends OracleRepositorySupport {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionRepository.class);
 
   private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
@@ -271,30 +276,54 @@ public class ExemptionRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleFailClosed(
-        FIND_EXEMPTION_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs ->
-            new ExemptionDetailDto(
-                getString(rs, "EXEMPTION_NUMBER"),
-                getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
-                getString(rs, "TYPE_DESCRIPTION"),
-                getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"),
-                getString(rs, "STATUS_DESCRIPTION"),
-                getString(rs, "OWNER_CLIENT_NUMBER"),
-                getString(rs, "AGENT_CLIENT_NUMBER"),
-                getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "APPLICATION_STATUS"),
-                getLocalDate(rs, "APPROVAL_DATE"),
-                getLocalDate(rs, "EXPIRY_DATE"),
-                coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d),
-                0.0d,
-                coalesce(getDouble(rs, "VOLUME_REMAINING"), 0.0d),
-                getString(rs, "OTHER_CONDITIONS"),
-                "B".equalsIgnoreCase(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
-                List.of(),
-                List.of()));
+    long startedAtNanos = System.nanoTime();
+    LOGGER.info(
+        "event=lexis_exemption_detail_oracle operation=find_exemption_by_number outcome=started exemptionNumber={}",
+        normalized);
+    try {
+      Optional<ExemptionDetailDto> detail =
+          queryCursorSingleFailClosed(
+              FIND_EXEMPTION_BY_NUMBER,
+              cs -> cs.setString(1, normalized),
+              2,
+              rs ->
+                  new ExemptionDetailDto(
+                      getString(rs, "EXEMPTION_NUMBER"),
+                      getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
+                      getString(rs, "TYPE_DESCRIPTION"),
+                      getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"),
+                      getString(rs, "STATUS_DESCRIPTION"),
+                      getString(rs, "OWNER_CLIENT_NUMBER"),
+                      getString(rs, "AGENT_CLIENT_NUMBER"),
+                      getLong(rs, "APPLICATION_NUMBER"),
+                      getString(rs, "APPLICATION_STATUS"),
+                      getLocalDate(rs, "APPROVAL_DATE"),
+                      getLocalDate(rs, "EXPIRY_DATE"),
+                      coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d),
+                      0.0d,
+                      coalesce(getDouble(rs, "VOLUME_REMAINING"), 0.0d),
+                      getString(rs, "OTHER_CONDITIONS"),
+                      "B".equalsIgnoreCase(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
+                      List.of(),
+                      List.of()));
+      LOGGER.info(
+          "event=lexis_exemption_detail_oracle operation=find_exemption_by_number outcome={} exemptionNumber={} durationMs={}",
+          detail.isPresent() ? "found" : "not_found",
+          normalized,
+          elapsedMillis(startedAtNanos));
+      return detail;
+    } catch (RuntimeException exception) {
+      LOGGER.warn(
+          "event=lexis_exemption_detail_oracle operation=find_exemption_by_number outcome=failed exemptionNumber={} durationMs={} failureType={}",
+          normalized,
+          elapsedMillis(startedAtNanos),
+          exceptionType(exception));
+      throw exception;
+    }
+  }
+
+  private static long elapsedMillis(long startedAtNanos) {
+    return Math.max(0L, (System.nanoTime() - startedAtNanos) / 1_000_000L);
   }
 
 }

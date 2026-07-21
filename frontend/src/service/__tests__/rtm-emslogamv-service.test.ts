@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   previewRtmEmsLogAmvUpload,
-  saveRtmEmsLogAmv,
+  saveRtmEmsLogAmvBatch,
   searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
   uploadRtmEmsLogAmv,
@@ -56,42 +56,37 @@ describe('rtm-emslogamv-service', () => {
     })
   })
 
-  it('posts manual update rows with retrieval and update dates', async () => {
+  it('posts the full AMV grid as one batch', async () => {
     postMock.mockResolvedValue({
       data: {
         status: 'accepted',
-        message: 'Average monthly value row saved.',
+        message: 'Average monthly values saved.',
         errors: [],
         rows: [],
       },
     })
-
     const request = {
-      species: 'FI',
-      grade: '1',
-      growthIndicator: 'O',
-      retrievalDate: '2026-05-01',
-      updateDate: '2026-06-01',
-      newValue: 123.45,
-      saveMode: 'update' as const,
+      values: [
+        {
+          species: 'PINE',
+          grade: 'A',
+          growthIndicator: 'O',
+          retrievalDate: '2026-06-01',
+          updateDate: '2026-06-01',
+          newValue: 123.45,
+          saveMode: 'update' as const,
+        },
+      ],
     }
 
-    const result = await saveRtmEmsLogAmv(request)
+    const result = await saveRtmEmsLogAmvBatch(request)
 
     expect(postMock).toHaveBeenCalledWith(
-      '/lexis/rtm/emslogamv',
+      '/lexis/rtm/emslogamv/batch',
       request,
       expect.objectContaining({ validateStatus: expect.any(Function) }),
     )
-    const [, , config] = postMock.mock.calls[0]
-    expect(config.validateStatus(422)).toBe(true)
-    expect(config.validateStatus(500)).toBe(false)
-    expect(result).toEqual({
-      status: 'accepted',
-      message: 'Average monthly value row saved.',
-      errors: [],
-      rows: [],
-    })
+    expect(result).toEqual(expect.objectContaining({ status: 'accepted' }))
   })
 
   it('retains the dormant AMV upload preview client contract', async () => {

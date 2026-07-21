@@ -43,6 +43,7 @@ describe('admin-schedule-service', () => {
           teacMeetingDate: '2026-07-15',
           applicationCount: 2,
           mutable: false,
+          provincialApplicationCount: 0,
         },
       ],
     })
@@ -75,6 +76,7 @@ describe('admin-schedule-service', () => {
         teacMeetingDate: '2026-07-15',
         applicationCount: 2,
         mutable: false,
+        provincialApplicationCount: 0,
       },
     ])
   })

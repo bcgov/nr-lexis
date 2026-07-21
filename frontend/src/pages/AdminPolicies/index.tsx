@@ -123,7 +123,7 @@ const SCHEDULE_SORT_COLUMNS: Array<{ id: ExportScheduleSortField; label: string 
   { id: 'offerEndDate', label: 'Offer end' },
   { id: 'offerWithdrawalDate', label: 'Offer withdrawal' },
   { id: 'teacMeetingDate', label: 'TEAC meeting' },
-  { id: 'applicationCount', label: 'Applications' },
+  { id: 'applicationCount', label: 'Provincial applications' },
 ]
 
 const FEE_POLICY_SORT_COLUMNS: Array<{ id: FeePolicySortField; label: string }> = [
@@ -137,10 +137,9 @@ const FIL_POLICY_SORT_COLUMNS: Array<{ id: FilPolicySortField; label: string }> 
   { id: 'fil_percent', label: 'Fee in lieu %' },
 ]
 
-const applicationSearchPathForAdvertisingDate = (advertisingDate: string): string => {
+const applicationSearchPathForExportSchedule = (exportScheduleId: string): string => {
   const searchParams = new URLSearchParams({
-    listingFromDate: advertisingDate,
-    listingToDate: advertisingDate,
+    exportScheduleId,
   })
   return `/provincial/application?${searchParams.toString()}`
 }
@@ -210,6 +209,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       : area === 'fil'
         ? 'Manage fee-in-lieu percentages and effective dates.'
         : 'Manage advertising, receipt, offer, and TEAC schedule dates.'
+  const editorTitle = area === 'schedule' ? 'Schedule details' : 'Policy details'
   const loadingDescription =
     area === 'schedule'
       ? 'Loading export schedules...'
@@ -323,6 +323,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setFeeOrgUnitNo('')
     setFeePolicyPercentage('')
     setEditingFeePolicyId(null)
+    setTouchedFields({})
     setShowFeeValidationErrors(false)
   }
 
@@ -330,6 +331,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setFilEffectiveDate('')
     setFilPolicyPercentage('')
     setEditingFilPolicyId(null)
+    setTouchedFields({})
     setShowFilValidationErrors(false)
   }
 
@@ -341,6 +343,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setScheduleOfferWithdrawalDate('')
     setScheduleTeacMeetingDate('')
     setEditingScheduleId(null)
+    setTouchedFields({})
     setShowScheduleValidationErrors(false)
   }
 
@@ -796,7 +799,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
             <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">Fee policy administration</h2>
+              <h2 className="dashboard-title">{editorTitle}</h2>
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="feeEffectiveDate"
@@ -961,7 +964,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
             <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">Fee in lieu percent policy administration</h2>
+              <h2 className="dashboard-title">{editorTitle}</h2>
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="filEffectiveDate"
@@ -1080,7 +1083,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
             <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">Export schedule administration</h2>
+              <h2 className="dashboard-title">{editorTitle}</h2>
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="scheduleAdvertisingDate"
@@ -1194,13 +1197,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                         <TableCell>
                           {canSearchApplications ? (
                             <Link
-                              to={applicationSearchPathForAdvertisingDate(row.advertisingDate)}
-                              aria-label={`View ${row.applicationCount} applications advertised on ${row.advertisingDate}`}
+                              to={applicationSearchPathForExportSchedule(row.exportScheduleId)}
+                              aria-label={`View ${row.provincialApplicationCount ?? row.applicationCount} provincial applications assigned to export schedule ${row.exportScheduleId}`}
                             >
-                              {row.applicationCount}
+                              {row.provincialApplicationCount ?? row.applicationCount}
                             </Link>
                           ) : (
-                            row.applicationCount
+                            (row.provincialApplicationCount ?? row.applicationCount)
                           )}
                         </TableCell>
                         <TableCell>

@@ -129,14 +129,62 @@ describe('Provincial Application Search Actions', () => {
       screen.getByRole('link', { name: 'Add Application' }).closest('.legacy-search-actions'),
     ).toBeNull()
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
-    expect(createExemptionButton).toBeEnabled()
+    const ineligibleCheckbox = screen.getByRole('checkbox', { name: 'Select 654' })
+    const ineligibleCheckboxTooltipTrigger = ineligibleCheckbox.closest(
+      '.disabled-button-tooltip',
+    ) as HTMLElement
+    expect(ineligibleCheckboxTooltipTrigger).toBeTruthy()
 
-    await userEvent.click(createExemptionButton)
+    await userEvent.hover(ineligibleCheckboxTooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This application already has an exemption.',
+    )
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
+    expect(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).toBeEnabled()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    )
 
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
       state: {
         selectedApplicationNumbers: ['321'],
+        applicantClientNumber: '11111111',
+        ownerClientNumber: '22222222',
+      },
+    })
+  })
+
+  it('passes every selected eligible application to exemption create', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: searchRowsWithMixedEligibility.map((row) => ({
+        ...row,
+        allowCreateExemption: true,
+      })),
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 2,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+    await screen.findByText('321')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 654' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    )
+
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
+      state: {
+        selectedApplicationNumbers: ['321', '654'],
         applicantClientNumber: '11111111',
         ownerClientNumber: '22222222',
       },
@@ -157,6 +205,42 @@ describe('Provincial Application Search Actions', () => {
     expect(
       screen.getByText('Options unavailable').closest('[role="status"]')?.querySelector('button'),
     ).toBeNull()
+  })
+
+  it('explains why the select-all checkbox is disabled when this page has no eligible rows', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[1],
+          allowCreateExemption: false,
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+    await screen.findByText('654')
+
+    const selectAllCheckbox = screen.getByRole('checkbox', {
+      name: 'Select all rows on this page',
+    })
+    expect(selectAllCheckbox).toBeDisabled()
+
+    const selectAllTooltipTrigger = selectAllCheckbox.closest(
+      '.disabled-button-tooltip',
+    ) as HTMLElement
+    expect(selectAllTooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(selectAllTooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'No eligible applications are available on this page.',
+    )
   })
 
   it('renders application search filters in the legacy order', async () => {
@@ -350,17 +434,17 @@ describe('Provincial Application Search Actions', () => {
     renderPage()
     await screen.findByText('321')
 
-    const createExemptionButton = screen.getByRole('button', {
-      name: 'Create exemption for Selected Applications',
-    })
-
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
-    expect(createExemptionButton).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).toBeEnabled()
 
     await userEvent.type(screen.getByLabelText('Application number'), '9')
 
     await waitFor(() => {
-      expect(createExemptionButton).toBeDisabled()
+      expect(
+        screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      ).toBeDisabled()
       expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({
@@ -386,15 +470,32 @@ describe('Provincial Application Search Actions', () => {
     )
   })
 
-  it('auto-searches an advertising date supplied by the export schedule link', async () => {
-    renderPage('/provincial/application?listingFromDate=2026-07-15&listingToDate=2026-07-15')
+  it('auto-searches applications assigned by the export schedule link', async () => {
+    renderPage('/provincial/application?exportScheduleId=1002')
     await screen.findByText('321')
+
+    expect(screen.getByText('Export schedule filter applied')).toBeInTheDocument()
+    expect(
+      screen.getByText('Showing applications assigned to export schedule 1002.'),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /close notification/i }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            exportScheduleId: '',
+          }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
 
     expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
-          listingFromDate: '2026-07-15',
-          listingToDate: '2026-07-15',
+          exportScheduleId: '1002',
         }),
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),

@@ -290,11 +290,6 @@ const ProvincialExemptionCreatePage = () => {
     () => mapSelectedOptionsById(form.regionNumbers, regionOptions, (id) => `Region ${id}`),
     [form.regionNumbers, regionOptions],
   )
-  const statusLabel =
-    exemptionStatuses.find((option) => option.value === form.exemptionStatusCode)?.label ||
-    form.exemptionStatusCode ||
-    'New'
-
   useEffect(() => {
     if (createdRecordPath) {
       navigate(createdRecordPath)
@@ -595,27 +590,7 @@ const ProvincialExemptionCreatePage = () => {
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-exemption-create-page">
       <Column sm={4} md={8} lg={16}>
-        <PageHeader
-          title="Create exemption"
-          subtitle={pageSubtitle}
-          statusPlacement="end"
-          status={
-            <dl
-              className="application-detail-header-metrics"
-              role="group"
-              aria-label="New exemption state"
-            >
-              <div>
-                <dt>Exemption number</dt>
-                <dd>{form.exemptionNumber || 'New'}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{statusLabel}</dd>
-              </div>
-            </dl>
-          }
-        />
+        <PageHeader title="Create exemption" subtitle={pageSubtitle} />
       </Column>
 
       {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
@@ -688,6 +663,7 @@ const ProvincialExemptionCreatePage = () => {
               {!blanketOic &&
                 (prefillState ? (
                   <TextArea
+                    className="selected-application-numbers"
                     id="selectedApplicationNumbers"
                     labelText="Selected application numbers"
                     value={prefillState.selectedApplicationNumbers.join('\n')}

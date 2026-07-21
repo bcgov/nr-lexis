@@ -6,7 +6,6 @@ export type PageHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'title'> 
   title: ReactNode
   subtitle?: ReactNode
   status?: ReactNode
-  statusPlacement?: 'inline' | 'end'
   actions?: ReactNode
   headingId?: string
   actionsLabel?: string
@@ -22,7 +21,6 @@ const PageHeader = ({
   title,
   subtitle,
   status,
-  statusPlacement = 'inline',
   actions,
   headingId,
   actionsLabel = 'Page actions',
@@ -47,13 +45,7 @@ const PageHeader = ({
           <h1 id={resolvedHeadingId} className="lexis-page-header__title">
             {title}
           </h1>
-          {status ? (
-            <div
-              className={`lexis-page-header__status lexis-page-header__status--${statusPlacement}`}
-            >
-              {status}
-            </div>
-          ) : null}
+          {status ? <div className="lexis-page-header__status">{status}</div> : null}
         </div>
 
         {actions ? (

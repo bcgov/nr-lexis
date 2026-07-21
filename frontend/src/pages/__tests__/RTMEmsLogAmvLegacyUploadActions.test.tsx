@@ -1,9 +1,9 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import LegacyRtmEmsLogAmvUploadWorkflow from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
-import { previewRtmEmsLogAmvUpload } from '@/service/rtm-emslogamv-service'
+import { previewRtmEmsLogAmvUpload, uploadRtmEmsLogAmv } from '@/service/rtm-emslogamv-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -17,6 +17,7 @@ vi.mock('@/service/rtm-emslogamv-service', () => ({
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedPreviewUpload = vi.mocked(previewRtmEmsLogAmvUpload)
+const mockedUpload = vi.mocked(uploadRtmEmsLogAmv)
 
 describe('legacy RTM EMS Log AMV upload actions', () => {
   beforeEach(() => {
@@ -43,13 +44,13 @@ describe('legacy RTM EMS Log AMV upload actions', () => {
     expect(mockedPreviewUpload).not.toHaveBeenCalled()
   })
 
-  it('reviews physical pine species and legacy W and BLANK grades without collapsing keys', async () => {
+  it('hides legacy W and BLANK review rows while preserving the original workbook submission', async () => {
     mockedPreviewUpload.mockResolvedValue({
       status: 'accepted',
       fileName: 'rtm-values.xlsx',
       fileSize: 1,
       message: 'Spreadsheet is valid.',
-      rowCount: 4,
+      rowCount: 5,
       retrievalDate: '2026-06-01',
       updateDate: '2026-07-01',
       errors: [],
@@ -57,7 +58,7 @@ describe('legacy RTM EMS Log AMV upload actions', () => {
       rows: [
         {
           species: 'WH',
-          grade: 'W',
+          grade: 'A',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
@@ -67,7 +68,7 @@ describe('legacy RTM EMS Log AMV upload actions', () => {
         },
         {
           species: 'LO',
-          grade: 'W',
+          grade: 'A',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
@@ -77,7 +78,7 @@ describe('legacy RTM EMS Log AMV upload actions', () => {
         },
         {
           species: 'YE',
-          grade: 'W',
+          grade: 'A',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
@@ -87,15 +88,34 @@ describe('legacy RTM EMS Log AMV upload actions', () => {
         },
         {
           species: 'BA',
-          grade: ' ',
-          growthIndicator: 'S',
+          grade: 'W',
+          growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
           currentValue: null,
           newValue: 4,
           returnCode: '0',
         },
+        {
+          species: 'BA',
+          grade: ' ',
+          growthIndicator: 'S',
+          retrievalDate: '2026-06-01',
+          updateDate: '2026-07-01',
+          currentValue: null,
+          newValue: 5,
+          returnCode: '0',
+        },
       ],
+    })
+    mockedUpload.mockResolvedValue({
+      status: 'accepted',
+      message: 'Spreadsheet uploaded.',
+      attemptedRowCount: 5,
+      uploadedRowCount: 5,
+      errors: [],
+      warnings: [],
+      rows: [],
     })
     render(<LegacyRtmEmsLogAmvUploadWorkflow />)
     const workbook = new File([new Uint8Array([1])], 'rtm-values.xlsx', {
@@ -114,7 +134,13 @@ describe('legacy RTM EMS Log AMV upload actions', () => {
     expect(within(table).getByRole('columnheader', { name: 'Lodgepole pine' })).toBeVisible()
     expect(within(table).getByRole('columnheader', { name: 'Yellow pine' })).toBeVisible()
     expect(within(table).queryByRole('columnheader', { name: 'Pine' })).not.toBeInTheDocument()
-    expect(within(table).getByRole('row', { name: /W.*10\.00.*20\.00.*30\.00/ })).toBeVisible()
-    expect(within(table).getByRole('row', { name: /BLANK.*4\.00/ })).toBeVisible()
+    expect(within(table).getByRole('row', { name: /A.*10\.00.*20\.00.*30\.00/ })).toBeVisible()
+    expect(within(table).queryByRole('row', { name: /W.*4\.00/ })).not.toBeInTheDocument()
+    expect(within(table).queryByRole('row', { name: /BLANK.*5\.00/ })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    await waitFor(() => {
+      expect(mockedUpload).toHaveBeenCalledWith({ file: workbook })
+    })
   })
 })

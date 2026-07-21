@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriUtils;
@@ -17,6 +19,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 @Profile("oracle")
 public class OptimisticRecordVersionInterceptor implements HandlerInterceptor {
+
+  private static final Logger LOGGER =
+      LoggerFactory.getLogger(OptimisticRecordVersionInterceptor.class);
 
   static final String RECORD_VERSION_ATTRIBUTE =
       OptimisticRecordVersionInterceptor.class.getName() + ".recordVersion";
@@ -27,7 +32,6 @@ public class OptimisticRecordVersionInterceptor implements HandlerInterceptor {
       Pattern.compile("^/api/lexis/purchase-offers/(\\d+)$");
   private static final Pattern EXEMPTION_PATH =
       Pattern.compile("^/api/lexis/exemptions/([^/]+)$");
-  private static final Pattern PERMIT_PATH = Pattern.compile("^/api/lexis/permits/(\\d+)$");
 
   private final OracleOptimisticRecordVersionService versionService;
 
@@ -41,10 +45,43 @@ public class OptimisticRecordVersionInterceptor implements HandlerInterceptor {
     if (!"GET".equalsIgnoreCase(request.getMethod())) {
       return true;
     }
-    target(request)
-        .flatMap(target -> versionService.find(target.recordType(), target.recordId()))
-        .ifPresent(version -> request.setAttribute(RECORD_VERSION_ATTRIBUTE, version));
+    target(request).ifPresent(target -> preloadVersion(request, target));
     return true;
+  }
+
+  private void preloadVersion(HttpServletRequest request, RecordTarget target) {
+    boolean permitEditContext = target.recordType() == OptimisticRecordType.PERMIT;
+    long startedAtNanos = System.nanoTime();
+    if (permitEditContext) {
+      LOGGER.info(
+          "event=lexis_record_version operation=permit_edit_context outcome=started permitNumber={}",
+          target.recordId());
+    }
+    try {
+      Optional<OptimisticRecordVersion> version =
+          versionService.find(target.recordType(), target.recordId());
+      version.ifPresent(value -> request.setAttribute(RECORD_VERSION_ATTRIBUTE, value));
+      if (permitEditContext) {
+        LOGGER.info(
+            "event=lexis_record_version operation=permit_edit_context outcome={} permitNumber={} durationMs={}",
+            version.isPresent() ? "found" : "not_found",
+            target.recordId(),
+            elapsedMillis(startedAtNanos));
+      }
+    } catch (RuntimeException exception) {
+      if (permitEditContext) {
+        LOGGER.warn(
+            "event=lexis_record_version operation=permit_edit_context outcome=failed permitNumber={} durationMs={} failureType={}",
+            target.recordId(),
+            elapsedMillis(startedAtNanos),
+            exception.getClass().getSimpleName());
+      }
+      throw exception;
+    }
+  }
+
+  private static long elapsedMillis(long startedAtNanos) {
+    return Math.max(0L, (System.nanoTime() - startedAtNanos) / 1_000_000L);
   }
 
   private Optional<RecordTarget> target(HttpServletRequest request) {
@@ -64,10 +101,6 @@ public class OptimisticRecordVersionInterceptor implements HandlerInterceptor {
           new RecordTarget(
               OptimisticRecordType.EXEMPTION,
               UriUtils.decode(exemption.group(1), StandardCharsets.UTF_8)));
-    }
-    Matcher permit = PERMIT_PATH.matcher(path);
-    if (permit.matches()) {
-      return Optional.of(new RecordTarget(OptimisticRecordType.PERMIT, permit.group(1)));
     }
     if ("/api/lexis/rpc/exemption-details/edit-context".equals(path)) {
       return parameterTarget(request, "exemptionNumber", OptimisticRecordType.EXEMPTION);

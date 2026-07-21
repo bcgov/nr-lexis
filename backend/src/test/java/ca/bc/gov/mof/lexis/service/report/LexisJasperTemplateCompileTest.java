@@ -141,6 +141,7 @@ class LexisJasperTemplateCompileTest {
         .contains("\"I\".equalsIgnoreCase($F{COAST_INTERIOR_IND})")
         .contains("$F{RECEIPT_NUMBER} == null ? \"\" : $F{RECEIPT_NUMBER}")
         .contains("$P{P_INVOICE_NUMBER} == null ? \"\" : $P{P_INVOICE_NUMBER}")
+        .doesNotContain("fontName=\"Calibri\"")
         .doesNotContain("$F{COAST_INTERIOR_IND}.equalsIgnoreCase(\"I\")");
   }
 

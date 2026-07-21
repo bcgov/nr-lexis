@@ -13,7 +13,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
-import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialPermitDetail,
+  fetchProvincialPermitExemptionContext,
+} from '@/service/lexis-detail-service'
 import {
   addApplicationsToPermit,
   addBlanketOicPackage,
@@ -22,7 +25,9 @@ import {
   deleteBlanketOicScale,
   fetchBlanketOicPackageEditContext,
   fetchAvailablePermitApplications,
-  fetchProvincialPermitDetailTabs,
+  fetchProvincialPermitGbmsEvents,
+  fetchProvincialPermitDetailCoreTabs,
+  fetchProvincialPermitFees,
   removeApplicationFromPermit,
   updateBlanketOicPackage,
   updatePermitScaleAttachment,
@@ -56,6 +61,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialPermitDetail: vi.fn(),
+  fetchProvincialPermitExemptionContext: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
@@ -75,7 +81,9 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
   deleteBlanketOicScale: vi.fn(),
   fetchBlanketOicPackageEditContext: vi.fn(),
   fetchAvailablePermitApplications: vi.fn(),
-  fetchProvincialPermitDetailTabs: vi.fn(),
+  fetchProvincialPermitGbmsEvents: vi.fn(),
+  fetchProvincialPermitDetailCoreTabs: vi.fn(),
+  fetchProvincialPermitFees: vi.fn(),
   removeApplicationFromPermit: vi.fn(),
   updateBlanketOicPackage: vi.fn(),
   updatePermitScaleAttachment: vi.fn(),
@@ -144,7 +152,10 @@ vi.setConfig({ testTimeout: 20000 })
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
-const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
+const mockedFetchProvincialPermitExemptionContext = vi.mocked(fetchProvincialPermitExemptionContext)
+const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailCoreTabs)
+const mockedFetchProvincialPermitGbmsEvents = vi.mocked(fetchProvincialPermitGbmsEvents)
+const mockedFetchProvincialPermitFees = vi.mocked(fetchProvincialPermitFees)
 const mockedUpdatePermitScaleAttachment = vi.mocked(updatePermitScaleAttachment)
 const mockedFetchAvailablePermitApplications = vi.mocked(fetchAvailablePermitApplications)
 const mockedAddApplicationsToPermit = vi.mocked(addApplicationsToPermit)
@@ -224,6 +235,17 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   boicItems: [],
 }
 
+const gbmsHistoryRow = {
+  id: 'GBMS-1',
+  gbmsInvoiceNumber: 'A006654',
+  cancelledByInvoice: 'A007321',
+  replacedByInvoice: 'A007322',
+  invoiceAmount: '1939.50',
+  printedDate: '2020-05-06',
+  entryDate: '2020-05-06',
+  updateDate: '2022-02-15',
+}
+
 const selectPermitDetailTab = async (name: string) => {
   const tab = await screen.findByRole('tab', { name })
   if (tab.getAttribute('aria-selected') !== 'true') {
@@ -269,6 +291,12 @@ const configureEditableBlanketOicPackage = () => {
     ...tabsResult,
     packages: [editableBlanketOicPackage],
   })
+  mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+    approvedExemptionVolume: 250,
+    exemptionVolumeRemaining: 130,
+    exemptionTypeDescription: 'Blanket OIC',
+    blanketOic: true,
+  })
 }
 
 const renderPermitDetails = () =>
@@ -308,7 +336,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: permitDetail.approvedExemptionVolume,
+      exemptionVolumeRemaining: permitDetail.exemptionVolumeRemaining,
+      exemptionTypeDescription: permitDetail.exemptionTypeDescription,
+      blanketOic: permitDetail.blanketOic,
+    })
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([])
+    mockedFetchProvincialPermitFees.mockResolvedValue([])
     mockedFetchProvincialPermitOptions.mockResolvedValue({
       permitStatuses: [
         { value: 'ACT', label: 'Active' },
@@ -518,19 +554,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it('renders permit details, client contacts, and invoice history', async () => {
     configureActivePermit()
-    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
-      ...tabsResult,
-      gbmsEvents: [
-        {
-          id: 'GBMS-1',
-          eventDate: '2026-05-02',
-          eventType: 'Invoice created',
-          status: 'ACT',
-          reference: 'GBMS-1001',
-          notes: 'Invoice accepted',
-        },
-      ],
-    })
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([gbmsHistoryRow])
     mockedFetchPermitInvoices.mockResolvedValue({
       rows: [
         {
@@ -590,15 +614,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(pageHeader as HTMLElement).queryByRole('button', { name: 'Print permit' }),
     ).not.toBeInTheDocument()
-    const permitHighlights = screen.getByLabelText('Permit highlights')
-    expect(within(permitHighlights).queryByText('Status')).not.toBeInTheDocument()
-    expect(within(permitHighlights).queryByText('Completed')).not.toBeInTheDocument()
-    expect(within(permitHighlights).getByText('Application')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('111')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('Exemption')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('EX-9')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('Documents')).toBeInTheDocument()
-    expect(within(permitHighlights).getByText('0')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Permit highlights')).not.toBeInTheDocument()
     const permitSummaryTile = screen
       .getByRole('heading', { name: 'Permit summary' })
       .closest('.cds--tile')
@@ -636,26 +652,258 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(permitFinancialTile as HTMLElement).queryByText('Permit Request Volume (m³)'),
     ).not.toBeInTheDocument()
+    expect(mockedFetchApplicationClientData).not.toHaveBeenCalled()
     await selectPermitDetailTab('Owner')
     expect(await screen.findByText('Owner Co')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
     await selectPermitDetailTab('Agent')
     expect(await screen.findByText('Agent Co')).toBeInTheDocument()
     expect(screen.getByText('agent@example.test')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'false')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '01')
     await selectPermitDetailTab('GBMS')
     expect(
       await screen.findByRole('heading', {
-        name: 'General Billing Management System events',
+        name: 'GBMS invoice history',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: 'GBMS-1001' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'A006654' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'A007321' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'A007322' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '1939.50' })).toBeInTheDocument()
+    expect(screen.getAllByRole('cell', { name: '2020-05-06' })).toHaveLength(2)
+    expect(screen.getByRole('cell', { name: '2022-02-15' })).toBeInTheDocument()
     await selectPermitDetailTab('Invoices')
     expect(await screen.findByText('INV-001')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
   }, 15000)
+
+  it('defers fee, document, and invoice data until their tabs are opened', async () => {
+    let resolveFees:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitFees>>) => void)
+      | undefined
+    mockedFetchProvincialPermitFees.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitFees>>>((resolve) => {
+          resolveFees = resolve
+        }),
+    )
+    renderPermitDetails()
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(mockedFetchProvincialPermitFees).not.toHaveBeenCalled()
+    expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
+    expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
+
+    await selectPermitDetailTab('Fees')
+    expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(1)
+    expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalledWith({
+      permitNumber: '777',
+      receiptNumber: 'R-1',
+      blanketOic: false,
+    })
+    expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('Loading…')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
+    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Loading…')
+    await act(async () => {
+      resolveFees?.([])
+    })
+    expect(
+      await screen.findByRole('heading', { name: 'No fee details available', level: 3 }),
+    ).toBeInTheDocument()
+    expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(1)
+
+    await selectPermitDetailTab('Items')
+    await selectPermitDetailTab('Fees')
+    expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(1)
+
+    await selectPermitDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { name: 'No permit documents available', level: 3 }),
+    ).toBeInTheDocument()
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(1)
+    await selectPermitDetailTab('Permit')
+    await selectPermitDetailTab('Documents')
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(1)
+
+    await selectPermitDetailTab('Invoices')
+    expect(
+      await screen.findByRole('heading', { name: 'No invoices available', level: 3 }),
+    ).toBeInTheDocument()
+    expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
+    await selectPermitDetailTab('Permit')
+    await selectPermitDetailTab('Invoices')
+    expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the permit detail while core tables continue loading', async () => {
+    configureActivePermit()
+    let resolveFeeContext:
+      | ((value: Awaited<ReturnType<typeof fetchPermitFeeOverrideContext>>) => void)
+      | undefined
+    let resolveTabs:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>) => void)
+      | undefined
+    let resolveGbms:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitGbmsEvents>>) => void)
+      | undefined
+    mockedFetchPermitFeeOverrideContext.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchPermitFeeOverrideContext>>>((resolve) => {
+          resolveFeeContext = resolve
+        }),
+    )
+    mockedFetchProvincialPermitDetailTabs.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>>((resolve) => {
+          resolveTabs = resolve
+        }),
+    )
+    mockedFetchProvincialPermitGbmsEvents.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitGbmsEvents>>>((resolve) => {
+          resolveGbms = resolve
+        }),
+    )
+
+    renderPermitDetails()
+
+    await waitFor(() => {
+      expect(mockedFetchPermitFeeOverrideContext).toHaveBeenCalledWith('777')
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
+        permitNumber: '777',
+        receiptNumber: 'R-1',
+        blanketOic: false,
+      })
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(screen.queryByText('Loading provincial permit detail...')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading associated permit applications...')).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
+      ),
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveTabs?.(tabsResult)
+    })
+
+    await waitFor(() => expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveGbms?.([gbmsHistoryRow])
+    })
+    expect(await screen.findByRole('tab', { name: 'GBMS' })).toBeInTheDocument()
+
+    await act(async () => {
+      resolveFeeContext?.({
+        overrideEnabled: false,
+        overrideFee: '',
+        overrideComment: '',
+        locked: false,
+        lockMessage: '',
+      })
+    })
+  })
+
+  it('reports an unavailable GBMS history instead of showing an empty result', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitGbmsEvents.mockRejectedValueOnce(new Error('gbms unavailable'))
+
+    renderPermitDetails()
+
+    expect(
+      await screen.findByText('GBMS invoice history could not be loaded. Please try again later.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
+  })
+
+  it('loads GBMS history when the permit has no receipt number', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({ ...permitDetail, receiptNumber: null })
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([gbmsHistoryRow])
+
+    renderPermitDetails()
+
+    await waitFor(() =>
+      expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalledWith({
+        permitNumber: '777',
+        receiptNumber: null,
+        blanketOic: false,
+      }),
+    )
+    await selectPermitDetailTab('GBMS')
+    expect(await screen.findByRole('cell', { name: 'A006654' })).toBeInTheDocument()
+  })
+
+  it('shows the base permit detail while exemption context continues loading', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      approvedExemptionVolume: null,
+      exemptionVolumeRemaining: null,
+      exemptionTypeDescription: null,
+      blanketOic: false,
+    })
+    let resolveExemptionContext:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitExemptionContext>>) => void)
+      | undefined
+    mockedFetchProvincialPermitExemptionContext.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitExemptionContext>>>(
+          (resolve) => {
+            resolveExemptionContext = resolve
+          },
+        ),
+    )
+
+    renderPermitDetails()
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(screen.queryByText('Loading provincial permit detail...')).not.toBeInTheDocument()
+    expect(mockedFetchProvincialPermitExemptionContext).toHaveBeenCalledWith('EX-9')
+    expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveExemptionContext?.({
+        approvedExemptionVolume: 250,
+        exemptionVolumeRemaining: 130,
+        exemptionTypeDescription: 'Standard exemption',
+        blanketOic: false,
+      })
+    })
+
+    await waitFor(() =>
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
+        permitNumber: '777',
+        receiptNumber: 'R-1',
+        blanketOic: false,
+      }),
+    )
+  })
+
+  it('shows unavailable fee summaries when the deferred fee request fails', async () => {
+    mockedFetchProvincialPermitFees.mockRejectedValue(new Error('fees unavailable'))
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Fee details unavailable' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('Unavailable')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Unavailable')
+    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Unavailable')
+  })
 
   it('shows legacy package metadata on the items tab', async () => {
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
@@ -775,6 +1023,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Fees')
+    expect(
+      await screen.findByRole('heading', { name: 'No fee details available', level: 3 }),
+    ).toBeInTheDocument()
+    expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(1)
+
     await selectPermitDetailTab('Items')
     const includeScale = await screen.findByRole('checkbox', {
       name: 'Include scale SCALE-2 in permit',
@@ -789,6 +1043,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         attachInd: true,
       })
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+      expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('Scale detail was added to the permit.')).toBeInTheDocument()
   })
@@ -1022,14 +1277,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByRole('heading', { name: 'Associated applications' })
     ).closest('.cds--tile') as HTMLElement
     expect(within(applicationsTile).getByText('1000456')).toBeInTheDocument()
+    const availableApplicationsCombobox = within(applicationsTile).getByRole('combobox', {
+      name: 'Available application',
+    })
+    expect(mockedFetchAvailablePermitApplications).not.toHaveBeenCalled()
+    await userEvent.click(availableApplicationsCombobox)
     await waitFor(() => {
       expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-9', ['1000456'])
     })
 
-    await chooseComboBoxOption(
-      within(applicationsTile).getByRole('combobox', { name: 'Available application' }),
-      '1000457',
-    )
+    await chooseComboBoxOption(availableApplicationsCombobox, '1000457')
     const addApplicationButton = within(applicationsTile).getByRole('button', {
       name: 'Add application',
     })
@@ -1058,6 +1315,111 @@ describe('Provincial Permit Detail Action Smoke', () => {
         applicationNumber: '1000456',
       })
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  it('keeps table-dependent permit actions unavailable while application links reload', async () => {
+    const submitterAuth = createTestAuthContext()
+    mockedUseAuth.mockReturnValue({
+      ...submitterAuth,
+      capabilities: {
+        ...submitterAuth.capabilities,
+        roles: ['ADMIN', 'PROVINCIAL_SUBMITTER_00067890'],
+      },
+      canPerform: () => true,
+    })
+    configureActivePermit()
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['1000457'],
+      errorMessage: '',
+    })
+
+    const initialTabs: ProvincialPermitDetailTabsData = {
+      ...tabsResult,
+      applications: ['1000456'],
+      packages: [
+        {
+          packageNumber: 'PKG-9',
+          region: 'Coast',
+          speciesEndUseSort: 'HE/PL',
+          ageClass: 'Second growth',
+          packageVolume: '120.5',
+          averageLength: '7.1',
+          averageTopDiameter: '16.2',
+          productType: 'Unmanufactured',
+          currentPackageVolume: '',
+          status: '',
+          reprocessed: '',
+          comments: '',
+        },
+      ],
+      items: [
+        {
+          id: 'SCALE-1',
+          timberMark: 'TM-1',
+          species: 'Fir',
+          grade: 'A',
+          pieces: 12,
+          volume: 34.5,
+          packageNumber: 'PKG-9',
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    }
+    let resolveReload:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>) => void)
+      | undefined
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValueOnce(initialTabs).mockImplementationOnce(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>>((resolve) => {
+          resolveReload = resolve
+        }),
+    )
+
+    renderPermitDetails()
+
+    const applicationsTile = (
+      await screen.findByRole('heading', { name: 'Associated applications' })
+    ).closest('.cds--tile') as HTMLElement
+    const availableApplicationsCombobox = within(applicationsTile).getByRole('combobox', {
+      name: 'Available application',
+    })
+    expect(mockedFetchAvailablePermitApplications).not.toHaveBeenCalled()
+    await userEvent.click(availableApplicationsCombobox)
+    await waitFor(() => {
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-9', ['1000456'])
+    })
+    const addApplicationButton = within(applicationsTile).getByRole('button', {
+      name: 'Add application',
+    })
+    await chooseComboBoxOption(availableApplicationsCombobox, '1000457')
+    await waitFor(() => expect(addApplicationButton).toBeEnabled())
+    expect(screen.getByRole('button', { name: 'Email review request' })).toBeEnabled()
+
+    await userEvent.click(addApplicationButton)
+
+    await waitFor(() => {
+      expect(mockedAddApplicationsToPermit).toHaveBeenCalledWith({
+        permitNumber: '777',
+        selectedApplications: ['1000457'],
+      })
+      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+    })
+    expect(screen.getByText('Loading associated permit applications...')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Email review request' })).toBeDisabled()
+
+    await act(async () => {
+      resolveReload?.({
+        ...initialTabs,
+        applications: ['1000456', '1000457'],
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Add application' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Email review request' })).toBeEnabled()
     })
   })
 
@@ -1123,7 +1485,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByRole('heading', { name: 'Invoices' })).toBeInTheDocument()
   })
 
-  it('does not present document and invoice lookup failures as empty collections', async () => {
+  it('keeps GBMS selected when the permit has no agent', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      applicantClientNumber: null,
+      agentClientLocationCode: null,
+    })
+    mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([gbmsHistoryRow])
+
+    renderPermitDetails()
+
+    expect(await screen.findByRole('tab', { name: 'GBMS' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+
+    await selectPermitDetailTab('GBMS')
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'GBMS invoice history',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'GBMS' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('does not present a deferred document lookup failure as an empty collection', async () => {
     mockedFetchPermitDocuments.mockRejectedValue(new Error('documents unavailable'))
 
     render(
@@ -1137,15 +1523,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Documents/invoices unavailable')).toBeInTheDocument()
-    expect(
-      screen.getAllByText('Unable to retrieve permit documents or invoice details.'),
-    ).not.toHaveLength(0)
-    expect(
-      within(screen.getByLabelText('Permit highlights')).getByText('Unavailable'),
-    ).toBeInTheDocument()
+    expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
+    expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
 
     await selectPermitDetailTab('Documents')
+
+    expect(await screen.findByText('Documents/invoices unavailable')).toBeInTheDocument()
+    expect(screen.getAllByText('Unable to retrieve permit documents.')).not.toHaveLength(0)
+    expect(screen.queryByLabelText('Permit highlights')).not.toBeInTheDocument()
+
     expect(
       await screen.findByRole('heading', { name: 'Permit documents unavailable', level: 3 }),
     ).toBeInTheDocument()
@@ -1153,21 +1539,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       screen.queryByRole('heading', { name: 'No permit documents available', level: 3 }),
     ).not.toBeInTheDocument()
 
-    await selectPermitDetailTab('Invoices')
-    expect(
-      await screen.findByRole('heading', { name: 'Invoices unavailable', level: 3 }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { name: 'No invoices available', level: 3 }),
-    ).not.toBeInTheDocument()
-
     await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
     expect(screen.queryByText('Documents/invoices unavailable')).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { name: 'No invoices available', level: 3 }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Invoices unavailable', level: 3 }),
+      screen.getByRole('heading', { name: 'Permit documents unavailable', level: 3 }),
     ).toBeInTheDocument()
   })
 
@@ -1487,10 +1862,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    const firstPermitCombobox = await screen.findByRole('combobox', {
+      name: 'Available application',
+    })
+    expect(mockedFetchAvailablePermitApplications).not.toHaveBeenCalled()
+    await userEvent.click(firstPermitCombobox)
     await waitFor(() =>
       expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-777', []),
     )
     await userEvent.click(screen.getByRole('button', { name: 'Switch permit' }))
+    const secondPermitCombobox = await screen.findByRole('combobox', {
+      name: 'Available application',
+    })
+    await userEvent.click(secondPermitCombobox)
     await waitFor(() =>
       expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledWith('EX-888', []),
     )
@@ -2902,7 +3286,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
-    expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(2)
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(1)
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(2)
   })
 

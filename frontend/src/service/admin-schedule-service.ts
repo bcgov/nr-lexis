@@ -12,6 +12,7 @@ export type ExportScheduleRow = {
   teacMeetingDate: string
   applicationCount: number
   mutable: boolean
+  provincialApplicationCount?: number
 }
 
 export type ExportScheduleCreateRequest = {
@@ -55,6 +56,10 @@ const DEFAULT_ADMIN_PAGE_SIZE = 100
 const normalizeScheduleRow = (row: unknown): ExportScheduleRow => {
   const source = recordOrEmpty(row)
   const applicationCount = Number(asString(source.applicationCount)) || 0
+  const provincialApplicationCount =
+    source.provincialApplicationCount === undefined
+      ? applicationCount
+      : Number(asString(source.provincialApplicationCount)) || 0
   return {
     exportScheduleId: asString(source.exportScheduleId || source.id),
     advertisingDate: asString(source.advertisingDate),
@@ -65,6 +70,7 @@ const normalizeScheduleRow = (row: unknown): ExportScheduleRow => {
     teacMeetingDate: asString(source.teacMeetingDate),
     applicationCount,
     mutable: source.mutable === undefined ? applicationCount === 0 : source.mutable === true,
+    provincialApplicationCount,
   }
 }
 

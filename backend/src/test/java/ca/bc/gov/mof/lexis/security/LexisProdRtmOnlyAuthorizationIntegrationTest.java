@@ -70,16 +70,28 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
         .perform(
             post("/api/lexis/rtm/emslogamv")
                 .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/rtm/emslogamv/batch")
+                .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """
                     {
-                      "species":"BA",
-                      "grade":"A",
-                      "growthIndicator":"O",
-                      "retrievalDate":"2099-01-01",
-                      "updateDate":"2099-01-01",
-                      "newValue":10.01,
-                      "saveMode":"create"
+                      "values":[
+                        {
+                          "species":"BA",
+                          "grade":"A",
+                          "growthIndicator":"O",
+                          "retrievalDate":"2099-01-01",
+                          "updateDate":"2099-01-01",
+                          "newValue":10.01,
+                          "saveMode":"create"
+                        }
+                      ]
                     }
                     """)
                 .with(jwt().authorities(admin)))
@@ -89,13 +101,13 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
         .perform(
             post("/api/lexis/rtm/emslogamv/preview")
                 .with(jwt().authorities(admin)))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isForbidden());
 
     mockMvc
         .perform(
             post("/api/lexis/rtm/emslogamv/upload")
                 .with(jwt().authorities(admin)))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isForbidden());
 
     mockMvc
         .perform(
@@ -127,6 +139,14 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
             post("/api/lexis/rtm/emslogamv")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/rtm/emslogamv/batch")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"values\":[]}")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isForbidden());
   }

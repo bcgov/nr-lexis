@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
@@ -217,6 +218,24 @@ class PermitOracleServiceTest {
 
     assertThat(result).contains(dto);
     verify(repository).findByPermitNumber(9000123L);
+  }
+
+  @Test
+  void permitAccessShouldUseNarrowRepositoryLookup() {
+    PermitAccessDto access =
+        new PermitAccessDto(9000123L, "00055667", "00077881", 1904L);
+    when(repository.findAccessByPermitNumber(9000123L)).thenReturn(Optional.of(access));
+
+    Optional<PermitAccessDto> result = service.findAccessByPermitNumber(9000123L);
+
+    assertThat(result).contains(access);
+    verify(repository).findAccessByPermitNumber(9000123L);
+  }
+
+  @Test
+  void permitAccessShouldReturnEmptyForInvalidPermitNumber() {
+    assertThat(service.findAccessByPermitNumber(0L)).isEmpty();
+    verifyNoInteractions(repository);
   }
 
   @Test

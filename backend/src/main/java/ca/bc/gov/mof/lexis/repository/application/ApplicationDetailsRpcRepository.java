@@ -201,7 +201,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         FIND_PERMIT_DETAIL_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
-        rs -> new ApplicationPermitRow(getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
+        rs ->
+            new ApplicationPermitRow(
+                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
   }
 
   public List<ApplicationPermitRow> findPermitsByApplicationNumberRequired(
@@ -215,7 +217,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         2,
         rs ->
             new ApplicationPermitRow(
-                getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
+                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
   }
 
   public Optional<ApplicationPermitRow> findPermitByOicApplicationNumberRequired(
@@ -229,7 +231,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         2,
         rs ->
             new ApplicationPermitRow(
-                getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
+                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
   }
 
   public List<ApplicationPermitRow> findPermitsByOicApplicationNumberRequired(
@@ -243,7 +245,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         2,
         rs ->
             new ApplicationPermitRow(
-                getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
+                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
   }
 
   public List<ApplicationScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {

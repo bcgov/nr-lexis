@@ -152,7 +152,7 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void jurisdictionOptionsShouldRemoveReserveReports() throws Exception {
+  void jurisdictionOptionsShouldRemoveRetiredIndianReserveJurisdiction() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, true, false);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
@@ -169,7 +169,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void biweeklyJurisdictionOptionsShouldPrependAllAndRemoveReserveLikeLegacy() throws Exception {
+  void biweeklyJurisdictionOptionsShouldPrependAllAndRemoveRetiredIndianReserveJurisdiction()
+      throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, true, false);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
@@ -186,7 +187,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void teacJurisdictionOptionsShouldRemoveReserveWithoutAddingAllLikeLegacy() throws Exception {
+  void teacJurisdictionOptionsShouldRemoveRetiredIndianReserveJurisdictionWithoutAddingAllLikeLegacy()
+      throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, true, false);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
@@ -419,11 +421,39 @@ class LexisReportScheduleRepositoryTest {
     verify(jdbcTemplate)
         .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sqlCaptor.getValue())
+        .contains("AS PROVINCIAL_APPLICATION_COUNT")
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("EEA.APPLICATION_NUMBER > TO_NUMBER(0)")
+        .contains("EEA.EXPORT_JURISDICTION_CODE <> 'F'")
+        .contains("EEA.OIC_INDICATOR = 'N'")
+        .contains("FROM EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("FROM EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("FROM EXPORT_APPLICANT_TYPE_CODE EATC")
+        .doesNotContain("EXPORT_EXEMPTION_APP_VIEW")
         .contains("ORDER BY ES.TEAC_MEETING_DATE DESC, ES.EXPORT_SCHEDULE_ID ASC")
         .doesNotContain("WHERE ES.ADVERTISING_DATE")
         .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
     verify(preparedStatement).setInt(1, 0);
     verify(preparedStatement).setInt(2, 50);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void findExportSchedulesPageShouldSortApplicationLinksByProvincialCount() throws Exception {
+    when(jdbcTemplate.query(
+            any(String.class),
+            any(PreparedStatementSetter.class),
+            any(RowMapper.class)))
+        .thenReturn(List.of());
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    repository.findExportSchedules(0, 50, "applicationCount", "desc");
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
+    assertThat(sqlCaptor.getValue())
+        .contains("ORDER BY PROVINCIAL_APPLICATION_COUNT DESC, ES.EXPORT_SCHEDULE_ID ASC");
   }
 
   @Test

@@ -138,7 +138,7 @@ public class LexisMailService {
               + "] "
               + safe(subject));
       message.setText(
-          "Non-production delivery was redirected to the configured override recipient(s).\n"
+          environment + " delivery was redirected to the configured override recipient(s).\n"
               + "Intended From: "
               + intendedSender(senderAddress, senderRoute)
               + "\nIntended To: "

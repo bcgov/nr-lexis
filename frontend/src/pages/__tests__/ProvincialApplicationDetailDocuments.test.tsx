@@ -94,30 +94,6 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('labels the header file count unavailable without presenting a failed lookup as zero', async () => {
-    mockedFetchApplicationDocuments.mockRejectedValue(new Error('document lookup failed'))
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const applicationHighlights = await screen.findByRole('group', {
-      name: 'Application highlights',
-    })
-    await waitFor(() => {
-      expect(within(applicationHighlights).getByText('Unavailable')).toBeInTheDocument()
-    })
-    expect(within(applicationHighlights).getByText('File count')).toBeInTheDocument()
-    expect(within(applicationHighlights).queryByText('0')).not.toBeInTheDocument()
-  })
-
   it('shows the embedded application upload panel on the documents tab without header actions', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>

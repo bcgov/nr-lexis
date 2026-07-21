@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Checkbox,
@@ -23,8 +23,11 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import ExemptionApprovalEmailModal, {
   type ExemptionApprovalRecipient,
 } from '@/components/ExemptionApprovalEmailModal'
@@ -40,11 +43,7 @@ import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUp
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { formatDocumentSource } from '@/service/document-service-utils'
 import { DetailFieldTile } from '../shared/DetailSections'
-import {
-  displayValue,
-  matchesFilter,
-  normalizeFilterText as normalizeText,
-} from '@/pages/shared/detail-page-utils'
+import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
@@ -93,7 +92,6 @@ const EXEMPTION_DETAIL_TAB_INDEX = {
   permits: 2,
   fees: 3,
   documents: 4,
-  remarks: 5,
 } as const
 
 type ExemptionEditForm = {
@@ -143,6 +141,7 @@ const ProvincialExemptionDetailsPage = () => {
   const { exemptionNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
+  const detailRef = useRef<ProvincialExemptionDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<ProvincialExemptionDocumentRow[]>([])
   const [applications, setApplications] = useState<ExemptionApplicationRow[]>([])
   const [permitRows, setPermitRows] = useState<ExemptionPermitRow[]>([])
@@ -150,6 +149,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [containsUnmanu, setContainsUnmanu] = useState<boolean | null>(null)
   const [editContext, setEditContext] = useState<ExemptionEditContext>(EMPTY_EDIT_CONTEXT)
   const [editContextLoaded, setEditContextLoaded] = useState(false)
+  const [editContextRefreshing, setEditContextRefreshing] = useState(false)
   const [editForm, setEditForm] = useState<ExemptionEditForm | null>(null)
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
@@ -192,15 +192,16 @@ const ProvincialExemptionDetailsPage = () => {
     EXEMPTION_DETAIL_TAB_INDEX.summary,
   )
   const beginDetailRequest = useLatestRequestGuard()
+  const currentDetail = detail && String(detail.exemptionNumber) === exemptionNumber ? detail : null
+  const isRefreshingDetail = loading && !!currentDetail
   const permitFilter = searchParams.get('permitFilter') ?? ''
-  const remarkFilter = searchParams.get('remarkFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
   const updateFilterParam = useCallback(
-    (key: 'permitFilter' | 'remarkFilter' | 'documentsFilter', value: string) => {
+    (key: 'permitFilter' | 'documentsFilter', value: string) => {
       const nextSearchParams = searchParamsWithValue(searchParams, key, value)
 
       if (nextSearchParams.toString() !== searchParams.toString()) {
@@ -218,20 +219,28 @@ const ProvincialExemptionDetailsPage = () => {
   }, [creatingPermit, navigate, permitCreationDestination, withCurrentSearch])
 
   useEffect(() => {
+    detailRef.current = detail
+  }, [detail])
+
+  useEffect(() => {
     const load = async () => {
-      setApprovalConfirmationOpen(false)
-      setApprovalConfirmationTarget(null)
-      setApprovalCertified(false)
-      setApprovalDate('')
-      setApprovalEmailRecipients([])
-      setSendingApprovalEmail(false)
-      setPermitCreationConfirmationOpen(false)
-      setCreatingPermit(false)
-      setPermitCreationDestination(null)
-      setPermitCreationRequiresReload(false)
-      setApplicationNumberToAdd('')
-      setApplicationMutationNumber(null)
       const isLatestRequest = beginDetailRequest()
+      const isRefreshingCurrentExemption =
+        detailRef.current !== null && String(detailRef.current.exemptionNumber) === exemptionNumber
+      if (!isRefreshingCurrentExemption) {
+        setApprovalConfirmationOpen(false)
+        setApprovalConfirmationTarget(null)
+        setApprovalCertified(false)
+        setApprovalDate('')
+        setApprovalEmailRecipients([])
+        setSendingApprovalEmail(false)
+        setPermitCreationConfirmationOpen(false)
+        setCreatingPermit(false)
+        setPermitCreationDestination(null)
+        setPermitCreationRequiresReload(false)
+        setApplicationNumberToAdd('')
+        setApplicationMutationNumber(null)
+      }
       if (!exemptionNumber) {
         setErrorMessage('Exemption number is missing from the route.')
         setDetail(null)
@@ -242,6 +251,7 @@ const ProvincialExemptionDetailsPage = () => {
         setContainsUnmanu(null)
         setEditContext(EMPTY_EDIT_CONTEXT)
         setEditContextLoaded(false)
+        setEditContextRefreshing(false)
         setEditForm(null)
         setDocumentsErrorMessage('')
         setDocumentsErrorDismissed(false)
@@ -263,14 +273,17 @@ const ProvincialExemptionDetailsPage = () => {
       setBlanketOicTotalsErrorMessage('')
       setActionErrorMessage('')
       setActionInfoMessage('')
-      setEditing(false)
-      setApplications([])
-      setPermitRows([])
-      setBlanketOicTotals(null)
-      setContainsUnmanu(null)
-      setEditContext(EMPTY_EDIT_CONTEXT)
-      setEditContextLoaded(false)
-      setEditForm(null)
+      if (!isRefreshingCurrentExemption) {
+        setEditing(false)
+        setApplications([])
+        setPermitRows([])
+        setBlanketOicTotals(null)
+        setContainsUnmanu(null)
+        setEditContext(EMPTY_EDIT_CONTEXT)
+        setEditContextLoaded(false)
+        setEditContextRefreshing(false)
+        setEditForm(null)
+      }
 
       try {
         const response = await fetchProvincialExemptionDetail(exemptionNumber)
@@ -367,20 +380,21 @@ const ProvincialExemptionDetailsPage = () => {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve provincial exemption detail.')
-          setDetail(null)
-          setDocumentRows([])
-          setApplications([])
-          setPermitRows([])
-          setBlanketOicTotals(null)
-          setContainsUnmanu(null)
-          setEditContext(EMPTY_EDIT_CONTEXT)
-          setEditContextLoaded(false)
-          setEditForm(null)
-          setDocumentsErrorMessage('')
-          setDocumentsErrorDismissed(false)
-          setApplicationsErrorMessage('')
-          setPermitsErrorMessage('')
-          setBlanketOicTotalsErrorMessage('')
+          if (!isRefreshingCurrentExemption) {
+            setDocumentRows([])
+            setApplications([])
+            setPermitRows([])
+            setBlanketOicTotals(null)
+            setContainsUnmanu(null)
+            setEditContext(EMPTY_EDIT_CONTEXT)
+            setEditContextLoaded(false)
+            setEditForm(null)
+            setDocumentsErrorMessage('')
+            setDocumentsErrorDismissed(false)
+            setApplicationsErrorMessage('')
+            setPermitsErrorMessage('')
+            setBlanketOicTotalsErrorMessage('')
+          }
         }
       } finally {
         if (isLatestRequest()) {
@@ -435,18 +449,6 @@ const ProvincialExemptionDetailsPage = () => {
     )
   }, [permitFilter, visiblePermitRows])
 
-  const filteredRemarks = useMemo(() => {
-    const rows = detail?.remarks ?? []
-    if (!remarkFilter.trim()) {
-      return rows
-    }
-
-    const normalizedFilter = normalizeText(remarkFilter)
-    return rows.filter((item) =>
-      normalizeText(`${item.title} ${item.remark}`).includes(normalizedFilter),
-    )
-  }, [detail?.remarks, remarkFilter])
-
   const filteredDocumentRows = useMemo(() => {
     return documentRows.filter((row) =>
       matchesFilter([row.name, row.description, row.type, row.source, row.id], documentsFilter),
@@ -455,11 +457,11 @@ const ProvincialExemptionDetailsPage = () => {
 
   const currentTypeCode = (
     editForm?.exemptionTypeCode ||
-    detail?.exemptionTypeCode ||
+    currentDetail?.exemptionTypeCode ||
     ''
   ).toUpperCase()
-  const persistedTypeCode = (detail?.exemptionTypeCode ?? '').toUpperCase()
-  const persistedStatusCode = (detail?.exemptionStatusCode ?? '').toUpperCase()
+  const persistedTypeCode = (currentDetail?.exemptionTypeCode ?? '').toUpperCase()
+  const persistedStatusCode = (currentDetail?.exemptionStatusCode ?? '').toUpperCase()
   const roles = capabilities?.roles ?? []
   const isApplicationApprover = hasRole(roles, 'APPLICATION_APPROVER') || hasRole(roles, 'ADMIN')
   const exemptionEditLocked = editContext.locked
@@ -471,17 +473,20 @@ const ProvincialExemptionDetailsPage = () => {
   const isExemptionFormDirty = useMemo(
     () =>
       editing &&
-      !!detail &&
+      !!currentDetail &&
       !!editForm &&
-      !formValuesEqual(editForm, toEditForm(detail, editContext)),
-    [detail, editContext, editForm, editing],
+      !formValuesEqual(editForm, toEditForm(currentDetail, editContext)),
+    [currentDetail, editContext, editForm, editing],
   )
   const applicationRelationshipDraftDirty =
     isApplicationApprover && applicationNumberToAdd.trim().length > 0
   const isExemptionDirty =
     isExemptionFormDirty || applicationRelationshipDraftDirty || documentUploadDirty
   const editContextUnavailableMessage =
-    hasExemptionEditPermission && !editContextLoaded
+    hasExemptionEditPermission &&
+    !editContextLoaded &&
+    !editContextRefreshing &&
+    !isRefreshingDetail
       ? 'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const canApproveExemption =
@@ -508,6 +513,11 @@ const ProvincialExemptionDetailsPage = () => {
     !documentUploadDirty &&
     persistedTypeCode !== 'B' &&
     persistedStatusCode !== 'CAN'
+  const addApplicationDisabled =
+    Boolean(applicationMutationNumber) || !applicationNumberToAdd.trim()
+  const addApplicationDisabledDescription = applicationMutationNumber
+    ? 'Wait for the current application link update to finish.'
+    : 'Enter an application number to add it.'
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
   const canEditSummaryFields =
@@ -669,6 +679,7 @@ const ProvincialExemptionDetailsPage = () => {
   const refreshEditableData = useCallback(
     async (preserveCurrentStateOnFailure = false) => {
       if (!exemptionNumber) return
+      setEditContextRefreshing(true)
       setEditContextLoaded(false)
       try {
         const [nextDetail, nextApplications, nextContext] = await Promise.all([
@@ -699,6 +710,8 @@ const ProvincialExemptionDetailsPage = () => {
           setEditing(false)
         }
         throw error
+      } finally {
+        setEditContextRefreshing(false)
       }
     },
     [exemptionNumber, refreshPermitData],
@@ -1111,116 +1124,102 @@ const ProvincialExemptionDetailsPage = () => {
         <DetailBreadcrumb label="Provincial exemption search" to="/provincial/exemption" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <div className="application-detail-title-row">
-          <PageHeader
-            title={`Exemption ${detail?.exemptionNumber ?? exemptionNumber ?? ''}`.trim()}
-            subtitle="Check and manage this provincial exemption"
-            status={
-              detail ? (
-                <StatusTag
-                  status={detail.exemptionStatusDescription ?? detail.exemptionStatusCode ?? ''}
-                  fallbackLabel="Not provided"
-                />
-              ) : undefined
-            }
-            actionsLabel="Exemption actions"
-            actions={
-              detail &&
-              ((!editing && canSaveExemption) ||
-                editing ||
-                canApproveExemption ||
-                (persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport'))) ? (
-                <>
-                  {!editing && canSaveExemption && (
-                    <Button kind="secondary" size="sm" onClick={() => setEditing(true)}>
-                      Edit exemption
-                    </Button>
-                  )}
-                  {editing && (
-                    <>
-                      <Button
-                        kind="primary"
-                        size="sm"
-                        disabled={
-                          saving ||
-                          Boolean(formValidationMessage) ||
-                          requiredExemptionOptionsMissing ||
-                          optionsAvailability !== 'available'
-                        }
-                        onClick={() => void onSaveExemption()}
-                      >
-                        {saving ? 'Saving...' : 'Save exemption'}
-                      </Button>
-                      <Button
-                        kind="tertiary"
-                        size="sm"
-                        disabled={saving}
-                        onClick={() => {
-                          setEditForm(toEditForm(detail, editContext))
-                          setEditing(false)
-                        }}
-                      >
-                        Cancel edit
-                      </Button>
-                    </>
-                  )}
-                  {canApproveExemption && (
+        <PageHeader
+          title={`Exemption ${currentDetail?.exemptionNumber ?? exemptionNumber ?? ''}`.trim()}
+          subtitle="Check and manage this provincial exemption"
+          status={
+            currentDetail ? (
+              <StatusTag
+                status={
+                  currentDetail.exemptionStatusDescription ??
+                  currentDetail.exemptionStatusCode ??
+                  ''
+                }
+                fallbackLabel="Not provided"
+              />
+            ) : undefined
+          }
+          actionsLabel="Exemption actions"
+          actions={
+            !loading &&
+            currentDetail &&
+            ((!editing && canSaveExemption) ||
+              editing ||
+              canApproveExemption ||
+              (persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport'))) ? (
+              <>
+                {!editing && canSaveExemption && (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedExemptionTabIndex(EXEMPTION_DETAIL_TAB_INDEX.summary)
+                      setEditing(true)
+                    }}
+                  >
+                    Edit exemption
+                  </Button>
+                )}
+                {editing && (
+                  <>
                     <Button
                       kind="primary"
                       size="sm"
-                      disabled={approving}
+                      disabled={
+                        saving ||
+                        Boolean(formValidationMessage) ||
+                        requiredExemptionOptionsMissing ||
+                        optionsAvailability !== 'available'
+                      }
+                      onClick={() => void onSaveExemption()}
+                    >
+                      {saving ? 'Saving...' : 'Save exemption'}
+                    </Button>
+                    <Button
+                      kind="tertiary"
+                      size="sm"
+                      disabled={saving}
                       onClick={() => {
-                        setApprovalCertified(false)
-                        setApprovalDate(formatLocalIsoDate(new Date()))
-                        setApprovalConfirmationTarget(detail.exemptionNumber)
-                        setApprovalConfirmationOpen(true)
+                        setEditForm(toEditForm(currentDetail, editContext))
+                        setEditing(false)
                       }}
                     >
-                      {approving ? 'Approving...' : 'Approve exemption'}
+                      Cancel edit
                     </Button>
-                  )}
-                  {persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport') && (
-                    <Button
-                      kind="secondary"
-                      size="sm"
-                      disabled={generatingReport}
-                      onClick={() => void onGenerateApprovedReport()}
-                    >
-                      {generatingReport ? 'Generating...' : 'Print approved exemption'}
-                    </Button>
-                  )}
-                </>
-              ) : undefined
-            }
-          />
-          {detail && (
-            <dl className="application-detail-header-metrics" aria-label="Exemption highlights">
-              <div>
-                <dt>Type</dt>
-                <dd>{displayValue(detail.exemptionTypeDescription ?? detail.exemptionTypeCode)}</dd>
-              </div>
-              <div>
-                <dt>Remaining volume (m³)</dt>
-                <dd>{displayValue(detail.remainingVolume)}</dd>
-              </div>
-              <div>
-                <dt>Permits</dt>
-                <dd>
-                  {permitsErrorMessage ? 'Unavailable' : visiblePermitRows.length.toLocaleString()}
-                </dd>
-              </div>
-              <div>
-                <dt>Documents</dt>
-                <dd>
-                  {documentsErrorMessage ? 'Unavailable' : documentRows.length.toLocaleString()}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
+                  </>
+                )}
+                {canApproveExemption && (
+                  <Button
+                    kind="primary"
+                    size="sm"
+                    disabled={approving}
+                    onClick={() => {
+                      setApprovalCertified(false)
+                      setApprovalDate(formatLocalIsoDate(new Date()))
+                      setApprovalConfirmationTarget(currentDetail.exemptionNumber)
+                      setApprovalConfirmationOpen(true)
+                    }}
+                  >
+                    {approving ? 'Approving...' : 'Approve exemption'}
+                  </Button>
+                )}
+                {persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport') && (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    disabled={generatingReport}
+                    onClick={() => void onGenerateApprovedReport()}
+                  >
+                    {generatingReport ? 'Generating...' : 'Print approved exemption'}
+                  </Button>
+                )}
+              </>
+            ) : undefined
+          }
+        />
       </Column>
 
-      {loading && (
+      {loading && !currentDetail && (
         <Column sm={4} md={8} lg={16}>
           <InlineLoading description="Loading provincial exemption detail..." />
         </Column>
@@ -1236,7 +1235,7 @@ const ProvincialExemptionDetailsPage = () => {
         />
       )}
 
-      {!loading && detail && (
+      {detail && currentDetail && (
         <>
           {!!exemptionEditLockMessage && (
             <AppNotification
@@ -1308,7 +1307,20 @@ const ProvincialExemptionDetailsPage = () => {
             />
           )}
 
-          <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+          <Column
+            sm={4}
+            md={8}
+            lg={16}
+            className={`application-detail-tabs-column content-loading-region${
+              isRefreshingDetail ? ' is-loading' : ''
+            }`}
+            inert={isRefreshingDetail ? true : undefined}
+            aria-busy={isRefreshingDetail}
+          >
+            <ContentLoadingOverlay
+              loading={isRefreshingDetail}
+              loadingDescription="Refreshing provincial exemption detail..."
+            />
             <Tabs
               selectedIndex={selectedExemptionTabIndex}
               onChange={({ selectedIndex }) => setSelectedExemptionTabIndex(selectedIndex)}
@@ -1324,7 +1336,6 @@ const ProvincialExemptionDetailsPage = () => {
                 <Tab>Permits</Tab>
                 {showFees && <Tab>Fees</Tab>}
                 <Tab>Documents</Tab>
-                <Tab>Remarks</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel className="application-detail-tab-panel">
@@ -1479,19 +1490,6 @@ const ProvincialExemptionDetailsPage = () => {
                                 ),
                               },
                               {
-                                label: 'Application number',
-                                value: displayValue(detail.applicationNumber),
-                              },
-                              {
-                                label: 'Application status',
-                                value: (
-                                  <StatusTag
-                                    status={detail.applicationStatus ?? ''}
-                                    fallbackLabel="Not provided"
-                                  />
-                                ),
-                              },
-                              {
                                 label: 'Owner client number',
                                 value: displayValue(detail.ownerClientNumber),
                               },
@@ -1499,13 +1497,19 @@ const ProvincialExemptionDetailsPage = () => {
                                 label: 'Agent client number',
                                 value: displayValue(detail.agentClientNumber),
                               },
-                              { label: 'Approval date', value: displayValue(detail.approvalDate) },
+                              {
+                                label: 'Approval date',
+                                value: displayValue(detail.approvalDate),
+                              },
                               { label: 'Expiry date', value: displayValue(detail.expiryDate) },
                               {
                                 label: 'Approved volume (m³)',
                                 value: displayValue(detail.approvedVolume),
                               },
-                              { label: 'Used volume (m³)', value: displayValue(detail.usedVolume) },
+                              {
+                                label: 'Used volume (m³)',
+                                value: displayValue(detail.usedVolume),
+                              },
                               {
                                 label: 'Remaining volume (m³)',
                                 value: displayValue(detail.remainingVolume),
@@ -1526,7 +1530,10 @@ const ProvincialExemptionDetailsPage = () => {
                           <DetailFieldTile
                             title="Other conditions"
                             fields={[
-                              { label: 'Conditions', value: displayValue(detail.otherConditions) },
+                              {
+                                label: 'Conditions',
+                                value: displayValue(detail.otherConditions),
+                              },
                             ]}
                           />
                         </Column>
@@ -1541,7 +1548,7 @@ const ProvincialExemptionDetailsPage = () => {
                         <Tile>
                           <h2 className="detail-tile-title">Associated applications</h2>
                           {canLinkApplications && (
-                            <div className="legacy-search-actions">
+                            <div className="exemption-application-add-form">
                               <TextInput
                                 id="exemptionApplicationNumberToAdd"
                                 labelText="Application number"
@@ -1550,19 +1557,21 @@ const ProvincialExemptionDetailsPage = () => {
                                   setApplicationNumberToAdd(event.target.value.replace(/\D/g, ''))
                                 }
                               />
-                              <Button
-                                kind="secondary"
-                                size="sm"
-                                disabled={
-                                  !applicationNumberToAdd.trim() ||
-                                  Boolean(applicationMutationNumber)
-                                }
-                                onClick={() => void onAddApplication()}
+                              <DisabledButtonTooltip
+                                disabled={addApplicationDisabled}
+                                description={addApplicationDisabledDescription}
                               >
-                                {applicationMutationNumber === applicationNumberToAdd.trim()
-                                  ? 'Adding...'
-                                  : 'Add application'}
-                              </Button>
+                                <Button
+                                  kind="secondary"
+                                  size="sm"
+                                  disabled={addApplicationDisabled}
+                                  onClick={() => void onAddApplication()}
+                                >
+                                  {applicationMutationNumber === applicationNumberToAdd.trim()
+                                    ? 'Adding...'
+                                    : 'Add application'}
+                                </Button>
+                              </DisabledButtonTooltip>
                             </div>
                           )}
                           {applicationsErrorMessage ? (
@@ -1600,35 +1609,52 @@ const ProvincialExemptionDetailsPage = () => {
                                         <TableCell>{application.scaleVolume || '-'}</TableCell>
                                         <TableCell>
                                           <div className="legacy-search-actions">
-                                            <Button
-                                              kind="ghost"
-                                              size="sm"
+                                            <DisabledButtonTooltip
                                               disabled={!canOpen}
-                                              onClick={() => navigate(withCurrentSearch(path))}
+                                              description="You do not have permission to open this application."
                                             >
-                                              Open
-                                            </Button>
-                                            {canLinkApplications && (
                                               <Button
-                                                kind="danger--ghost"
+                                                kind="ghost"
                                                 size="sm"
+                                                disabled={!canOpen}
+                                                onClick={() => navigate(withCurrentSearch(path))}
+                                              >
+                                                Open
+                                              </Button>
+                                            </DisabledButtonTooltip>
+                                            {canLinkApplications && (
+                                              <DisabledButtonTooltip
                                                 disabled={
                                                   application.locked ||
                                                   Boolean(applicationMutationNumber)
                                                 }
-                                                onClick={() =>
-                                                  void onRemoveApplication(
-                                                    application.applicationNumber,
-                                                  )
+                                                description={
+                                                  application.locked
+                                                    ? 'This application is locked and cannot be removed.'
+                                                    : 'Wait for the current application link update to finish.'
                                                 }
                                               >
-                                                {applicationMutationNumber ===
-                                                application.applicationNumber
-                                                  ? 'Removing...'
-                                                  : application.locked
-                                                    ? 'Locked'
-                                                    : 'Remove'}
-                                              </Button>
+                                                <Button
+                                                  kind="danger--ghost"
+                                                  size="sm"
+                                                  disabled={
+                                                    application.locked ||
+                                                    Boolean(applicationMutationNumber)
+                                                  }
+                                                  onClick={() =>
+                                                    void onRemoveApplication(
+                                                      application.applicationNumber,
+                                                    )
+                                                  }
+                                                >
+                                                  {applicationMutationNumber ===
+                                                  application.applicationNumber
+                                                    ? 'Removing...'
+                                                    : application.locked
+                                                      ? 'Locked'
+                                                      : 'Remove'}
+                                                </Button>
+                                              </DisabledButtonTooltip>
                                             )}
                                           </div>
                                         </TableCell>
@@ -1655,6 +1681,12 @@ const ProvincialExemptionDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <h2 className="detail-tile-title">Related permits</h2>
+                        {editing && (
+                          <p className="detail-read-only-note">
+                            Permit records are read-only. Edit exemption details on the Summary or
+                            Fees tab.
+                          </p>
+                        )}
                         {canCreateMinisterialPermit && (
                           <div className="legacy-search-actions">
                             <Button
@@ -1953,95 +1985,42 @@ const ProvincialExemptionDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <h2 className="detail-tile-title">Remarks</h2>
-                        {(detail.remarks ?? []).length > 0 && (
-                          <TextInput
-                            id="exemptionDetailRemarkFilter"
-                            labelText="Filter remarks"
-                            value={remarkFilter}
-                            onChange={(event) =>
-                              updateFilterParam('remarkFilter', event.target.value)
-                            }
-                            placeholder="Filter by title or remark text"
-                          />
-                        )}
-                        {filteredRemarks.length > 0 ? (
-                          <TableFrame ariaLabel="Exemption remarks">
-                            <Table useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>Title</TableHeader>
-                                  <TableHeader>Remark</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {filteredRemarks.map((item) => (
-                                  <TableRow key={`${item.title}-${item.remark}`}>
-                                    <TableCell>{item.title}</TableCell>
-                                    <TableCell>{item.remark}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title={
-                              (detail.remarks ?? []).length === 0
-                                ? 'No remarks found'
-                                : 'No remarks match this filter'
-                            }
-                            description={
-                              (detail.remarks ?? []).length === 0
-                                ? 'No remarks have been added to this exemption.'
-                                : 'Try a different title or remark text.'
-                            }
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
-                    </Column>
-                  </Grid>
-                </TabPanel>
               </TabPanels>
             </Tabs>
           </Column>
         </>
       )}
-      {approvalConfirmationOpen && approvalConfirmationTarget === detail?.exemptionNumber && (
-        <Modal
-          open
-          danger
-          modalHeading="Approve exemption"
-          primaryButtonText={approving ? 'Approving...' : 'Approve exemption'}
-          secondaryButtonText="Cancel"
-          primaryButtonDisabled={approving || !approvalCertified}
-          onRequestClose={closeApprovalConfirmation}
-          onSecondarySubmit={closeApprovalConfirmation}
-          onRequestSubmit={() => {
-            if (approvalConfirmationTarget === detail?.exemptionNumber) {
-              void onApproveExemption()
-            }
-          }}
-        >
-          <p>You are about to approve exemption {detail?.exemptionNumber ?? exemptionNumber}.</p>
-          <p>
-            By checking the box below you certify that this exemption has been approved. This
-            exemption will be marked with an approval date of {approvalDate}.
-          </p>
-          <Checkbox
-            id="approveExemptionCertification"
-            labelText="I certify that this exemption has been approved."
-            checked={approvalCertified}
-            disabled={approving}
-            onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
-          />
-        </Modal>
-      )}
+      {approvalConfirmationOpen &&
+        approvalConfirmationTarget === currentDetail?.exemptionNumber && (
+          <ConfirmationModal
+            open
+            title="Approve exemption"
+            description={`You are about to approve exemption ${
+              currentDetail?.exemptionNumber ?? exemptionNumber
+            }.`}
+            confirmLabel="Approve exemption"
+            pendingLabel="Approving..."
+            confirmDisabled={approving || !approvalCertified}
+            onClose={closeApprovalConfirmation}
+            onConfirm={() => {
+              if (approvalConfirmationTarget === currentDetail?.exemptionNumber) {
+                return onApproveExemption()
+              }
+            }}
+          >
+            <p>
+              By checking the box below you certify that this exemption has been approved. This
+              exemption will be marked with an approval date of {approvalDate}.
+            </p>
+            <Checkbox
+              id="approveExemptionCertification"
+              labelText="I certify that this exemption has been approved."
+              checked={approvalCertified}
+              disabled={approving}
+              onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
+            />
+          </ConfirmationModal>
+        )}
       {approvalEmailRecipients.length > 0 && (
         <ExemptionApprovalEmailModal
           recipients={approvalEmailRecipients}
@@ -2051,26 +2030,37 @@ const ProvincialExemptionDetailsPage = () => {
           onSkip={closeApprovalEmail}
         />
       )}
-      {permitCreationConfirmationOpen && canCreateMinisterialPermit && detail && (
+      {permitCreationConfirmationOpen && canCreateMinisterialPermit && currentDetail && (
         <Modal
           open
+          passiveModal
+          size="sm"
           modalHeading="Apply for new permit"
-          primaryButtonText={creatingPermit ? 'Creating...' : 'Create permit'}
-          secondaryButtonText="Cancel"
-          primaryButtonDisabled={creatingPermit}
+          className="permit-creation-confirmation-modal"
           aria-describedby="permit-creation-confirmation-description"
           onRequestClose={closePermitCreationConfirmation}
-          onSecondarySubmit={closePermitCreationConfirmation}
-          onRequestSubmit={() => void onCreatePermitFromExemption()}
         >
           <p id="permit-creation-confirmation-description">
-            This creates a new active permit shell for Ministerial exemption{' '}
-            {detail.exemptionNumber}.
+            This creates a new active permit for Ministerial exemption{' '}
+            {currentDetail.exemptionNumber}.
           </p>
-          <p>
-            Applications are not attached automatically. Attach the required applications separately
-            from the new permit.
-          </p>
+          <p>Eligible application scales from this exemption will be added automatically.</p>
+          <div className="permit-creation-confirmation-modal__actions">
+            <Button
+              kind="secondary"
+              disabled={creatingPermit}
+              onClick={closePermitCreationConfirmation}
+            >
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              disabled={creatingPermit}
+              onClick={() => void onCreatePermitFromExemption()}
+            >
+              {creatingPermit ? 'Creating...' : 'Create permit'}
+            </Button>
+          </div>
         </Modal>
       )}
       <UnsavedChangesGuard

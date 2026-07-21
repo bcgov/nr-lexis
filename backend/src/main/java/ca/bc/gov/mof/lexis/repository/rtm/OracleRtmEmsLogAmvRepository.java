@@ -6,6 +6,7 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.math.BigDecimal;
 import java.sql.CallableStatement;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -16,6 +17,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -31,6 +33,43 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
   private static final String SELECT_PROCEDURE =
       "RTM_EMS_LOG_AMV_SELECT(?,?,?,?,?,?)";
   private static final String BLANK_GRADE_SENTINEL = "BLANK";
+  private static final String ATOMIC_UPSERT =
+      """
+      MERGE INTO THE.EMS_LOG_AMV target
+      USING (
+        SELECT UPPER(?) AS SPECIES,
+               UPPER(?) AS GRADE,
+               UPPER(?) AS GROWTH_TYPE_ST,
+               ? AS EFFECTIVE_DATE,
+               ? AS AVG_MARKET_PRICE
+        FROM DUAL
+      ) source
+      ON (
+        target.SPECIES = source.SPECIES
+        AND target.GRADE = source.GRADE
+        AND target.GROWTH_TYPE_ST = source.GROWTH_TYPE_ST
+        AND target.EFFECTIVE_DATE = source.EFFECTIVE_DATE
+      )
+      WHEN MATCHED THEN
+        UPDATE SET target.AVG_MARKET_PRICE = source.AVG_MARKET_PRICE
+      WHEN NOT MATCHED THEN
+        INSERT (SPECIES, GRADE, GROWTH_TYPE_ST, EFFECTIVE_DATE, AVG_MARKET_PRICE, REVISION_COUNT)
+        VALUES (
+          source.SPECIES,
+          source.GRADE,
+          source.GROWTH_TYPE_ST,
+          source.EFFECTIVE_DATE,
+          source.AVG_MARKET_PRICE,
+          0
+        )
+      """;
+
+  public record AtomicWriteTarget(
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate effectiveDate,
+      BigDecimal newValue) {}
 
   public OracleRtmEmsLogAmvRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -376,6 +415,36 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
         cs.setBigDecimal(7, newValue);
       }
     });
+  }
+
+  /**
+   * Writes the generated physical AMV targets without using the legacy procedures, which commit
+   * each row independently. The caller owns the transaction so the complete grid submission
+   * commits or rolls back together.
+   */
+  public int[] upsertAtomically(List<AtomicWriteTarget> targets) {
+    if (targets == null || targets.isEmpty()) {
+      return new int[0];
+    }
+
+    return jdbcTemplate.batchUpdate(
+        ATOMIC_UPSERT,
+        new BatchPreparedStatementSetter() {
+          @Override
+          public void setValues(PreparedStatement statement, int index) throws SQLException {
+            AtomicWriteTarget target = targets.get(index);
+            statement.setString(1, trim(target.species()));
+            statement.setString(2, gradeForOracle(target.grade()));
+            statement.setString(3, trim(target.growthIndicator()));
+            statement.setDate(4, java.sql.Date.valueOf(target.effectiveDate()));
+            statement.setBigDecimal(5, target.newValue());
+          }
+
+          @Override
+          public int getBatchSize() {
+            return targets.size();
+          }
+        });
   }
 
   private String executeMutation(String operation, String call, ProcedureCallback callback) {

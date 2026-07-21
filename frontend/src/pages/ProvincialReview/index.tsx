@@ -4,12 +4,9 @@ import {
   Button,
   Checkbox,
   Column,
-  ComposedModal,
   Grid,
   InlineNotification,
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
+  Modal,
   Pagination,
   Table,
   TableBody,
@@ -23,6 +20,7 @@ import {
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -141,6 +139,8 @@ const REJECT_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
 const REJECT_EMAIL_REQUIRED_MESSAGE =
   'Enter one valid client email address or deselect Send status email.'
+const REJECT_EMAIL_MISSING_HELPER =
+  'No client email was found. Enter an email address or deselect Send status email.'
 const REJECT_EMAIL_PREVIEW_HELPER =
   "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
 const STATUS_EMAIL_UNAVAILABLE_HELPER =
@@ -149,6 +149,11 @@ const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
 const isReviewableSourceStatus = (status: string | null | undefined): boolean =>
   REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(status ?? ''))
+
+const disabledReviewSelectionDescription = (canApproveApplications: boolean): string =>
+  !canApproveApplications
+    ? 'You do not have permission to approve applications.'
+    : 'Only New and Pending applications can be approved.'
 
 const normalizeReviewEmail = (value: string | null | undefined): string => {
   const normalized = normalizeEmail(value ?? '')
@@ -570,9 +575,6 @@ const ProvincialReviewPage = () => {
 
         const candidateEmail = reviewEmailCandidate(summary, ownerClientData, agentClientData)
         setRejectEmailAddress(candidateEmail)
-        if (!candidateEmail || !isValidEmail(candidateEmail)) {
-          setRejectValidationMessage(REJECT_EMAIL_REQUIRED_MESSAGE)
-        }
       } catch (error) {
         console.error(error)
         setRejectValidationMessage('Unable to load client email for this application.')
@@ -858,103 +860,96 @@ const ProvincialReviewPage = () => {
         </section>
       </Column>
 
-      <ComposedModal
+      <Modal
         open={Boolean(rejectApplicationNumber)}
+        passiveModal
         size="md"
+        modalLabel="Application review"
+        modalHeading={`Update application ${rejectApplicationNumber}`}
+        aria-label="Application review"
+        className="review-reject-modal"
         preventCloseOnClickOutside
         selectorPrimaryFocus="#reviewRejectStatus"
-        onClose={() => {
-          if (submittingReject) {
-            return false
+        onRequestClose={() => {
+          if (!submittingReject) {
+            closeRejectPanel()
           }
-
-          closeRejectPanel()
-          return true
         }}
       >
-        <ModalHeader
-          label="Application review"
-          title={`Update application ${rejectApplicationNumber}`}
-          buttonOnClick={() => {
-            if (!submittingReject) {
-              closeRejectPanel()
-            }
-          }}
-        />
-        <ModalBody hasForm hasScrollingContent>
-          <div className="review-reject-modal__grid">
-            <SearchableSelect
-              id="reviewRejectStatus"
-              labelText="Application status"
-              value={rejectStatusCode}
-              placeholder="Select application status"
-              options={rejectStatusSelectOptions}
-              invalid={rejectValidationMessage === REJECT_STATUS_REQUIRED_MESSAGE}
-              invalidText={rejectValidationMessage}
-              disabled={optionsUnavailable || !rejectStatusAvailable || submittingReject}
-              onChange={(value) => {
-                const statusCode = value.toUpperCase()
-                setRejectStatusCode(statusCode)
-                setSendRejectEmail(EMAIL_STATUS_CODES.has(statusCode))
-                setRejectValidationMessage('')
-              }}
-            />
-            <TextArea
-              id="reviewRejectRemark"
-              labelText="Remarks"
-              maxCount={250}
-              value={rejectRemark}
-              invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
-              invalidText={rejectValidationMessage}
-              disabled={submittingReject}
-              onChange={(event) => {
-                setRejectRemark(event.target.value.slice(0, 250))
-                setRejectValidationMessage('')
-              }}
-            />
-            <Checkbox
-              id="reviewRejectSendEmail"
-              labelText="Send status email"
-              checked={sendRejectEmail}
-              disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
-              onChange={(_, payload) => {
-                setSendRejectEmail(Boolean(payload.checked))
-                setRejectValidationMessage('')
-              }}
-            />
-            <TextInput
-              id="reviewRejectEmail"
-              labelText="Client email address"
-              helperText={
-                !rejectStatusSupportsEmail
-                  ? STATUS_EMAIL_UNAVAILABLE_HELPER
-                  : loadingRejectEmail
-                    ? 'Loading from client account...'
+        <div className="review-reject-modal__grid">
+          <SearchableSelect
+            id="reviewRejectStatus"
+            labelText="Application status"
+            value={rejectStatusCode}
+            placeholder="Select application status"
+            options={rejectStatusSelectOptions}
+            invalid={rejectValidationMessage === REJECT_STATUS_REQUIRED_MESSAGE}
+            invalidText={rejectValidationMessage}
+            disabled={optionsUnavailable || !rejectStatusAvailable || submittingReject}
+            onChange={(value) => {
+              const statusCode = value.toUpperCase()
+              setRejectStatusCode(statusCode)
+              setSendRejectEmail(EMAIL_STATUS_CODES.has(statusCode))
+              setRejectValidationMessage('')
+            }}
+          />
+          <TextArea
+            id="reviewRejectRemark"
+            labelText="Remarks"
+            maxCount={250}
+            value={rejectRemark}
+            invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
+            invalidText={rejectValidationMessage}
+            disabled={submittingReject}
+            onChange={(event) => {
+              setRejectRemark(event.target.value.slice(0, 250))
+              setRejectValidationMessage('')
+            }}
+          />
+          <Checkbox
+            id="reviewRejectSendEmail"
+            labelText="Send status email"
+            checked={sendRejectEmail}
+            disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
+            onChange={(_, payload) => {
+              setSendRejectEmail(Boolean(payload.checked))
+              setRejectValidationMessage('')
+            }}
+          />
+          <TextInput
+            id="reviewRejectEmail"
+            labelText="Client email address"
+            helperText={
+              !rejectStatusSupportsEmail
+                ? STATUS_EMAIL_UNAVAILABLE_HELPER
+                : loadingRejectEmail
+                  ? 'Loading from client account...'
+                  : !rejectEmailAddress
+                    ? REJECT_EMAIL_MISSING_HELPER
                     : REJECT_EMAIL_PREVIEW_HELPER
-              }
-              value={rejectEmailAddress}
-              disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
-              invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
-              invalidText={rejectValidationMessage}
-              onChange={(event) => {
-                setRejectEmailAddress(event.target.value)
-                setRejectValidationMessage('')
-              }}
-            />
-            {!!rejectValidationMessage &&
-              rejectValidationMessage !== REJECT_STATUS_REQUIRED_MESSAGE &&
-              rejectValidationMessage !== REJECT_REMARK_REQUIRED_MESSAGE && (
-                <InlineNotification
-                  kind="error"
-                  title="Review validation"
-                  subtitle={rejectValidationMessage}
-                  lowContrast
-                  onCloseButtonClick={() => setRejectValidationMessage('')}
-                />
-              )}
-          </div>
-        </ModalBody>
-        <ModalFooter>
+            }
+            value={rejectEmailAddress}
+            disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
+            invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
+            invalidText={rejectValidationMessage}
+            onChange={(event) => {
+              setRejectEmailAddress(event.target.value)
+              setRejectValidationMessage('')
+            }}
+          />
+          {!!rejectValidationMessage &&
+            rejectValidationMessage !== REJECT_STATUS_REQUIRED_MESSAGE &&
+            rejectValidationMessage !== REJECT_REMARK_REQUIRED_MESSAGE && (
+              <InlineNotification
+                kind="error"
+                title="Review validation"
+                subtitle={rejectValidationMessage}
+                lowContrast
+                onCloseButtonClick={() => setRejectValidationMessage('')}
+              />
+            )}
+        </div>
+        <div className="review-reject-modal__actions">
           <Button kind="secondary" disabled={submittingReject} onClick={closeRejectPanel}>
             Cancel
           </Button>
@@ -967,8 +962,8 @@ const ProvincialReviewPage = () => {
           >
             {submittingReject ? 'Updating...' : 'Update Application'}
           </Button>
-        </ModalFooter>
-      </ComposedModal>
+        </div>
+      </Modal>
 
       <Column sm={4} md={8} lg={16}>
         <section
@@ -983,9 +978,7 @@ const ProvincialReviewPage = () => {
                   ? 'Loading results…'
                   : `${results.page.totalElements} results found`}
             </p>
-            <Button
-              kind="secondary"
-              onClick={() => void onApproveSelectedClick()}
+            <DisabledButtonTooltip
               disabled={
                 loading ||
                 submittingApproval ||
@@ -993,9 +986,30 @@ const ProvincialReviewPage = () => {
                 selectedRowsCount === 0 ||
                 !canApproveApplications
               }
+              description={
+                loading
+                  ? 'Wait for the review results to load.'
+                  : submittingApproval || submittingReject
+                    ? 'Wait for the current review update to finish.'
+                    : !canApproveApplications
+                      ? 'You do not have permission to approve applications.'
+                      : 'Select at least one application to approve.'
+              }
             >
-              Approve Selected Applications
-            </Button>
+              <Button
+                kind="secondary"
+                onClick={() => void onApproveSelectedClick()}
+                disabled={
+                  loading ||
+                  submittingApproval ||
+                  submittingReject ||
+                  selectedRowsCount === 0 ||
+                  !canApproveApplications
+                }
+              >
+                Approve Selected Applications
+              </Button>
+            </DisabledButtonTooltip>
           </div>
           <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
             {errorMessage ? (
@@ -1009,16 +1023,25 @@ const ProvincialReviewPage = () => {
                 <TableHead>
                   <TableRow>
                     <TableHeader>
-                      <Checkbox
-                        id="selectAllCurrentPageRows"
-                        hideLabel
-                        labelText="Select all rows on this page"
-                        checked={allSelectableRowsAreSelected}
+                      <DisabledButtonTooltip
                         disabled={selectableRows.length === 0 || !canApproveApplications}
-                        onChange={(_, payload) =>
-                          toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                        description={
+                          !canApproveApplications
+                            ? 'You do not have permission to approve applications.'
+                            : 'No New or Pending applications are available on this page.'
                         }
-                      />
+                      >
+                        <Checkbox
+                          id="selectAllCurrentPageRows"
+                          hideLabel
+                          labelText="Select all rows on this page"
+                          checked={allSelectableRowsAreSelected}
+                          disabled={selectableRows.length === 0 || !canApproveApplications}
+                          onChange={(_, payload) =>
+                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                          }
+                        />
+                      </DisabledButtonTooltip>
                     </TableHeader>
                     {RESULT_COLUMNS.map((column) => (
                       <TableHeader key={column.id}>
@@ -1045,18 +1068,25 @@ const ProvincialReviewPage = () => {
                   {results.content.map((row) => (
                     <TableRow key={row.applicationNumber}>
                       <TableCell>
-                        <Checkbox
-                          id={`selectRow-${row.applicationNumber}`}
-                          hideLabel
-                          labelText={`Select ${row.applicationNumber}`}
-                          checked={Boolean(selectedRowsById[row.applicationNumber])}
+                        <DisabledButtonTooltip
                           disabled={
                             !canApproveApplications || !isReviewableSourceStatus(row.status)
                           }
-                          onChange={(_, payload) =>
-                            toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
-                          }
-                        />
+                          description={disabledReviewSelectionDescription(canApproveApplications)}
+                        >
+                          <Checkbox
+                            id={`selectRow-${row.applicationNumber}`}
+                            hideLabel
+                            labelText={`Select ${row.applicationNumber}`}
+                            checked={Boolean(selectedRowsById[row.applicationNumber])}
+                            disabled={
+                              !canApproveApplications || !isReviewableSourceStatus(row.status)
+                            }
+                            onChange={(_, payload) =>
+                              toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
+                            }
+                          />
+                        </DisabledButtonTooltip>
                       </TableCell>
                       <TableCell>
                         {canOpenApplicationDetails ? (

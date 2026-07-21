@@ -154,6 +154,43 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
   })
 
+  it('shows the explicit remark validation failure without clearing the draft', async () => {
+    mockedSaveApplicationRemark.mockResolvedValueOnce({
+      success: false,
+      status: 'validation_error',
+      remarkId: '',
+      remark: '',
+      title: '',
+      user: '',
+      message:
+        'Application remarks contain unsupported special characters. Remove them and try again.',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Remarks')
+    const remarkInput = await screen.findByLabelText('New Remark')
+    fireEvent.change(remarkInput, { target: { value: 'éè' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+
+    expect(
+      await screen.findByText(
+        'Application remarks contain unsupported special characters. Remove them and try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(remarkInput).toHaveValue('éè')
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
+  })
+
   it('does not treat a normal remark as a new review-status draft', async () => {
     const rejectedDetail: ProvincialApplicationDetail = {
       ...applicationDetail,

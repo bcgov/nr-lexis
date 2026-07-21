@@ -33,6 +33,7 @@ import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChange
 import ApplicationAccuracyConfirmation, {
   APPLICATION_ACCURACY_ACKNOWLEDGEMENT,
 } from '@/components/ApplicationAccuracyConfirmation'
+import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -115,7 +116,6 @@ import {
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
 import { triggerBrowserDownload } from '@/utils/download'
-import { displayAuditIdentity } from '@/utils/text'
 import {
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
@@ -140,6 +140,8 @@ type ApplicationDetailTabKey =
   | 'remarks'
   | 'offers'
   | 'review'
+// Carbon indexes the conditional JSX children as well as the visible tabs.
+// Keep these slots aligned with the TabList and TabPanels declarations below.
 const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
   'owner',
   'agent',
@@ -193,16 +195,21 @@ function ClientDataSummary({ title, clientData, isLoading, detailFields }: Clien
     string | null
   >(null)
 
-  if (isLoading) {
-    return <InlineLoading description={`Loading ${title.toLowerCase()}...`} />
-  }
-
   if (!clientData) {
-    return null
+    return isLoading ? <InlineLoading description={`Loading ${title.toLowerCase()}...`} /> : null
   }
 
   return (
-    <section className="application-client-summary" aria-label={title}>
+    <section
+      className={`application-client-summary content-loading-region${isLoading ? ' is-loading' : ''}`}
+      aria-label={title}
+      inert={isLoading ? true : undefined}
+      aria-busy={isLoading}
+    >
+      <ContentLoadingOverlay
+        loading={isLoading}
+        loadingDescription={`Refreshing ${title.toLowerCase()}...`}
+      />
       <h3 className="application-client-summary__title">{title}</h3>
       <dl className="detail-field-grid">
         {[
@@ -596,13 +603,25 @@ const ProvincialApplicationDetailsPage = () => {
   const seededReviewFieldsApplicationRef = useRef<string | null>(null)
   const [reviewValidationMessage, setReviewValidationMessage] = useState('')
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
-  const [focusedPackageNumber, setFocusedPackageNumber] = useState('')
-  const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(0)
-  const [selectedApplicationTab, setSelectedApplicationTab] =
-    useState<ApplicationDetailTabKey>('owner')
+  const requestedApplicationTab = (searchParams.get('tab') ?? '').trim().toLowerCase()
+  const requestedPackageNumber = (searchParams.get('packageNumber') ?? '').trim()
+  const shouldFocusScaleSection =
+    requestedApplicationTab === 'items' &&
+    (searchParams.get('section') ?? '').trim().toLowerCase() === 'scales'
+  const [focusedPackageNumber, setFocusedPackageNumber] = useState(() =>
+    requestedApplicationTab === 'items' ? requestedPackageNumber : '',
+  )
+  const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(() =>
+    requestedApplicationTab === 'items' ? 1 : 0,
+  )
+  const [selectedApplicationTab, setSelectedApplicationTab] = useState<ApplicationDetailTabKey>(
+    () => (requestedApplicationTab === 'items' ? 'items' : 'owner'),
+  )
   const beginDetailRequest = useLatestRequestGuard()
   const currentApplicationNumberRef = useRef(applicationNumber)
   currentApplicationNumberRef.current = applicationNumber
+  const currentDetailRef = useRef<ProvincialApplicationDetail | null>(null)
+  currentDetailRef.current = detail
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
@@ -656,16 +675,22 @@ const ProvincialApplicationDetailsPage = () => {
       return
     }
 
+    const retainingCurrentDetail =
+      !!currentDetailRef.current &&
+      String(currentDetailRef.current.applicationNumber) === applicationNumber
+
     setLoading(true)
     setErrorMessage('')
     setDocumentsErrorMessage('')
     setActionErrorMessage('')
     setActionInfoMessage('')
-    setIndustryViewableExemptionNumber(null)
-    setDocumentRows([])
-    setPermitRows([])
-    setDocumentLookupAvailability('loading')
-    setPermitLookupAvailability('loading')
+    if (!retainingCurrentDetail) {
+      setIndustryViewableExemptionNumber(null)
+      setDocumentRows([])
+      setPermitRows([])
+      setDocumentLookupAvailability('loading')
+      setPermitLookupAvailability('loading')
+    }
 
     try {
       const response = await fetchProvincialApplicationDetail(applicationNumber)
@@ -727,8 +752,10 @@ const ProvincialApplicationDetailsPage = () => {
         }
       } catch {
         if (isLatestRequest()) {
-          setPermitRows([])
-          setPermitLookupAvailability('unavailable')
+          if (!retainingCurrentDetail) {
+            setPermitRows([])
+            setPermitLookupAvailability('unavailable')
+          }
           setActionErrorMessage('Unable to retrieve application permits.')
         }
       }
@@ -776,24 +803,28 @@ const ProvincialApplicationDetailsPage = () => {
         }
       } catch {
         if (isLatestRequest()) {
-          setDocumentRows([])
-          setDocumentLookupAvailability('unavailable')
+          if (!retainingCurrentDetail) {
+            setDocumentRows([])
+            setDocumentLookupAvailability('unavailable')
+          }
           setDocumentsErrorMessage('Unable to retrieve application documents.')
         }
       }
     } catch {
       if (isLatestRequest()) {
         setErrorMessage('Unable to retrieve provincial application detail.')
-        setDetail(null)
-        setIndustryViewableExemptionNumber(null)
-        setSummaryForm(null)
-        setSummaryBaselineForm(null)
-        setShowSummaryValidationErrors(false)
-        setDocumentRows([])
-        setPermitRows([])
-        setDocumentLookupAvailability('unavailable')
-        setPermitLookupAvailability('unavailable')
-        setDocumentsErrorMessage('')
+        if (!retainingCurrentDetail) {
+          setDetail(null)
+          setIndustryViewableExemptionNumber(null)
+          setSummaryForm(null)
+          setSummaryBaselineForm(null)
+          setShowSummaryValidationErrors(false)
+          setDocumentRows([])
+          setPermitRows([])
+          setDocumentLookupAvailability('unavailable')
+          setPermitLookupAvailability('unavailable')
+          setDocumentsErrorMessage('')
+        }
       }
     } finally {
       if (isLatestRequest()) {
@@ -1924,7 +1955,7 @@ const ProvincialApplicationDetailsPage = () => {
           remarkId: editingRemarkId ?? undefined,
         })
         if (!result.success) {
-          setActionErrorMessage('Unable to save application remark.')
+          setActionErrorMessage(result.message || 'Unable to save application remark.')
           return false
         }
 
@@ -2800,54 +2831,41 @@ const ProvincialApplicationDetailsPage = () => {
     )
   ) : null
 
+  const detailMatchesRoute =
+    !!detail && !!applicationNumber && String(detail.applicationNumber) === applicationNumber
+  const isRefreshingDetail = loading && detailMatchesRoute
+
   return (
-    <Grid fullWidth className="default-grid detail-page-grid provincial-application-detail">
+    <Grid
+      fullWidth
+      className={`default-grid detail-page-grid provincial-application-detail content-loading-region${
+        isRefreshingDetail ? ' is-loading' : ''
+      }`}
+      inert={isRefreshingDetail ? true : undefined}
+      aria-busy={isRefreshingDetail}
+    >
+      <ContentLoadingOverlay
+        loading={isRefreshingDetail}
+        loadingDescription="Refreshing provincial application detail..."
+      />
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb label="Provincial application search" to="/provincial/application" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <div className="application-detail-title-row">
-          <PageHeader
-            title={`Application ${detail?.applicationNumber ?? applicationNumber ?? ''}`.trim()}
-            subtitle="Check and manage this provincial application"
-            status={
-              detail ? (
-                <StatusTag
-                  status={detail.statusDescription ?? detail.applicationStatusCode ?? ''}
-                />
-              ) : undefined
-            }
-          />
-          {detail && (
-            <dl
-              className="application-detail-header-metrics"
-              role="group"
-              aria-label="Application highlights"
-            >
-              <div>
-                <dt>Author</dt>
-                <dd>{displayAuditIdentity(detail.author)}</dd>
-              </div>
-              <div>
-                <dt>Package count</dt>
-                <dd>{detail.packages.length.toLocaleString()}</dd>
-              </div>
-              <div>
-                <dt>File count</dt>
-                <dd>
-                  {documentLookupAvailability === 'available'
-                    ? documentRows.length.toLocaleString()
-                    : documentLookupAvailability === 'unavailable'
-                      ? 'Unavailable'
-                      : 'Loading'}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
+        <PageHeader
+          title={`Application ${
+            detailMatchesRoute ? (detail?.applicationNumber ?? '') : (applicationNumber ?? '')
+          }`.trim()}
+          subtitle="Check and manage this provincial application"
+          status={
+            detail && detailMatchesRoute ? (
+              <StatusTag status={detail.statusDescription ?? detail.applicationStatusCode ?? ''} />
+            ) : undefined
+          }
+        />
       </Column>
 
-      {loading && (
+      {loading && !detailMatchesRoute && (
         <Column sm={4} md={8} lg={16}>
           <InlineLoading description="Loading provincial application detail..." />
         </Column>
@@ -2863,7 +2881,7 @@ const ProvincialApplicationDetailsPage = () => {
         />
       )}
 
-      {!loading && detail && (
+      {detail && detailMatchesRoute && (
         <>
           {!!documentsErrorMessage && (
             <AppNotification
@@ -3691,6 +3709,7 @@ const ProvincialApplicationDetailsPage = () => {
                         onBusyChange={setApplicationItemsBusy}
                         focusedPackageNumber={focusedPackageNumber}
                         focusedPackageRequestId={focusedPackageRequestId}
+                        focusScalesRequestId={shouldFocusScaleSection ? focusedPackageRequestId : 0}
                       />
                     </Column>
                   </Grid>

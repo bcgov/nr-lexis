@@ -18,8 +18,9 @@ class RtmEmsLogAmvDateUtilsTest {
   }
 
   @Test
-  void shouldRejectDayLevelAndLegacyDateFormats() {
-    assertThat(RtmEmsLogAmvDateUtils.parseRetrievalDate("2026-07-10")).isNull();
+  void shouldNormalizeDayLevelDatesAndRejectUnsupportedFormats() {
+    assertThat(RtmEmsLogAmvDateUtils.parseRetrievalDate("2026-07-10"))
+        .isEqualTo(LocalDate.of(2026, 7, 1));
     assertThat(RtmEmsLogAmvDateUtils.parseRetrievalDate("07/01/2026")).isNull();
     assertThat(RtmEmsLogAmvDateUtils.parseRetrievalDate("not-a-date")).isNull();
   }

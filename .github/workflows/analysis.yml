@@ -69,7 +69,11 @@ jobs:
             npm run typecheck
             npm run lint
             npm run format:check
-            npm run test:cov
+            # PR validation uses sharded Vitest runs in pr-open.yml. Keep this action's
+            # dependency and supply scans, but avoid running the same suite twice.
+            if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+              npm run test:cov
+            fi
           dir: frontend
           node_version: "24"
           # Keep starter-kit project key until dedicated LEXIS project exists.

@@ -247,6 +247,9 @@ const installSyntheticLexisApi = async (page: Page) => {
       case '/api/lexis/reports/options':
         body = reportOptions
         break
+      case '/api/lexis/rtm/emslogamv':
+        body = []
+        break
       case '/api/lexis/admin/fam-users':
         body = famIdentitySearchResponse
         break
@@ -346,6 +349,54 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.app-shell')).toHaveClass(/is-side-nav-collapsed/)
   })
 
+  test('applies FSPTS row striping and blue hover to rendered data tables in both themes', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+
+    const table = page.getByRole('region', { name: 'Search results table' }).getByRole('table')
+    const rows = table.locator('tbody tr')
+    const firstRowCell = rows.nth(0).locator('td').first()
+    const secondRowCell = rows.nth(1).locator('td').first()
+
+    await expect(rows).toHaveCount(2)
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await expect(secondRowCell).toHaveCSS('background-color', 'rgb(243, 243, 245)')
+
+    await rows.nth(0).hover()
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(223, 234, 248)')
+
+    await page.getByRole('switch', { name: 'Toggle dark mode' }).click()
+    await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
+    await expect(secondRowCell).toHaveCSS('background-color', 'rgb(57, 57, 57)')
+
+    await rows.nth(0).hover()
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(31, 61, 90)')
+  })
+
+  test('shows one striped RTM AMV table without growth controls or a blank grade row', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/admin/rtm/emslogamv', { waitUntil: 'domcontentloaded' })
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Average monthly values' }),
+    ).toBeVisible()
+    const table = page.getByRole('table', { name: 'Average monthly value table' })
+    await expect(table).toBeVisible()
+    await expect(table.locator('tbody tr')).toHaveCount(23)
+    await expect(page.getByRole('radio')).toHaveCount(0)
+    await expect(table.getByRole('cell', { name: 'BLANK', exact: true })).toHaveCount(0)
+
+    const firstRowCell = table.locator('tbody tr').first().locator('td').first()
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await table.locator('tbody tr').first().hover()
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(223, 234, 248)')
+  })
+
   test('keeps the search shell within a mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
@@ -442,28 +493,22 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
     await expect(page.locator('.detail-page-grid')).toHaveCSS('row-gap', '16px')
 
+    await expect(page.getByLabel('Offer highlights')).toHaveCount(0)
+
     const detailHeaderLayout = await page.evaluate(() => {
       const breadcrumb = document.querySelector('.cds--breadcrumb')
       const pageHeader = document.querySelector('.lexis-page-header')
-      const metrics = document.querySelector('[aria-label="Offer highlights"]')
-      const metricRows = metrics ? Array.from(metrics.children) : []
       if (!(breadcrumb instanceof HTMLElement)) throw new Error('Detail breadcrumb not found')
       if (!(pageHeader instanceof HTMLElement)) throw new Error('Detail page header not found')
-      if (!(metrics instanceof HTMLElement)) throw new Error('Detail metrics not found')
 
       const breadcrumbBounds = breadcrumb.getBoundingClientRect()
       const pageHeaderBounds = pageHeader.getBoundingClientRect()
-      const metricsBounds = metrics.getBoundingClientRect()
       return {
         breadcrumbGap: pageHeaderBounds.top - breadcrumbBounds.bottom,
-        headerAlignment: Math.abs(pageHeaderBounds.top - metricsBounds.top),
-        metricRowTops: metricRows.map((row) => row.getBoundingClientRect().top),
       }
     })
 
     expect(detailHeaderLayout.breadcrumbGap).toBeLessThanOrEqual(24)
-    expect(detailHeaderLayout.headerAlignment).toBeLessThanOrEqual(4)
-    expect(new Set(detailHeaderLayout.metricRowTops).size).toBeGreaterThan(1)
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()

@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
@@ -18,6 +20,7 @@ import java.sql.Types;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.CallableStatementCallback;
@@ -31,6 +34,120 @@ class PermitRpcRepositoryTest {
   @Mock private JdbcTemplate jdbcTemplate;
   @Mock private CallableStatement callableStatement;
   @Mock private ResultSet resultSet;
+
+  @Test
+  void packagePermitMembershipShouldUseOneDirectPredicateForNormalAndOicRelationships() {
+    when(
+            jdbcTemplate.queryForObject(
+                anyString(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L)))
+        .thenReturn(1L);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPackageAssignedToPermitRequired(" PKG-903 ", 7000123L)).isTrue();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .queryForObject(
+            sql.capture(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("WHEN EXISTS")
+        .contains("FROM EXPORT_PACKAGE P")
+        .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("LEFT JOIN EXPORT_PERMIT_DETAIL EPD")
+        .contains("LEFT JOIN EXPORT_SCALE_DETAIL ESD")
+        .contains("EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("OR ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?");
+  }
+
+  @Test
+  void packagePermitMembershipShouldReturnFalseWhenNoRelationshipExists() {
+    when(
+            jdbcTemplate.queryForObject(
+                anyString(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L)))
+        .thenReturn(0L);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPackageAssignedToPermitRequired("PKG-903", 7000123L)).isFalse();
+  }
+
+  @Test
+  void packagePermitMembershipShouldRejectInvalidInputWithoutQueryingOracle() {
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPackageAssignedToPermitRequired(" ", 7000123L)).isFalse();
+    assertThat(repository.isPackageAssignedToPermitRequired("PKG-903", 0L)).isFalse();
+
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  void corePackageRowsShouldReuseTheCompletePermitPackageCursor() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_PERMIT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getString(anyString())).thenReturn(null);
+    when(resultSet.getDouble(anyString())).thenReturn(0.0d);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(" PKG-200 ", "PKG-100");
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L, 1000457L);
+    when(resultSet.getDouble("PACKAGE_VOLUME")).thenReturn(20.0d, 10.0d);
+    when(resultSet.getString("EXPORT_PACKAGE_STATUS_CODE")).thenReturn("ACT", "COM");
+    when(resultSet.getString("EXPORT_GROWTH_TYPE_CODE")).thenReturn("S", "O");
+    when(resultSet.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("T", "T");
+    when(resultSet.wasNull()).thenReturn(false);
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    var rows = repository.findCorePackageRowsByPermitNumberRequired(7000123L);
+
+    assertThat(rows)
+        .extracting(
+            "packageNumber",
+            "applicationNumber",
+            "packageVolume",
+            "packageStatusCode",
+            "growthTypeCode")
+        .containsExactly(
+            tuple("PKG-100", 1000457L, 10.0d, "COM", "O"),
+            tuple("PKG-200", 1000456L, 20.0d, "ACT", "S"));
+    verify(callableStatement).setString(1, "7000123");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void permitScaleRowsByApplicationShouldUseTheExistingApplicationCursor() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_SCALE_DETAIL_BY_APP(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString("EXPORT_SCALE_DETAIL_ID")).thenReturn("101");
+    when(resultSet.getString("TIMBER_MARK")).thenReturn("TM-1");
+    when(resultSet.getString("EXPORT_SPECIES_CODE")).thenReturn("HE");
+    when(resultSet.getString("EXPORT_GRADE_CODE")).thenReturn("A");
+    when(resultSet.getDouble("SPECIES_GRADE_VOLUME")).thenReturn(7.5d);
+    when(resultSet.getLong("PIECES_COUNT")).thenReturn(12L);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(resultSet.getString("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn("7000123");
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn("PKG-100");
+    when(resultSet.getString("CASCADE_SPLIT_CODE")).thenReturn("C");
+    when(resultSet.wasNull()).thenReturn(false);
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    var rows = repository.findPermitScaleDetailsByApplicationNumber(1000456L);
+
+    assertThat(rows)
+        .extracting(
+            "exportScaleDetailId",
+            "timberMark",
+            "exportSpeciesCode",
+            "exportGradeCode",
+            "speciesGradeVolume",
+            "piecesCount",
+            "applicationNumber",
+            "exportPermitDetailNumber",
+            "packageNumber")
+        .containsExactly(
+            tuple("101", "TM-1", "HE", "A", 7.5d, 12L, 1000456L, "7000123", "PKG-100"));
+    verify(callableStatement).setString(1, "1000456");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
 
   @Test
   void findAllCountryCodesShouldUseOracleRowsWhenAvailable() throws Exception {
@@ -619,6 +736,31 @@ class PermitRpcRepositoryTest {
     assertThat(rows)
         .extracting("invoiceNumber", "replacedByInvoice", "invoiceAmount")
         .containsExactly(tuple("A000123", null, 125.50d));
+    verify(callableStatement).setString(1, "RN-42");
+    verify(callableStatement).setString(2, "7000123");
+    verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
+  }
+
+  @Test
+  void displayGbmsHistoryShouldPreserveLegacyReceiptFallbackRows() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_9.FIND_GBMS_INVOICE_HISTORY(?,?,?) }", 3);
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getString("INVOICE_NUMBER")).thenReturn("A007321", "A007322");
+    when(resultSet.getString("CANCELLED_BY_INVOICE")).thenReturn(null, "A007321");
+    when(resultSet.getString("REPLACED_BY_INVOICE")).thenReturn("A007322", null);
+    when(resultSet.getLong("LEXIS_PERMIT_NUMBER")).thenReturn(7000999L, 7000999L);
+    when(resultSet.getDouble("INVOICE_AMOUNT")).thenReturn(-1939.50d, 1950.70d);
+    when(resultSet.wasNull()).thenReturn(false);
+
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    var rows = repository.findGbmsInvoiceHistoryForDisplay("RN-42", 7000123L, false);
+
+    assertThat(rows)
+        .extracting("invoiceNumber", "cancelledByInvoice", "replacedByInvoice", "invoiceAmount")
+        .containsExactly(
+            tuple("A007321", null, "A007322", -1939.50d),
+            tuple("A007322", "A007321", null, 1950.70d));
     verify(callableStatement).setString(1, "RN-42");
     verify(callableStatement).setString(2, "7000123");
     verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);

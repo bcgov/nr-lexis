@@ -17,6 +17,7 @@ export type SearchableSelectProps = {
   invalid?: boolean
   invalidText?: ReactNode
   onBlur?: () => void
+  onFocus?: () => void
   onChange: (value: string) => void
 }
 
@@ -32,6 +33,7 @@ export default function SearchableSelect({
   invalid = false,
   invalidText,
   onBlur,
+  onFocus,
   onChange,
 }: SearchableSelectProps) {
   const selectedItem =
@@ -52,6 +54,7 @@ export default function SearchableSelect({
       invalid={invalid}
       invalidText={invalidText}
       onBlur={onBlur}
+      onFocus={() => onFocus?.()}
       onChange={({ selectedItem }) => {
         const nextValue = selectedItem?.value ?? ''
         if (nextValue !== value) {

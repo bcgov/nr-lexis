@@ -44,7 +44,7 @@ class LexisMailServiceTest {
             "[TEST - Intended From: GENERAL <sender@example.com> - Intended To: real.client@example.com; "
                 + "Intended Cc: REGION_RCO: regional.office@gov.bc.ca] Permit approved");
     assertThat(captor.getValue().getText())
-        .contains("Non-production delivery was redirected to the configured override recipient(s).")
+        .contains("TEST delivery was redirected to the configured override recipient(s).")
         .contains("Intended From: GENERAL <sender@example.com>")
         .contains("Intended To: real.client@example.com")
         .contains("Intended Cc: REGION_RCO: regional.office@gov.bc.ca")
@@ -110,7 +110,7 @@ class LexisMailServiceTest {
             true,
             "sender@example.com",
             "test.admin@gov.bc.ca",
-            "test");
+            "dev");
 
     assertThat(
             service.send(
@@ -126,8 +126,10 @@ class LexisMailServiceTest {
     verify(sender).send(captor.capture());
     assertThat(captor.getValue().getSubject())
         .isEqualTo(
-            "[TEST - Intended From: GENERAL <sender@example.com> - Intended To: client@example.com]"
+            "[DEV - Intended From: GENERAL <sender@example.com> - Intended To: client@example.com]"
                 + " Application updated");
+    assertThat(captor.getValue().getText())
+        .startsWith("DEV delivery was redirected to the configured override recipient(s).\n");
   }
 
   @Test
@@ -176,7 +178,7 @@ class LexisMailServiceTest {
                 + "REGION_RSI (not configured)] Review");
     assertThat(captor.getAllValues().getFirst().getText())
         .startsWith(
-            "Non-production delivery was redirected to the configured override recipient(s).\n"
+            "TEST delivery was redirected to the configured override recipient(s).\n"
                 + "Intended From: GENERAL <sender@example.com>\n"
                 + "Intended To: REGION_RCO (not configured)");
   }

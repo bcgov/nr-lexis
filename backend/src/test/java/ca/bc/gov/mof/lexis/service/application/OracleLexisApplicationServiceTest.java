@@ -138,7 +138,9 @@ class OracleLexisApplicationServiceTest {
             LocalDate.of(2026, 3, 31),
             LocalDate.of(2026, 2, 1),
             LocalDate.of(2026, 2, 28),
+            31916L,
             Arrays.asList(12L, null, 12L, -1L, 0L),
+            false,
             " listingDate DESC ",
             -2,
             0);
@@ -160,6 +162,7 @@ class OracleLexisApplicationServiceTest {
     assertThat(normalized.ownerClientNumber()).isEqualTo("00077881");
     assertThat(normalized.agentClientNumber()).isEqualTo("00055667");
     assertThat(normalized.productTypeCode()).isEqualTo("S");
+    assertThat(normalized.exportScheduleId()).isEqualTo(31916L);
     assertThat(normalized.regionNumbers()).containsExactly(12L);
     assertThat(normalized.sortField()).isEqualTo("listingDate DESC");
     assertThat(normalized.page()).isZero();

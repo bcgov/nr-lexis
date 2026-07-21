@@ -1,8 +1,9 @@
 /**
- * Dormant AMV workbook upload and review workflow.
+ * Retained AMV workbook upload and review workflow.
  *
  * The table workflow in index.tsx is the active route. This module is deliberately
- * not routed so the prior screen can be reactivated without rebuilding it.
+ * not routed. Reactivation requires restoring server-side authorization and an
+ * atomic-save review before it can be exposed again.
  */
 
 import {
@@ -188,7 +189,6 @@ const RTM_REVIEW_GRADE_ORDER = [
   'L',
   'M',
   'U',
-  'W',
   'X',
   'Y',
   'Z',
@@ -198,8 +198,9 @@ const RTM_REVIEW_GRADE_ORDER = [
   '4',
   '5',
   '6',
-  'BLANK',
 ]
+
+const HIDDEN_REVIEW_GRADES = new Set(['W', 'BLANK'])
 
 const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
 
@@ -302,7 +303,7 @@ const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] =>
     const growthIndicator = normalizeKey(row.growthIndicator)
     const speciesColumnKey = resolveSpeciesColumnKey(row.species)
 
-    if (!grade || !speciesColumnKey) {
+    if (!grade || !speciesColumnKey || HIDDEN_REVIEW_GRADES.has(grade)) {
       return
     }
 
@@ -511,7 +512,7 @@ const ReviewUploadContent = ({
     <div className="admin-upload-review admin-upload-review--rtm">
       {matrixRows.length > 0 ? (
         <div className="admin-upload-review-table">
-          <Table aria-label="Average monthly value upload review">
+          <Table useZebraStyles aria-label="Average monthly value upload review">
             <TableHead>
               <TableRow>
                 <TableHeader>Grade</TableHeader>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Column, Grid, InlineLoading, TextArea, TextInput, Tile } from '@carbon/react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
+import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
@@ -120,22 +121,32 @@ const ProvincialOfferDetailsPage = () => {
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialOfferDetailField>>({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
-  const offerEditLocked = detail?.locked === true
+  const currentDetail = detail && String(detail.offerNumber) === offerNumber ? detail : null
+  const isRefreshingDetail = loading && !!currentDetail
+  const offerEditLocked = currentDetail?.locked === true
   const canEditAnyOfferField =
-    !!detail &&
+    !!currentDetail &&
     !offerEditLocked &&
-    (detail.canEditOfferDetails ||
-      detail.canEditWithdrawFields ||
-      detail.canEditScheduleDates ||
-      detail.canEditOfferRemarks)
-  const canEditOfferDetailFields = isEditing && !offerEditLocked && !!detail?.canEditOfferDetails
-  const canEditWithdrawFields = isEditing && !offerEditLocked && !!detail?.canEditWithdrawFields
+    (currentDetail.canEditOfferDetails ||
+      currentDetail.canEditWithdrawFields ||
+      currentDetail.canEditScheduleDates ||
+      currentDetail.canEditOfferRemarks)
+  const canEditOfferDetailFields =
+    isEditing && !offerEditLocked && !!currentDetail?.canEditOfferDetails
+  const canEditWithdrawFields =
+    isEditing && !offerEditLocked && !!currentDetail?.canEditWithdrawFields
   const canEditOfferCondition = canEditOfferDetailFields || canEditWithdrawFields
-  const canEditScheduleFields = isEditing && !offerEditLocked && !!detail?.canEditScheduleDates
-  const canEditOfferRemarkFields = isEditing && !offerEditLocked && !!detail?.canEditOfferRemarks
+  const canEditScheduleFields =
+    isEditing && !offerEditLocked && !!currentDetail?.canEditScheduleDates
+  const canEditOfferRemarkFields =
+    isEditing && !offerEditLocked && !!currentDetail?.canEditOfferRemarks
   const isOfferDirty = useMemo(
-    () => isEditing && !!detail && !!form && !formValuesEqual(form, buildOfferForm(detail)),
-    [detail, form, isEditing],
+    () =>
+      isEditing &&
+      !!currentDetail &&
+      !!form &&
+      !formValuesEqual(form, buildOfferForm(currentDetail)),
+    [currentDetail, form, isEditing],
   )
 
   const loadOfferDetail = useCallback(async () => {
@@ -149,8 +160,6 @@ const ProvincialOfferDetailsPage = () => {
     }
 
     setLoading(true)
-    setDetail(null)
-    setForm(null)
     setErrorMessage('')
     setStatus(null)
     try {
@@ -167,8 +176,6 @@ const ProvincialOfferDetailsPage = () => {
       if (isLatestRequest()) {
         console.error(error)
         setErrorMessage('Unable to retrieve provincial offer detail.')
-        setDetail(null)
-        setForm(null)
       }
     } finally {
       if (isLatestRequest()) {
@@ -291,11 +298,15 @@ const ProvincialOfferDetailsPage = () => {
     if (!applicationNumber || !packageNumber) {
       return
     }
-    const params = new URLSearchParams({ packageFilter: packageNumber })
-    const applicationPath =
-      detail?.exportJurisdictionCode?.trim().toUpperCase() === 'F'
-        ? `/federal/application/${applicationNumber}`
-        : `/provincial/application/${applicationNumber}`
+    const isFederal = detail?.exportJurisdictionCode?.trim().toUpperCase() === 'F'
+    const params = new URLSearchParams(
+      isFederal
+        ? { packageFilter: packageNumber }
+        : { tab: 'items', packageNumber, section: 'scales' },
+    )
+    const applicationPath = isFederal
+      ? `/federal/application/${applicationNumber}`
+      : `/provincial/application/${applicationNumber}`
     navigate(`${applicationPath}?${params}`)
   }
 
@@ -374,38 +385,20 @@ const ProvincialOfferDetailsPage = () => {
         <DetailBreadcrumb label="Provincial offer search" to="/provincial/offers" />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <div className="application-detail-title-row">
-          <PageHeader
-            title={`Offer ${detail?.offerNumber ?? offerNumber ?? ''}`.trim()}
-            subtitle="Check and manage this provincial offer"
-            actions={
-              !isEditing && detail && form && canEditAnyOfferField ? (
-                <Button kind="primary" onClick={() => setIsEditing(true)}>
-                  Edit
-                </Button>
-              ) : undefined
-            }
-          />
-          {detail && (
-            <dl className="application-detail-header-metrics" aria-label="Offer highlights">
-              <div>
-                <dt>Application</dt>
-                <dd>{displayValue(detail.applicationNumber)}</dd>
-              </div>
-              <div>
-                <dt>Package</dt>
-                <dd>{displayValue(detail.packageNumber)}</dd>
-              </div>
-              <div>
-                <dt>Valid offer</dt>
-                <dd>{displayValue(detail.validOfferIndicator)}</dd>
-              </div>
-            </dl>
-          )}
-        </div>
+        <PageHeader
+          title={`Offer ${currentDetail?.offerNumber ?? offerNumber ?? ''}`.trim()}
+          subtitle="Check and manage this provincial offer"
+          actions={
+            !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
+              <Button kind="primary" onClick={() => setIsEditing(true)}>
+                Edit
+              </Button>
+            ) : undefined
+          }
+        />
       </Column>
 
-      {loading && (
+      {loading && !currentDetail && (
         <Column sm={4} md={8} lg={16}>
           <InlineLoading description="Loading provincial offer detail..." />
         </Column>
@@ -436,21 +429,33 @@ const ProvincialOfferDetailsPage = () => {
         </Column>
       )}
 
-      {!loading && detail?.locked && (
+      {!loading && currentDetail?.locked && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
           <AppNotification
             kind="warning"
             title="Offer locked"
             subtitle={
-              detail.lockMessage || 'This offer is currently locked for editing by another user.'
+              currentDetail.lockMessage ||
+              'This offer is currently locked for editing by another user.'
             }
             lowContrast
           />
         </Column>
       )}
 
-      {!loading && detail && form && (
-        <Column sm={4} md={8} lg={16}>
+      {detail && currentDetail && form && (
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className={`content-loading-region${isRefreshingDetail ? ' is-loading' : ''}`}
+          inert={isRefreshingDetail ? true : undefined}
+          aria-busy={isRefreshingDetail}
+        >
+          <ContentLoadingOverlay
+            loading={isRefreshingDetail}
+            loadingDescription="Refreshing provincial offer detail..."
+          />
           <Tile className="provincial-offer-create">
             <fieldset className="legacy-form-fieldset">
               <legend>Application details</legend>

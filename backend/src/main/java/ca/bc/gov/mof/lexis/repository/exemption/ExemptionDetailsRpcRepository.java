@@ -1,7 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
-import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
@@ -524,10 +523,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     return new ApplicationSummaryRow(
         coalesce(getLong(rs, "APPLICATION_NUMBER"), 0L),
         coalesce(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), 0.0d),
-        coalesce(
-            Optional.ofNullable(getDouble(rs, "TOTAL_SCALE_VOLUME"))
-                .orElse(getDouble(rs, "SCALE_VOLUME")),
-            0.0d),
+        // The legacy cursor does not return aggregate scale volume; legacy leaves it blank.
+        Double.NaN,
         valueOrEmpty(getString(rs, "OWNER_CLIENT_NUMBER")),
         valueOrEmpty(getString(rs, "EXPORT_JURISDICTION_CODE")),
         valueOrEmpty(getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
@@ -593,9 +590,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         getLocalDate(rs, "APPLICATION_DATE"),
         getLong(rs, "TERM_DAYS"),
         getLocalDate(rs, "RECEIVED_DATE"),
-        firstNonNull(
-            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
-            getDouble(rs, "APPLICATION_VOLUME")),
+        getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
         getDouble(rs, "AVERAGE_LOG_VOLUME"),
         getString(rs, "PRODUCT_LOCATION"),
         getString(rs, "ENTRY_USERID"),

@@ -16,7 +16,12 @@ describe('SearchResultsTableFrame', () => {
       </SearchResultsTableFrame>,
     )
 
-    expect(container.firstElementChild).toHaveAttribute('aria-busy', 'true')
+    expect(container.firstElementChild).not.toHaveAttribute('aria-busy')
+    expect(screen.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.getByRole('region', { name: 'Search results table' })).toHaveAttribute('inert')
     expect(screen.getByText('Loading search results...')).toBeInTheDocument()
     expect(screen.getByText('Existing rows')).toBeInTheDocument()
   })
@@ -34,7 +39,14 @@ describe('SearchResultsTableFrame', () => {
       </SearchResultsTableFrame>,
     )
 
-    expect(container.firstElementChild).toHaveAttribute('aria-busy', 'false')
+    expect(container.firstElementChild).not.toHaveAttribute('aria-busy')
+    expect(screen.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
+      'aria-busy',
+      'false',
+    )
+    expect(screen.getByRole('region', { name: 'Search results table' })).not.toHaveAttribute(
+      'inert',
+    )
     expect(screen.queryByText('Loading search results...')).not.toBeInTheDocument()
     expect(screen.getByText('Loaded rows')).toBeInTheDocument()
   })

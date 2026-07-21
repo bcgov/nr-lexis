@@ -163,18 +163,13 @@ $F{OFFER_WITHDRAWAL_DATE}==null
 //    'Provincial'
 //else if {?P_JURISDICTION} = 'F' then
 //    'Federal'
-//else if {?P_JURISDICTION} = 'I' then
-//    'Indian Reserve'
-
 $P{P_JURISDICTION} == null || $P{P_JURISDICTION}.isEmpty()
 ?   "All"
 :   $P{P_JURISDICTION}.equalsIgnoreCase( "P" )
     ?   "Provincial"
     :   $P{P_JURISDICTION}.equalsIgnoreCase( "F" )
         ?   "Federal"
-        :   $P{P_JURISDICTION}.equalsIgnoreCase( "I" )
-            ? "Indian Reserve"
-            : ""]]></variableExpression>
+        : ""]]></variableExpression>
 	</variable>
 	<variable name="CCF6_F_DATE_RANGE" class="java.lang.String" resetType="None">
 		<variableExpression><![CDATA[//if (

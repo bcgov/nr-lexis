@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
@@ -228,17 +229,55 @@ public class ExemptionController {
   public ResponseEntity<ExemptionDetailDto> getByExemptionNumber(
       @PathVariable("exemptionNumber") String exemptionNumber,
       Authentication authentication) {
+    long startedAtNanos = System.nanoTime();
     ExemptionService service = serviceProvider.getIfAvailable();
     if (service == null) {
-      LOGGER.warn("Exemption service unavailable - returning no content for detail");
+      LOGGER.warn(
+          "event=lexis_exemption_detail operation=get outcome=service_unavailable exemptionNumber={} durationMs={}",
+          exemptionNumber,
+          elapsedMillis(startedAtNanos));
       return ResponseEntity.noContent().build();
     }
-    return service.findByExemptionNumber(exemptionNumber)
-        .filter(detail -> provincialAuthorizationService.canAccessExemption(authentication, detail))
-        // Permit identifiers use the dedicated row-level-authorized RPC contract.
-        .map(this::withoutPermitIdentifiers)
-        .map(ResponseEntity::ok)
-        .orElseGet(() -> ResponseEntity.notFound().build());
+
+    LOGGER.info(
+        "event=lexis_exemption_detail operation=get outcome=started exemptionNumber={}",
+        exemptionNumber);
+    try {
+      long lookupStartedAtNanos = System.nanoTime();
+      ExemptionDetailDto detail = service.findByExemptionNumber(exemptionNumber).orElse(null);
+      long lookupDurationMillis = elapsedMillis(lookupStartedAtNanos);
+
+      long authorizationStartedAtNanos = System.nanoTime();
+      boolean authorized =
+          detail != null && provincialAuthorizationService.canAccessExemption(authentication, detail);
+      long authorizationDurationMillis = elapsedMillis(authorizationStartedAtNanos);
+      String outcome = detail == null ? "not_found" : authorized ? "found" : "access_denied";
+      ResponseEntity<ExemptionDetailDto> response =
+          authorized
+              // Permit identifiers use the dedicated row-level-authorized RPC contract.
+              ? ResponseEntity.ok(withoutPermitIdentifiers(detail))
+              : ResponseEntity.notFound().build();
+
+      LOGGER.info(
+          "event=lexis_exemption_detail operation=get outcome={} exemptionNumber={} lookupDurationMs={} authorizationDurationMs={} durationMs={}",
+          outcome,
+          exemptionNumber,
+          lookupDurationMillis,
+          authorizationDurationMillis,
+          elapsedMillis(startedAtNanos));
+      return response;
+    } catch (RuntimeException exception) {
+      LOGGER.warn(
+          "event=lexis_exemption_detail operation=get outcome=failed exemptionNumber={} durationMs={} failureType={}",
+          exemptionNumber,
+          elapsedMillis(startedAtNanos),
+          exceptionType(exception));
+      throw exception;
+    }
+  }
+
+  private static long elapsedMillis(long startedAtNanos) {
+    return Math.max(0L, (System.nanoTime() - startedAtNanos) / 1_000_000L);
   }
 
   private ExemptionDetailDto withoutPermitIdentifiers(ExemptionDetailDto detail) {

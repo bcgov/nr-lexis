@@ -155,6 +155,7 @@ export type ApplicationRemarkMutationResult = {
   title: string
   user: string
   status: string
+  message?: string
 }
 
 export type ApplicationSummaryMutationResult = {
@@ -326,6 +327,7 @@ const normalizeScaleMutationResult = (payload: unknown): ApplicationScaleMutatio
 const normalizeRemarkMutationResult = (payload: unknown): ApplicationRemarkMutationResult => {
   const source = asRecord(payload)
   const status = asString(source.status)
+  const message = asString(source.message)
   return {
     success: status.toLowerCase() === 'ok',
     status,
@@ -333,6 +335,7 @@ const normalizeRemarkMutationResult = (payload: unknown): ApplicationRemarkMutat
     remark: asString(source.remark),
     title: asString(source.title),
     user: asString(source.user),
+    ...(message ? { message } : {}),
   }
 }
 

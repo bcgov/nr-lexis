@@ -35,8 +35,7 @@ public final class RtmEmsLogAmvDateUtils {
     }
 
     try {
-      LocalDate parsed = LocalDate.parse(normalized, DateTimeFormatter.ISO_LOCAL_DATE);
-      return isFirstOfMonth(parsed) ? parsed : null;
+      return LocalDate.parse(normalized, DateTimeFormatter.ISO_LOCAL_DATE).withDayOfMonth(1);
     } catch (DateTimeParseException ignored) {
       return null;
     }

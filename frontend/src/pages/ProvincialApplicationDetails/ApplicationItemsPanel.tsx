@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
   Button,
   InlineLoading,
@@ -125,6 +125,7 @@ export type ProvincialApplicationItemsPanelProps = {
   onBusyChange?: (busy: boolean) => void
   focusedPackageNumber?: string
   focusedPackageRequestId?: number
+  focusScalesRequestId?: number
 }
 
 const emptyPackageForm = (productTypeCode: string | null | undefined): PackageFormState => ({
@@ -314,6 +315,7 @@ function ProvincialApplicationItemsPanel({
   onBusyChange,
   focusedPackageNumber,
   focusedPackageRequestId,
+  focusScalesRequestId,
 }: ProvincialApplicationItemsPanelProps) {
   const applicationNumber = String(detail.applicationNumber)
   const productTypeCode = detail.productTypeCode ?? ''
@@ -380,6 +382,8 @@ function ProvincialApplicationItemsPanel({
   const [createPackageDraftTouched, setCreatePackageDraftTouched] = useState(false)
   const [scaleDraftTouched, setScaleDraftTouched] = useState(false)
   const [pendingPackageSelection, setPendingPackageSelection] = useState('')
+  const scalesSectionRef = useRef<HTMLElement>(null)
+  const lastScrolledToScalesRequestIdRef = useRef(0)
   const beginItemsRequest = useLatestRequestGuard()
   const selectedPackageDraftDirty =
     packageDraftTouched &&
@@ -705,6 +709,19 @@ function ProvincialApplicationItemsPanel({
   }, [loadPackageItems, selectedPackageNumber])
 
   useEffect(() => {
+    if (
+      !focusScalesRequestId ||
+      lastScrolledToScalesRequestIdRef.current === focusScalesRequestId ||
+      !packageDataLoaded ||
+      (focusedPackageNumber && selectedPackageNumber !== focusedPackageNumber)
+    ) {
+      return
+    }
+    lastScrolledToScalesRequestIdRef.current = focusScalesRequestId
+    scalesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [focusScalesRequestId, focusedPackageNumber, packageDataLoaded, selectedPackageNumber])
+
+  useEffect(() => {
     let cancelled = false
     const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
     const productType = packageForm.productType || productTypeCode
@@ -944,6 +961,7 @@ function ProvincialApplicationItemsPanel({
     setCreateSpeciesDraft([])
     setCreateSpeciesToAdd('')
     setCreatePackageDraftTouched(false)
+    setTouchedItemFields({})
     setShowCreatePackageValidationErrors(false)
   }
 
@@ -951,6 +969,7 @@ function ProvincialApplicationItemsPanel({
     setScaleForm(emptyScaleForm)
     setScaleActionErrorMessage('')
     setScaleDraftTouched(false)
+    setTouchedItemFields({})
     setShowScaleValidationErrors(false)
   }
 
@@ -1108,11 +1127,7 @@ function ProvincialApplicationItemsPanel({
 
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
-      setCreatePackageForm(emptyPackageForm(productTypeCode))
-      setCreateSpeciesDraft([])
-      setCreatePackageDraftTouched(false)
-      setCreateSpeciesToAdd('')
-      setShowCreatePackageValidationErrors(false)
+      resetCreatePackageDraft()
       setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
       await onDetailChanged()
       await loadApplicationScaleSummary()
@@ -1203,10 +1218,7 @@ function ProvincialApplicationItemsPanel({
       }
 
       setScales((current) => [...current, result.result as ApplicationPackageScaleRow])
-      setScaleForm(emptyScaleForm)
-      setScaleDraftTouched(false)
-      setScaleActionErrorMessage('')
-      setShowScaleValidationErrors(false)
+      resetScaleDraft()
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
       setScaleLookupResult('')
       await loadApplicationScaleSummary()
@@ -1829,7 +1841,11 @@ function ProvincialApplicationItemsPanel({
           </div>
         </section>
 
-        <section className="application-items-section application-items-section--scales">
+        <section
+          id="application-items-scales"
+          ref={scalesSectionRef}
+          className="application-items-section application-items-section--scales"
+        >
           <h3>Scales</h3>
           <div className="application-items-form">
             <TextInput

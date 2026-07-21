@@ -41,6 +41,22 @@ class LexisApplicationControllerTests {
   }
 
   @Test
+  void searchFiltersByExportScheduleId() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/lexis/applications/search")
+                .param("exportScheduleId", "1002")
+                .param("page", "0")
+                .param("size", "10")
+                .with(
+                    jwt("orgUnitNo", 11L)
+                        .authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.total").value(1))
+        .andExpect(jsonPath("$.results[0].application").value(1000123));
+  }
+
+  @Test
   void detailReturnsSingleApplication() throws Exception {
     mockMvc
         .perform(

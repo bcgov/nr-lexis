@@ -28,6 +28,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -76,6 +77,9 @@ public interface PermitDetailsRpcService {
 
   PermitApplicationListRpcResponseDto getApplicationList(
       Long permitNumber, Predicate<Long> applicationAccess);
+
+  PermitCoreTabsRpcResponseDto getCoreTabs(
+      Long permitNumber, boolean blanketOic, Predicate<Long> applicationAccess);
 
   PermitAvailableApplicationListRpcResponseDto getAvailableApplicationList(
       String exemptionNumber,

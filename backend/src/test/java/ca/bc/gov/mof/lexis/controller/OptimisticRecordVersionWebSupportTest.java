@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
@@ -63,7 +64,24 @@ class OptimisticRecordVersionWebSupportTest {
   }
 
   @Test
-  void interceptorShouldPreReadVersionForMainPermitDetail() {
+  void interceptorShouldSkipAggregateVersionForMainPermitDetail() {
+    OracleOptimisticRecordVersionService versionService =
+        mock(OracleOptimisticRecordVersionService.class);
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("GET", "/api/lexis/permits/999000001");
+
+    new OptimisticRecordVersionInterceptor(versionService)
+        .preHandle(request, new MockHttpServletResponse(), new Object());
+
+    assertThat(
+            request.getAttribute(
+                OptimisticRecordVersionInterceptor.RECORD_VERSION_ATTRIBUTE))
+        .isNull();
+    verifyNoInteractions(versionService);
+  }
+
+  @Test
+  void interceptorShouldPreReadVersionForPermitEditContext() {
     OracleOptimisticRecordVersionService versionService =
         mock(OracleOptimisticRecordVersionService.class);
     when(
@@ -71,7 +89,8 @@ class OptimisticRecordVersionWebSupportTest {
                 OptimisticRecordType.PERMIT, Long.toString(SYNTHETIC_PERMIT_NUMBER)))
         .thenReturn(Optional.of(PERMIT_VERSION));
     MockHttpServletRequest request =
-        new MockHttpServletRequest("GET", "/api/lexis/permits/999000001");
+        new MockHttpServletRequest("GET", "/api/lexis/rpc/permit-details/edit-context");
+    request.setParameter("permitNumber", Long.toString(SYNTHETIC_PERMIT_NUMBER));
 
     new OptimisticRecordVersionInterceptor(versionService)
         .preHandle(request, new MockHttpServletResponse(), new Object());

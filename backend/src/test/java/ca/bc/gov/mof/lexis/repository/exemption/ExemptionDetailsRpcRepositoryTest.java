@@ -5,10 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.sql.CallableStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -97,6 +102,90 @@ class ExemptionDetailsRpcRepositoryTest {
             () -> repository.streamFileAttachment(44L, new ByteArrayOutputStream()))
         .isInstanceOf(java.io.IOException.class)
         .hasCauseInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void applicationLinkLookupShouldUseLegacyExemptionApplicationVolumeColumn() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet cursor = applicationLinkCursor(108653L, 847.7d);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(cursor);
+
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findApplicationLinkRecord(108653L))
+        .hasValueSatisfying(
+            application -> {
+              assertThat(application.applicationNumber()).isEqualTo(108653L);
+              assertThat(application.exemptionApplicationVolume()).isEqualTo(847.7d);
+            });
+
+    verify(cursor, never()).getDouble("APPLICATION_VOLUME");
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void applicationSummaryLookupShouldNotReadScaleColumnsMissingFromLegacyCursor() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet cursor = applicationSummaryCursor(108653L, 847.7d);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(cursor);
+
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findApplicationSummariesByExemptionNumber("26-8759"))
+        .singleElement()
+        .satisfies(
+            application -> {
+              assertThat(application.applicationNumber()).isEqualTo(108653L);
+              assertThat(application.requestedVolume()).isEqualTo(847.7d);
+              assertThat(application.scaleVolume()).isNaN();
+            });
+
+    verify(cursor, never()).getDouble("TOTAL_SCALE_VOLUME");
+    verify(cursor, never()).getDouble("SCALE_VOLUME");
+  }
+
+  private static ResultSet applicationLinkCursor(long applicationNumber, double applicationVolume)
+      throws SQLException {
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
+    when(cursor.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(applicationVolume);
+    when(cursor.getTimestamp("APPLICATION_DATE"))
+        .thenReturn(Timestamp.valueOf("2026-02-20 00:00:00"));
+    when(cursor.getTimestamp("RECEIVED_DATE"))
+        .thenReturn(Timestamp.valueOf("2026-02-21 00:00:00"));
+    return cursor;
+  }
+
+  private static ResultSet applicationSummaryCursor(long applicationNumber, double applicationVolume)
+      throws SQLException {
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
+    when(cursor.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(applicationVolume);
+    when(cursor.getString("OWNER_CLIENT_NUMBER")).thenReturn("00162575");
+    when(cursor.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
+    when(cursor.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("T");
+    return cursor;
   }
 
   private static void assertOracleFailure(Runnable operation) {

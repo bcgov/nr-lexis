@@ -69,4 +69,17 @@ describe('AppRoutes selection', () => {
 
     expect(await screen.findByText('protected-routes')).toBeInTheDocument()
   })
+
+  it('renders only the session loader while authentication is loading', () => {
+    mockUseAuth.mockReturnValue({
+      isLoading: true,
+      isLoggedIn: true,
+      hasAnyRole: true,
+    })
+
+    render(<AppRoutes />)
+
+    expect(screen.getByRole('img', { name: 'Loading session...' })).toBeInTheDocument()
+    expect(screen.queryByText('protected-routes')).not.toBeInTheDocument()
+  })
 })

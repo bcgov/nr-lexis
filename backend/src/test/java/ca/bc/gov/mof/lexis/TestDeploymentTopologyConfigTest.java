@@ -18,10 +18,10 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_min_replicas: \"2\"")
         .contains("backend_max_replicas: \"6\"")
         .contains("frontend_replicas: \"2\"")
-        .contains("backend_cpu_request: \"500m\"")
-        .contains("backend_memory_request: \"1Gi\"")
-        .contains("backend_cpu_limit: \"1500m\"")
-        .contains("backend_memory_limit: \"2Gi\"")
+        .contains("backend_cpu_request: \"750m\"")
+        .contains("backend_memory_request: \"1536Mi\"")
+        .contains("backend_cpu_limit: \"2\"")
+        .contains("backend_memory_limit: \"3Gi\"")
         .contains("frontend_cpu_request: \"100m\"")
         .contains("frontend_memory_request: \"128Mi\"")
         .contains("frontend_cpu_limit: \"500m\"")
@@ -40,6 +40,10 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_min_replicas: \"3\"")
         .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
+        .contains("backend_cpu_request: \"400m\"")
+        .contains("backend_memory_request: \"1Gi\"")
+        .contains("backend_cpu_limit: \"1500m\"")
+        .contains("backend_memory_limit: \"1536Mi\"")
         .contains("expiry_enabled: true")
         .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}")
         .contains("lexis_mail_region_rco_address: ${{ secrets.LEXIS_MAIL_REGION_RCO_ADDRESS }}")
@@ -66,6 +70,10 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_min_replicas: \"1\"")
         .contains("backend_max_replicas: \"1\"")
         .contains("frontend_replicas: \"1\"")
+        .contains("backend_cpu_request: \"500m\"")
+        .contains("backend_memory_request: \"1Gi\"")
+        .contains("backend_cpu_limit: \"1500m\"")
+        .contains("backend_memory_limit: \"2Gi\"")
         .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}");
     assertThat(backendDeploy)
         .contains("file: backend/openshift.deploy.yml")
@@ -97,10 +105,6 @@ class TestDeploymentTopologyConfigTest {
     assertThat(workflow)
         .contains("backend_min_replicas:")
         .contains("backend_max_replicas:")
-        .contains(
-            "lexis_mail_from:\n"
-                + "        description: Approved sender mailbox for LEXIS workflow messages\n"
-                + "        required: true")
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
@@ -118,12 +122,19 @@ class TestDeploymentTopologyConfigTest {
                 + " ${{ (inputs.environment == 'dev' || inputs.environment == 'test')"
                 + " && 'DEBUG' || 'INFO' }}")
         .contains(
+            "LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL:"
+                + " ${{ (inputs.environment == 'dev' || inputs.environment == 'test')"
+                + " && 'DEBUG' || 'INFO' }}")
+        .contains(
             "-p LEXIS_EXPIRY_LOCK_AT_MOST_FOR=\"$LEXIS_EXPIRY_LOCK_AT_MOST_FOR\"")
         .contains(
             "-p LEXIS_EXPIRY_LOCK_AT_LEAST_FOR=\"$LEXIS_EXPIRY_LOCK_AT_LEAST_FOR\"")
         .contains(
             "-p LEXIS_REPORT_STATISTICS_LOG_LEVEL="
                 + "\"$LEXIS_REPORT_STATISTICS_LOG_LEVEL\"")
+        .contains(
+            "-p LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL="
+                + "\"$LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL\"")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")
@@ -161,9 +172,11 @@ class TestDeploymentTopologyConfigTest {
         .contains("- name: LEXIS_EXPIRY_LOCK_AT_MOST_FOR")
         .contains("- name: LEXIS_EXPIRY_LOCK_AT_LEAST_FOR")
         .contains("- name: LEXIS_REPORT_STATISTICS_LOG_LEVEL")
+        .contains("- name: LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL")
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR}")
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}")
         .contains("value: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL}")
+        .contains("value: ${LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL}")
         .contains("type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 0\n          maxSurge: 1")
         .contains("averageUtilization: 70")
         .contains("topologySpreadConstraints:")

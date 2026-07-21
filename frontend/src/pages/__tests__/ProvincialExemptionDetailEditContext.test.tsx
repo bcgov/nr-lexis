@@ -567,6 +567,145 @@ describe('Provincial exemption edit context', () => {
     expect(committedUnload.defaultPrevented).toBe(false)
   })
 
+  it('does not show an editing warning while refreshing edit settings after a save', async () => {
+    const editContext = {
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    }
+    let resolveRefreshedEditContext: (value: typeof editContext) => void = () => undefined
+    const refreshedEditContext = new Promise<typeof editContext>((resolve) => {
+      resolveRefreshedEditContext = resolve
+    })
+    vi.mocked(fetchExemptionEditContext)
+      .mockResolvedValueOnce(editContext)
+      .mockImplementationOnce(() => refreshedEditContext)
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: true,
+      message: 'The exemption was updated successfully.',
+      exemptionNumber: 'BOIC-205',
+      errors: [],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    await waitFor(() => expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledTimes(2))
+    expect(
+      screen.queryByText(
+        'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
+      ),
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveRefreshedEditContext(editContext)
+    })
+
+    expect(await screen.findByText('The exemption was updated successfully.')).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
+      ),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not show an editing warning while initial edit settings load', async () => {
+    const editContext = {
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    }
+    let resolveEditContext: (value: typeof editContext) => void = () => undefined
+    const pendingEditContext = new Promise<typeof editContext>((resolve) => {
+      resolveEditContext = resolve
+    })
+    vi.mocked(fetchExemptionEditContext).mockImplementationOnce(() => pendingEditContext)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Exemption BOIC-205', level: 1 })
+    await waitFor(() => expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledTimes(1))
+
+    expect(
+      screen.queryByText(
+        'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
+      ),
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveEditContext(editContext)
+    })
+
+    expect(await screen.findByRole('button', { name: 'Edit exemption' })).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
+      ),
+    ).not.toBeInTheDocument()
+  })
+
+  it('returns to Summary when editing starts and keeps related permits read-only', async () => {
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Permits' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit exemption' }))
+
+    expect(screen.getByRole('tab', { name: 'Summary' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'Edit exemption', level: 2 })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Permits' }))
+    expect(
+      screen.getByText(
+        'Permit records are read-only. Edit exemption details on the Summary or Fees tab.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeInTheDocument()
+
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+  })
+
   it('protects relationship drafts and disables linking while exemption fields are dirty', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
@@ -699,6 +838,9 @@ describe('Provincial exemption edit context', () => {
     const firstConfirm = within(firstDialog).getByRole('button', { name: 'Approve exemption' })
     expect(firstCertification).not.toBeChecked()
     expect(firstConfirm).toBeDisabled()
+    expect(firstConfirm).toHaveClass('cds--btn--primary')
+    expect(firstConfirm).not.toHaveClass('cds--btn--danger')
+    expect(firstConfirm.parentElement).toHaveClass('lexis-confirmation-modal__actions')
     await userEvent.click(firstConfirm)
     expect(vi.mocked(approveExemptions)).not.toHaveBeenCalled()
 

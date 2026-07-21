@@ -94,6 +94,7 @@
   --csp-layer-01: #ffffff;
   --csp-layer-02: #f4f4f4;
   --csp-layer-hover: #e8e8e8;
+  --csp-table-row-hover-bg: #dfeaf8;
   --csp-content-bg: #ffffff;
   --csp-border-subtle-01: #e0e0e0;
   --csp-border-strong-01: #8d8d8d;
@@ -192,6 +193,13 @@ body {
   --csp-active-side-nav-width: var(--csp-side-nav-collapsed-width);
 }
 
+// Route modules load inside the application shell. Keep Carbon's temporary
+// full-page loader above the fixed header and side navigation until the route
+// is ready to render.
+.app-shell .cds--loading-overlay {
+  z-index: 9001;
+}
+
 .cds--g100 .app-shell {
   --csp-button-primary: var(--csp-brand-blue);
   --csp-interactive: var(--csp-brand-blue);
@@ -209,6 +217,7 @@ body {
   --csp-layer-01: #262626;
   --csp-layer-02: #393939;
   --csp-layer-hover: #474747;
+  --csp-table-row-hover-bg: #1f3d5a;
   --csp-content-bg: #262626;
   --csp-border-subtle-01: #525252;
   --csp-border-strong-01: #6f6f6f;
@@ -323,58 +332,53 @@ body {
 
 .csp-header-theme-toggle {
   align-items: center;
-  color: var(--csp-text-inverse);
   display: flex;
-  font-size: 12px;
-  gap: 8px;
   height: 100%;
-  padding: 0 16px;
-  white-space: nowrap;
+  padding: 0 12px;
 }
 
 .csp-theme-switch {
-  position: relative;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.35);
+  background-color: rgba(255, 255, 255, 0.9);
   border: 0;
-  border-radius: 16px;
-  color: var(--csp-interactive);
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
-  height: 16px;
+  height: 24px;
   justify-content: flex-start;
   margin: 0;
   padding: 2px;
-  width: 32px;
+  width: 44px;
 }
 
-.csp-theme-switch::after {
-  position: absolute;
-  inset-block-start: 2px;
-  inset-inline-start: 2px;
-  width: 12px;
-  height: 12px;
-  background-color: #ffffff;
+.csp-theme-switch__thumb {
+  align-items: center;
+  background-color: var(--csp-interactive);
   border-radius: 50%;
-  content: '';
+  color: #ffffff;
+  display: flex;
+  height: 20px;
+  justify-content: center;
   transition: transform 0.2s ease;
+  width: 20px;
 }
 
 .csp-theme-switch[aria-checked='true'] {
   background-color: rgba(255, 255, 255, 0.9);
 }
 
-.csp-theme-switch[aria-checked='true']::after {
-  background-color: var(--csp-interactive);
-  transform: translateX(16px);
+.csp-theme-switch[aria-checked='true'] .csp-theme-switch__thumb {
+  transform: translateX(20px);
 }
 
 .csp-theme-switch svg {
-  z-index: 1;
-  display: none;
+  display: block;
+  fill: currentcolor;
 }
 
 .csp-header-action {
+  --cds-icon-primary: var(--csp-text-inverse);
+
   width: var(--csp-header-height);
   height: var(--csp-header-height);
   color: var(--csp-text-inverse);
@@ -385,9 +389,13 @@ body {
   background-color: var(--csp-header-hover);
 }
 
-.csp-header-action[aria-expanded='true'] {
-  background-color: var(--csp-layer-01);
-  color: var(--csp-interactive);
+// Carbon's icon-only ghost focus state uses a grey active fill and blue inset ring.
+.csp-header-action[aria-expanded='true'],
+.csp-header-action[aria-expanded='true']:hover,
+.csp-header-action.cds--btn--icon-only.cds--btn--ghost:focus {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .csp-side-nav {
@@ -1488,6 +1496,11 @@ legend.cds--label {
   max-inline-size: 100%;
 }
 
+.create-form-grid .selected-application-numbers .cds--text-area {
+  block-size: auto;
+  min-block-size: calc(2 * var(--cds-layout-size-height-md, 2.5rem));
+}
+
 .create-form-grid .cds--date-picker-input__wrapper > span {
   inline-size: 100%;
   max-inline-size: 100%;
@@ -1525,6 +1538,26 @@ legend.cds--label {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+.disabled-button-tooltip {
+  cursor: not-allowed;
+  display: inline-flex;
+}
+
+.disabled-button-tooltip > .cds--btn:disabled {
+  pointer-events: none;
+}
+
+.disabled-button-tooltip > .cds--checkbox-wrapper {
+  pointer-events: none;
+}
+
+// Search result tables scroll beneath the fixed application navigation. Lift
+// disabled-control explanations into the app overlay layer so they remain
+// visible when a checkbox is near the edge of a table.
+.disabled-button-tooltip-popover > .cds--popover {
+  z-index: 9001;
 }
 
 .region-multi-select .cds--multi-select--filterable > .cds--list-box__field > .cds--tag--filter {
@@ -1702,12 +1735,14 @@ legend.cds--label {
   vertical-align: top;
 }
 
-.legacy-search-table-frame .cds--data-table tbody tr:hover td {
-  background-color: var(--csp-brand-blue-tint-hover);
+.legacy-search-table-frame .cds--data-table tbody tr:hover td,
+.legacy-search-table-frame .cds--data-table tbody tr:focus-within td {
+  background-color: #dfeaf8;
 }
 
-.cds--g100 .legacy-search-table-frame .cds--data-table tbody tr:hover td {
-  background-color: var(--csp-layer-hover);
+.cds--g100 .legacy-search-table-frame .cds--data-table tbody tr:hover td,
+.cds--g100 .legacy-search-table-frame .cds--data-table tbody tr:focus-within td {
+  background-color: var(--csp-table-row-hover-bg);
 }
 
 .legacy-search-table-frame .cds--pagination {
@@ -1771,6 +1806,41 @@ legend.cds--label {
   white-space: normal;
 }
 
+// Keep previously loaded workspace content in place during a refresh. The
+// page becomes inert while the status indicator remains outside that region,
+// so it can still be announced to assistive technology.
+.content-loading-region.is-loading {
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+
+.content-loading-overlay__indicator {
+  position: fixed;
+  z-index: 10000;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.content-loading-overlay__indicator .cds--inline-loading {
+  inline-size: auto;
+  max-inline-size: min(90%, 24rem);
+  min-height: 2.5rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--cds-layer);
+  border: 1px solid var(--cds-border-subtle);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 15%);
+}
+
+.content-loading-overlay__indicator .cds--inline-loading__text {
+  white-space: normal;
+}
+
 .legacy-inline-notification {
   margin-top: 1rem;
 }
@@ -1780,9 +1850,32 @@ legend.cds--label {
   gap: 1rem;
 }
 
+.review-reject-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
 .review-reject-modal__grid .cds--inline-notification {
   margin-block: 0;
   max-inline-size: none;
+}
+
+.review-reject-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+
+.review-reject-modal__actions .cds--btn {
+  min-inline-size: 7.5rem;
+}
+
+@media (max-width: 671px) {
+  .review-reject-modal__actions .cds--btn {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
 }
 
 .app-notification-region {
@@ -1869,7 +1962,7 @@ legend.cds--label {
   --fds-border-strong: var(--csp-border-strong-01);
   --fds-interactive: var(--csp-interactive);
   --fds-interactive-hover: var(--csp-link-hover);
-  --fds-interactive-light: var(--csp-layer-hover);
+  --fds-interactive-light: var(--csp-table-row-hover-bg);
   --fds-support-error-bg: var(--cds-notification-background-error, #2c1a1c);
   --fds-support-success-bg: var(--cds-notification-background-success, #1a2a1c);
   --fds-support-info-bg: var(--cds-notification-background-info, #1a2230);
@@ -2577,8 +2670,22 @@ legend.cds--label {
   border-block-end: 0;
 }
 
+.admin-upload-validation-table tbody tr:nth-child(odd) td {
+  background: var(--fds-layer-01, #ffffff);
+}
+
 .admin-upload-validation-table tbody tr:nth-child(even) td {
   background: var(--fds-table-zebra, #f3f3f5);
+}
+
+.admin-upload-validation-table tbody tr:hover td,
+.admin-upload-validation-table tbody tr:focus-within td {
+  background: #dfeaf8;
+}
+
+:root[data-carbon-theme='g100'] .admin-upload-validation-table tbody tr:hover td,
+:root[data-carbon-theme='g100'] .admin-upload-validation-table tbody tr:focus-within td {
+  background: var(--fds-interactive-light);
 }
 
 .admin-upload-validation-table__issue,
@@ -2707,8 +2814,14 @@ legend.cds--label {
   background: var(--fds-table-zebra, #f3f3f5);
 }
 
-.admin-upload-queue__table tbody tr:hover td {
-  background: var(--fds-interactive-light, #dfeaf8);
+.admin-upload-queue__table tbody tr:hover td,
+.admin-upload-queue__table tbody tr:focus-within td {
+  background: #dfeaf8;
+}
+
+:root[data-carbon-theme='g100'] .admin-upload-queue__table tbody tr:hover td,
+:root[data-carbon-theme='g100'] .admin-upload-queue__table tbody tr:focus-within td {
+  background: var(--fds-interactive-light);
 }
 
 .admin-upload-queue__table--generic th:nth-child(1),
@@ -2955,13 +3068,6 @@ legend.cds--label {
   min-inline-size: 56rem;
 }
 
-.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr,
-.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr:hover,
-.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody tr:hover td,
-.admin-upload-review--rtm .admin-upload-review-table .cds--data-table tbody td {
-  background: var(--fds-layer-01, var(--cds-layer));
-}
-
 .admin-upload-review-table .cds--data-table tbody td {
   border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
 }
@@ -3110,7 +3216,12 @@ legend.cds--label {
 
 .rtm-amv-table-wrap .cds--data-table tbody tr:hover > td,
 .rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td {
-  background: var(--csp-layer-hover);
+  background: #dfeaf8;
+}
+
+:root[data-carbon-theme='g100'] .rtm-amv-table-wrap .cds--data-table tbody tr:hover > td,
+:root[data-carbon-theme='g100'] .rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td {
+  background: var(--csp-table-row-hover-bg);
 }
 
 .rtm-amv-grade-cell {
@@ -3444,52 +3555,6 @@ legend.cds--label {
   font-size: 0.875rem;
 }
 
-.application-detail-title-row {
-  align-items: start;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.application-detail-title-row > .lexis-page-header {
-  flex: 1 1 32rem;
-}
-
-.application-detail-title-row h1 {
-  margin-bottom: 0.25rem;
-  font-size: 2rem;
-  font-weight: 400;
-  line-height: 2.5rem;
-}
-
-.application-detail-title-row p {
-  margin: 0;
-}
-
-.application-detail-header-metrics {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(2, minmax(6.5rem, auto));
-  margin: 0;
-}
-
-.application-detail-header-metrics div {
-  border-left: 3px solid var(--cds-border-interactive);
-  padding-left: 0.75rem;
-}
-
-.application-detail-header-metrics dt {
-  color: var(--csp-text-primary);
-  font-size: 0.75rem;
-  margin-bottom: 0.125rem;
-}
-
-.application-detail-header-metrics dd {
-  font-weight: 700;
-  margin: 0;
-}
-
 .detail-page-error {
   margin-bottom: 1rem;
 }
@@ -3499,6 +3564,32 @@ legend.cds--label {
   font-size: 1.25rem;
   font-weight: 400;
   line-height: 1.75rem;
+}
+
+.detail-read-only-note {
+  margin: -0.5rem 0 1rem;
+  color: var(--csp-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.permit-creation-confirmation-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
+.permit-creation-confirmation-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+
+@media (max-width: 671px) {
+  .permit-creation-confirmation-modal__actions .cds--btn {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
 }
 
 .detail-section-card__header {
@@ -3535,6 +3626,46 @@ legend.cds--label {
 @media (min-width: 1312px) {
   .detail-section-card .detail-field-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.application-detail-tab-panel .federal-shipping-details.cds--tile {
+  min-height: auto;
+}
+
+.federal-shipping-details .federal-shipping-details__field-grid {
+  justify-content: start;
+}
+
+.federal-shipping-details__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem 1.5rem;
+}
+
+.federal-shipping-details__form > * {
+  flex: 1 1 16rem;
+  max-inline-size: 18rem;
+}
+
+.federal-shipping-details__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+
+@media (min-width: 672px) {
+  .federal-shipping-details .federal-shipping-details__field-grid {
+    grid-template-columns: repeat(2, minmax(12rem, 18rem));
+  }
+}
+
+@media (min-width: 1312px) {
+  .federal-shipping-details .federal-shipping-details__field-grid {
+    grid-template-columns: repeat(3, minmax(12rem, 18rem));
   }
 }
 
@@ -3802,6 +3933,18 @@ legend.cds--label {
   margin-bottom: 0.75rem;
 }
 
+.exemption-application-add-form {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 0.75rem;
+}
+
+.exemption-application-add-form .cds--btn {
+  min-inline-size: 8rem;
+}
+
 .application-items-inline-error {
   color: var(--cds-text-error, #da1e28);
   font-size: 0.75rem;
@@ -3845,6 +3988,16 @@ legend.cds--label {
   min-inline-size: 8rem;
 }
 
+@media (max-width: 671px) {
+  .exemption-application-add-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .exemption-application-add-form .cds--btn {
+    inline-size: 100%;
+  }
+}
+
 @media (min-width: 672px) {
   .application-items-inline-form {
     grid-template-columns: minmax(220px, 1fr) auto;
@@ -3878,7 +4031,6 @@ legend.cds--label {
     grid-column: span 2;
   }
 
-  .application-detail-header-metrics,
   .application-detail-documents .legacy-search-grid,
   .application-detail-remarks .legacy-search-actions {
     grid-template-columns: 1fr;
@@ -3970,16 +4122,79 @@ legend.cds--label {
 }
 
 .cds--data-table thead th {
-  background: var(--csp-table-header-bg);
+  background: #dfdfe1;
   color: var(--csp-table-header-text);
 }
 
-.cds--data-table tbody tr:nth-child(even) td {
+.cds--data-table tbody tr:nth-child(odd),
+.cds--data-table tbody tr:nth-child(odd) td,
+.cds--data-table tbody tr:nth-child(odd) th {
+  background: #ffffff;
+}
+
+.cds--data-table tbody tr:nth-child(even),
+.cds--data-table tbody tr:nth-child(even) td,
+.cds--data-table tbody tr:nth-child(even) th {
+  background: #f3f3f5;
+}
+
+.cds--data-table tbody tr:hover td,
+.cds--data-table tbody tr:hover th,
+.cds--data-table tbody tr:focus-within td,
+.cds--data-table tbody tr:focus-within th {
+  background: #dfeaf8;
+}
+
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table thead th {
+  background: var(--csp-table-header-bg);
+}
+
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd),
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd) td,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(odd) th {
+  background: var(--csp-layer-01);
+}
+
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even),
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) td,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) th {
   background: var(--csp-table-row-alt-bg);
 }
 
-.cds--g100 .app-shell .cds--data-table tbody tr:hover td {
-  background: var(--csp-layer-hover);
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:hover td,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:hover th,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:focus-within td,
+:root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:focus-within th {
+  background: var(--csp-table-row-hover-bg);
+}
+
+.rtm-amv-table-wrap .cds--data-table td.rtm-amv-value-cell.has-warning {
+  background: #fff8e1;
+}
+
+.rtm-amv-table-wrap .cds--data-table td.rtm-amv-value-cell.has-error {
+  background: #fff1f1;
+}
+
+:root[data-carbon-theme='g100']
+  .rtm-amv-table-wrap
+  .cds--data-table
+  td.rtm-amv-value-cell.has-warning {
+  background: #3b3300;
+}
+
+:root[data-carbon-theme='g100']
+  .rtm-amv-table-wrap
+  .cds--data-table
+  td.rtm-amv-value-cell.has-error {
+  background: #3d1e21;
+}
+
+.rtm-amv-table-wrap .cds--data-table tbody tr:hover > td.rtm-amv-value-cell.has-warning,
+.rtm-amv-table-wrap .cds--data-table tbody tr:hover > td.rtm-amv-value-cell.has-error,
+.rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td.rtm-amv-value-cell.has-warning,
+.rtm-amv-table-wrap .cds--data-table tbody tr:focus-within > td.rtm-amv-value-cell.has-error {
+  background: var(--csp-table-row-hover-bg);
 }
 
 .cds--data-table tbody td,
@@ -4019,10 +4234,6 @@ legend.cds--label {
   }
 
   .csp-header-title {
-    display: none;
-  }
-
-  .csp-header-theme-toggle span {
     display: none;
   }
 

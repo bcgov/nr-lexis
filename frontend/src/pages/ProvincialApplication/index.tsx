@@ -5,6 +5,7 @@ import {
   Checkbox,
   Column,
   Grid,
+  InlineNotification,
   Pagination,
   Table,
   TableBody,
@@ -18,6 +19,7 @@ import {
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -100,6 +102,7 @@ const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
   receivedToDate: '',
   listingFromDate: '',
   listingToDate: '',
+  exportScheduleId: '',
   applicantClientNumber: '',
   ownerClientNumber: '',
 }
@@ -135,6 +138,11 @@ const SORT_FIELD_OPTIONS = RESULT_COLUMNS.flatMap((column) =>
   column.sortField ? [column.sortField] : [],
 )
 
+const disabledExemptionSelectionDescription = (row: ProvincialApplicationSearchItem): string =>
+  row.exemptionNumber
+    ? 'This application already has an exemption.'
+    : 'This application is not eligible to create an exemption.'
+
 const buildSearchParams = (
   filters: ProvincialApplicationSearchFilters,
   sortField: ProvincialApplicationSearchSortField,
@@ -154,6 +162,7 @@ const buildSearchParams = (
     ['receivedToDate', filters.receivedToDate],
     ['listingFromDate', filters.listingFromDate],
     ['listingToDate', filters.listingToDate],
+    ['exportScheduleId', filters.exportScheduleId ?? ''],
     ['applicantClientNumber', filters.applicantClientNumber],
     ['ownerClientNumber', filters.ownerClientNumber],
     ['sortField', sortField],
@@ -204,6 +213,7 @@ const ProvincialApplicationPage = () => {
       receivedToDate: searchParams.get('receivedToDate') ?? '',
       listingFromDate: searchParams.get('listingFromDate') ?? '',
       listingToDate: searchParams.get('listingToDate') ?? '',
+      exportScheduleId: searchParams.get('exportScheduleId') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
     }
@@ -537,6 +547,15 @@ const ProvincialApplicationPage = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-application-search-filters">
           <Tile>
+            {filters.exportScheduleId && (
+              <InlineNotification
+                kind="info"
+                lowContrast
+                title="Export schedule filter applied"
+                subtitle={`Showing applications assigned to export schedule ${filters.exportScheduleId}.`}
+                onCloseButtonClick={() => updateFilter('exportScheduleId', '')}
+              />
+            )}
             <div className="legacy-search-grid provincial-application-search-grid">
               <TextInput
                 id="applicationNumber"
@@ -659,14 +678,19 @@ const ProvincialApplicationPage = () => {
                 Clear Filters
               </Button>
               {canCreateExemption && (
-                <Button
-                  kind="secondary"
-                  size="md"
-                  onClick={onCreateExemptionClick}
+                <DisabledButtonTooltip
                   disabled={selectedRowsCount === 0}
+                  description="Select at least one eligible application."
                 >
-                  Create exemption for Selected Applications
-                </Button>
+                  <Button
+                    kind="secondary"
+                    size="md"
+                    onClick={onCreateExemptionClick}
+                    disabled={selectedRowsCount === 0}
+                  >
+                    Create exemption for Selected Applications
+                  </Button>
+                </DisabledButtonTooltip>
               )}
             </div>
             {canCreateApplication && (
@@ -715,16 +739,21 @@ const ProvincialApplicationPage = () => {
                   <TableRow>
                     {canCreateExemption && (
                       <TableHeader>
-                        <Checkbox
-                          id="selectAllCurrentPageRows"
-                          hideLabel
-                          labelText="Select all rows on this page"
-                          checked={allSelectableRowsAreSelected}
+                        <DisabledButtonTooltip
                           disabled={selectableRows.length === 0}
-                          onChange={(_, payload) =>
-                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
-                          }
-                        />
+                          description="No eligible applications are available on this page."
+                        >
+                          <Checkbox
+                            id="selectAllCurrentPageRows"
+                            hideLabel
+                            labelText="Select all rows on this page"
+                            checked={allSelectableRowsAreSelected}
+                            disabled={selectableRows.length === 0}
+                            onChange={(_, payload) =>
+                              toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                            }
+                          />
+                        </DisabledButtonTooltip>
                       </TableHeader>
                     )}
                     {visibleResultColumns.map((column) => (
@@ -752,16 +781,21 @@ const ProvincialApplicationPage = () => {
                     <TableRow key={row.applicationNumber}>
                       {canCreateExemption && (
                         <TableCell>
-                          <Checkbox
-                            id={`selectRow-${row.applicationNumber}`}
-                            hideLabel
-                            labelText={`Select ${row.applicationNumber}`}
-                            checked={Boolean(selectedRowsById[row.applicationNumber])}
+                          <DisabledButtonTooltip
                             disabled={!row.allowCreateExemption}
-                            onChange={(_, payload) =>
-                              toggleRowSelection(row, Boolean(payload.checked))
-                            }
-                          />
+                            description={disabledExemptionSelectionDescription(row)}
+                          >
+                            <Checkbox
+                              id={`selectRow-${row.applicationNumber}`}
+                              hideLabel
+                              labelText={`Select ${row.applicationNumber}`}
+                              checked={Boolean(selectedRowsById[row.applicationNumber])}
+                              disabled={!row.allowCreateExemption}
+                              onChange={(_, payload) =>
+                                toggleRowSelection(row, Boolean(payload.checked))
+                              }
+                            />
+                          </DisabledButtonTooltip>
                         </TableCell>
                       )}
                       <TableCell>

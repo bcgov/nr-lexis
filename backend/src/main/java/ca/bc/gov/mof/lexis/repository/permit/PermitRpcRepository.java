@@ -16,7 +16,9 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
@@ -42,6 +44,28 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_PERMIT(?,?)";
   private static final String FIND_PACKAGES_BY_OIC_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_OIC_PERMIT(?,?)";
+  private static final String PACKAGE_BELONGS_TO_PERMIT =
+      """
+      SELECT CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM EXPORT_PACKAGE P
+          LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA
+            ON EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
+          LEFT JOIN EXPORT_PERMIT_DETAIL EPD
+            ON EPD.OIC_APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+          LEFT JOIN EXPORT_SCALE_DETAIL ESD
+            ON ESD.PACKAGE_NUMBER = P.PACKAGE_NUMBER
+          WHERE P.PACKAGE_NUMBER = ?
+            AND (
+              EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+              OR ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+            )
+        ) THEN 1
+        ELSE 0
+      END
+      FROM DUAL
+      """;
   private static final String FIND_PACKAGES_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
   private static final String FIND_PACKAGES_BY_EXEMPTION =
@@ -56,6 +80,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_END_USE_BY_PACK = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
+  private static final String FIND_PERMIT_FEE_OVERRIDE =
+      "SELECT OVERRIDE_FEE, OVERRIDE_COMMENT "
+          + "FROM EXPORT_PERMIT_DETAIL "
+          + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = ?";
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_PERMIT_FILE_DETAILS =
@@ -132,6 +160,23 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_PERMIT,
         cs -> cs.setString(1, permitNumber.toString()),
+        2,
+        this::mapPermitScaleDetailRow);
+  }
+
+  /**
+   * Returns all scale rows for an application using the same cursor as the legacy application
+   * scale lookup. Core permit tabs group these rows by package so they do not issue one cursor
+   * call per package.
+   */
+  public List<PermitScaleDetailRow> findPermitScaleDetailsByApplicationNumber(
+      Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_SCALE_DETAIL_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
         2,
         this::mapPermitScaleDetailRow);
   }
@@ -343,6 +388,75 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .distinct()
         .sorted()
         .toList();
+  }
+
+  /**
+   * Reads the complete package cursor once for the normal permit core-tab response. It preserves
+   * the same package relationship, package ordering, and invalid-application guard as the
+   * existing package/application list methods.
+   */
+  public List<PermitCorePackageRow> findCorePackageRowsByPermitNumberRequired(Long permitNumber) {
+    return findCorePackageRows(
+        permitNumber, FIND_PACKAGES_BY_PERMIT, true, "permit " + permitNumber);
+  }
+
+  /** Reads the complete package cursor once for the Blanket OIC core-tab response. */
+  public List<PermitCorePackageRow> findCorePackageRowsByOicPermitNumber(Long permitNumber) {
+    return findCorePackageRows(
+        permitNumber, FIND_PACKAGES_BY_OIC_PERMIT, false, "Blanket OIC permit " + permitNumber);
+  }
+
+  private List<PermitCorePackageRow> findCorePackageRows(
+      Long permitNumber,
+      String procedure,
+      boolean requireValidApplicationRelationship,
+      String aggregateDescription) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    List<PermitCorePackageRow> rows =
+        queryCursorProcedureRequired(
+            procedure,
+            cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            this::mapPermitCorePackageRow);
+    if (requireValidApplicationRelationship
+        && rows.stream()
+            .anyMatch(row -> row.applicationNumber() == null || row.applicationNumber() < 1)) {
+      throw new DataRetrievalFailureException(
+          "An invalid application relationship was returned for " + aggregateDescription + ".");
+    }
+
+    Map<String, PermitCorePackageRow> packagesByNumber = new TreeMap<>();
+    for (PermitCorePackageRow row : rows) {
+      String packageNumber = trim(row.packageNumber());
+      if (packageNumber == null) {
+        continue;
+      }
+      packagesByNumber.putIfAbsent(packageNumber, row.withPackageNumber(packageNumber));
+    }
+    return List.copyOf(packagesByNumber.values());
+  }
+
+  /**
+   * Checks the same normal and Blanket OIC package relationships as the legacy package-list
+   * procedures without materializing either list.
+   */
+  public boolean isPackageAssignedToPermitRequired(String packageNumber, Long permitNumber) {
+    String normalizedPackageNumber = trim(packageNumber);
+    if (normalizedPackageNumber == null || permitNumber == null || permitNumber < 1) {
+      return false;
+    }
+
+    Long matches =
+        jdbcTemplate.queryForObject(
+            PACKAGE_BELONGS_TO_PERMIT,
+            Long.class,
+            normalizedPackageNumber,
+            permitNumber,
+            permitNumber);
+    return matches != null && matches > 0;
   }
 
   public List<Long> findApplicationNumbersByPermitNumber(Long permitNumber) {
@@ -687,6 +801,26 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         this::mapPermitMutationRow);
   }
 
+  /**
+   * Reads the fields needed to initialize permit fee editing without relying on optional columns
+   * from the legacy full-permit cursor.
+   */
+  public Optional<PermitFeeOverrideRow> findPermitFeeOverrideByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+
+    return jdbcTemplate
+        .query(
+            FIND_PERMIT_FEE_OVERRIDE,
+            (rs, rowNumber) ->
+                new PermitFeeOverrideRow(
+                    getDouble(rs, "OVERRIDE_FEE"), getString(rs, "OVERRIDE_COMMENT")),
+            permitNumber)
+        .stream()
+        .findFirst();
+  }
+
   public Optional<PermitMutationRow> insertPermitDetail(PermitMutationRow row, String entryUserId) {
     String normalizedEntryUserId = trim(entryUserId);
     if (row == null || normalizedEntryUserId == null) {
@@ -870,6 +1004,19 @@ public class PermitRpcRepository extends OracleRepositorySupport {
    */
   public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistoryRequired(
       String receiptNumber, Long permitNumber, boolean readOnlyUser) {
+    return filterGbmsHistoryForPermit(
+        findGbmsInvoiceHistoryForDisplay(receiptNumber, permitNumber, readOnlyUser), permitNumber);
+  }
+
+  /**
+   * Loads GBMS invoice history using the legacy permit-first, receipt-fallback lookup semantics.
+   *
+   * The legacy procedure can resolve a different permit from the receipt/invoice number when
+   * the requested permit has no history. This display-oriented lookup preserves that result;
+   * mutation callers must use {@link #findGbmsInvoiceHistoryRequired(String, Long, boolean)}.
+   */
+  public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistoryForDisplay(
+      String receiptNumber, Long permitNumber, boolean readOnlyUser) {
     if (permitNumber == null || permitNumber < 1) {
       throw new IllegalArgumentException("Permit number must be positive.");
     }
@@ -878,25 +1025,23 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     String procedure =
         readOnlyUser ? FIND_GBMS_INVOICE_HISTORY_READ_ONLY : FIND_GBMS_INVOICE_HISTORY;
 
-    return filterGbmsHistoryForPermit(
-        queryCursorProcedureRequired(
-            procedure,
-            cs -> {
-              cs.setString(1, normalizedReceiptNumber);
-              cs.setString(2, normalizedPermitNumber);
-            },
-            3,
-            rs ->
-                new GbmsInvoiceHistoryRow(
-                    getString(rs, "INVOICE_NUMBER"),
-                    getString(rs, "CANCELLED_BY_INVOICE"),
-                    getString(rs, "REPLACED_BY_INVOICE"),
-                    getLong(rs, "LEXIS_PERMIT_NUMBER"),
-                    coalesce(getDouble(rs, "INVOICE_AMOUNT"), 0.0d),
-                    getLocalDate(rs, "PRINTED_DATE"),
-                    getLocalDate(rs, "ENTRY_TIMESTAMP"),
-                    getLocalDate(rs, "UPDATE_TIMESTAMP"))),
-        permitNumber);
+    return queryCursorProcedureRequired(
+        procedure,
+        cs -> {
+          cs.setString(1, normalizedReceiptNumber);
+          cs.setString(2, normalizedPermitNumber);
+        },
+        3,
+        rs ->
+            new GbmsInvoiceHistoryRow(
+                getString(rs, "INVOICE_NUMBER"),
+                getString(rs, "CANCELLED_BY_INVOICE"),
+                getString(rs, "REPLACED_BY_INVOICE"),
+                getLong(rs, "LEXIS_PERMIT_NUMBER"),
+                coalesce(getDouble(rs, "INVOICE_AMOUNT"), 0.0d),
+                getLocalDate(rs, "PRINTED_DATE"),
+                getLocalDate(rs, "ENTRY_TIMESTAMP"),
+                getLocalDate(rs, "UPDATE_TIMESTAMP")));
   }
 
   private List<GbmsInvoiceHistoryRow> filterGbmsHistoryForPermit(
@@ -1432,6 +1577,20 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         getString(rs, "MF"));
   }
 
+  private PermitCorePackageRow mapPermitCorePackageRow(ResultSet rs) {
+    return new PermitCorePackageRow(
+        getString(rs, "PACKAGE_NUMBER"),
+        getLong(rs, "APPLICATION_NUMBER"),
+        coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
+        coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
+        coalesce(getDouble(rs, "AVERAGE_DIAMETER"), 0.0d),
+        getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
+        getString(rs, "COMMENTS"),
+        getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
+        getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
+  }
+
   private Timestamp getTimestamp(ResultSet rs, String column) {
     try {
       return rs.getTimestamp(column);
@@ -1583,6 +1742,34 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String growthTypeCode,
       String productTypeCode) {}
 
+  /** Complete package projection returned by the existing permit package cursors. */
+  public record PermitCorePackageRow(
+      String packageNumber,
+      Long applicationNumber,
+      double packageVolume,
+      double averageLength,
+      double averageDiameter,
+      String packageStatusCode,
+      String comments,
+      String reprocessedIndicator,
+      String growthTypeCode,
+      String productTypeCode) {
+
+    PermitCorePackageRow withPackageNumber(String value) {
+      return new PermitCorePackageRow(
+          value,
+          applicationNumber,
+          packageVolume,
+          averageLength,
+          averageDiameter,
+          packageStatusCode,
+          comments,
+          reprocessedIndicator,
+          growthTypeCode,
+          productTypeCode);
+    }
+  }
+
   public record ApplicationInfoRow(
       Long applicationNumber,
       String exemptionNumber,
@@ -1673,6 +1860,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       double exportValue,
       double currencyConversionRate,
       double feeInLieu) {}
+
+  public record PermitFeeOverrideRow(Double overrideFee, String overrideComment) {}
 
   public record PermitMutationRow(
       Long permitNumber,
