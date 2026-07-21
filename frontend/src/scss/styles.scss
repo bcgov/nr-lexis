@@ -1832,9 +1832,32 @@ legend.cds--label {
   gap: 1rem;
 }
 
+.review-reject-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
 .review-reject-modal__grid .cds--inline-notification {
   margin-block: 0;
   max-inline-size: none;
+}
+
+.review-reject-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+
+.review-reject-modal__actions .cds--btn {
+  min-inline-size: 7.5rem;
+}
+
+@media (max-width: 671px) {
+  .review-reject-modal__actions .cds--btn {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
 }
 
 .app-notification-region {

@@ -625,13 +625,16 @@ describe('Provincial Review Action State Smoke', () => {
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
 
+    await waitFor(() => expect(screen.getByLabelText('Client email address')).not.toBeDisabled())
+    expect(screen.getByLabelText('Client email address')).toHaveValue('')
     expect(
-      (
-        await screen.findAllByText(
-          'Enter one valid client email address or deselect Send status email.',
-        )
-      ).length,
-    ).toBeGreaterThan(0)
+      screen.queryByText('Enter one valid client email address or deselect Send status email.'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'No client email was found. Enter an email address or deselect Send status email.',
+      ),
+    ).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))

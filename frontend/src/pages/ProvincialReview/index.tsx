@@ -4,12 +4,9 @@ import {
   Button,
   Checkbox,
   Column,
-  ComposedModal,
   Grid,
   InlineNotification,
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
+  Modal,
   Pagination,
   Table,
   TableBody,
@@ -142,6 +139,8 @@ const REJECT_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
 const REJECT_EMAIL_REQUIRED_MESSAGE =
   'Enter one valid client email address or deselect Send status email.'
+const REJECT_EMAIL_MISSING_HELPER =
+  'No client email was found. Enter an email address or deselect Send status email.'
 const REJECT_EMAIL_PREVIEW_HELPER =
   "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
 const STATUS_EMAIL_UNAVAILABLE_HELPER =
@@ -571,9 +570,6 @@ const ProvincialReviewPage = () => {
 
         const candidateEmail = reviewEmailCandidate(summary, ownerClientData, agentClientData)
         setRejectEmailAddress(candidateEmail)
-        if (!candidateEmail || !isValidEmail(candidateEmail)) {
-          setRejectValidationMessage(REJECT_EMAIL_REQUIRED_MESSAGE)
-        }
       } catch (error) {
         console.error(error)
         setRejectValidationMessage('Unable to load client email for this application.')
@@ -859,103 +855,96 @@ const ProvincialReviewPage = () => {
         </section>
       </Column>
 
-      <ComposedModal
+      <Modal
         open={Boolean(rejectApplicationNumber)}
+        passiveModal
         size="md"
+        modalLabel="Application review"
+        modalHeading={`Update application ${rejectApplicationNumber}`}
+        aria-label="Application review"
+        className="review-reject-modal"
         preventCloseOnClickOutside
         selectorPrimaryFocus="#reviewRejectStatus"
-        onClose={() => {
-          if (submittingReject) {
-            return false
+        onRequestClose={() => {
+          if (!submittingReject) {
+            closeRejectPanel()
           }
-
-          closeRejectPanel()
-          return true
         }}
       >
-        <ModalHeader
-          label="Application review"
-          title={`Update application ${rejectApplicationNumber}`}
-          buttonOnClick={() => {
-            if (!submittingReject) {
-              closeRejectPanel()
-            }
-          }}
-        />
-        <ModalBody hasForm hasScrollingContent>
-          <div className="review-reject-modal__grid">
-            <SearchableSelect
-              id="reviewRejectStatus"
-              labelText="Application status"
-              value={rejectStatusCode}
-              placeholder="Select application status"
-              options={rejectStatusSelectOptions}
-              invalid={rejectValidationMessage === REJECT_STATUS_REQUIRED_MESSAGE}
-              invalidText={rejectValidationMessage}
-              disabled={optionsUnavailable || !rejectStatusAvailable || submittingReject}
-              onChange={(value) => {
-                const statusCode = value.toUpperCase()
-                setRejectStatusCode(statusCode)
-                setSendRejectEmail(EMAIL_STATUS_CODES.has(statusCode))
-                setRejectValidationMessage('')
-              }}
-            />
-            <TextArea
-              id="reviewRejectRemark"
-              labelText="Remarks"
-              maxCount={250}
-              value={rejectRemark}
-              invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
-              invalidText={rejectValidationMessage}
-              disabled={submittingReject}
-              onChange={(event) => {
-                setRejectRemark(event.target.value.slice(0, 250))
-                setRejectValidationMessage('')
-              }}
-            />
-            <Checkbox
-              id="reviewRejectSendEmail"
-              labelText="Send status email"
-              checked={sendRejectEmail}
-              disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
-              onChange={(_, payload) => {
-                setSendRejectEmail(Boolean(payload.checked))
-                setRejectValidationMessage('')
-              }}
-            />
-            <TextInput
-              id="reviewRejectEmail"
-              labelText="Client email address"
-              helperText={
-                !rejectStatusSupportsEmail
-                  ? STATUS_EMAIL_UNAVAILABLE_HELPER
-                  : loadingRejectEmail
-                    ? 'Loading from client account...'
+        <div className="review-reject-modal__grid">
+          <SearchableSelect
+            id="reviewRejectStatus"
+            labelText="Application status"
+            value={rejectStatusCode}
+            placeholder="Select application status"
+            options={rejectStatusSelectOptions}
+            invalid={rejectValidationMessage === REJECT_STATUS_REQUIRED_MESSAGE}
+            invalidText={rejectValidationMessage}
+            disabled={optionsUnavailable || !rejectStatusAvailable || submittingReject}
+            onChange={(value) => {
+              const statusCode = value.toUpperCase()
+              setRejectStatusCode(statusCode)
+              setSendRejectEmail(EMAIL_STATUS_CODES.has(statusCode))
+              setRejectValidationMessage('')
+            }}
+          />
+          <TextArea
+            id="reviewRejectRemark"
+            labelText="Remarks"
+            maxCount={250}
+            value={rejectRemark}
+            invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
+            invalidText={rejectValidationMessage}
+            disabled={submittingReject}
+            onChange={(event) => {
+              setRejectRemark(event.target.value.slice(0, 250))
+              setRejectValidationMessage('')
+            }}
+          />
+          <Checkbox
+            id="reviewRejectSendEmail"
+            labelText="Send status email"
+            checked={sendRejectEmail}
+            disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
+            onChange={(_, payload) => {
+              setSendRejectEmail(Boolean(payload.checked))
+              setRejectValidationMessage('')
+            }}
+          />
+          <TextInput
+            id="reviewRejectEmail"
+            labelText="Client email address"
+            helperText={
+              !rejectStatusSupportsEmail
+                ? STATUS_EMAIL_UNAVAILABLE_HELPER
+                : loadingRejectEmail
+                  ? 'Loading from client account...'
+                  : !rejectEmailAddress
+                    ? REJECT_EMAIL_MISSING_HELPER
                     : REJECT_EMAIL_PREVIEW_HELPER
-              }
-              value={rejectEmailAddress}
-              disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
-              invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
-              invalidText={rejectValidationMessage}
-              onChange={(event) => {
-                setRejectEmailAddress(event.target.value)
-                setRejectValidationMessage('')
-              }}
-            />
-            {!!rejectValidationMessage &&
-              rejectValidationMessage !== REJECT_STATUS_REQUIRED_MESSAGE &&
-              rejectValidationMessage !== REJECT_REMARK_REQUIRED_MESSAGE && (
-                <InlineNotification
-                  kind="error"
-                  title="Review validation"
-                  subtitle={rejectValidationMessage}
-                  lowContrast
-                  onCloseButtonClick={() => setRejectValidationMessage('')}
-                />
-              )}
-          </div>
-        </ModalBody>
-        <ModalFooter>
+            }
+            value={rejectEmailAddress}
+            disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
+            invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
+            invalidText={rejectValidationMessage}
+            onChange={(event) => {
+              setRejectEmailAddress(event.target.value)
+              setRejectValidationMessage('')
+            }}
+          />
+          {!!rejectValidationMessage &&
+            rejectValidationMessage !== REJECT_STATUS_REQUIRED_MESSAGE &&
+            rejectValidationMessage !== REJECT_REMARK_REQUIRED_MESSAGE && (
+              <InlineNotification
+                kind="error"
+                title="Review validation"
+                subtitle={rejectValidationMessage}
+                lowContrast
+                onCloseButtonClick={() => setRejectValidationMessage('')}
+              />
+            )}
+        </div>
+        <div className="review-reject-modal__actions">
           <Button kind="secondary" disabled={submittingReject} onClick={closeRejectPanel}>
             Cancel
           </Button>
@@ -968,8 +957,8 @@ const ProvincialReviewPage = () => {
           >
             {submittingReject ? 'Updating...' : 'Update Application'}
           </Button>
-        </ModalFooter>
-      </ComposedModal>
+        </div>
+      </Modal>
 
       <Column sm={4} md={8} lg={16}>
         <section
