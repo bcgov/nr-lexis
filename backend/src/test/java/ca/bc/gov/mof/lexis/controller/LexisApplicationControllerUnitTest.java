@@ -86,6 +86,7 @@ class LexisApplicationControllerUnitTest {
         null,
         null,
         null,
+        null,
         List.of(),
         null,
         0,
@@ -131,6 +132,7 @@ class LexisApplicationControllerUnitTest {
         null,
         "00099999",
         "00088888",
+        null,
         null,
         null,
         null,
@@ -185,6 +187,7 @@ class LexisApplicationControllerUnitTest {
             null,
             null,
             null,
+            null,
             List.of(),
             null,
             0,
@@ -196,6 +199,39 @@ class LexisApplicationControllerUnitTest {
     assertThat(response.getBody().results())
         .extracting(LexisApplicationSearchResultDto::locked)
         .containsExactly(true, false);
+  }
+
+  @Test
+  void searchShouldApplyExportScheduleFilter() {
+    when(service.search(any(LexisApplicationSearchCriteria.class)))
+        .thenReturn(new LexisApplicationSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "31916",
+        List.of(),
+        null,
+        0,
+        25,
+        null,
+        authentication);
+
+    ArgumentCaptor<LexisApplicationSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(LexisApplicationSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+
+    assertThat(criteriaCaptor.getValue().exportScheduleId()).isEqualTo(31916L);
   }
 
   @Test

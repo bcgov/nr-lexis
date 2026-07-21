@@ -53,7 +53,9 @@ class LexisApplicationRepositoryTest {
             LocalDate.of(2026, 1, 31),
             LocalDate.of(2026, 2, 1),
             LocalDate.of(2026, 2, 28),
+            31916L,
             List.of(1904L, 1905L),
+            false,
             "listingDate DESC",
             0,
             10));
@@ -62,6 +64,7 @@ class LexisApplicationRepositoryTest {
         .contains("v.APPLICATION_NUMBER")
         .contains("v.PACKAGE_NUMBER")
         .contains("v.ADVERTISING_DATE")
+        .contains("v.EXPORT_SCHEDULE_ID")
         .contains("v.EXPORT_JURISDICTION_CODE <> 'F'")
         .contains("ORDER BY v.ADVERTISING_DATE DESC, v.APPLICATION_NUMBER ASC")
         .doesNotContain("EEA.")
@@ -78,6 +81,7 @@ class LexisApplicationRepositoryTest {
             "2026-01-31",
             "2026-02-01",
             "2026-02-28",
+            "31916",
             "00077881",
             "N",
             "1904",

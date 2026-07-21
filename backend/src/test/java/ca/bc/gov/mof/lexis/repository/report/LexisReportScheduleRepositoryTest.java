@@ -419,11 +419,35 @@ class LexisReportScheduleRepositoryTest {
     verify(jdbcTemplate)
         .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sqlCaptor.getValue())
+        .contains("AS PROVINCIAL_APPLICATION_COUNT")
+        .contains("FROM EXPORT_EXEMPTION_APP_VIEW V")
+        .contains("V.APPLICATION_NUMBER > TO_NUMBER(0)")
+        .contains("V.EXPORT_JURISDICTION_CODE <> 'F'")
+        .contains("V.OIC_INDICATOR = 'N'")
         .contains("ORDER BY ES.TEAC_MEETING_DATE DESC, ES.EXPORT_SCHEDULE_ID ASC")
         .doesNotContain("WHERE ES.ADVERTISING_DATE")
         .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
     verify(preparedStatement).setInt(1, 0);
     verify(preparedStatement).setInt(2, 50);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void findExportSchedulesPageShouldSortApplicationLinksByProvincialCount() throws Exception {
+    when(jdbcTemplate.query(
+            any(String.class),
+            any(PreparedStatementSetter.class),
+            any(RowMapper.class)))
+        .thenReturn(List.of());
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    repository.findExportSchedules(0, 50, "applicationCount", "desc");
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
+    assertThat(sqlCaptor.getValue())
+        .contains("ORDER BY PROVINCIAL_APPLICATION_COUNT DESC, ES.EXPORT_SCHEDULE_ID ASC");
   }
 
   @Test

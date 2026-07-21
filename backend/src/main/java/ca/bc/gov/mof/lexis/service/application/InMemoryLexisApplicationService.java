@@ -87,6 +87,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               LocalDate.of(2026, 1, 14),
               LocalDate.of(2026, 1, 15),
               LocalDate.of(2026, 2, 1),
+              1002L,
               180L,
               true,
               false,
@@ -125,6 +126,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               LocalDate.of(2026, 2, 20),
               LocalDate.of(2026, 2, 21),
               LocalDate.of(2026, 2, 26),
+              1003L,
               120L,
               true,
               false,
@@ -169,6 +171,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               LocalDate.of(2025, 11, 3),
               LocalDate.of(2025, 11, 5),
               LocalDate.of(2025, 11, 30),
+              null,
               365L,
               false,
               true,
@@ -319,6 +322,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
             ApplicationRecord::receivedDate, criteria.receivedFromDate(), criteria.receivedToDate()))
         .filter(matchesDateRange(
             ApplicationRecord::listingDate, criteria.listingFromDate(), criteria.listingToDate()))
+        .filter(matchesExportSchedule(criteria.exportScheduleId()))
         .filter(matchesRegion(criteria.regionNumbers()))
         .sorted(resolveSort(criteria.sortField()))
         .toList();
@@ -467,6 +471,13 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
     return app -> app.orgUnitNumber() != null && regionNumbers.contains(app.orgUnitNumber());
   }
 
+  private Predicate<ApplicationRecord> matchesExportSchedule(Long exportScheduleId) {
+    if (exportScheduleId == null || exportScheduleId < 1) {
+      return ignored -> true;
+    }
+    return app -> exportScheduleId.equals(app.exportScheduleId());
+  }
+
   private Predicate<ApplicationRecord> matchesDateRange(
       java.util.function.Function<ApplicationRecord, LocalDate> getter,
       LocalDate from,
@@ -538,6 +549,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
       LocalDate applicationDate,
       LocalDate receivedDate,
       LocalDate listingDate,
+      Long exportScheduleId,
       Long termDays,
       boolean showCheckbox,
       boolean locked,

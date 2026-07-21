@@ -11,7 +11,31 @@ public record ExportScheduleRowDto(
     LocalDate offerWithdrawalDate,
     LocalDate teacMeetingDate,
     long applicationCount,
-    boolean mutable) {
+    boolean mutable,
+    long provincialApplicationCount) {
+
+  public ExportScheduleRowDto(
+      Long exportScheduleId,
+      LocalDate advertisingDate,
+      LocalDate applicationReceiptDate,
+      LocalDate offerReceiptDate,
+      LocalDate offerEndDate,
+      LocalDate offerWithdrawalDate,
+      LocalDate teacMeetingDate,
+      long applicationCount,
+      boolean mutable) {
+    this(
+        exportScheduleId,
+        advertisingDate,
+        applicationReceiptDate,
+        offerReceiptDate,
+        offerEndDate,
+        offerWithdrawalDate,
+        teacMeetingDate,
+        applicationCount,
+        mutable,
+        applicationCount);
+  }
 
   public ExportScheduleRowDto(
       Long exportScheduleId,
@@ -30,6 +54,7 @@ public record ExportScheduleRowDto(
         offerWithdrawalDate,
         teacMeetingDate,
         0L,
-        true);
+        true,
+        0L);
   }
 }

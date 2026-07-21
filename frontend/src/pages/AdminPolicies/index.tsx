@@ -123,7 +123,7 @@ const SCHEDULE_SORT_COLUMNS: Array<{ id: ExportScheduleSortField; label: string 
   { id: 'offerEndDate', label: 'Offer end' },
   { id: 'offerWithdrawalDate', label: 'Offer withdrawal' },
   { id: 'teacMeetingDate', label: 'TEAC meeting' },
-  { id: 'applicationCount', label: 'Applications' },
+  { id: 'applicationCount', label: 'Provincial applications' },
 ]
 
 const FEE_POLICY_SORT_COLUMNS: Array<{ id: FeePolicySortField; label: string }> = [
@@ -137,10 +137,9 @@ const FIL_POLICY_SORT_COLUMNS: Array<{ id: FilPolicySortField; label: string }> 
   { id: 'fil_percent', label: 'Fee in lieu %' },
 ]
 
-const applicationSearchPathForAdvertisingDate = (advertisingDate: string): string => {
+const applicationSearchPathForExportSchedule = (exportScheduleId: string): string => {
   const searchParams = new URLSearchParams({
-    listingFromDate: advertisingDate,
-    listingToDate: advertisingDate,
+    exportScheduleId,
   })
   return `/provincial/application?${searchParams.toString()}`
 }
@@ -1198,13 +1197,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                         <TableCell>
                           {canSearchApplications ? (
                             <Link
-                              to={applicationSearchPathForAdvertisingDate(row.advertisingDate)}
-                              aria-label={`View ${row.applicationCount} applications advertised on ${row.advertisingDate}`}
+                              to={applicationSearchPathForExportSchedule(row.exportScheduleId)}
+                              aria-label={`View ${row.provincialApplicationCount ?? row.applicationCount} provincial applications assigned to export schedule ${row.exportScheduleId}`}
                             >
-                              {row.applicationCount}
+                              {row.provincialApplicationCount ?? row.applicationCount}
                             </Link>
                           ) : (
-                            row.applicationCount
+                            (row.provincialApplicationCount ?? row.applicationCount)
                           )}
                         </TableCell>
                         <TableCell>

@@ -5,6 +5,7 @@ import {
   Checkbox,
   Column,
   Grid,
+  InlineNotification,
   Pagination,
   Table,
   TableBody,
@@ -100,6 +101,7 @@ const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
   receivedToDate: '',
   listingFromDate: '',
   listingToDate: '',
+  exportScheduleId: '',
   applicantClientNumber: '',
   ownerClientNumber: '',
 }
@@ -154,6 +156,7 @@ const buildSearchParams = (
     ['receivedToDate', filters.receivedToDate],
     ['listingFromDate', filters.listingFromDate],
     ['listingToDate', filters.listingToDate],
+    ['exportScheduleId', filters.exportScheduleId ?? ''],
     ['applicantClientNumber', filters.applicantClientNumber],
     ['ownerClientNumber', filters.ownerClientNumber],
     ['sortField', sortField],
@@ -204,6 +207,7 @@ const ProvincialApplicationPage = () => {
       receivedToDate: searchParams.get('receivedToDate') ?? '',
       listingFromDate: searchParams.get('listingFromDate') ?? '',
       listingToDate: searchParams.get('listingToDate') ?? '',
+      exportScheduleId: searchParams.get('exportScheduleId') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
     }
@@ -537,6 +541,15 @@ const ProvincialApplicationPage = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-application-search-filters">
           <Tile>
+            {filters.exportScheduleId && (
+              <InlineNotification
+                kind="info"
+                lowContrast
+                title="Export schedule filter applied"
+                subtitle={`Showing applications assigned to export schedule ${filters.exportScheduleId}.`}
+                onCloseButtonClick={() => updateFilter('exportScheduleId', '')}
+              />
+            )}
             <div className="legacy-search-grid provincial-application-search-grid">
               <TextInput
                 id="applicationNumber"

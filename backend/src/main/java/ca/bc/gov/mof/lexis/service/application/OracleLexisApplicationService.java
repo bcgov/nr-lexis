@@ -144,11 +144,16 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         input.receivedToDate(),
         input.listingFromDate(),
         input.listingToDate(),
+        positive(input.exportScheduleId()),
         positiveDistinctLongs(input.regionNumbers()),
         input.broadClientMatch(),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
+  }
+
+  private Long positive(Long value) {
+    return value != null && value > 0 ? value : null;
   }
 
   private List<CodeNameDto> currentScheduleOptions() {

@@ -386,15 +386,32 @@ describe('Provincial Application Search Actions', () => {
     )
   })
 
-  it('auto-searches an advertising date supplied by the export schedule link', async () => {
-    renderPage('/provincial/application?listingFromDate=2026-07-15&listingToDate=2026-07-15')
+  it('auto-searches applications assigned by the export schedule link', async () => {
+    renderPage('/provincial/application?exportScheduleId=1002')
     await screen.findByText('321')
+
+    expect(screen.getByText('Export schedule filter applied')).toBeInTheDocument()
+    expect(
+      screen.getByText('Showing applications assigned to export schedule 1002.'),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /close notification/i }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            exportScheduleId: '',
+          }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
 
     expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
-          listingFromDate: '2026-07-15',
-          listingToDate: '2026-07-15',
+          exportScheduleId: '1002',
         }),
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),

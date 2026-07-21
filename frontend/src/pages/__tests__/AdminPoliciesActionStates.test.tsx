@@ -859,6 +859,7 @@ describe('Admin policy action states', () => {
           teacMeetingDate: '2026-08-07',
           applicationCount: 3,
           mutable: false,
+          provincialApplicationCount: 2,
         },
       ],
       total: 1,
@@ -869,12 +870,9 @@ describe('Admin policy action states', () => {
     renderPage('schedule')
 
     const applicationLink = await screen.findByRole('link', {
-      name: 'View 3 applications advertised on 2026-07-15',
+      name: 'View 2 provincial applications assigned to export schedule 1002',
     })
-    expect(applicationLink).toHaveAttribute(
-      'href',
-      '/provincial/application?listingFromDate=2026-07-15&listingToDate=2026-07-15',
-    )
+    expect(applicationLink).toHaveAttribute('href', '/provincial/application?exportScheduleId=1002')
   })
 
   it('shows backend schedule guardrail messages without reloading the table', async () => {
