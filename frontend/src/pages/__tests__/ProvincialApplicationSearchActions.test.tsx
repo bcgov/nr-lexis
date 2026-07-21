@@ -143,6 +143,38 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it('passes every selected eligible application to exemption create', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: searchRowsWithMixedEligibility.map((row) => ({
+        ...row,
+        allowCreateExemption: true,
+      })),
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 2,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+    await screen.findByText('321')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 654' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    )
+
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
+      state: {
+        selectedApplicationNumbers: ['321', '654'],
+        applicantClientNumber: '11111111',
+        ownerClientNumber: '22222222',
+      },
+    })
+  })
+
   it('keeps authoritative filters disabled with a persistent warning when options fail', async () => {
     mockedFetchProvincialApplicationOptions.mockRejectedValueOnce(new Error('private failure'))
 

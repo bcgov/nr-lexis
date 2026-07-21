@@ -663,6 +663,7 @@ const ProvincialExemptionCreatePage = () => {
               {!blanketOic &&
                 (prefillState ? (
                   <TextArea
+                    className="selected-application-numbers"
                     id="selectedApplicationNumbers"
                     labelText="Selected application numbers"
                     value={prefillState.selectedApplicationNumbers.join('\n')}

@@ -1161,6 +1161,37 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777')
   })
 
+  it('displays every application selected from provincial search', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/exemption/create',
+            state: {
+              selectedApplicationNumbers: ['321', '654'],
+              applicantClientNumber: '00044444',
+              ownerClientNumber: '00033333',
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+
+    const selectedApplicationNumbers = screen.getByLabelText('Selected application numbers')
+    expect(selectedApplicationNumbers.closest('.selected-application-numbers')).toBeTruthy()
+    expect(selectedApplicationNumbers).toHaveAttribute('rows', '2')
+    expect(selectedApplicationNumbers).toHaveValue('321\n654')
+    await waitFor(() =>
+      expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenCalledWith(['321', '654']),
+    )
+  })
+
   it('submits a standalone Ministerial exemption without an application', async () => {
     mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-900'))
 

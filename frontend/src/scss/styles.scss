@@ -1489,6 +1489,11 @@ legend.cds--label {
   max-inline-size: 100%;
 }
 
+.create-form-grid .selected-application-numbers .cds--text-area {
+  block-size: auto;
+  min-block-size: calc(2 * var(--cds-layout-size-height-md, 2.5rem));
+}
+
 .create-form-grid .cds--date-picker-input__wrapper > span {
   inline-size: 100%;
   max-inline-size: 100%;
