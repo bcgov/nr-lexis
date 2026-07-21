@@ -117,8 +117,12 @@ describe('Federal Search Actions', () => {
     await userEvent.click(
       screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
     )
-    expect(createButton).toBeEnabled()
-    await userEvent.click(createButton)
+    expect(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).toBeEnabled()
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    )
 
     expect(mockNavigate).toHaveBeenCalledWith(
       '/provincial/exemption/create?applications=1001&source=federal',

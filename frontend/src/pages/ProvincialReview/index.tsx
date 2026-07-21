@@ -23,6 +23,7 @@ import {
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -983,9 +984,7 @@ const ProvincialReviewPage = () => {
                   ? 'Loading results…'
                   : `${results.page.totalElements} results found`}
             </p>
-            <Button
-              kind="secondary"
-              onClick={() => void onApproveSelectedClick()}
+            <DisabledButtonTooltip
               disabled={
                 loading ||
                 submittingApproval ||
@@ -993,9 +992,30 @@ const ProvincialReviewPage = () => {
                 selectedRowsCount === 0 ||
                 !canApproveApplications
               }
+              description={
+                loading
+                  ? 'Wait for the review results to load.'
+                  : submittingApproval || submittingReject
+                    ? 'Wait for the current review update to finish.'
+                    : !canApproveApplications
+                      ? 'You do not have permission to approve applications.'
+                      : 'Select at least one application to approve.'
+              }
             >
-              Approve Selected Applications
-            </Button>
+              <Button
+                kind="secondary"
+                onClick={() => void onApproveSelectedClick()}
+                disabled={
+                  loading ||
+                  submittingApproval ||
+                  submittingReject ||
+                  selectedRowsCount === 0 ||
+                  !canApproveApplications
+                }
+              >
+                Approve Selected Applications
+              </Button>
+            </DisabledButtonTooltip>
           </div>
           <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
             {errorMessage ? (

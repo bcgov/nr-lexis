@@ -236,7 +236,7 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(newRowCheckbox).toBeChecked()
     expect(pendingRowCheckbox).toBeChecked()
-    expect(approveButton).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeEnabled()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
   })
 

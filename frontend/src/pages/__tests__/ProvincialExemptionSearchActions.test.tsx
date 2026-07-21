@@ -147,9 +147,9 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByText('Locked')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    expect(approveButton).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeEnabled()
 
-    await userEvent.click(approveButton)
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
     const firstDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     expect(within(firstDialog).getByText('EX-1001')).toBeInTheDocument()
     const firstCertification = within(firstDialog).getByRole('checkbox', {
@@ -170,7 +170,7 @@ describe('Provincial Exemption Search Actions', () => {
       ).not.toBeInTheDocument(),
     )
 
-    await userEvent.click(approveButton)
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
     const reopenedDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     const reopenedCertification = within(reopenedDialog).getByRole('checkbox', {
       name: 'I certify that this exemption has been approved.',

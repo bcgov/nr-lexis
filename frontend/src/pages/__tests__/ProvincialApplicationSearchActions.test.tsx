@@ -130,9 +130,13 @@ describe('Provincial Application Search Actions', () => {
     ).toBeNull()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
-    expect(createExemptionButton).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).toBeEnabled()
 
-    await userEvent.click(createExemptionButton)
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    )
 
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
       state: {
@@ -382,17 +386,17 @@ describe('Provincial Application Search Actions', () => {
     renderPage()
     await screen.findByText('321')
 
-    const createExemptionButton = screen.getByRole('button', {
-      name: 'Create exemption for Selected Applications',
-    })
-
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
-    expect(createExemptionButton).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).toBeEnabled()
 
     await userEvent.type(screen.getByLabelText('Application number'), '9')
 
     await waitFor(() => {
-      expect(createExemptionButton).toBeDisabled()
+      expect(
+        screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      ).toBeDisabled()
       expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({

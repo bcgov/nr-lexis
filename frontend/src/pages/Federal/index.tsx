@@ -19,6 +19,7 @@ import {
 import { AppNotification } from '../../components/AppNotification'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -543,14 +544,19 @@ const FederalPage = () => {
                 Clear Filters
               </Button>
               {canCreateFederalExemption && (
-                <Button
-                  kind="secondary"
-                  size="md"
-                  onClick={onCreateExemptionClick}
+                <DisabledButtonTooltip
                   disabled={selectedRowsCount === 0}
+                  description="Select at least one eligible application."
                 >
-                  Create exemption for Selected Applications
-                </Button>
+                  <Button
+                    kind="secondary"
+                    size="md"
+                    onClick={onCreateExemptionClick}
+                    disabled={selectedRowsCount === 0}
+                  >
+                    Create exemption for Selected Applications
+                  </Button>
+                </DisabledButtonTooltip>
               )}
             </div>
             {exemptionSelectionStatus && (

@@ -20,6 +20,7 @@ import {
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import ExemptionApprovalEmailModal, {
   type ExemptionApprovalRecipient,
 } from '@/components/ExemptionApprovalEmailModal'
@@ -830,14 +831,23 @@ const ProvincialExemptionPage = () => {
                 Clear Filters
               </Button>
               {canApproveExemption && (
-                <Button
-                  kind="secondary"
-                  size="md"
-                  onClick={onApproveSelectedClick}
+                <DisabledButtonTooltip
                   disabled={selectedRowsCount === 0 || approving}
+                  description={
+                    approving
+                      ? 'Wait for the approval request to finish.'
+                      : 'Select at least one exemption to approve.'
+                  }
                 >
-                  {approving ? 'Approving...' : 'Approve Selected Exemption'}
-                </Button>
+                  <Button
+                    kind="secondary"
+                    size="md"
+                    onClick={onApproveSelectedClick}
+                    disabled={selectedRowsCount === 0 || approving}
+                  >
+                    {approving ? 'Approving...' : 'Approve Selected Exemption'}
+                  </Button>
+                </DisabledButtonTooltip>
               )}
               {canCreateExemption && (
                 <Link className="cds--link" to="/provincial/exemption/create">

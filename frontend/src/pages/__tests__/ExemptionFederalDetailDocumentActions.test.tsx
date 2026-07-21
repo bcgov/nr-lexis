@@ -519,6 +519,36 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('explains why adding an associated application is unavailable until a number is entered', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+
+    const applicationInput = await screen.findByLabelText('Application number')
+    const addButton = screen.getByRole('button', { name: 'Add application' })
+    const tooltipTrigger = addButton.parentElement as HTMLElement
+
+    expect(applicationInput.closest('.exemption-application-add-form')).toBeTruthy()
+    expect(addButton).toBeDisabled()
+
+    await userEvent.hover(tooltipTrigger)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Enter an application number to add it.',
+    )
+
+    await userEvent.type(applicationInput, '654')
+    expect(screen.getByRole('button', { name: 'Add application' })).toBeEnabled()
+  })
+
   it('renders authoritative permit metadata and omits rows without record access', async () => {
     mockedFetchExemptionPermits.mockResolvedValue([
       {

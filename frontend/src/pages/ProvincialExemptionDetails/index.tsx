@@ -26,6 +26,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import ExemptionApprovalEmailModal, {
   type ExemptionApprovalRecipient,
 } from '@/components/ExemptionApprovalEmailModal'
@@ -523,6 +524,11 @@ const ProvincialExemptionDetailsPage = () => {
     !documentUploadDirty &&
     persistedTypeCode !== 'B' &&
     persistedStatusCode !== 'CAN'
+  const addApplicationDisabled =
+    Boolean(applicationMutationNumber) || !applicationNumberToAdd.trim()
+  const addApplicationDisabledDescription = applicationMutationNumber
+    ? 'Wait for the current application link update to finish.'
+    : 'Enter an application number to add it.'
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
   const canEditSummaryFields =
@@ -1557,7 +1563,7 @@ const ProvincialExemptionDetailsPage = () => {
                         <Tile>
                           <h2 className="detail-tile-title">Associated applications</h2>
                           {canLinkApplications && (
-                            <div className="legacy-search-actions">
+                            <div className="exemption-application-add-form">
                               <TextInput
                                 id="exemptionApplicationNumberToAdd"
                                 labelText="Application number"
@@ -1566,19 +1572,21 @@ const ProvincialExemptionDetailsPage = () => {
                                   setApplicationNumberToAdd(event.target.value.replace(/\D/g, ''))
                                 }
                               />
-                              <Button
-                                kind="secondary"
-                                size="sm"
-                                disabled={
-                                  !applicationNumberToAdd.trim() ||
-                                  Boolean(applicationMutationNumber)
-                                }
-                                onClick={() => void onAddApplication()}
+                              <DisabledButtonTooltip
+                                disabled={addApplicationDisabled}
+                                description={addApplicationDisabledDescription}
                               >
-                                {applicationMutationNumber === applicationNumberToAdd.trim()
-                                  ? 'Adding...'
-                                  : 'Add application'}
-                              </Button>
+                                <Button
+                                  kind="secondary"
+                                  size="sm"
+                                  disabled={addApplicationDisabled}
+                                  onClick={() => void onAddApplication()}
+                                >
+                                  {applicationMutationNumber === applicationNumberToAdd.trim()
+                                    ? 'Adding...'
+                                    : 'Add application'}
+                                </Button>
+                              </DisabledButtonTooltip>
                             </div>
                           )}
                           {applicationsErrorMessage ? (
@@ -1616,35 +1624,52 @@ const ProvincialExemptionDetailsPage = () => {
                                         <TableCell>{application.scaleVolume || '-'}</TableCell>
                                         <TableCell>
                                           <div className="legacy-search-actions">
-                                            <Button
-                                              kind="ghost"
-                                              size="sm"
+                                            <DisabledButtonTooltip
                                               disabled={!canOpen}
-                                              onClick={() => navigate(withCurrentSearch(path))}
+                                              description="You do not have permission to open this application."
                                             >
-                                              Open
-                                            </Button>
-                                            {canLinkApplications && (
                                               <Button
-                                                kind="danger--ghost"
+                                                kind="ghost"
                                                 size="sm"
+                                                disabled={!canOpen}
+                                                onClick={() => navigate(withCurrentSearch(path))}
+                                              >
+                                                Open
+                                              </Button>
+                                            </DisabledButtonTooltip>
+                                            {canLinkApplications && (
+                                              <DisabledButtonTooltip
                                                 disabled={
                                                   application.locked ||
                                                   Boolean(applicationMutationNumber)
                                                 }
-                                                onClick={() =>
-                                                  void onRemoveApplication(
-                                                    application.applicationNumber,
-                                                  )
+                                                description={
+                                                  application.locked
+                                                    ? 'This application is locked and cannot be removed.'
+                                                    : 'Wait for the current application link update to finish.'
                                                 }
                                               >
-                                                {applicationMutationNumber ===
-                                                application.applicationNumber
-                                                  ? 'Removing...'
-                                                  : application.locked
-                                                    ? 'Locked'
-                                                    : 'Remove'}
-                                              </Button>
+                                                <Button
+                                                  kind="danger--ghost"
+                                                  size="sm"
+                                                  disabled={
+                                                    application.locked ||
+                                                    Boolean(applicationMutationNumber)
+                                                  }
+                                                  onClick={() =>
+                                                    void onRemoveApplication(
+                                                      application.applicationNumber,
+                                                    )
+                                                  }
+                                                >
+                                                  {applicationMutationNumber ===
+                                                  application.applicationNumber
+                                                    ? 'Removing...'
+                                                    : application.locked
+                                                      ? 'Locked'
+                                                      : 'Remove'}
+                                                </Button>
+                                              </DisabledButtonTooltip>
                                             )}
                                           </div>
                                         </TableCell>
