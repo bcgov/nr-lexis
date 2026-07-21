@@ -3,9 +3,14 @@ package ca.bc.gov.mof.lexis.repository.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.Reader;
+import java.io.StringWriter;
+import java.sql.PreparedStatement;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,12 +18,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.RowMapper;
 
 @ExtendWith(MockitoExtension.class)
 class OracleNotificationRepositoryTest {
 
   @Mock private JdbcTemplate jdbcTemplate;
+  @Mock private PreparedStatement statement;
 
   @Test
   void findVisibleShouldCloseTheRoleAudiencePredicate() {
@@ -34,5 +41,32 @@ class OracleNotificationRepositoryTest {
     assertThat(sqlCaptor.getValue())
         .contains("audience_filter.ROLE_NAME IN (\n?")
         .contains(")\n  )\n) ORDER BY n.PUBLISH_TIMESTAMP DESC");
+  }
+
+  @Test
+  void updateShouldBindRichTextAsACharacterStream() throws Exception {
+    OracleNotificationRepository repository = new OracleNotificationRepository(jdbcTemplate);
+    String contentHtml = "<p>" + "x".repeat(100_000) + "</p>";
+    when(jdbcTemplate.update(anyString(), any(PreparedStatementSetter.class)))
+        .thenAnswer(
+            invocation -> {
+              invocation.getArgument(1, PreparedStatementSetter.class).setValues(statement);
+              return 0;
+            });
+
+    repository.update(
+        12L,
+        new OracleNotificationRepository.NotificationMutation(
+            "Service update",
+            contentHtml,
+            LocalDateTime.of(2026, 7, 21, 12, 0),
+            "IDIR\\ADMIN",
+            List.of()));
+
+    ArgumentCaptor<Reader> contentCaptor = ArgumentCaptor.forClass(Reader.class);
+    verify(statement).setCharacterStream(eq(2), contentCaptor.capture());
+    StringWriter boundContent = new StringWriter();
+    contentCaptor.getValue().transferTo(boundContent);
+    assertThat(boundContent.toString()).isEqualTo(contentHtml);
   }
 }

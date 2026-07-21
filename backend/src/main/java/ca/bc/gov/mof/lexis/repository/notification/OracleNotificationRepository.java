@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.notification;
 
+import java.io.StringReader;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -105,12 +106,14 @@ public class OracleNotificationRepository {
           UPDATE_TIMESTAMP
         ) VALUES (?, ?, ?, ?, ?, SYSTIMESTAMP, ?, SYSTIMESTAMP)
         """,
-        notificationId,
-        mutation.title(),
-        mutation.contentHtml(),
-        Timestamp.valueOf(mutation.publishTimestamp()),
-        mutation.auditUserId(),
-        mutation.auditUserId());
+        statement -> {
+          statement.setLong(1, notificationId);
+          statement.setString(2, mutation.title());
+          statement.setCharacterStream(3, new StringReader(mutation.contentHtml()));
+          statement.setTimestamp(4, Timestamp.valueOf(mutation.publishTimestamp()));
+          statement.setString(5, mutation.auditUserId());
+          statement.setString(6, mutation.auditUserId());
+        });
     replaceAudienceRoles(notificationId, mutation.audienceRoles());
     return findById(notificationId)
         .orElseThrow(
@@ -129,11 +132,13 @@ public class OracleNotificationRepository {
                    UPDATE_TIMESTAMP = SYSTIMESTAMP
              WHERE LEXIS_NOTIFICATION_ID = ?
             """,
-            mutation.title(),
-            mutation.contentHtml(),
-            Timestamp.valueOf(mutation.publishTimestamp()),
-            mutation.auditUserId(),
-            notificationId);
+            statement -> {
+              statement.setString(1, mutation.title());
+              statement.setCharacterStream(2, new StringReader(mutation.contentHtml()));
+              statement.setTimestamp(3, Timestamp.valueOf(mutation.publishTimestamp()));
+              statement.setString(4, mutation.auditUserId());
+              statement.setLong(5, notificationId);
+            });
     if (updated == 0) {
       return Optional.empty();
     }
