@@ -420,10 +420,14 @@ class LexisReportScheduleRepositoryTest {
         .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sqlCaptor.getValue())
         .contains("AS PROVINCIAL_APPLICATION_COUNT")
-        .contains("FROM EXPORT_EXEMPTION_APP_VIEW V")
-        .contains("V.APPLICATION_NUMBER > TO_NUMBER(0)")
-        .contains("V.EXPORT_JURISDICTION_CODE <> 'F'")
-        .contains("V.OIC_INDICATOR = 'N'")
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("EEA.APPLICATION_NUMBER > TO_NUMBER(0)")
+        .contains("EEA.EXPORT_JURISDICTION_CODE <> 'F'")
+        .contains("EEA.OIC_INDICATOR = 'N'")
+        .contains("FROM EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("FROM EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("FROM EXPORT_APPLICANT_TYPE_CODE EATC")
+        .doesNotContain("EXPORT_EXEMPTION_APP_VIEW")
         .contains("ORDER BY ES.TEAC_MEETING_DATE DESC, ES.EXPORT_SCHEDULE_ID ASC")
         .doesNotContain("WHERE ES.ADVERTISING_DATE")
         .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
