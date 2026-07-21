@@ -397,9 +397,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    for (const tabName of ['Summary', 'Permits', 'Documents', 'Remarks']) {
+    for (const tabName of ['Summary', 'Permits', 'Documents']) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
     const exemptionHeading = screen.getByRole('heading', {
       name: 'Exemption EX-777',
       level: 1,
@@ -513,10 +514,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
     ).toBeInTheDocument()
 
-    await selectDetailTab('Remarks')
-    expect(
-      await screen.findByRole('heading', { name: 'No remarks found', level: 3 }),
-    ).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
   })
 
   it('explains why adding an associated application is unavailable until a number is entered', async () => {

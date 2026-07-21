@@ -42,11 +42,7 @@ import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUp
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { formatDocumentSource } from '@/service/document-service-utils'
 import { DetailFieldTile } from '../shared/DetailSections'
-import {
-  displayValue,
-  matchesFilter,
-  normalizeFilterText as normalizeText,
-} from '@/pages/shared/detail-page-utils'
+import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
@@ -95,7 +91,6 @@ const EXEMPTION_DETAIL_TAB_INDEX = {
   permits: 2,
   fees: 3,
   documents: 4,
-  remarks: 5,
 } as const
 
 type ExemptionEditForm = {
@@ -199,14 +194,13 @@ const ProvincialExemptionDetailsPage = () => {
   const currentDetail = detail && String(detail.exemptionNumber) === exemptionNumber ? detail : null
   const isRefreshingDetail = loading && !!currentDetail
   const permitFilter = searchParams.get('permitFilter') ?? ''
-  const remarkFilter = searchParams.get('remarkFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
   const updateFilterParam = useCallback(
-    (key: 'permitFilter' | 'remarkFilter' | 'documentsFilter', value: string) => {
+    (key: 'permitFilter' | 'documentsFilter', value: string) => {
       const nextSearchParams = searchParamsWithValue(searchParams, key, value)
 
       if (nextSearchParams.toString() !== searchParams.toString()) {
@@ -453,18 +447,6 @@ const ProvincialExemptionDetailsPage = () => {
       ),
     )
   }, [permitFilter, visiblePermitRows])
-
-  const filteredRemarks = useMemo(() => {
-    const rows = detail?.remarks ?? []
-    if (!remarkFilter.trim()) {
-      return rows
-    }
-
-    const normalizedFilter = normalizeText(remarkFilter)
-    return rows.filter((item) =>
-      normalizeText(`${item.title} ${item.remark}`).includes(normalizedFilter),
-    )
-  }, [detail?.remarks, remarkFilter])
 
   const filteredDocumentRows = useMemo(() => {
     return documentRows.filter((row) =>
@@ -1353,7 +1335,6 @@ const ProvincialExemptionDetailsPage = () => {
                 <Tab>Permits</Tab>
                 {showFees && <Tab>Fees</Tab>}
                 <Tab>Documents</Tab>
-                <Tab>Remarks</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel className="application-detail-tab-panel">
@@ -2008,66 +1989,6 @@ const ProvincialExemptionDetailsPage = () => {
                               documentRows.length === 0
                                 ? 'No documents have been uploaded for this exemption.'
                                 : 'Try a different file name, description, type, or identifier.'
-                            }
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
-                    </Column>
-                  </Grid>
-                </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <h2 className="detail-tile-title">Remarks</h2>
-                        {editing && (
-                          <p className="detail-read-only-note">
-                            Remarks are read-only. Edit exemption details on the Summary or Fees
-                            tab.
-                          </p>
-                        )}
-                        {(detail.remarks ?? []).length > 0 && (
-                          <TextInput
-                            id="exemptionDetailRemarkFilter"
-                            labelText="Filter remarks"
-                            value={remarkFilter}
-                            onChange={(event) =>
-                              updateFilterParam('remarkFilter', event.target.value)
-                            }
-                            placeholder="Filter by title or remark text"
-                          />
-                        )}
-                        {filteredRemarks.length > 0 ? (
-                          <TableFrame ariaLabel="Exemption remarks">
-                            <Table useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>Title</TableHeader>
-                                  <TableHeader>Remark</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {filteredRemarks.map((item) => (
-                                  <TableRow key={`${item.title}-${item.remark}`}>
-                                    <TableCell>{item.title}</TableCell>
-                                    <TableCell>{item.remark}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title={
-                              (detail.remarks ?? []).length === 0
-                                ? 'No remarks found'
-                                : 'No remarks match this filter'
-                            }
-                            description={
-                              (detail.remarks ?? []).length === 0
-                                ? 'No remarks have been added to this exemption.'
-                                : 'Try a different title or remark text.'
                             }
                             headingLevel={3}
                           />

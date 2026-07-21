@@ -669,7 +669,7 @@ describe('Provincial exemption edit context', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('returns to Summary when editing starts and identifies permit and remark rows as read-only', async () => {
+  it('returns to Summary when editing starts and keeps related permits read-only', async () => {
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,
       fixedFeeRate: '',
@@ -703,11 +703,7 @@ describe('Provincial exemption edit context', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save exemption' })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Remarks' }))
-    expect(
-      screen.getByText('Remarks are read-only. Edit exemption details on the Summary or Fees tab.'),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
   })
 
   it('protects relationship drafts and disables linking while exemption fields are dirty', async () => {
