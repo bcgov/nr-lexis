@@ -427,9 +427,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
     expect(within(exemptionSummaryTile as HTMLElement).getByText('EX-777')).toBeInTheDocument()
     expect(
-      within(exemptionSummaryTile as HTMLElement).getByText('Application status'),
-    ).toBeInTheDocument()
-    expect(within(exemptionSummaryTile as HTMLElement).getByText('OPEN')).toBeInTheDocument()
+      within(exemptionSummaryTile as HTMLElement).queryByText('Application number'),
+    ).not.toBeInTheDocument()
+    expect(
+      within(exemptionSummaryTile as HTMLElement).queryByText('Application status'),
+    ).not.toBeInTheDocument()
     expect(
       within(exemptionSummaryTile as HTMLElement).getByText('Approved volume (m³)'),
     ).toBeInTheDocument()
