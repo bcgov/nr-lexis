@@ -10,6 +10,7 @@ import {
   Finance,
   Logout,
   Moon,
+  Notification,
   Report,
   Search,
   Settings,
@@ -88,6 +89,16 @@ const isMobileNavigationViewport = (): boolean => {
 }
 
 const NAVIGATION_SECTIONS: NavigationSection[] = [
+  {
+    label: 'Notifications',
+    links: [
+      {
+        to: '/notifications',
+        label: 'Notifications',
+        icon: Notification,
+      },
+    ],
+  },
   {
     label: 'Provincial',
     links: [

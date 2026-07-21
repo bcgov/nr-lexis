@@ -17,6 +17,7 @@ const AdminPoliciesPage = lazy(() => import('@/pages/AdminPolicies'))
 const AdminUploadsPage = lazy(() => import('@/pages/AdminUploads'))
 const FederalPage = lazy(() => import('@/pages/Federal'))
 const FederalApplicationDetailsPage = lazy(() => import('@/pages/FederalApplicationDetails'))
+const NotificationsPage = lazy(() => import('@/pages/Notifications'))
 const ProvincialApplicationPage = lazy(() => import('@/pages/ProvincialApplication'))
 const ProvincialApplicationCreatePage = lazy(() => import('@/pages/ProvincialApplicationCreate'))
 const ProvincialApplicationDetailsPage = lazy(() => import('@/pages/ProvincialApplicationDetails'))
@@ -183,6 +184,16 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     id: 'Legacy Callback Redirect',
     element: <ProtectedRootRedirect />,
     isNavigation: false,
+  },
+  {
+    path: '/notifications',
+    id: 'Notifications',
+    element: (
+      <Layout>
+        <NotificationsPage />
+      </Layout>
+    ),
+    isNavigation: true,
   },
   {
     path: '/provincial',

@@ -1,0 +1,123 @@
+.notifications-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.notifications-page__message {
+  max-width: 60rem;
+}
+
+.notifications-page__editor,
+.notifications-page__list {
+  display: grid;
+  gap: 1rem;
+}
+
+.notifications-page__section-heading,
+.notifications-page__notification-heading,
+.notifications-page__list-heading,
+.notifications-page__editor-actions,
+.notifications-page__notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.notifications-page__section-heading,
+.notifications-page__notification-heading,
+.notifications-page__list-heading {
+  justify-content: space-between;
+}
+
+.notifications-page__section-heading h2,
+.notifications-page__list-heading h2,
+.notifications-page__notification-heading h3 {
+  margin: 0;
+}
+
+.notifications-page__section-heading p,
+.notifications-page__notification-heading p,
+.notifications-page__audience p {
+  margin: 0.25rem 0 0;
+  color: var(--cds-text-secondary);
+}
+
+.notifications-page__form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.notifications-page__form-field,
+.notifications-page__audience {
+  margin-top: 1.25rem;
+}
+
+.notifications-page__form-field > .cds--label {
+  margin-bottom: 0.5rem;
+}
+
+.notifications-page__audience {
+  padding: 0;
+  border: 0;
+}
+
+.notifications-page__audience legend {
+  padding: 0;
+  font-weight: 600;
+}
+
+.notifications-page__audience-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.notifications-page__editor-actions {
+  margin-top: 1.5rem;
+}
+
+.notifications-page__notification-content {
+  margin-top: 1.25rem;
+}
+
+.notifications-page__notification-content p {
+  margin: 0 0 0.75rem;
+}
+
+.notifications-page__notification-content p:last-child {
+  margin-bottom: 0;
+}
+
+.notifications-page__notification-content ul,
+.notifications-page__notification-content ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.5rem;
+}
+
+.notifications-page__metadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cds-border-subtle);
+}
+
+.notifications-page__metadata dt {
+  color: var(--cds-text-secondary);
+}
+
+.notifications-page__metadata dd {
+  margin: 0.25rem 0 0;
+}
+
+@media (max-width: 42rem) {
+  .notifications-page__section-heading,
+  .notifications-page__notification-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

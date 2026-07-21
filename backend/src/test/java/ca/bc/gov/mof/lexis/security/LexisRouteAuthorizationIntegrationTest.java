@@ -96,6 +96,36 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void notificationRoutesShouldSeparateViewAndAdministratorAccess() throws Exception {
+    String notificationsPath = "/api/lexis/notifications";
+    String adminNotificationsPath = "/api/lexis/admin/notifications";
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+    SimpleGrantedAuthority administrator = new SimpleGrantedAuthority("LEXIS_ADMIN");
+
+    mockMvc.perform(get(notificationsPath)).andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(get(notificationsPath).with(jwt().authorities(readOnly)))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(get(notificationsPath).with(jwt().authorities(new SimpleGrantedAuthority("UNKNOWN"))))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get(adminNotificationsPath).with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get(adminNotificationsPath).with(jwt().authorities(administrator)))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(
+            post(adminNotificationsPath)
+                .with(csrf())
+                .with(jwt().authorities(readOnly))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Notice\",\"contentHtml\":\"<p>Text</p>\",\"publishTimestamp\":\"2026-07-21T00:00:00\",\"audienceRoles\":[]}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void shippingReferenceOptionsShouldRequireAProvincialOrFederalDetailAction() throws Exception {
     String path = "/api/lexis/shipping-reference-options";
 
