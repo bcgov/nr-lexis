@@ -138,6 +138,11 @@ const SORT_FIELD_OPTIONS = RESULT_COLUMNS.flatMap((column) =>
   column.sortField ? [column.sortField] : [],
 )
 
+const disabledExemptionSelectionDescription = (row: ProvincialApplicationSearchItem): string =>
+  row.exemptionNumber
+    ? 'This application already has an exemption.'
+    : 'This application is not eligible to create an exemption.'
+
 const buildSearchParams = (
   filters: ProvincialApplicationSearchFilters,
   sortField: ProvincialApplicationSearchSortField,
@@ -734,16 +739,21 @@ const ProvincialApplicationPage = () => {
                   <TableRow>
                     {canCreateExemption && (
                       <TableHeader>
-                        <Checkbox
-                          id="selectAllCurrentPageRows"
-                          hideLabel
-                          labelText="Select all rows on this page"
-                          checked={allSelectableRowsAreSelected}
+                        <DisabledButtonTooltip
                           disabled={selectableRows.length === 0}
-                          onChange={(_, payload) =>
-                            toggleSelectAllRowsOnPage(Boolean(payload.checked))
-                          }
-                        />
+                          description="No eligible applications are available on this page."
+                        >
+                          <Checkbox
+                            id="selectAllCurrentPageRows"
+                            hideLabel
+                            labelText="Select all rows on this page"
+                            checked={allSelectableRowsAreSelected}
+                            disabled={selectableRows.length === 0}
+                            onChange={(_, payload) =>
+                              toggleSelectAllRowsOnPage(Boolean(payload.checked))
+                            }
+                          />
+                        </DisabledButtonTooltip>
                       </TableHeader>
                     )}
                     {visibleResultColumns.map((column) => (
@@ -771,16 +781,21 @@ const ProvincialApplicationPage = () => {
                     <TableRow key={row.applicationNumber}>
                       {canCreateExemption && (
                         <TableCell>
-                          <Checkbox
-                            id={`selectRow-${row.applicationNumber}`}
-                            hideLabel
-                            labelText={`Select ${row.applicationNumber}`}
-                            checked={Boolean(selectedRowsById[row.applicationNumber])}
+                          <DisabledButtonTooltip
                             disabled={!row.allowCreateExemption}
-                            onChange={(_, payload) =>
-                              toggleRowSelection(row, Boolean(payload.checked))
-                            }
-                          />
+                            description={disabledExemptionSelectionDescription(row)}
+                          >
+                            <Checkbox
+                              id={`selectRow-${row.applicationNumber}`}
+                              hideLabel
+                              labelText={`Select ${row.applicationNumber}`}
+                              checked={Boolean(selectedRowsById[row.applicationNumber])}
+                              disabled={!row.allowCreateExemption}
+                              onChange={(_, payload) =>
+                                toggleRowSelection(row, Boolean(payload.checked))
+                              }
+                            />
+                          </DisabledButtonTooltip>
                         </TableCell>
                       )}
                       <TableCell>

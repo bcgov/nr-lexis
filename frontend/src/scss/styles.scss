@@ -1542,6 +1542,10 @@ legend.cds--label {
   pointer-events: none;
 }
 
+.disabled-button-tooltip > .cds--checkbox-wrapper {
+  pointer-events: none;
+}
+
 .region-multi-select .cds--multi-select--filterable > .cds--list-box__field > .cds--tag--filter {
   display: none;
 }

@@ -129,6 +129,18 @@ describe('Provincial Application Search Actions', () => {
       screen.getByRole('link', { name: 'Add Application' }).closest('.legacy-search-actions'),
     ).toBeNull()
 
+    const ineligibleCheckbox = screen.getByRole('checkbox', { name: 'Select 654' })
+    const ineligibleCheckboxTooltipTrigger = ineligibleCheckbox.closest(
+      '.disabled-button-tooltip',
+    ) as HTMLElement
+    expect(ineligibleCheckboxTooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(ineligibleCheckboxTooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This application already has an exemption.',
+    )
+
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(
       screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
@@ -193,6 +205,42 @@ describe('Provincial Application Search Actions', () => {
     expect(
       screen.getByText('Options unavailable').closest('[role="status"]')?.querySelector('button'),
     ).toBeNull()
+  })
+
+  it('explains why the select-all checkbox is disabled when this page has no eligible rows', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[1],
+          allowCreateExemption: false,
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+    await screen.findByText('654')
+
+    const selectAllCheckbox = screen.getByRole('checkbox', {
+      name: 'Select all rows on this page',
+    })
+    expect(selectAllCheckbox).toBeDisabled()
+
+    const selectAllTooltipTrigger = selectAllCheckbox.closest(
+      '.disabled-button-tooltip',
+    ) as HTMLElement
+    expect(selectAllTooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(selectAllTooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'No eligible applications are available on this page.',
+    )
   })
 
   it('renders application search filters in the legacy order', async () => {
