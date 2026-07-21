@@ -623,6 +623,52 @@ describe('Provincial exemption edit context', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('does not show an editing warning while initial edit settings load', async () => {
+    const editContext = {
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    }
+    let resolveEditContext: (value: typeof editContext) => void = () => undefined
+    const pendingEditContext = new Promise<typeof editContext>((resolve) => {
+      resolveEditContext = resolve
+    })
+    vi.mocked(fetchExemptionEditContext).mockImplementationOnce(() => pendingEditContext)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Exemption BOIC-205', level: 1 })
+    await waitFor(() => expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledTimes(1))
+
+    expect(
+      screen.queryByText(
+        'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
+      ),
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveEditContext(editContext)
+    })
+
+    expect(await screen.findByRole('button', { name: 'Edit exemption' })).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
+      ),
+    ).not.toBeInTheDocument()
+  })
+
   it('returns to Summary when editing starts and identifies permit and remark rows as read-only', async () => {
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,

@@ -500,7 +500,10 @@ const ProvincialExemptionDetailsPage = () => {
   const isExemptionDirty =
     isExemptionFormDirty || applicationRelationshipDraftDirty || documentUploadDirty
   const editContextUnavailableMessage =
-    hasExemptionEditPermission && !editContextLoaded && !editContextRefreshing
+    hasExemptionEditPermission &&
+    !editContextLoaded &&
+    !editContextRefreshing &&
+    !isRefreshingDetail
       ? 'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const canApproveExemption =
