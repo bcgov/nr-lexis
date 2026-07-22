@@ -32,7 +32,7 @@ rollout but not an image rebuild.
 | `VITE_USER_POOLS_WEB_CLIENT_ID` | Cognito app client id | - |
 | `VITE_COGNITO_DOMAIN` | Cognito hosted UI domain, without protocol | - |
 | `VITE_REDIRECT_SIGN_IN` | OAuth callback URL | http://localhost:3000/ |
-| `VITE_REDIRECT_SIGN_OUT` | BC Gov logoff URL registered in Cognito; use `logoff.cgi?retnow=1&returl=<encoded-app-root>` and do not chain through LoginProxy OIDC logout | - |
+| `VITE_REDIRECT_SIGN_OUT` | Full shared FAM logout chain registered in Cognito; the final application return must be the deployed `/logout` route | - |
 | `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
 | `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
 | `VITE_LEXIS_PROD_RTM_ONLY` | Restricts frontend routes and navigation to the Average Monthly Values module for LEXIS admins | false |

@@ -139,6 +139,19 @@ describe('Protected route access matrix', () => {
     })
   })
 
+  it('returns the FAM logout callback to the login shell', () => {
+    const publicLogoutRoute = PUBLIC_ROUTES.find((entry) => entry.path === '/logout')
+
+    expect(publicLogoutRoute).toBeDefined()
+    expect(publicLogoutRoute?.id).toBe('Logout Login Redirect')
+    expect(isValidElement(publicLogoutRoute?.element)).toBe(true)
+    expect((publicLogoutRoute?.element as ReactElement).type).toBe(Navigate)
+    expect((publicLogoutRoute?.element as ReactElement).props).toMatchObject({
+      to: '/',
+      replace: true,
+    })
+  })
+
   it('redirects the retired federal upload URL to federal search', () => {
     const route = findRoute('/federal/application/upload')
 

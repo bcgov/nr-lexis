@@ -139,6 +139,12 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    path: '/logout',
+    id: 'Logout Login Redirect',
+    element: <Navigate to="/" replace />,
+    isNavigation: false,
+  },
+  {
     path: '*',
     id: 'Not Found',
     element: <NotFoundPage />,

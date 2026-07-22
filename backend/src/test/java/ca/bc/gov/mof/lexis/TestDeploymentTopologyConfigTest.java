@@ -393,7 +393,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("^([0-9]|[1-4][0-9])$")
         .contains(
             "${COGNITO_LOGOUT_CHAIN_URL}https://${REPOSITORY_NAME}-${LEXIS_SLOT}"
-                + ".apps.gold.devops.gov.bc.ca")
+                + ".apps.gold.devops.gov.bc.ca/logout")
         .contains("COGNITO_LOGOUT_CHAIN_URL is required for DEV")
         .contains("VITE_REDIRECT_SIGN_OUT is required outside DEV")
         .doesNotContain("logontest7.gov.bc.ca")

@@ -149,13 +149,13 @@ const safeUrlForLog = (rawUrl: string): string => {
 }
 
 const redirectExternalLogoutToLoginShell = async (page: Page): Promise<void> => {
-  const loginShellUrl = `${new URL(E2E_BASE_URL).origin}/`
+  const logoutReturnUrl = `${new URL(E2E_BASE_URL).origin}/logout`
 
   await page.route(/https:\/\/[^/]*amazoncognito\.com\/(?:logout|error).*/i, async (route) => {
     await route.fulfill({
       status: 302,
       headers: {
-        location: loginShellUrl,
+        location: logoutReturnUrl,
       },
       body: '',
     })

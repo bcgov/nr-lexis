@@ -260,7 +260,7 @@ jobs:
               echo "::error title=Missing DEV logout chain::COGNITO_LOGOUT_CHAIN_URL is required for DEV."
               exit 1
             fi
-            sign_out="${COGNITO_LOGOUT_CHAIN_URL}https://${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca"
+            sign_out="${COGNITO_LOGOUT_CHAIN_URL}https://${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca/logout"
           else
             sign_out="${CONFIGURED_SIGN_OUT}"
           fi
