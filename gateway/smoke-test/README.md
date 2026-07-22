@@ -43,14 +43,15 @@ From the repository root:
 The smoke test verifies:
 
 - the raw OpenAPI contract and its viewer are reachable;
+- Swagger CORS preflights succeed for both federal operations;
 - the runtime token is active and contains `lexis:federal-submission:submit`;
-- a request without a token returns `401`;
-- invalid XML returns `422`; and
+- gateway-generated `401` and optional `403` responses include the approved CORS origin;
+- invalid XML returns `422` with CORS headers from both validation and submission operations; and
 - when `VALID_XML_FILE` is supplied, valid XML returns `200` with status `validated`.
 
 An optional wrong-scope check runs when both `WRONG_SCOPE_CLIENT_ID` and
 `WRONG_SCOPE_CLIENT_SECRET` are supplied. It expects `403`.
 
-This script does not call the submission endpoint and does not persist application data. Controlled
-submission testing should follow the request contract in `gateway/openapi.yaml` after validation
-passes.
+The submission check deliberately sends invalid XML and expects rejection before persistence.
+Controlled valid submission testing should follow the request contract in `gateway/openapi.yaml`
+after validation passes.
