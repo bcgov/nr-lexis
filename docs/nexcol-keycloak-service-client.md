@@ -13,21 +13,42 @@ NEXCOL
   -> LEXIS federal application tables
 ```
 
-The OpenShift Route remains internet-accessible. Direct requests still require a valid Keycloak
-token with the submission scope, but bypass gateway metrics and throttling. The submission scope
-must be assigned only to the approved NEXCOL client.
+The API gateway is the supported external entry point. LEXIS also validates the forwarded token
+and independently enforces the same authentication and authorization requirements.
 
 ## Authentication
 
-NEXCOL uses a dedicated confidential Keycloak client. Both federal endpoints require the OAuth
-scope:
+Two Keycloak clients have different responsibilities in this integration:
+
+| Client | Configuration | Used by | Purpose |
+|---|---|---|---|
+| Deployment provisioning client | GitHub environment secrets `KEYCLOAK_SA_CLIENT_ID` and `KEYCLOAK_SA_CLIENT_SECRET` | LEXIS deployment workflow | Creates or checks the client scope and dedicated NEXCOL runtime client |
+| NEXCOL runtime client | GitHub environment variable `NEXCOL_KEYCLOAK_CLIENT_ID`; its runtime secret is managed operationally | NEXCOL | Obtains access tokens and calls the gateway |
+
+The deployment provisioning client is not a NEXCOL credential and must not be used to call the
+federal endpoints. NEXCOL receives the dedicated runtime client id and its corresponding runtime
+client secret.
+
+Both federal endpoints require this OAuth scope:
 
 ```text
 lexis:federal-submission:submit
 ```
 
-The gateway validates the token issuer, expiry, required scope, and audience when configured.
-LEXIS validates the forwarded token and applies the same scope-based authorization.
+The runtime client is confidential, has service accounts enabled, and uses only the
+`client_credentials` grant. The submission scope is assigned as a default client scope, so it is
+included in each service-account access token without a `scope` parameter in the token request.
+
+| Environment | Runtime client id | Issuer | Token endpoint |
+|---|---|---|---|
+| TEST | `lexis-nexcol-test` | `https://test.loginproxy.gov.bc.ca/auth/realms/forests` | `https://test.loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token` |
+| PROD | `lexis-nexcol-prod` | `https://loginproxy.gov.bc.ca/auth/realms/forests` | `https://loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token` |
+
+An authenticated request must present an unexpired access token issued for the target environment,
+with `lexis:federal-submission:submit` in its `scope` claim, as
+`Authorization: Bearer <access-token>`. The gateway validates issuer, signature, expiry, required
+scope, and audience when configured. LEXIS validates the forwarded token and applies the same
+scope-based authorization.
 
 The TEST deployment, and the PROD deployment when enabled, idempotently create or check the client
 scope, confidential client, and default scope assignment. Each GitHub environment requires:
@@ -37,34 +58,43 @@ scope, confidential client, and default scope assignment. Each GitHub environmen
 - variable `KEYCLOAK_ISSUER_URI` for the target realm; and
 - variable `NEXCOL_KEYCLOAK_CLIENT_ID` for the approved calling client.
 
-The expected calling-client values are:
-
-- TEST: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-test`
-- PROD: `NEXCOL_KEYCLOAK_CLIENT_ID=lexis-nexcol-prod`
-
 The deployment fails when required configuration is absent, the existing scope/client shape is
 unexpected, or the submission scope is assigned as a realm default or to another client. It does
 not remove assignments from unrelated clients. Runtime client-secret lifecycle is managed through
 the environment's operational process.
 
-Obtain an access token with the standard client-credentials grant:
+Obtain an access token with the runtime NEXCOL credentials:
 
 ```bash
-curl -sS -X POST "${TOKEN_URL}" \
+ACCESS_TOKEN="$(curl -fsS -X POST "${TOKEN_URL}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   --data-urlencode "grant_type=client_credentials" \
   --data-urlencode "client_id=${CLIENT_ID}" \
-  --data-urlencode "client_secret=${CLIENT_SECRET}"
+  --data-urlencode "client_secret=${CLIENT_SECRET}" \
+  | jq -er '.access_token')"
 ```
 
-Tokens should contain the expected issuer, an unexpired access-token lifetime, and
-`lexis:federal-submission:submit` in the `scope` claim. A configured gateway audience is also
-represented in `aud`.
+The returned token can be checked against the realm before calling LEXIS:
+
+```bash
+curl -fsS -X POST "${TOKEN_URL}/introspect" \
+  -u "${CLIENT_ID}:${CLIENT_SECRET}" \
+  --data-urlencode "token=${ACCESS_TOKEN}" \
+  | jq '{active, client_id, scope, exp}'
+```
+
+The result must show `active: true`, the expected runtime client id, and the required scope. A
+configured gateway audience is represented in the token's `aud` claim. In Swagger UI, authorize
+with the resulting access token; do not enter the provisioning client credentials there.
 
 ## Endpoints
 
 Both endpoints are live in every backend environment. TEST and PROD provide the supported NEXCOL
 gateway and service-client integration; DEV has no supported NEXCOL gateway/client configuration.
+
+The machine-readable gateway contract is available in
+[`gateway/openapi.yaml`](../gateway/openapi.yaml). Configure its server URL for the target
+environment before loading it into Swagger UI, Postman, or client-generation tooling.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|
@@ -93,10 +123,15 @@ LEXIS validates the supplied application date and persists the service receipt d
 schedule is resolved from the biweekly list date, with the next available schedule used when an
 exact date is unavailable.
 
-Synthetic fixtures are available in `backend/src/test/resources/lexis-upload-samples/`:
+Synthetic XML-shape fixtures are available in `backend/src/test/resources/lexis-upload-samples/`:
 
 - `pass-federal-application.xml`
 - `fail-federal-jurisdiction.xml`
+
+Their client, location and timber-mark values are placeholders for automated tests and are not
+guaranteed to pass live environment reference-data validation. The non-mutating TEST procedure in
+[`gateway/smoke-test/README.md`](../gateway/smoke-test/README.md) accepts an operator-owned
+live-valid fixture without storing that data in the repository.
 
 ## Request Contract
 

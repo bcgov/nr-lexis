@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis"
+                   xmlns:esf="http://www.for.gov.bc.ca/schema/esf">
+  <esf:submissionContent>
+    <lexis:LexisSubmission>
+      <lexis:applicant>
+        <lexis:applicantDetails>
+          <lexis:name>Incomplete Federal Applicant</lexis:name>
+        </lexis:applicantDetails>
+      </lexis:applicant>
+      <lexis:applicationDetail>
+        <lexis:jurisdictionCode>F</lexis:jurisdictionCode>
+        <lexis:applStatusCode>A</lexis:applStatusCode>
+      </lexis:applicationDetail>
+    </lexis:LexisSubmission>
+  </esf:submissionContent>
+</esf:ESFSubmission>

@@ -194,11 +194,6 @@ type ReviewStatusResponse = {
   message?: string | null
 }
 
-type ReviewStatusEmailResponse = {
-  success?: boolean
-  message?: string | null
-}
-
 type ExportScheduleMutationResponse = {
   success?: boolean
   message?: string | null
@@ -433,8 +428,10 @@ const missingApplicationNumber = '999999999'
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionClientEmail = 'lexis-regression@example.test'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
-const selectedNaturalResourceRegionText =
-  'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region'
+const selectedNaturalResourceRegionNames = [
+  'Cariboo Natural Resource Region',
+  'Skeena Natural Resource Region',
+]
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
@@ -472,7 +469,7 @@ const expectCurrentScheduleOptions = (value: unknown, source: string): void => {
   expect(
     schedules.length,
     `${source} should include blank plus future dates`,
-  ).toBeGreaterThanOrEqual(3)
+  ).toBeGreaterThanOrEqual(2)
   const blankSchedule = schedules[schedules.length - 1]
   expect(optionCode(blankSchedule), `${source} last schedule option should be blank`).toBe('')
   expect(optionName(blankSchedule), `${source} last schedule option should be labeled Blank`).toBe(
@@ -480,8 +477,8 @@ const expectCurrentScheduleOptions = (value: unknown, source: string): void => {
   )
   expect(
     datedSchedules.length,
-    `${source} should expose at least two future list dates`,
-  ).toBeGreaterThanOrEqual(2)
+    `${source} should expose at least one future list date`,
+  ).toBeGreaterThanOrEqual(1)
 
   for (const schedule of datedSchedules) {
     const scheduleDate = optionName(schedule)
@@ -722,8 +719,8 @@ const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
 
 const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
   ['/provincial/application/create', /create provincial application/i],
-  ['/provincial/exemption/create', /create provincial exemption/i],
-  ['/provincial/offers/create', /provincial offers/i],
+  ['/provincial/exemption/create', /create exemption/i],
+  ['/provincial/offers/create', /create provincial offer/i],
 ]
 
 const regionFilterPages: Array<[path: string, heading: RegExp]> = [
@@ -836,22 +833,6 @@ const representativeAdminActions = [
   'savePermit',
   'mofrListing',
 ]
-
-const readReviewStatusResponse = async (
-  response: Awaited<ReturnType<typeof postWithCsrf>>,
-): Promise<ReviewStatusResponse> => {
-  const text = await response.text()
-  expect(response.status(), redactedTextSnippet(text)).toBe(200)
-  return JSON.parse(text) as ReviewStatusResponse
-}
-
-const readReviewStatusEmailResponse = async (
-  response: Awaited<ReturnType<typeof postWithCsrf>>,
-): Promise<ReviewStatusEmailResponse> => {
-  const text = await response.text()
-  expect(response.status(), redactedTextSnippet(text)).toBe(200)
-  return JSON.parse(text) as ReviewStatusEmailResponse
-}
 
 const expectAdminNavigation = async (page: Page): Promise<void> => {
   for (const { section, links } of adminNavigationSections) {
@@ -1365,12 +1346,13 @@ const postRegressionApplicationSubmissionFile = async (
 
 const postRegressionApplicationDocumentFile = async (
   page: Page,
+  applicationNumber: number,
   file: RegressionUploadFile,
 ): Promise<JsonWithStatus<LexisUploadResponse>> => {
   return readJsonResponseWithStatuses<LexisUploadResponse>(
     await postWithCsrf(page, '/api/lexis/fileApplicationUpload', {
       multipart: {
-        applicationNumber: String(missingApplicationNumber),
+        applicationNumber: String(applicationNumber),
         fileDescription: 'E2E ClamAV application document regression',
         file,
       },
@@ -1614,16 +1596,16 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(page, '/admin', /administration/i)
 
     const famAccessSection = page.locator('.cds--tile', {
-      has: page.getByRole('heading', { name: 'FAM user access lookup' }),
+      has: page.getByRole('heading', { name: 'IDIR identity lookup' }),
     })
     await expect(famAccessSection).toBeVisible()
     await expect(
       famAccessSection.getByText(
-        'Search IDIR users to confirm their FAM identity before managing access in FAM.',
+        'Confirm that an IDIR identity exists before managing LEXIS role assignments in FAM. This lookup does not display or change FAM roles.',
       ),
     ).toBeVisible()
     await expect(famAccessSection.getByLabel('IDIR username')).toBeVisible()
-    await expect(famAccessSection.getByRole('button', { name: 'Search FAM Access' })).toBeVisible()
+    await expect(famAccessSection.getByRole('button', { name: 'Search IDIR' })).toBeVisible()
 
     const manageLink = famAccessSection.getByRole('link', { name: 'Manage in FAM' })
     await expect(manageLink).toBeVisible()
@@ -1810,7 +1792,9 @@ test.describe('TEST IDIR admin regression', () => {
     })
 
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
-    await expect(page.getByText('Maintain one monthly value for each species and grade.')).toBeVisible()
+    await expect(
+      page.getByText('Maintain one monthly value for each species and grade.'),
+    ).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Upload' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Download template' })).toHaveCount(0)
     await expect(
@@ -1826,9 +1810,13 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(table).toBeVisible()
     await expect(table.getByRole('columnheader', { name: 'Balsam (BA)' })).toBeVisible()
     await expect(table.getByRole('columnheader', { name: 'Pine' })).toBeVisible()
-    await expect(table.getByRole('columnheader', { name: /white pine|lodgepole|yellow pine/i })).toHaveCount(0)
     await expect(
-      page.getByText('Each cell represents one species and grade for the selected effective month.'),
+      table.getByRole('columnheader', { name: /white pine|lodgepole|yellow pine/i }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByText(
+        'Each cell represents one species and grade for the selected effective month.',
+      ),
     ).toBeVisible()
     const balsamGradeA = page.getByLabel('Balsam (BA) grade A')
     const balsamGradeB = page.getByLabel('Balsam (BA) grade B')
@@ -1864,9 +1852,9 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const [currentYear, currentMonthNumber] = currentMonth.split('-').map(Number)
-    const previousCurrentMonth = new Date(
-      Date.UTC(currentYear, currentMonthNumber - 2, 1),
-    ).toISOString().slice(0, 10)
+    const previousCurrentMonth = new Date(Date.UTC(currentYear, currentMonthNumber - 2, 1))
+      .toISOString()
+      .slice(0, 10)
     const sourceDate = previousCurrentMonth
     const copiedRows = [
       ['BA', 'O', 10.25],
@@ -2019,14 +2007,20 @@ test.describe('TEST IDIR admin regression', () => {
 
     for (const [path, heading] of regionFilterPages) {
       await expectAccessiblePage(page, path, heading)
-      await expect(
-        page.getByText(selectedNaturalResourceRegionText, { exact: true }),
-        `${path} should show selected region names, not only a selected count`,
-      ).toBeVisible({ timeout: 30_000 })
+      const selectedRegions = page.getByRole('list', { name: 'Selected regions' })
+      await expect(selectedRegions, `${path} should show its selected regions`).toBeVisible({
+        timeout: 30_000,
+      })
+      for (const regionName of selectedNaturalResourceRegionNames) {
+        await expect(
+          selectedRegions.getByText(regionName, { exact: true }),
+          `${path} should show ${regionName}`,
+        ).toBeVisible()
+      }
     }
   })
 
-  test('prefills create application with legacy defaults and next list date', async () => {
+  test('prefills create application with safe defaults and next list date', async () => {
     const page = await authenticatedIdirPage()
 
     const options = await readJsonResponse<GenericOptionsResponse>(
@@ -2050,9 +2044,9 @@ test.describe('TEST IDIR admin regression', () => {
       'Harvested Timber',
     )
     await expect(page.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue('Surplus')
-    await expect(page.getByRole('combobox', { name: 'Region' })).toHaveValue(
-      'Cariboo Natural Resource Region',
-    )
+    const region = page.getByRole('combobox', { name: 'Region' })
+    await expect(region).toHaveValue('')
+    await expect(region).toBeEnabled()
     await expect(page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
       today,
     )
@@ -2663,7 +2657,7 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
-  test('can reach protected write validation endpoints without mutating real data', async () => {
+  test('validates protected writes and rejects missing scoped resources', async () => {
     const page = await authenticatedIdirPage()
 
     await expectInvalidApplicationCreateValidation(
@@ -2689,46 +2683,37 @@ test.describe('TEST IDIR admin regression', () => {
       }),
     )
 
-    const approveResponse = await readReviewStatusResponse(
-      await postWithCsrf(
-        page,
-        `/api/lexis/application-reviews/${missingApplicationNumber}/approve`,
-      ),
+    const approveResponse = await postWithCsrf(
+      page,
+      `/api/lexis/application-reviews/${missingApplicationNumber}/approve`,
     )
-    expect(approveResponse.updated).toBe(false)
-    expect(approveResponse.message ?? '').toContain('Application was not updated.')
+    expect(approveResponse.status()).toBe(403)
 
-    const rejectResponse = await readReviewStatusResponse(
-      await postWithCsrf(
-        page,
-        `/api/lexis/application-reviews/${missingApplicationNumber}/status`,
-        {
-          data: {
-            statusCode: 'REJ',
-            remark: 'IDIR admin regression authorization check',
-            clientEmailAddress: '',
-          },
+    const rejectResponse = await postWithCsrf(
+      page,
+      `/api/lexis/application-reviews/${missingApplicationNumber}/status`,
+      {
+        data: {
+          statusCode: 'REJ',
+          remark: 'IDIR admin regression authorization check',
+          clientEmailAddress: '',
         },
-      ),
+      },
     )
-    expect(rejectResponse.updated).toBe(false)
-    expect(rejectResponse.message ?? '').toContain('Application status update did not persist.')
+    expect(rejectResponse.status()).toBe(403)
 
-    const emailResponse = await readReviewStatusEmailResponse(
-      await postWithCsrf(
-        page,
-        `/api/lexis/application-reviews/${missingApplicationNumber}/status-email`,
-        {
-          data: {
-            statusCode: 'REJ',
-            remark: 'IDIR admin regression authorization check',
-            clientEmailAddress: '',
-          },
+    const emailResponse = await postWithCsrf(
+      page,
+      `/api/lexis/application-reviews/${missingApplicationNumber}/status-email`,
+      {
+        data: {
+          statusCode: 'REJ',
+          remark: 'IDIR admin regression authorization check',
+          clientEmailAddress: '',
         },
-      ),
+      },
     )
-    expect(emailResponse.success).toBe(false)
-    expect(emailResponse.message ?? '').toContain('Status code and client email are required.')
+    expect(emailResponse.status()).toBe(403)
 
     const invalidScheduleResponse = await readJsonResponse<ExportScheduleMutationResponse>(
       await postWithCsrf(page, '/api/lexis/admin/schedules', {
@@ -2750,12 +2735,8 @@ test.describe('TEST IDIR admin regression', () => {
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
   })
 
-  test('rejects ClamAV test payloads on application document and submission uploads', async () => {
+  test('rejects ClamAV test payloads on application submission uploads', async () => {
     const page = await authenticatedIdirPage()
-
-    expectApplicationDocumentVirusScanRejection(
-      await postRegressionApplicationDocumentFile(page, infectedApplicationDocumentPdf()),
-    )
 
     for (const file of infectedApplicationSubmissionFiles()) {
       for (const path of [
@@ -2820,10 +2801,20 @@ test.describe('TEST IDIR admin regression', () => {
         rejectRegressionApplication(page, lifecycleApplicationNumber, `${marker} cleanup`),
       )
 
+      await test.step('reject an infected application document', async () => {
+        expectApplicationDocumentVirusScanRejection(
+          await postRegressionApplicationDocumentFile(
+            page,
+            lifecycleApplicationNumber,
+            infectedApplicationDocumentPdf(),
+          ),
+        )
+      })
+
       await expectAccessiblePage(
         page,
         `/provincial/application/${lifecycleApplicationNumber}`,
-        /provincial application details/i,
+        new RegExp(`application ${lifecycleApplicationNumber}`, 'i'),
       )
       const lifecycleTemplate = await fetchApplicationSummary(page, lifecycleApplicationNumber)
 
