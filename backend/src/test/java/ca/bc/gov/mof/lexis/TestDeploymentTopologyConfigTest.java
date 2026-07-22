@@ -177,7 +177,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}")
         .contains("value: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL}")
         .contains("value: ${LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL}")
-        .contains("type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 0\n          maxSurge: 1")
+        .contains("type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 1\n          maxSurge: 0")
         .contains("averageUtilization: 70")
         .contains("topologySpreadConstraints:")
         .contains("topologyKey: kubernetes.io/hostname")
