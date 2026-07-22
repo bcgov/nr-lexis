@@ -13,9 +13,8 @@ NEXCOL
   -> LEXIS federal application tables
 ```
 
-The API gateway is the supported external entry point. LEXIS also validates the forwarded token,
-so authentication and authorization are enforced even before the backend Route is replaced by a
-gateway-only OpenShift Service connection.
+The API gateway is the supported external entry point. LEXIS also validates the forwarded token
+and independently enforces the same authentication and authorization requirements.
 
 ## Authentication
 

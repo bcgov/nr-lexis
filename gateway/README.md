@@ -49,17 +49,6 @@ Gateway configuration is maintained per environment through API Services tooling
 TEST and PROD use independent gateway and Keycloak client configurations. DEV uses ephemeral
 application deployments and has no long-lived NEXCOL gateway.
 
-## Backend ingress
-
-The current gateway forwards to the authenticated backend Route. Direct Route requests still need
-a valid token and the required scope, but they bypass gateway traffic controls and metrics.
-
-The target gateway-only topology forwards from the API Services data plane to the LEXIS OpenShift
-Service, permits that data plane in NetworkPolicy, and then removes the public backend Route. The
-LEXIS frontend already reaches the backend through its internal Service. Keycloak client/scope
-provisioning and backend JWKS retrieval are outbound flows, so this ingress change does not affect
-them. Complete and verify the Service connection before removing the Route.
-
 The integration flow and XML contract are documented in
 [`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).
 
