@@ -903,6 +903,17 @@ const readJsonResponseWithStatuses = async <T>(
   }
 }
 
+const expectStaleRecordResponse = (
+  response: JsonWithStatus<Record<string, unknown>>,
+  recordType: string,
+  recordId: string,
+): void => {
+  expect(response.status).toBe(409)
+  expect(response.payload.code).toBe('STALE_RECORD')
+  expect(response.payload.recordType).toBe(recordType)
+  expect(response.payload.recordId).toBe(recordId)
+}
+
 const requiredString = (value: unknown, label: string): string => {
   if (value === null || value === undefined || String(value).trim() === '') {
     throw new Error(`${label} was missing from the TEST regression record.`)
@@ -2765,6 +2776,17 @@ test.describe('TEST IDIR admin regression', () => {
     const rtmSearchText = await rtmSearchResponse.text()
     expect(rtmSearchResponse.status(), redactedTextSnippet(rtmSearchText)).toBe(200)
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
+
+    const invalidRtmBatch = await readJsonResponse<Record<string, unknown>>(
+      await postWithCsrf(page, '/api/lexis/rtm/emslogamv/batch', {
+        data: { values: [] },
+      }),
+      422,
+    )
+    expect(invalidRtmBatch.status).toBe('validation_failed')
+    expect(asStringArray(invalidRtmBatch.errors)).toContain(
+      'At least one AMV table value is required.',
+    )
   })
 
   test('rejects ClamAV test payloads on application submission uploads', async () => {
@@ -2892,10 +2914,11 @@ test.describe('TEST IDIR admin regression', () => {
         }),
         [409],
       )
-      expect(staleApplicationUpdate.status).toBe(409)
-      expect(staleApplicationUpdate.payload.code).toBe('STALE_RECORD')
-      expect(staleApplicationUpdate.payload.recordType).toBe('application')
-      expect(staleApplicationUpdate.payload.recordId).toBe(String(offerApplicationNumber))
+      expectStaleRecordResponse(
+        staleApplicationUpdate,
+        'application',
+        String(offerApplicationNumber),
+      )
 
       const persistedOfferApplication = await fetchApplicationSummary(page, offerApplicationNumber)
       expect(persistedOfferApplication.productLocation).toBe(`${offerMarker} edited`)
@@ -2944,17 +2967,28 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/purchase-offers/${offerNumber}`,
       )
+      const offerUpdate = offerUpdateForm(offerNumber, {
+        purchaseOfferAmount: '125',
+        offerRemark: `${offerMarker} edited`,
+      })
       const editedOffer = await readJsonResponse<OfferPersistenceResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/offer-details/offer/update', {
           headers: versionHeaders(currentOffer.version),
-          form: offerUpdateForm(offerNumber, {
-            purchaseOfferAmount: '125',
-            offerRemark: `${offerMarker} edited`,
-          }),
+          form: offerUpdate,
         }),
       )
       expect(editedOffer.success).toBe(true)
       expect(asStringArray(editedOffer.errors)).toEqual([])
+
+      const staleOfferUpdate = await readJsonResponseWithStatuses<Record<string, unknown>>(
+        await postWithCsrf(page, '/api/lexis/rpc/offer-details/offer/update', {
+          headers: versionHeaders(currentOffer.version),
+          form: offerUpdate,
+        }),
+        [409],
+      )
+      expectStaleRecordResponse(staleOfferUpdate, 'offer', String(offerNumber))
+
       const persistedOffer = await readVersionedJson<Record<string, unknown>>(
         page,
         `/api/lexis/purchase-offers/${offerNumber}`,
@@ -3073,16 +3107,26 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
       )
+      const exemptionUpdate = exemptionUpdateForm(currentExemption.payload, orgUnitNumber, {
+        otherConditions: `${lifecycleMarker} edited`,
+      })
       const editedExemption = await readJsonResponse<ExemptionPersistenceResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/exemption-details/exemption/update', {
           headers: versionHeaders(currentExemption.version),
-          form: exemptionUpdateForm(currentExemption.payload, orgUnitNumber, {
-            otherConditions: `${lifecycleMarker} edited`,
-          }),
+          form: exemptionUpdate,
         }),
       )
       expect(editedExemption.success).toBe(true)
       expect(asStringArray(editedExemption.errors)).toEqual([])
+
+      const staleExemptionUpdate = await readJsonResponseWithStatuses<Record<string, unknown>>(
+        await postWithCsrf(page, '/api/lexis/rpc/exemption-details/exemption/update', {
+          headers: versionHeaders(currentExemption.version),
+          form: exemptionUpdate,
+        }),
+        [409],
+      )
+      expectStaleRecordResponse(staleExemptionUpdate, 'exemption', exemptionNumber.toUpperCase())
 
       const relinkCleanup = cleanup.defer('relink lifecycle application to exemption', () =>
         linkRegressionExemptionApplication(page, exemptionNumber, lifecycleApplicationNumber),
@@ -3144,20 +3188,30 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/permits/${permitNumber}`,
       )
+      const permitUpdate = permitShippingForm(
+        permitNumber,
+        packageNumber.slice(0, 24),
+        schedule.shipping,
+        'ACT',
+      )
       const updatedPermit = await readJsonResponse<PermitMutationResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
           headers: versionHeaders(currentPermit.version),
-          form: permitShippingForm(
-            permitNumber,
-            packageNumber.slice(0, 24),
-            schedule.shipping,
-            'ACT',
-          ),
+          form: permitUpdate,
         }),
       )
       expect(updatedPermit.success).toBe(true)
       expect(updatedPermit.permitStatus).toBe('ACT')
       expect(asStringArray(updatedPermit.errors)).toEqual([])
+
+      const stalePermitUpdate = await readJsonResponseWithStatuses<Record<string, unknown>>(
+        await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+          headers: versionHeaders(currentPermit.version),
+          form: permitUpdate,
+        }),
+        [409],
+      )
+      expectStaleRecordResponse(stalePermitUpdate, 'permit', String(permitNumber))
 
       const permitBeforeAttach = await readVersionedJson<Record<string, unknown>>(
         page,
