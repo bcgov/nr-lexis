@@ -120,7 +120,7 @@ public class OracleNotificationRepository {
           CREATE_TIMESTAMP,
           UPDATE_USERID,
           UPDATE_TIMESTAMP
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, SYSTIMESTAMP, ?, SYSTIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, SYSDATE, ?, SYSDATE)
         """,
         statement -> {
           statement.setLong(1, notificationId);
@@ -148,7 +148,7 @@ public class OracleNotificationRepository {
                    LEXIS_NOTIFICATION_LEVEL_CODE = ?,
                    DISPLAY_END_TIMESTAMP = ?,
                    UPDATE_USERID = ?,
-                   UPDATE_TIMESTAMP = SYSTIMESTAMP
+                   UPDATE_TIMESTAMP = SYSDATE
              WHERE LEXIS_NOTIFICATION_ID = ?
             """,
             statement -> {

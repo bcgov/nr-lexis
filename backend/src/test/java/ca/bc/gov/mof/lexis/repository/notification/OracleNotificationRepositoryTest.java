@@ -75,6 +75,8 @@ class OracleNotificationRepositoryTest {
 
     ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate).update(sqlCaptor.capture(), any(PreparedStatementSetter.class));
-    assertThat(sqlCaptor.getValue()).doesNotContain("PUBLISH_TIMESTAMP = ?");
+    assertThat(sqlCaptor.getValue())
+        .doesNotContain("PUBLISH_TIMESTAMP = ?")
+        .contains("UPDATE_TIMESTAMP = SYSDATE");
   }
 }
