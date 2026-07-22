@@ -84,6 +84,14 @@ expect_status 200 "${status}" "raw OpenAPI contract" "${TMP_DIR}/openapi.yaml"
 grep -Fq 'openapi: 3.0.3' "${TMP_DIR}/openapi.yaml"
 grep -Fq '  /api/lexis/federal/submissions/validation:' "${TMP_DIR}/openapi.yaml"
 grep -Fq '  /api/lexis/federal/submissions:' "${TMP_DIR}/openapi.yaml"
+grep -Fq 'https://test.loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token' "${TMP_DIR}/openapi.yaml"
+grep -Fq 'https://loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token' "${TMP_DIR}/openapi.yaml"
+grep -Fq '              name: ESFSubmission' "${TMP_DIR}/openapi.yaml"
+grep -Fq '                <esf:ESFSubmission' "${TMP_DIR}/openapi.yaml"
+if grep -Fq 'externalValue:' "${TMP_DIR}/openapi.yaml"; then
+  echo "FAIL: XML request examples must be inline for the Swagger request editor." >&2
+  exit 1
+fi
 
 status="$(request_status "${TMP_DIR}/console.html" -L "${OPENAPI_CONSOLE_URL}")"
 expect_status 200 "${status}" "BC Government OpenAPI viewer" "${TMP_DIR}/console.html"
