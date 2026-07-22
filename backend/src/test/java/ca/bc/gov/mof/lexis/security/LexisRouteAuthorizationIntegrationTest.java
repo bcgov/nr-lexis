@@ -453,6 +453,22 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void federalCreateSubmissionPreflightShouldAllowOpenApiViewer() throws Exception {
+    mockMvc
+        .perform(
+            options("/api/lexis/federal/submissions")
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
+                .header("Access-Control-Request-Method", "POST")
+                .header(
+                    "Access-Control-Request-Headers",
+                    "Authorization, Content-Type, X-Idempotency-Key, X-Request-ID, X-Source-System"))
+        .andExpect(status().isOk())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"))
+        .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+  }
+
+  @Test
   void corsPreflightShouldRejectDisallowedOriginOnProtectedRoute() throws Exception {
     mockMvc
         .perform(
@@ -1898,10 +1914,13 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("userReference", "FED-REF-1")
                 .param("originalFileName", "federal-submission.xml")
                 .contentType(MediaType.APPLICATION_XML)
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
                 .header("X-Idempotency-Key", "AUTHORIZATION-INTEGRATION-2")
                 .content("<xml />")
                 .with(federalUploadScopeJwt()))
-        .andExpect(status().isUnprocessableEntity());
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"));
   }
 
   @Test
