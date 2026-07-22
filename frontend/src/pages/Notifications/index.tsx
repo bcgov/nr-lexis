@@ -31,6 +31,7 @@ import './Notifications.scss'
 
 const RECENT_UPDATE_WINDOW_DAYS = 3
 const DEFAULT_DISPLAY_DURATION_DAYS = 7
+const MAX_NOTIFICATION_CONTENT_LENGTH = 4_000
 
 const notificationLevels: ReadonlyArray<{
   value: NotificationLevel
@@ -156,6 +157,12 @@ const hasRecentUpdate = (notification: LexisNotification): boolean => {
   return updateTime >= Date.now() - RECENT_UPDATE_WINDOW_DAYS * 24 * 60 * 60 * 1000
 }
 
+const contentTextLength = (contentHtml: string): number =>
+  contentHtml
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .trim().length
+
 export default function NotificationsPage() {
   const { capabilities } = useAuth()
   const isAdmin = hasRole(capabilities.roles, 'ADMIN')
@@ -261,6 +268,14 @@ export default function NotificationsPage() {
         kind: 'error',
         title: 'Check the display period',
         subtitle: 'The end date cannot be before the start date.',
+      })
+      return
+    }
+    if (contentTextLength(form.contentHtml) > MAX_NOTIFICATION_CONTENT_LENGTH) {
+      setMessage({
+        kind: 'error',
+        title: 'Shorten the notification content',
+        subtitle: 'Notification content cannot exceed 4,000 characters.',
       })
       return
     }
@@ -404,6 +419,9 @@ export default function NotificationsPage() {
               />
               <div className="notifications-page__form-field">
                 <p className="cds--label">Message</p>
+                <p className="notifications-page__field-help">
+                  Up to 4,000 visible characters. Formatting does not count toward this limit.
+                </p>
                 <NotificationEditor
                   value={form.contentHtml}
                   disabled={saving}

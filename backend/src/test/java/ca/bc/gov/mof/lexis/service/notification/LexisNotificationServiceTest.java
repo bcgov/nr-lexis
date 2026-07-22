@@ -121,6 +121,26 @@ class LexisNotificationServiceTest {
   }
 
   @Test
+  void createShouldRejectContentLongerThanFourThousandCharacters() {
+    LexisNotificationService service = newService();
+    Principal principal = () -> "idir\\admin";
+    NotificationUpsertRequestDto request =
+        new NotificationUpsertRequestDto(
+            "Long notification",
+            "<p>" + "x".repeat(4_001) + "</p>",
+            NotificationLevel.INFORMATION,
+            LocalDate.of(2026, 7, 21),
+            LocalDate.of(2026, 7, 28),
+            List.of());
+
+    assertThatThrownBy(() -> service.create(request, principal))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Notification content cannot exceed 4,000 characters.");
+
+    verify(repository, never()).insert(any(NotificationMutation.class));
+  }
+
+  @Test
   void updateShouldRetainTheOriginalDisplayStartDate() {
     LexisNotificationService service = newService();
     Principal principal = () -> "idir\\admin";

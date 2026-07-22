@@ -26,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Profile("oracle")
 public class LexisNotificationService {
 
+  private static final int MAX_NOTIFICATION_CONTENT_LENGTH = 4_000;
+
   private final OracleNotificationRepository repository;
   private final NotificationHtmlSanitizer htmlSanitizer;
   private final LexisSessionService sessionService;
@@ -100,8 +102,12 @@ public class LexisNotificationService {
         normalizeRequired(
             htmlSanitizer.sanitizePlainText(request.title()), "A notification title is required.");
     String contentHtml = htmlSanitizer.sanitize(request.contentHtml());
-    if (htmlSanitizer.sanitizePlainText(contentHtml).isBlank()) {
+    String contentText = htmlSanitizer.sanitizePlainText(contentHtml);
+    if (contentText.isBlank()) {
       throw new IllegalArgumentException("Notification content is required.");
+    }
+    if (contentText.length() > MAX_NOTIFICATION_CONTENT_LENGTH) {
+      throw new IllegalArgumentException("Notification content cannot exceed 4,000 characters.");
     }
     if (request.notificationLevel() == null) {
       throw new IllegalArgumentException("A notification level is required.");
