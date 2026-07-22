@@ -18,7 +18,7 @@ servers:
   - url: https://nr-lexis-nexcol-test-api-gov-bc-ca.test.api.gov.bc.ca
     description: TEST NEXCOL gateway.
   - url: https://nr-lexis-nexcol.api.gov.bc.ca
-    description: Projected PROD NEXCOL gateway; available after production provisioning.
+    description: PROD NEXCOL gateway.
 tags:
   - name: Federal submissions
     description: Validate or persist a federal LEXIS submission.
