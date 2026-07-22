@@ -4,7 +4,6 @@ import {
   businessBceidProviderName,
   idirProviderName,
   isCognitoConfigured,
-  redirectSignOut,
 } from '@/config/fam/config'
 import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
 import { AuthContext } from '@/context/auth/AuthContext'
@@ -94,7 +93,7 @@ const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER])
 const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'scroll', 'focus']
 
 const cognitoSignOut = async (): Promise<void> => {
-  await signOut({ global: false, oauth: { redirectUrl: redirectSignOut } })
+  await signOut()
 }
 
 const normalizeAction = (action: string): string => {

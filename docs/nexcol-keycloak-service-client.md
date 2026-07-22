@@ -39,10 +39,13 @@ The runtime client is confidential, has service accounts enabled, and uses only 
 `client_credentials` grant. The submission scope is assigned as a default client scope, so it is
 included in each service-account access token without a `scope` parameter in the token request.
 
-| Environment | Runtime client id | Issuer | Token endpoint |
-|---|---|---|---|
-| TEST | `lexis-nexcol-test` | `https://test.loginproxy.gov.bc.ca/auth/realms/forests` | `https://test.loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token` |
-| PROD | `lexis-nexcol-prod` | `https://loginproxy.gov.bc.ca/auth/realms/forests` | `https://loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token` |
+| Environment | Runtime client id | Gateway base URL | Issuer | Token endpoint |
+|---|---|---|---|---|
+| TEST | `lexis-nexcol-test` | `https://nr-lexis-nexcol-test-api-gov-bc-ca.test.api.gov.bc.ca` | `https://test.loginproxy.gov.bc.ca/auth/realms/forests` | `https://test.loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token` |
+| PROD | `lexis-nexcol-prod` | `https://nr-lexis-nexcol.api.gov.bc.ca` | `https://loginproxy.gov.bc.ca/auth/realms/forests` | `https://loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token` |
+
+The PROD gateway URL is projected for integration configuration and becomes functional after the
+production gateway and LEXIS deployment are provisioned.
 
 An authenticated request must present an unexpired access token issued for the target environment,
 with `lexis:federal-submission:submit` in its `scope` claim, as
@@ -93,8 +96,8 @@ Both endpoints are live in every backend environment. TEST and PROD provide the 
 gateway and service-client integration; DEV has no supported NEXCOL gateway/client configuration.
 
 The machine-readable gateway contract is available in
-[`gateway/openapi.yaml`](../gateway/openapi.yaml). Configure its server URL for the target
-environment before loading it into Swagger UI, Postman, or client-generation tooling.
+[`gateway/openapi.yaml`](../gateway/openapi.yaml). Its `servers` list contains the gateway URLs that
+are currently available for integration.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|

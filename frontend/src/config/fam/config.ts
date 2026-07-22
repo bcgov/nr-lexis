@@ -38,7 +38,7 @@ const userPoolClientId = env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() ?? ''
 const domain = env.VITE_COGNITO_DOMAIN?.trim()?.replace(/^https?:\/\//, '') ?? ''
 const redirectSignIn = resolveSameOriginRedirect(env.VITE_REDIRECT_SIGN_IN, '/')
 // External logoff URL registered in the Cognito app client. The return URL
-// should point back to this app's root.
+// should point back to this app's public /logout route.
 export const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() || `${window.location.origin}/`
 const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
 
