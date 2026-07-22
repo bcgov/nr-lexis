@@ -244,6 +244,7 @@ jobs:
     steps:
       - name: Resolve frontend logout URL
         env:
+          COGNITO_LOGOUT_CHAIN_URL: ${{ vars.COGNITO_LOGOUT_CHAIN_URL }}
           CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}
           DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
           LEXIS_SLOT: ${{ inputs.slot || inputs.target }}
@@ -255,7 +256,11 @@ jobs:
               echo "::error title=Invalid DEV logout slot::Expected a Cognito slot from 0 through 49."
               exit 1
             fi
-            sign_out="https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2F${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca%2F"
+            if [ -z "${COGNITO_LOGOUT_CHAIN_URL}" ]; then
+              echo "::error title=Missing DEV logout chain::COGNITO_LOGOUT_CHAIN_URL is required for DEV."
+              exit 1
+            fi
+            sign_out="${COGNITO_LOGOUT_CHAIN_URL}https://${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca"
           else
             sign_out="${CONFIGURED_SIGN_OUT}"
           fi

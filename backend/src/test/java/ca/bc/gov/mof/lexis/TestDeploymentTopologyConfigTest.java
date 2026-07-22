@@ -387,12 +387,16 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RNI_ADDRESS",
             "LEXIS_MAIL_REGION_RSI_ADDRESS");
     assertThat(logoutStep)
+        .contains("COGNITO_LOGOUT_CHAIN_URL: ${{ vars.COGNITO_LOGOUT_CHAIN_URL }}")
         .contains("CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}")
         .contains("LEXIS_SLOT: ${{ inputs.slot || inputs.target }}")
         .contains("^([0-9]|[1-4][0-9])$")
         .contains(
-            "https%3A%2F%2F${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca%2F")
+            "${COGNITO_LOGOUT_CHAIN_URL}https://${REPOSITORY_NAME}-${LEXIS_SLOT}"
+                + ".apps.gold.devops.gov.bc.ca")
+        .contains("COGNITO_LOGOUT_CHAIN_URL is required for DEV")
         .contains("VITE_REDIRECT_SIGN_OUT is required outside DEV")
+        .doesNotContain("logontest7.gov.bc.ca")
         .contains("printf 'VITE_REDIRECT_SIGN_OUT=%s\\n'");
     assertThat(frontendDeployStep)
         .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}")
