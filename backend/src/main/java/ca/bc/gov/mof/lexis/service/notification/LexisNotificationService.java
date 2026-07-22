@@ -27,6 +27,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class LexisNotificationService {
 
   private static final int MAX_NOTIFICATION_CONTENT_LENGTH = 4_000;
+  private static final List<String> NOTIFICATION_AUDIENCE_ROLES =
+      List.of(
+          "LEXIS_ADMIN",
+          "LEXIS_READ_ONLY",
+          "LEXIS_APPLICATION_APPROVER",
+          "LEXIS_EXEMPTION_APPROVER",
+          "LEXIS_PROVINCIAL_SUBMITTER");
 
   private final OracleNotificationRepository repository;
   private final NotificationHtmlSanitizer htmlSanitizer;
@@ -153,8 +160,12 @@ public class LexisNotificationService {
   }
 
   private Set<String> knownAudienceRoles() {
-    return authorizationService.getConfiguredRoles().stream()
+    Set<String> configuredRoles =
+        authorizationService.getConfiguredRoles().stream()
         .map(role -> role.toUpperCase(Locale.ROOT))
+        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    return NOTIFICATION_AUDIENCE_ROLES.stream()
+        .filter(configuredRoles::contains)
         .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
   }
 

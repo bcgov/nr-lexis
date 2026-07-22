@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -98,6 +99,84 @@ class LexisNotificationServiceTest {
         .hasMessage("Notification content is required.");
 
     verify(repository, never()).insert(any(NotificationMutation.class));
+  }
+
+  @Test
+  void audienceRolesShouldOnlyExposeSupportedFamRoles() {
+    when(authorizationService.getConfiguredRoles())
+        .thenReturn(
+            Set.of(
+                "LEXIS_ADMIN",
+                "LEXIS_READ_ONLY",
+                "LEXIS_APPLICATION_APPROVER",
+                "LEXIS_EXEMPTION_APPROVER",
+                "LEXIS_PROVINCIAL_SUBMITTER",
+                "LEXIS_DELEGATED_ADMIN"));
+
+    assertThat(newService().audienceRoles().roles())
+        .containsExactly(
+            "LEXIS_ADMIN",
+            "LEXIS_READ_ONLY",
+            "LEXIS_APPLICATION_APPROVER",
+            "LEXIS_EXEMPTION_APPROVER",
+            "LEXIS_PROVINCIAL_SUBMITTER");
+  }
+
+  @Test
+  void createShouldRejectDelegatedAdminAsAnAudience() {
+    LexisNotificationService service = newService();
+    Principal principal = () -> "idir\\admin";
+    NotificationUpsertRequestDto request =
+        new NotificationUpsertRequestDto(
+            "Service update",
+            "<p>Details</p>",
+            NotificationLevel.INFORMATION,
+            LocalDate.of(2026, 7, 21),
+            LocalDate.of(2026, 7, 28),
+            List.of("LEXIS_DELEGATED_ADMIN"));
+    when(principalService.resolvePrincipalName(principal)).thenReturn("IDIR\\ADMIN");
+    when(sessionService.normalizeRole("LEXIS_DELEGATED_ADMIN"))
+        .thenReturn("LEXIS_DELEGATED_ADMIN");
+    when(authorizationService.getConfiguredRoles()).thenReturn(Set.of("LEXIS_DELEGATED_ADMIN"));
+
+    assertThatThrownBy(() -> service.create(request, principal))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("An unknown notification audience role was supplied.");
+
+    verify(repository, never()).insert(any(NotificationMutation.class));
+  }
+
+  @Test
+  void createShouldNormalizeScopedProvincialSubmitterAudienceToItsBaseRole() {
+    LexisNotificationService service = newService();
+    Principal principal = () -> "idir\\admin";
+    String scopedRole = "LEXIS_PROVINCIAL_SUBMITTER_00012345";
+    NotificationUpsertRequestDto request =
+        new NotificationUpsertRequestDto(
+            "Service update",
+            "<p>Details</p>",
+            NotificationLevel.INFORMATION,
+            LocalDate.of(2026, 7, 21),
+            LocalDate.of(2026, 7, 28),
+            List.of(scopedRole));
+    when(principalService.resolvePrincipalName(principal)).thenReturn("IDIR\\ADMIN");
+    when(sessionService.normalizeRole(scopedRole)).thenReturn("LEXIS_PROVINCIAL_SUBMITTER");
+    when(authorizationService.getConfiguredRoles()).thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(repository.insert(any(NotificationMutation.class)))
+        .thenReturn(
+            notificationRow(
+                "<p>Details</p>",
+                NotificationLevel.INFORMATION,
+                LocalDate.of(2026, 7, 21).atStartOfDay(),
+                LocalDate.of(2026, 7, 28).atTime(LocalTime.of(23, 59, 59, 999_000_000))));
+
+    service.create(request, principal);
+
+    ArgumentCaptor<NotificationMutation> mutationCaptor =
+        ArgumentCaptor.forClass(NotificationMutation.class);
+    verify(repository).insert(mutationCaptor.capture());
+    assertThat(mutationCaptor.getValue().audienceRoles())
+        .containsExactly("LEXIS_PROVINCIAL_SUBMITTER");
   }
 
   @Test
