@@ -88,6 +88,9 @@ describe('SessionTimeoutWarning', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'You’re about to be logged out' })
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     expect(screen.getByText('5:00')).toHaveAttribute('aria-live', 'polite')
+    expect(document.querySelector('.lexis-session-timeout-warning__urgency-icon')).toHaveAttribute(
+      'hidden',
+    )
     expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
     expect(document.querySelector('.lexis-session-timeout-warning')).toHaveClass('is-visible')
 
