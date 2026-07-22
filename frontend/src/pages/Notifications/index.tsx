@@ -1,4 +1,4 @@
-import { Add, Edit, TrashCan } from '@carbon/icons-react'
+import { Add, Edit, Notification as NotificationIcon, TrashCan } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -559,9 +559,15 @@ export default function NotificationsPage() {
         </div>
 
         {!loading && notifications.length === 0 && (
-          <Tile>
+          <Tile className="notifications-page__empty-state">
+            <div className="notifications-page__empty-state-icon" aria-hidden="true">
+              <NotificationIcon size={32} />
+            </div>
+            <h3>No active notifications</h3>
             <p>
-              {isAdmin ? 'No notifications have been created.' : 'No notifications are available.'}
+              {isAdmin
+                ? 'Nothing is posted right now. When you publish a notification, it appears here for its audience until its end date.'
+                : 'Nothing is posted right now. New notifications will appear here until their end date.'}
             </p>
           </Tile>
         )}

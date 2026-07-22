@@ -84,6 +84,24 @@ describe('Notifications page', () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 
+  it('shows the empty state when no notification is visible to the signed-in user', async () => {
+    mockedFetchNotifications.mockResolvedValue([])
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'No active notifications' })).toBeVisible()
+    expect(
+      screen.getByText(
+        'Nothing is posted right now. New notifications will appear here until their end date.',
+      ),
+    ).toBeVisible()
+  })
+
   it('lets administrators create notifications from the same page', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(

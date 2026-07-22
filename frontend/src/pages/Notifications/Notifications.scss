@@ -40,6 +40,36 @@
   max-width: 68rem;
 }
 
+.notifications-page__empty-state {
+  display: grid;
+  min-height: 22rem;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.notifications-page__empty-state-icon {
+  display: grid;
+  width: 4.25rem;
+  height: 4.25rem;
+  place-items: center;
+  margin-bottom: 1.5rem;
+  border-radius: 50%;
+  background: var(--cds-layer-accent-01);
+  color: var(--cds-icon-secondary);
+}
+
+.notifications-page__empty-state h3 {
+  margin: 0;
+}
+
+.notifications-page__empty-state p {
+  max-width: 36rem;
+  margin: 0.75rem 1rem 0;
+  color: var(--cds-text-secondary);
+  line-height: 1.5;
+}
+
 .notifications-page__section-heading h2,
 .notifications-page__list-heading h2,
 .notifications-page__notification-heading h3,
