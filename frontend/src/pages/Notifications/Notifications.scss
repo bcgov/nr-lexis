@@ -3,6 +3,29 @@
   gap: 1.5rem;
 }
 
+.notifications-page__header,
+.notifications-page__section-heading,
+.notifications-page__notification-heading,
+.notifications-page__list-heading,
+.notifications-page__editor-actions,
+.notifications-page__notification-actions,
+.notifications-page__notification-title-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.notifications-page__header,
+.notifications-page__section-heading,
+.notifications-page__notification-heading,
+.notifications-page__list-heading {
+  justify-content: space-between;
+}
+
+.notifications-page__header {
+  align-items: flex-start;
+}
+
 .notifications-page__message {
   max-width: 60rem;
 }
@@ -13,44 +36,56 @@
   gap: 1rem;
 }
 
-.notifications-page__section-heading,
-.notifications-page__notification-heading,
-.notifications-page__list-heading,
-.notifications-page__editor-actions,
-.notifications-page__notification-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.notifications-page__section-heading,
-.notifications-page__notification-heading,
-.notifications-page__list-heading {
-  justify-content: space-between;
+.notifications-page__editor-tile {
+  max-width: 68rem;
 }
 
 .notifications-page__section-heading h2,
 .notifications-page__list-heading h2,
-.notifications-page__notification-heading h3 {
+.notifications-page__notification-heading h3,
+.notifications-page__form-section h3 {
   margin: 0;
 }
 
 .notifications-page__section-heading p,
+.notifications-page__list-heading p,
 .notifications-page__notification-heading p,
 .notifications-page__audience p {
   margin: 0.25rem 0 0;
   color: var(--cds-text-secondary);
 }
 
+.notifications-page__section-eyebrow {
+  margin: 0 0 0.25rem;
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+}
+
+.notifications-page__form-section {
+  margin-top: 2rem;
+}
+
+.notifications-page__form-section > h3,
+.notifications-page__form-section > legend {
+  display: block;
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0 0 0.5rem;
+  border-bottom: 1px solid var(--cds-border-subtle);
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .notifications-page__form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 1rem;
-  margin-top: 1rem;
 }
 
-.notifications-page__form-field,
-.notifications-page__audience {
+.notifications-page__form-field {
   margin-top: 1.25rem;
 }
 
@@ -58,29 +93,130 @@
   margin-bottom: 0.5rem;
 }
 
+.notifications-page__level,
 .notifications-page__audience {
   padding: 0;
   border: 0;
 }
 
-.notifications-page__audience legend {
-  padding: 0;
-  font-weight: 600;
+.notifications-page__level .cds--radio-button-group {
+  display: grid;
+  border: 1px solid var(--cds-border-subtle);
+}
+
+.notifications-page__level .cds--radio-button-wrapper {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--cds-border-subtle);
+}
+
+.notifications-page__level .cds--radio-button-wrapper:last-child {
+  border-bottom: 0;
+}
+
+.notifications-page__level-option {
+  display: grid;
+  grid-template-columns: auto minmax(7rem, auto) 1fr;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.notifications-page__level-option > span:last-child {
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+}
+
+.notifications-page__level-dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+}
+
+.notifications-page__level-dot--information {
+  background: #0f62fe;
+}
+
+.notifications-page__level-dot--warning {
+  background: #f1c21b;
+}
+
+.notifications-page__level-dot--critical {
+  background: #da1e28;
 }
 
 .notifications-page__audience-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 0.75rem;
-  margin-top: 0.75rem;
+  margin-top: 1rem;
+}
+
+.notifications-page__audience-options[aria-disabled='true'] {
+  opacity: 0.55;
 }
 
 .notifications-page__editor-actions {
-  margin-top: 1.5rem;
+  margin-top: 2rem;
+}
+
+.notifications-page__notification {
+  border-left: 0.25rem solid #0f62fe;
+}
+
+.notifications-page__notification--warning {
+  border-left-color: #f1c21b;
+}
+
+.notifications-page__notification--critical {
+  border-left-color: #da1e28;
+}
+
+.notifications-page__notification-heading {
+  align-items: flex-start;
+}
+
+.notifications-page__notification-title-row {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.notifications-page__level-tag,
+.notifications-page__status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0 0.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.notifications-page__level-tag--information {
+  background: #d0e2ff;
+  color: #0043ce;
+}
+
+.notifications-page__level-tag--warning {
+  background: #f1e6c3;
+  color: #684e00;
+}
+
+.notifications-page__level-tag--critical {
+  background: #ffd7d9;
+  color: #a2191f;
+}
+
+.notifications-page__status {
+  background: var(--cds-layer-accent-01);
+  color: var(--cds-text-secondary);
 }
 
 .notifications-page__notification-content {
+  max-width: 60rem;
   margin-top: 1.25rem;
+  color: var(--cds-text-secondary);
+  line-height: 1.5;
 }
 
 .notifications-page__notification-content p {
@@ -99,7 +235,7 @@
 
 .notifications-page__metadata {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: 1rem;
   margin: 1.25rem 0 0;
   padding-top: 1rem;
@@ -115,9 +251,23 @@
 }
 
 @media (max-width: 42rem) {
+  .notifications-page__header,
   .notifications-page__section-heading,
-  .notifications-page__notification-heading {
+  .notifications-page__notification-heading,
+  .notifications-page__list-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .notifications-page__header > .cds--btn {
+    width: 100%;
+  }
+
+  .notifications-page__level-option {
+    grid-template-columns: auto minmax(6rem, auto);
+  }
+
+  .notifications-page__level-option > span:last-child {
+    grid-column: 2;
   }
 }

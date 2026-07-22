@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.notification;
 
+import ca.bc.gov.mof.lexis.dto.notification.NotificationLevel;
 import java.io.StringReader;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -23,7 +24,9 @@ public class OracleNotificationRepository {
       SELECT n.LEXIS_NOTIFICATION_ID,
              n.TITLE,
              n.CONTENT_HTML,
+             n.NOTIFICATION_LEVEL,
              n.PUBLISH_TIMESTAMP,
+             n.DISPLAY_END_TIMESTAMP,
              n.ENTRY_USERID,
              n.ENTRY_TIMESTAMP,
              n.UPDATE_USERID,
@@ -35,7 +38,16 @@ public class OracleNotificationRepository {
       """;
 
   private static final String ORDER_BY =
-      " ORDER BY n.PUBLISH_TIMESTAMP DESC, n.LEXIS_NOTIFICATION_ID DESC, a.ROLE_NAME";
+      """
+       ORDER BY CASE n.NOTIFICATION_LEVEL
+                  WHEN 'CRITICAL' THEN 1
+                  WHEN 'WARNING' THEN 2
+                  ELSE 3
+                END,
+                n.PUBLISH_TIMESTAMP DESC,
+                n.LEXIS_NOTIFICATION_ID DESC,
+                a.ROLE_NAME
+      """;
 
   private final JdbcTemplate jdbcTemplate;
 
@@ -49,6 +61,7 @@ public class OracleNotificationRepository {
           SELECT_NOTIFICATION_ROWS
               + """
                 WHERE n.PUBLISH_TIMESTAMP <= SYSTIMESTAMP
+                  AND n.DISPLAY_END_TIMESTAMP >= SYSTIMESTAMP
                   AND NOT EXISTS (
                     SELECT 1
                       FROM THE.LEXIS_NOTIFICATION_AUDIENCE audience_filter
@@ -63,6 +76,7 @@ public class OracleNotificationRepository {
         SELECT_NOTIFICATION_ROWS
             + """
               WHERE n.PUBLISH_TIMESTAMP <= SYSTIMESTAMP
+                AND n.DISPLAY_END_TIMESTAMP >= SYSTIMESTAMP
                 AND (
                   NOT EXISTS (
                     SELECT 1
@@ -99,20 +113,24 @@ public class OracleNotificationRepository {
           LEXIS_NOTIFICATION_ID,
           TITLE,
           CONTENT_HTML,
+          NOTIFICATION_LEVEL,
           PUBLISH_TIMESTAMP,
+          DISPLAY_END_TIMESTAMP,
           ENTRY_USERID,
           ENTRY_TIMESTAMP,
           UPDATE_USERID,
           UPDATE_TIMESTAMP
-        ) VALUES (?, ?, ?, ?, ?, SYSTIMESTAMP, ?, SYSTIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, SYSTIMESTAMP, ?, SYSTIMESTAMP)
         """,
         statement -> {
           statement.setLong(1, notificationId);
           statement.setString(2, mutation.title());
           statement.setCharacterStream(3, new StringReader(mutation.contentHtml()));
-          statement.setTimestamp(4, Timestamp.valueOf(mutation.publishTimestamp()));
-          statement.setString(5, mutation.auditUserId());
-          statement.setString(6, mutation.auditUserId());
+          statement.setString(4, mutation.notificationLevel().name());
+          statement.setTimestamp(5, Timestamp.valueOf(mutation.displayStartTimestamp()));
+          statement.setTimestamp(6, Timestamp.valueOf(mutation.displayEndTimestamp()));
+          statement.setString(7, mutation.auditUserId());
+          statement.setString(8, mutation.auditUserId());
         });
     replaceAudienceRoles(notificationId, mutation.audienceRoles());
     return findById(notificationId)
@@ -127,7 +145,8 @@ public class OracleNotificationRepository {
             UPDATE THE.LEXIS_NOTIFICATION
                SET TITLE = ?,
                    CONTENT_HTML = ?,
-                   PUBLISH_TIMESTAMP = ?,
+                   NOTIFICATION_LEVEL = ?,
+                   DISPLAY_END_TIMESTAMP = ?,
                    UPDATE_USERID = ?,
                    UPDATE_TIMESTAMP = SYSTIMESTAMP
              WHERE LEXIS_NOTIFICATION_ID = ?
@@ -135,9 +154,10 @@ public class OracleNotificationRepository {
             statement -> {
               statement.setString(1, mutation.title());
               statement.setCharacterStream(2, new StringReader(mutation.contentHtml()));
-              statement.setTimestamp(3, Timestamp.valueOf(mutation.publishTimestamp()));
-              statement.setString(4, mutation.auditUserId());
-              statement.setLong(5, notificationId);
+              statement.setString(3, mutation.notificationLevel().name());
+              statement.setTimestamp(4, Timestamp.valueOf(mutation.displayEndTimestamp()));
+              statement.setString(5, mutation.auditUserId());
+              statement.setLong(6, notificationId);
             });
     if (updated == 0) {
       return Optional.empty();
@@ -155,7 +175,7 @@ public class OracleNotificationRepository {
         == 1;
   }
 
-  private Optional<NotificationRow> findById(long notificationId) {
+  public Optional<NotificationRow> findById(long notificationId) {
     List<NotificationRow> rows =
         queryNotificationRows(
             SELECT_NOTIFICATION_ROWS
@@ -193,7 +213,9 @@ public class OracleNotificationRepository {
                     rs.getLong("LEXIS_NOTIFICATION_ID"),
                     rs.getString("TITLE"),
                     rs.getString("CONTENT_HTML"),
+                    NotificationLevel.valueOf(rs.getString("NOTIFICATION_LEVEL")),
                     toLocalDateTime(rs.getTimestamp("PUBLISH_TIMESTAMP")),
+                    toLocalDateTime(rs.getTimestamp("DISPLAY_END_TIMESTAMP")),
                     rs.getString("ENTRY_USERID"),
                     toLocalDateTime(rs.getTimestamp("ENTRY_TIMESTAMP")),
                     rs.getString("UPDATE_USERID"),
@@ -220,7 +242,9 @@ public class OracleNotificationRepository {
   public record NotificationMutation(
       String title,
       String contentHtml,
-      LocalDateTime publishTimestamp,
+      NotificationLevel notificationLevel,
+      LocalDateTime displayStartTimestamp,
+      LocalDateTime displayEndTimestamp,
       String auditUserId,
       List<String> audienceRoles) {}
 
@@ -228,7 +252,9 @@ public class OracleNotificationRepository {
       long id,
       String title,
       String contentHtml,
-      LocalDateTime publishTimestamp,
+      NotificationLevel notificationLevel,
+      LocalDateTime displayStartTimestamp,
+      LocalDateTime displayEndTimestamp,
       String entryUserId,
       LocalDateTime entryTimestamp,
       String updateUserId,
@@ -239,7 +265,9 @@ public class OracleNotificationRepository {
       long id,
       String title,
       String contentHtml,
-      LocalDateTime publishTimestamp,
+      NotificationLevel notificationLevel,
+      LocalDateTime displayStartTimestamp,
+      LocalDateTime displayEndTimestamp,
       String entryUserId,
       LocalDateTime entryTimestamp,
       String updateUserId,
@@ -263,7 +291,9 @@ public class OracleNotificationRepository {
           row.id(),
           row.title(),
           row.contentHtml(),
-          row.publishTimestamp(),
+          row.notificationLevel(),
+          row.displayStartTimestamp(),
+          row.displayEndTimestamp(),
           row.entryUserId(),
           row.entryTimestamp(),
           row.updateUserId(),

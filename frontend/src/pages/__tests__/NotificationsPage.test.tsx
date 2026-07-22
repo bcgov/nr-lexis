@@ -39,7 +39,9 @@ const notification: LexisNotification = {
   id: 9,
   title: 'Winter service update',
   contentHtml: '<p>Services are available.</p>',
-  publishTimestamp: '2026-01-01T00:00:00',
+  notificationLevel: 'WARNING',
+  displayStartDate: '2026-01-01',
+  displayEndDate: '2026-01-08',
   entryUserId: 'IDIR\\ADMIN',
   entryTimestamp: '2026-01-01T00:00:00',
   updateUserId: 'IDIR\\ADMIN',
@@ -74,7 +76,7 @@ describe('Notifications page', () => {
     expect(await screen.findByText('Winter service update')).toBeVisible()
     expect(mockedFetchNotifications).toHaveBeenCalledOnce()
     expect(mockedFetchAdminNotifications).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Create notification' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New notification' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
@@ -89,20 +91,41 @@ describe('Notifications page', () => {
 
     render(<NotificationsPage />)
 
-    await screen.findByRole('heading', { name: 'Create notification' })
+    await screen.findByText('Winter service update')
+    await user.click(screen.getByRole('button', { name: 'New notification' }))
+    await screen.findByRole('heading', { name: 'New notification' })
     await user.type(screen.getByLabelText('Title'), 'Office closure')
     await user.type(screen.getByLabelText('Notification content editor'), 'Office closed Friday.')
-    await user.click(screen.getByRole('button', { name: 'Create notification' }))
+    await user.click(screen.getByRole('button', { name: 'Publish notification' }))
 
     await waitFor(() => {
       expect(mockedCreateNotification).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Office closure',
           contentHtml: 'Office closed Friday.',
+          notificationLevel: 'INFORMATION',
           audienceRoles: [],
-          publishTimestamp: expect.stringMatching(/T00:00:00$/),
+          displayStartDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+          displayEndDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
         }),
       )
     })
+  })
+
+  it('keeps the original start date read-only while an administrator edits', async () => {
+    const user = userEvent.setup()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    await screen.findByText('Winter service update')
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+
+    expect(screen.getByLabelText('Start date')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('End date')).not.toHaveAttribute('readonly')
   })
 })

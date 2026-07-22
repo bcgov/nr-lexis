@@ -1,8 +1,12 @@
+export type NotificationLevel = 'INFORMATION' | 'WARNING' | 'CRITICAL'
+
 export type LexisNotification = {
   id: number
   title: string
   contentHtml: string
-  publishTimestamp: string
+  notificationLevel: NotificationLevel
+  displayStartDate: string
+  displayEndDate: string
   entryUserId: string
   entryTimestamp: string
   updateUserId: string
@@ -13,7 +17,9 @@ export type LexisNotification = {
 export type NotificationUpsertRequest = {
   title: string
   contentHtml: string
-  publishTimestamp: string
+  notificationLevel: NotificationLevel
+  displayStartDate: string
+  displayEndDate: string
   audienceRoles: string[]
 }
 

@@ -1,11 +1,24 @@
 import { Add, Edit, TrashCan } from '@carbon/icons-react'
-import { Button, Checkbox, InlineLoading, InlineNotification, TextInput, Tile } from '@carbon/react'
+import {
+  Button,
+  Checkbox,
+  InlineLoading,
+  InlineNotification,
+  RadioButton,
+  RadioButtonGroup,
+  TextInput,
+  Tile,
+} from '@carbon/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppNotification } from '@/components/AppNotification'
 import NotificationEditor from '@/components/NotificationEditor'
 import { hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
-import type { LexisNotification, NotificationUpsertRequest } from '@/interfaces/LexisNotification'
+import type {
+  LexisNotification,
+  NotificationLevel,
+  NotificationUpsertRequest,
+} from '@/interfaces/LexisNotification'
 import {
   createNotification,
   deleteNotification,
@@ -17,12 +30,26 @@ import {
 import './Notifications.scss'
 
 const RECENT_UPDATE_WINDOW_DAYS = 3
+const DEFAULT_DISPLAY_DURATION_DAYS = 7
+
+const notificationLevels: ReadonlyArray<{
+  value: NotificationLevel
+  label: string
+  description: string
+}> = [
+  { value: 'INFORMATION', label: 'Information', description: 'General update' },
+  { value: 'WARNING', label: 'Warning', description: 'Needs attention' },
+  { value: 'CRITICAL', label: 'Critical', description: 'Time-sensitive' },
+]
 
 type NotificationForm = {
   id: number | null
   title: string
   contentHtml: string
-  publishDate: string
+  notificationLevel: NotificationLevel
+  displayStartDate: string
+  displayEndDate: string
+  audienceMode: 'ALL' | 'ROLES'
   audienceRoles: string[]
 }
 
@@ -32,37 +59,64 @@ type NotificationMessage = {
   subtitle: string
 }
 
-const today = (): string => {
-  const date = new Date()
+const toDateValue = (date: Date): string => {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${date.getFullYear()}-${month}-${day}`
 }
 
-const emptyForm = (): NotificationForm => ({
-  id: null,
-  title: '',
-  contentHtml: '',
-  publishDate: today(),
-  audienceRoles: [],
-})
+const today = (): string => toDateValue(new Date())
 
-const toPublishDate = (value: string): string => value.slice(0, 10)
+const addDays = (value: string, days: number): string => {
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  date.setDate(date.getDate() + days)
+  return toDateValue(date)
+}
+
+const emptyForm = (): NotificationForm => {
+  const displayStartDate = today()
+  return {
+    id: null,
+    title: '',
+    contentHtml: '',
+    notificationLevel: 'INFORMATION',
+    displayStartDate,
+    displayEndDate: addDays(displayStartDate, DEFAULT_DISPLAY_DURATION_DAYS),
+    audienceMode: 'ALL',
+    audienceRoles: [],
+  }
+}
+
+const toDateInputValue = (value: string): string => value.slice(0, 10)
 
 const toForm = (notification: LexisNotification): NotificationForm => ({
   id: notification.id,
   title: notification.title,
   contentHtml: notification.contentHtml,
-  publishDate: toPublishDate(notification.publishTimestamp),
+  notificationLevel: notification.notificationLevel,
+  displayStartDate: toDateInputValue(notification.displayStartDate),
+  displayEndDate: toDateInputValue(notification.displayEndDate),
+  audienceMode: notification.audienceRoles.length === 0 ? 'ALL' : 'ROLES',
   audienceRoles: notification.audienceRoles,
 })
 
 const toRequest = (form: NotificationForm): NotificationUpsertRequest => ({
   title: form.title.trim(),
   contentHtml: form.contentHtml,
-  publishTimestamp: `${form.publishDate}T00:00:00`,
-  audienceRoles: form.audienceRoles,
+  notificationLevel: form.notificationLevel,
+  displayStartDate: form.displayStartDate,
+  displayEndDate: form.displayEndDate,
+  audienceRoles: form.audienceMode === 'ALL' ? [] : form.audienceRoles,
 })
+
+const formatDate = (value: string): string => {
+  const date = new Date(`${toDateInputValue(value)}T12:00:00`)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat('en-CA', { dateStyle: 'medium' }).format(date)
+}
 
 const formatDateTime = (value: string): string => {
   const date = new Date(value)
@@ -83,6 +137,17 @@ const roleLabel = (role: string): string =>
     .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
     .join(' ')
 
+const levelLabel = (level: NotificationLevel): string =>
+  notificationLevels.find((entry) => entry.value === level)?.label ?? level
+
+const notificationStatus = (notification: LexisNotification): string => {
+  const currentDate = today()
+  if (notification.displayStartDate > currentDate) {
+    return 'Scheduled'
+  }
+  return notification.displayEndDate < currentDate ? 'Past' : 'Active'
+}
+
 const hasRecentUpdate = (notification: LexisNotification): boolean => {
   const updateTime = new Date(notification.updateTimestamp).getTime()
   if (Number.isNaN(updateTime)) {
@@ -97,6 +162,7 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<LexisNotification[]>([])
   const [audienceRoles, setAudienceRoles] = useState<string[]>([])
   const [form, setForm] = useState<NotificationForm>(emptyForm)
+  const [showEditor, setShowEditor] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<NotificationMessage | null>(null)
@@ -134,40 +200,75 @@ export default function NotificationsPage() {
   }, [loadNotifications])
 
   const isEditing = form.id !== null
-  const formTitle = isEditing ? 'Edit notification' : 'Create notification'
+  const editorTitle = isEditing ? 'Edit notification' : 'New notification'
   const pageDescription = isAdmin
-    ? 'Create, edit, delete, and review notifications for LEXIS users.'
-    : 'View LEXIS notifications that apply to your assigned roles.'
-
+    ? 'Create, edit, delete, and review LEXIS notifications.'
+    : 'Updates and bulletins from LEXIS administrators. Notices hide automatically after their end date.'
   const recentUpdateCount = useMemo(
     () => notifications.filter(hasRecentUpdate).length,
     [notifications],
   )
+  const activeNotificationCount = useMemo(
+    () =>
+      notifications.filter((notification) => notificationStatus(notification) === 'Active').length,
+    [notifications],
+  )
+
+  const startCreate = (): void => {
+    setForm(emptyForm())
+    setMessage(null)
+    setShowEditor(true)
+  }
+
+  const startEdit = (notification: LexisNotification): void => {
+    setForm(toForm(notification))
+    setMessage(null)
+    setShowEditor(true)
+  }
+
+  const resetForm = (): void => {
+    setForm(emptyForm())
+    setShowEditor(false)
+    setMessage(null)
+  }
 
   const toggleAudienceRole = (role: string, selected: boolean): void => {
     setForm((current) => ({
       ...current,
+      audienceMode: 'ROLES',
       audienceRoles: selected
         ? [...new Set([...current.audienceRoles, role])]
         : current.audienceRoles.filter((entry) => entry !== role),
     }))
   }
 
-  const resetForm = (): void => {
-    setForm(emptyForm())
-    setMessage(null)
-  }
-
   const save = async (): Promise<void> => {
     if (
       !form.title.trim() ||
-      !form.publishDate ||
+      !form.displayStartDate ||
+      !form.displayEndDate ||
       !form.contentHtml.replace(/<[^>]*>/g, '').trim()
     ) {
       setMessage({
         kind: 'error',
         title: 'Complete the required fields',
-        subtitle: 'Title, publish date, and notification content are required.',
+        subtitle: 'Title, content, notification level, and display dates are required.',
+      })
+      return
+    }
+    if (form.displayEndDate < form.displayStartDate) {
+      setMessage({
+        kind: 'error',
+        title: 'Check the display period',
+        subtitle: 'The end date cannot be before the start date.',
+      })
+      return
+    }
+    if (form.audienceMode === 'ROLES' && form.audienceRoles.length === 0) {
+      setMessage({
+        kind: 'error',
+        title: 'Choose an audience',
+        subtitle: 'Select at least one role or use all authenticated LEXIS roles.',
       })
       return
     }
@@ -179,18 +280,19 @@ export default function NotificationsPage() {
         await createNotification(toRequest(form))
         setMessage({
           kind: 'success',
-          title: 'Notification created',
-          subtitle: 'The notification has been saved.',
+          title: 'Notification published',
+          subtitle: 'The notification is now scheduled for its display period.',
         })
       } else {
         await updateNotification(form.id, toRequest(form))
         setMessage({
           kind: 'success',
           title: 'Notification updated',
-          subtitle: 'The notification has been saved.',
+          subtitle: 'The notification changes have been saved.',
         })
       }
       setForm(emptyForm())
+      setShowEditor(false)
       await loadNotifications(false)
     } catch {
       setMessage({
@@ -214,6 +316,7 @@ export default function NotificationsPage() {
       await deleteNotification(notification.id)
       if (form.id === notification.id) {
         setForm(emptyForm())
+        setShowEditor(false)
       }
       setMessage({
         kind: 'success',
@@ -234,12 +337,20 @@ export default function NotificationsPage() {
 
   return (
     <main className="notifications-page" id="main-content">
-      <section className="page-banner" aria-labelledby="notifications-page-title">
+      <section
+        className="notifications-page__header page-banner"
+        aria-labelledby="notifications-page-title"
+      >
         <div>
           <p className="page-banner__eyebrow">LEXIS</p>
           <h1 id="notifications-page-title">Notifications</h1>
           <p>{pageDescription}</p>
         </div>
+        {isAdmin && (
+          <Button renderIcon={Add} onClick={startCreate} disabled={saving}>
+            New notification
+          </Button>
+        )}
       </section>
 
       {showRecentUpdateToast && recentUpdateCount > 0 && (
@@ -262,25 +373,25 @@ export default function NotificationsPage() {
         />
       )}
 
-      {isAdmin && (
+      {isAdmin && showEditor && (
         <section
           className="notifications-page__editor"
           aria-labelledby="notification-editor-heading"
         >
-          <Tile>
+          <Tile className="notifications-page__editor-tile">
             <div className="notifications-page__section-heading">
               <div>
-                <h2 id="notification-editor-heading">{formTitle}</h2>
+                <p className="notifications-page__section-eyebrow">Admin</p>
+                <h2 id="notification-editor-heading">{editorTitle}</h2>
                 <p>Rich text is sanitized on the server before it is saved.</p>
               </div>
-              {isEditing && (
-                <Button kind="ghost" onClick={resetForm} disabled={saving}>
-                  Cancel edit
-                </Button>
-              )}
+              <Button kind="ghost" onClick={resetForm} disabled={saving}>
+                Cancel
+              </Button>
             </div>
 
-            <div className="notifications-page__form-grid">
+            <div className="notifications-page__form-section">
+              <h3>Message</h3>
               <TextInput
                 id="notification-title"
                 labelText="Title"
@@ -291,45 +402,111 @@ export default function NotificationsPage() {
                   setForm((current) => ({ ...current, title: event.target.value }))
                 }
               />
-              <TextInput
-                id="notification-publish-date"
-                type="date"
-                labelText="Publish date"
-                value={form.publishDate}
+              <div className="notifications-page__form-field">
+                <p className="cds--label">Message</p>
+                <NotificationEditor
+                  value={form.contentHtml}
+                  disabled={saving}
+                  onChange={(contentHtml) => setForm((current) => ({ ...current, contentHtml }))}
+                />
+              </div>
+            </div>
+
+            <fieldset className="notifications-page__form-section notifications-page__level">
+              <legend>Notification level</legend>
+              <RadioButtonGroup
+                legendText=""
+                name="notification-level"
+                valueSelected={form.notificationLevel}
                 disabled={saving}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, publishDate: event.target.value }))
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    notificationLevel: value as NotificationLevel,
+                  }))
+                }
+              >
+                {notificationLevels.map((level) => (
+                  <RadioButton
+                    key={level.value}
+                    id={`notification-level-${level.value.toLowerCase()}`}
+                    value={level.value}
+                    labelText={
+                      <span className="notifications-page__level-option">
+                        <span
+                          className={`notifications-page__level-dot notifications-page__level-dot--${level.value.toLowerCase()}`}
+                        />
+                        <span>{level.label}</span>
+                        <span>{level.description}</span>
+                      </span>
+                    }
+                  />
+                ))}
+              </RadioButtonGroup>
+            </fieldset>
+
+            <fieldset className="notifications-page__form-section notifications-page__audience">
+              <legend>Audience</legend>
+              <Checkbox
+                id="notification-audience-all"
+                labelText="All authenticated LEXIS roles"
+                checked={form.audienceMode === 'ALL'}
+                disabled={saving}
+                onChange={(_, { checked }) =>
+                  setForm((current) => ({
+                    ...current,
+                    audienceMode: checked ? 'ALL' : 'ROLES',
+                    audienceRoles: checked ? [] : current.audienceRoles,
+                  }))
                 }
               />
-            </div>
-
-            <div className="notifications-page__form-field">
-              <p className="cds--label">Notification content</p>
-              <NotificationEditor
-                value={form.contentHtml}
-                disabled={saving}
-                onChange={(contentHtml) => setForm((current) => ({ ...current, contentHtml }))}
-              />
-            </div>
-
-            <fieldset className="notifications-page__audience">
-              <legend>Audience roles</legend>
-              <p>
-                Selecting no roles makes the notification visible to all authenticated LEXIS users.
-              </p>
-              <div className="notifications-page__audience-options">
+              <p>Choose specific roles only when the notification does not apply to everyone.</p>
+              <div
+                className="notifications-page__audience-options"
+                aria-disabled={form.audienceMode === 'ALL'}
+              >
                 {audienceRoles.map((role) => (
                   <Checkbox
                     key={role}
                     id={`notification-audience-${role}`}
                     labelText={roleLabel(role)}
                     checked={form.audienceRoles.includes(role)}
-                    disabled={saving}
+                    disabled={saving || form.audienceMode === 'ALL'}
                     onChange={(_, { checked }) => toggleAudienceRole(role, Boolean(checked))}
                   />
                 ))}
               </div>
             </fieldset>
+
+            <section className="notifications-page__form-section">
+              <h3>Display period</h3>
+              <div className="notifications-page__form-grid">
+                <TextInput
+                  id="notification-display-start-date"
+                  type="date"
+                  labelText="Start date"
+                  value={form.displayStartDate}
+                  disabled={saving}
+                  readOnly={isEditing}
+                  helperText={isEditing ? 'The original start date cannot be changed.' : undefined}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, displayStartDate: event.target.value }))
+                  }
+                />
+                <TextInput
+                  id="notification-display-end-date"
+                  type="date"
+                  labelText="End date"
+                  value={form.displayEndDate}
+                  min={form.displayStartDate}
+                  disabled={saving}
+                  helperText="The notification hides automatically after this date."
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, displayEndDate: event.target.value }))
+                  }
+                />
+              </div>
+            </section>
 
             <div className="notifications-page__editor-actions">
               <Button
@@ -338,7 +515,7 @@ export default function NotificationsPage() {
                 disabled={saving}
                 onClick={() => void save()}
               >
-                {isEditing ? 'Save notification' : 'Create notification'}
+                {isEditing ? 'Save changes' : 'Publish notification'}
               </Button>
               {saving && <InlineLoading description="Saving notification…" />}
             </div>
@@ -348,26 +525,54 @@ export default function NotificationsPage() {
 
       <section aria-labelledby="notification-list-heading">
         <div className="notifications-page__list-heading">
-          <h2 id="notification-list-heading">Current notifications</h2>
+          <div>
+            <h2 id="notification-list-heading">
+              {isAdmin ? 'Notifications' : 'Current notifications'}
+            </h2>
+            {!loading && (
+              <p>
+                {isAdmin
+                  ? `${activeNotificationCount} active notification${activeNotificationCount === 1 ? '' : 's'}`
+                  : `${notifications.length} active notification${notifications.length === 1 ? '' : 's'}`}
+              </p>
+            )}
+          </div>
           {loading && <InlineLoading description="Loading notifications…" />}
         </div>
 
         {!loading && notifications.length === 0 && (
           <Tile>
-            <p>No notifications are available.</p>
+            <p>
+              {isAdmin ? 'No notifications have been created.' : 'No notifications are available.'}
+            </p>
           </Tile>
         )}
 
         <div className="notifications-page__list">
           {notifications.map((notification) => (
-            <article key={notification.id} className="notifications-page__notification">
+            <article
+              key={notification.id}
+              className={`notifications-page__notification notifications-page__notification--${notification.notificationLevel.toLowerCase()}`}
+            >
               <Tile>
                 <div className="notifications-page__notification-heading">
                   <div>
-                    <h3>{notification.title}</h3>
+                    <div className="notifications-page__notification-title-row">
+                      <h3>{notification.title}</h3>
+                      <span
+                        className={`notifications-page__level-tag notifications-page__level-tag--${notification.notificationLevel.toLowerCase()}`}
+                      >
+                        {levelLabel(notification.notificationLevel)}
+                      </span>
+                      {isAdmin && (
+                        <span className="notifications-page__status">
+                          {notificationStatus(notification)}
+                        </span>
+                      )}
+                    </div>
                     <p>
-                      Published {formatDateTime(notification.publishTimestamp)} · Updated{' '}
-                      {formatDateTime(notification.updateTimestamp)} by {notification.updateUserId}
+                      Posted {formatDate(notification.displayStartDate)} · Shows until{' '}
+                      {formatDate(notification.displayEndDate)}
                     </p>
                   </div>
                   {isAdmin && (
@@ -377,10 +582,7 @@ export default function NotificationsPage() {
                         size="sm"
                         renderIcon={Edit}
                         disabled={saving}
-                        onClick={() => {
-                          setForm(toForm(notification))
-                          setMessage(null)
-                        }}
+                        onClick={() => startEdit(notification)}
                       >
                         Edit
                       </Button>
@@ -407,6 +609,13 @@ export default function NotificationsPage() {
                       <dt>Created</dt>
                       <dd>
                         {formatDateTime(notification.entryTimestamp)} by {notification.entryUserId}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Last updated</dt>
+                      <dd>
+                        {formatDateTime(notification.updateTimestamp)} by{' '}
+                        {notification.updateUserId}
                       </dd>
                     </div>
                     <div>

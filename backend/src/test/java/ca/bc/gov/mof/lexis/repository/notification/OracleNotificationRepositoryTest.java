@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.notification.NotificationLevel;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.sql.PreparedStatement;
@@ -40,7 +41,8 @@ class OracleNotificationRepositoryTest {
         .query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
     assertThat(sqlCaptor.getValue())
         .contains("audience_filter.ROLE_NAME IN (\n?")
-        .contains(")\n  )\n) ORDER BY n.PUBLISH_TIMESTAMP DESC");
+        .contains("AND n.DISPLAY_END_TIMESTAMP >= SYSTIMESTAMP")
+        .contains("ORDER BY CASE n.NOTIFICATION_LEVEL");
   }
 
   @Test
@@ -59,7 +61,9 @@ class OracleNotificationRepositoryTest {
         new OracleNotificationRepository.NotificationMutation(
             "Service update",
             contentHtml,
+            NotificationLevel.INFORMATION,
             LocalDateTime.of(2026, 7, 21, 12, 0),
+            LocalDateTime.of(2026, 7, 28, 23, 59, 59, 999_000_000),
             "IDIR\\ADMIN",
             List.of()));
 
@@ -68,5 +72,9 @@ class OracleNotificationRepositoryTest {
     StringWriter boundContent = new StringWriter();
     contentCaptor.getValue().transferTo(boundContent);
     assertThat(boundContent.toString()).isEqualTo(contentHtml);
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).update(sqlCaptor.capture(), any(PreparedStatementSetter.class));
+    assertThat(sqlCaptor.getValue()).doesNotContain("PUBLISH_TIMESTAMP = ?");
   }
 }

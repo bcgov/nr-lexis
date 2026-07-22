@@ -121,7 +121,7 @@ class LexisRouteAuthorizationIntegrationTest {
                 .with(csrf())
                 .with(jwt().authorities(readOnly))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\"Notice\",\"contentHtml\":\"<p>Text</p>\",\"publishTimestamp\":\"2026-07-21T00:00:00\",\"audienceRoles\":[]}"))
+                .content("{\"title\":\"Notice\",\"contentHtml\":\"<p>Text</p>\",\"notificationLevel\":\"INFORMATION\",\"displayStartDate\":\"2026-07-21\",\"displayEndDate\":\"2026-07-28\",\"audienceRoles\":[]}"))
         .andExpect(status().isForbidden());
   }
 

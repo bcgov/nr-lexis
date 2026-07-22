@@ -3,10 +3,12 @@ package ca.bc.gov.mof.lexis.service.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.notification.NotificationLevel;
 import ca.bc.gov.mof.lexis.dto.notification.NotificationUpsertRequestDto;
 import ca.bc.gov.mof.lexis.repository.notification.OracleNotificationRepository;
 import ca.bc.gov.mof.lexis.repository.notification.OracleNotificationRepository.NotificationMutation;
@@ -15,8 +17,11 @@ import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.security.Principal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,17 +42,25 @@ class LexisNotificationServiceTest {
   void createShouldSanitizeHtmlBeforeWritingToTheRepository() {
     LexisNotificationService service = newService();
     Principal principal = () -> "idir\\admin";
-    LocalDateTime publishTimestamp = LocalDateTime.of(2026, 7, 21, 0, 0);
+    LocalDate displayStartDate = LocalDate.of(2026, 7, 21);
+    LocalDate displayEndDate = LocalDate.of(2026, 7, 28);
     NotificationUpsertRequestDto request =
         new NotificationUpsertRequestDto(
             "<strong>Service</strong><script>alert(1)</script> update",
             "<p><strong>Important</strong><script>alert(1)</script>"
                 + "<a href=\"javascript:alert(1)\">unsafe</a></p>",
-            publishTimestamp,
+            NotificationLevel.WARNING,
+            displayStartDate,
+            displayEndDate,
             List.of());
     when(principalService.resolvePrincipalName(principal)).thenReturn("IDIR\\ADMIN");
     when(repository.insert(any(NotificationMutation.class)))
-        .thenReturn(notificationRow("<p><strong>Important</strong>unsafe</p>", publishTimestamp));
+        .thenReturn(
+            notificationRow(
+                "<p><strong>Important</strong>unsafe</p>",
+                NotificationLevel.WARNING,
+                displayStartDate.atStartOfDay(),
+                displayEndDate.atTime(LocalTime.of(23, 59, 59, 999_000_000))));
 
     service.create(request, principal);
 
@@ -60,6 +73,10 @@ class LexisNotificationServiceTest {
         .doesNotContain("script")
         .doesNotContain("javascript:");
     assertThat(mutation.title()).isEqualTo("Service update");
+    assertThat(mutation.notificationLevel()).isEqualTo(NotificationLevel.WARNING);
+    assertThat(mutation.displayStartTimestamp()).isEqualTo(displayStartDate.atStartOfDay());
+    assertThat(mutation.displayEndTimestamp())
+        .isEqualTo(displayEndDate.atTime(LocalTime.of(23, 59, 59, 999_000_000)));
     assertThat(mutation.auditUserId()).isEqualTo("IDIR\\ADMIN");
   }
 
@@ -71,7 +88,9 @@ class LexisNotificationServiceTest {
         new NotificationUpsertRequestDto(
             "Image-only notification",
             "<img src=\"https://example.test/image.png\">",
-            LocalDateTime.of(2026, 7, 21, 0, 0),
+            NotificationLevel.INFORMATION,
+            LocalDate.of(2026, 7, 21),
+            LocalDate.of(2026, 7, 28),
             List.of());
 
     assertThatThrownBy(() -> service.create(request, principal))
@@ -81,21 +100,80 @@ class LexisNotificationServiceTest {
     verify(repository, never()).insert(any(NotificationMutation.class));
   }
 
+  @Test
+  void createShouldRejectAnEndDateBeforeTheStartDate() {
+    LexisNotificationService service = newService();
+    Principal principal = () -> "idir\\admin";
+    NotificationUpsertRequestDto request =
+        new NotificationUpsertRequestDto(
+            "Service update",
+            "<p>Details</p>",
+            NotificationLevel.INFORMATION,
+            LocalDate.of(2026, 7, 28),
+            LocalDate.of(2026, 7, 21),
+            List.of());
+
+    assertThatThrownBy(() -> service.create(request, principal))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("The display end date cannot be before the display start date.");
+
+    verify(repository, never()).insert(any(NotificationMutation.class));
+  }
+
+  @Test
+  void updateShouldRetainTheOriginalDisplayStartDate() {
+    LexisNotificationService service = newService();
+    Principal principal = () -> "idir\\admin";
+    LocalDateTime originalStart = LocalDateTime.of(2026, 7, 21, 0, 0);
+    NotificationRow existing =
+        notificationRow(
+            "<p>Details</p>",
+            NotificationLevel.INFORMATION,
+            originalStart,
+            LocalDateTime.of(2026, 7, 28, 23, 59, 59, 999_000_000));
+    NotificationUpsertRequestDto request =
+        new NotificationUpsertRequestDto(
+            "Updated service update",
+            "<p>Updated details</p>",
+            NotificationLevel.CRITICAL,
+            LocalDate.of(2027, 1, 1),
+            LocalDate.of(2026, 7, 30),
+            List.of());
+    when(repository.findById(12L)).thenReturn(Optional.of(existing));
+    when(repository.update(eq(12L), any(NotificationMutation.class))).thenReturn(Optional.of(existing));
+    when(principalService.resolvePrincipalName(principal)).thenReturn("IDIR\\ADMIN");
+
+    service.update(12L, request, principal);
+
+    ArgumentCaptor<NotificationMutation> mutationCaptor =
+        ArgumentCaptor.forClass(NotificationMutation.class);
+    verify(repository).update(eq(12L), mutationCaptor.capture());
+    assertThat(mutationCaptor.getValue().displayStartTimestamp()).isEqualTo(originalStart);
+    assertThat(mutationCaptor.getValue().displayEndTimestamp())
+        .isEqualTo(LocalDateTime.of(2026, 7, 30, 23, 59, 59, 999_000_000));
+  }
+
   private LexisNotificationService newService() {
     return new LexisNotificationService(
         repository, htmlSanitizer, sessionService, authorizationService, principalService);
   }
 
-  private NotificationRow notificationRow(String contentHtml, LocalDateTime publishTimestamp) {
+  private NotificationRow notificationRow(
+      String contentHtml,
+      NotificationLevel notificationLevel,
+      LocalDateTime displayStartTimestamp,
+      LocalDateTime displayEndTimestamp) {
     return new NotificationRow(
         12L,
         "Service update",
         contentHtml,
-        publishTimestamp,
+        notificationLevel,
+        displayStartTimestamp,
+        displayEndTimestamp,
         "IDIR\\ADMIN",
-        publishTimestamp,
+        displayStartTimestamp,
         "IDIR\\ADMIN",
-        publishTimestamp,
+        displayStartTimestamp,
         List.of());
   }
 }

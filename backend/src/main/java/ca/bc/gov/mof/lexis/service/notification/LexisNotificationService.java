@@ -10,6 +10,8 @@ import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.security.Principal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -59,7 +61,10 @@ public class LexisNotificationService {
 
   @Transactional
   public LexisNotificationDto create(NotificationUpsertRequestDto request, Principal principal) {
-    return toDto(repository.insert(toMutation(request, principal)));
+    if (request == null) {
+      throw new IllegalArgumentException("Notification details are required.");
+    }
+    return toDto(repository.insert(toMutation(request, request.displayStartDate(), principal)));
   }
 
   @Transactional
@@ -68,8 +73,12 @@ public class LexisNotificationService {
     if (notificationId < 1) {
       throw new IllegalArgumentException("A valid notification id is required.");
     }
+    NotificationRow existing =
+        repository
+            .findById(notificationId)
+            .orElseThrow(() -> new NotificationNotFoundException(notificationId));
     return repository
-        .update(notificationId, toMutation(request, principal))
+        .update(notificationId, toMutation(request, existing.displayStartTimestamp().toLocalDate(), principal))
         .map(this::toDto)
         .orElseThrow(() -> new NotificationNotFoundException(notificationId));
   }
@@ -81,7 +90,8 @@ public class LexisNotificationService {
     }
   }
 
-  private NotificationMutation toMutation(NotificationUpsertRequestDto request, Principal principal) {
+  private NotificationMutation toMutation(
+      NotificationUpsertRequestDto request, LocalDate displayStartDate, Principal principal) {
     if (request == null) {
       throw new IllegalArgumentException("Notification details are required.");
     }
@@ -93,15 +103,28 @@ public class LexisNotificationService {
     if (htmlSanitizer.sanitizePlainText(contentHtml).isBlank()) {
       throw new IllegalArgumentException("Notification content is required.");
     }
-    if (request.publishTimestamp() == null) {
-      throw new IllegalArgumentException("A publish timestamp is required.");
+    if (request.notificationLevel() == null) {
+      throw new IllegalArgumentException("A notification level is required.");
+    }
+    if (displayStartDate == null) {
+      throw new IllegalArgumentException("A display start date is required.");
+    }
+    if (request.displayEndDate() == null) {
+      throw new IllegalArgumentException("A display end date is required.");
+    }
+    if (request.displayEndDate().isBefore(displayStartDate)) {
+      throw new IllegalArgumentException("The display end date cannot be before the display start date.");
     }
 
-    String auditUserId = normalizeRequired(principalService.resolvePrincipalName(principal), "An audit user is required.");
+    String auditUserId =
+        normalizeRequired(
+            principalService.resolvePrincipalName(principal), "An audit user is required.");
     return new NotificationMutation(
         title,
         contentHtml,
-        request.publishTimestamp(),
+        request.notificationLevel(),
+        displayStartDate.atStartOfDay(),
+        request.displayEndDate().atTime(LocalTime.of(23, 59, 59, 999_000_000)),
         auditUserId,
         normalizeAudienceRoles(request.audienceRoles()));
   }
@@ -134,7 +157,9 @@ public class LexisNotificationService {
         row.id(),
         row.title(),
         row.contentHtml(),
-        row.publishTimestamp(),
+        row.notificationLevel(),
+        row.displayStartTimestamp().toLocalDate(),
+        row.displayEndTimestamp().toLocalDate(),
         row.entryUserId(),
         row.entryTimestamp(),
         row.updateUserId(),
