@@ -461,10 +461,23 @@ const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   }
 }
 
-const expectCurrentScheduleOptions = (value: unknown, source: string): void => {
+const expectDatedScheduleOptions = (schedules: Record<string, unknown>[], source: string): void => {
+  const today = formatBusinessIsoDate()
+
+  expect(
+    schedules.length,
+    `${source} should expose at least one future list date`,
+  ).toBeGreaterThanOrEqual(1)
+
+  for (const schedule of schedules) {
+    const scheduleDate = optionName(schedule)
+    expect(scheduleDate, `${source} schedule names should be ISO dates`).toMatch(isoDatePattern)
+    expect(scheduleDate >= today, `${source} should not expose previous list dates`).toBe(true)
+  }
+}
+
+const expectApplicationScheduleOptions = (value: unknown, source: string): void => {
   const schedules = asRecordArray(value)
-  const datedSchedules = schedules.filter((schedule) => optionCode(schedule))
-  const today = new Date().toISOString().slice(0, 10)
 
   expect(
     schedules.length,
@@ -475,16 +488,24 @@ const expectCurrentScheduleOptions = (value: unknown, source: string): void => {
   expect(optionName(blankSchedule), `${source} last schedule option should be labeled Blank`).toBe(
     'Blank',
   )
-  expect(
-    datedSchedules.length,
-    `${source} should expose at least one future list date`,
-  ).toBeGreaterThanOrEqual(1)
+  expectDatedScheduleOptions(
+    schedules.filter((schedule) => optionCode(schedule)),
+    source,
+  )
+}
 
-  for (const schedule of datedSchedules) {
-    const scheduleDate = optionName(schedule)
-    expect(scheduleDate, `${source} schedule names should be ISO dates`).toMatch(isoDatePattern)
-    expect(scheduleDate >= today, `${source} should not expose previous list dates`).toBe(true)
-  }
+const expectReportScheduleOptions = (value: unknown, source: string): void => {
+  const schedules = asRecordArray(value)
+
+  expect(
+    schedules.length,
+    `${source} should expose no more than two list dates`,
+  ).toBeLessThanOrEqual(2)
+  expect(
+    schedules.every((schedule) => optionCode(schedule)),
+    `${source} should expose dated schedules only`,
+  ).toBe(true)
+  expectDatedScheduleOptions(schedules, source)
 }
 
 const expectLoginShell = async (page: Page, source: string): Promise<void> => {
@@ -520,14 +541,18 @@ const expectLoginShell = async (page: Page, source: string): Promise<void> => {
   await expect(page.locator('.landing-img')).toBeVisible()
 }
 
-const browserLocalIsoToday = async (page: Page): Promise<string> => {
-  return page.evaluate(() => {
-    const date = new Date()
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  })
+const expectLogoutRoundTrip = async (
+  page: Page,
+  source: string,
+  trigger: () => Promise<unknown>,
+): Promise<void> => {
+  const baseOrigin = new URL(E2E_BASE_URL).origin
+
+  await Promise.all([
+    page.waitForURL((url) => url.origin !== baseOrigin, { timeout: 30_000 }),
+    trigger(),
+  ])
+  await expectLoginShell(page, source)
 }
 
 const uniqueRegressionPackageNumber = (): string => {
@@ -622,6 +647,13 @@ const antivirusTestPayloadHex =
 
 const antivirusTestPayload = (): Buffer => Buffer.from(antivirusTestPayloadHex, 'hex')
 
+const antivirusTestPdfPayload = (): Buffer =>
+  Buffer.concat([
+    Buffer.from('%PDF-1.7\n', 'ascii'),
+    antivirusTestPayload(),
+    Buffer.from('\n%%EOF\n', 'ascii'),
+  ])
+
 const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
   {
     name: 'antivirus-test-application-import.xml',
@@ -638,7 +670,7 @@ const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
 const infectedApplicationDocumentPdf = (): RegressionUploadFile => ({
   name: 'antivirus-test-application-upload.pdf',
   mimeType: 'application/pdf',
-  buffer: antivirusTestPayload(),
+  buffer: antivirusTestPdfPayload(),
 })
 
 const adminNavigationSections: Array<{
@@ -1278,7 +1310,7 @@ const firstCurrentScheduleAdvertisingDate = async (page: Page): Promise<string> 
     await getWithAuth(page, '/api/lexis/reports/options'),
   )
   const currentSchedules = asRecordArray(reportOptions.currentSchedules)
-  expectCurrentScheduleOptions(currentSchedules, 'advertising list report generation')
+  expectReportScheduleOptions(currentSchedules, 'advertising list report generation')
 
   const scheduleDate = optionName(currentSchedules.find((schedule) => optionCode(schedule)) ?? {})
   expect(scheduleDate, 'advertising list report generation needs a dated current schedule').toMatch(
@@ -2027,7 +2059,7 @@ test.describe('TEST IDIR admin regression', () => {
       await getWithAuth(page, '/api/lexis/applications/search/options'),
     )
     const currentSchedules = asRecordArray(options.currentSchedules)
-    expectCurrentScheduleOptions(currentSchedules, 'create application list dates')
+    expectApplicationScheduleOptions(currentSchedules, 'create application list dates')
     const nextListDate = optionName(currentSchedules.find((schedule) => optionCode(schedule)) ?? {})
     expect(nextListDate, 'create application should have a next list date option').toMatch(
       isoDatePattern,
@@ -2038,7 +2070,7 @@ test.describe('TEST IDIR admin regression', () => {
       '/provincial/application/create',
       /create provincial application/i,
     )
-    const today = await browserLocalIsoToday(page)
+    const today = formatBusinessIsoDate()
 
     await expect(page.getByRole('combobox', { name: 'Product type' })).toHaveValue(
       'Harvested Timber',
@@ -2267,7 +2299,7 @@ test.describe('TEST IDIR admin regression', () => {
     expect(Array.isArray(provincialOptions.productTypes)).toBe(true)
     expect(Array.isArray(provincialOptions.regions)).toBe(true)
     expectNaturalResourceRegions(provincialOptions.regions, 'provincial application options')
-    expectCurrentScheduleOptions(
+    expectApplicationScheduleOptions(
       provincialOptions.currentSchedules,
       'provincial application list dates',
     )
@@ -2456,7 +2488,7 @@ test.describe('TEST IDIR admin regression', () => {
     expect(Array.isArray(reportOptions.regions)).toBe(true)
     expect(Array.isArray(reportOptions.reportJurisdictions)).toBe(true)
     expectNaturalResourceRegions(reportOptions.regions, 'report options')
-    expectCurrentScheduleOptions(reportOptions.currentSchedules, 'report list dates')
+    expectReportScheduleOptions(reportOptions.currentSchedules, 'report list dates')
 
     const exportSchedules = await readJsonResponse<GenericSearchResponse>(
       await getWithAuth(page, '/api/lexis/admin/schedules'),
@@ -2506,7 +2538,7 @@ test.describe('TEST IDIR admin regression', () => {
       await getWithAuth(page, '/api/lexis/reports/options'),
     )
     const currentSchedules = asRecordArray(reportOptions.currentSchedules)
-    expectCurrentScheduleOptions(currentSchedules, 'report advertising date selector')
+    expectReportScheduleOptions(currentSchedules, 'report advertising date selector')
 
     const datedSchedules = currentSchedules.filter((schedule) => optionCode(schedule))
     const firstScheduleDate = optionName(datedSchedules[0] ?? {})
@@ -2527,7 +2559,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(advertisingDate).toBeVisible()
     await expect(advertisingDate).toHaveValue(firstScheduleDate)
 
-    for (const optionLabel of [...datedSchedules.slice(0, 2).map(optionName), 'Blank']) {
+    for (const optionLabel of datedSchedules.slice(0, 2).map(optionName)) {
       await advertisingDate.click()
       await advertisingDate.fill(optionLabel)
       await expect(page.getByRole('option', { name: optionLabel, exact: true })).toBeVisible()
@@ -3208,15 +3240,15 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(page, '/admin', /administration/i)
-    await page.evaluate((eventName) => {
-      window.dispatchEvent(
-        new CustomEvent(eventName, {
-          detail: { reason: 'idle-timeout' },
-        }),
-      )
-    }, sessionExpiredEventName)
-
-    await expectLoginShell(page, 'Expired IDIR admin session')
+    await expectLogoutRoundTrip(page, 'Expired IDIR admin session', () =>
+      page.evaluate((eventName) => {
+        window.dispatchEvent(
+          new CustomEvent(eventName, {
+            detail: { reason: 'idle-timeout' },
+          }),
+        )
+      }, sessionExpiredEventName),
+    )
   })
 
   test('signs out to the login shell', async () => {
@@ -3231,8 +3263,6 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(openProfilePanel).toBeVisible()
     const signOutButton = openProfilePanel.getByRole('button', { name: /sign out/i })
     await expect(signOutButton).toBeVisible()
-    await signOutButton.click()
-
-    await expectLoginShell(page, 'Logout')
+    await expectLogoutRoundTrip(page, 'Logout', () => signOutButton.click())
   })
 })
