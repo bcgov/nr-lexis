@@ -632,7 +632,7 @@ export default function NotificationsPage() {
                     <div>
                       <dt>Created</dt>
                       <dd>
-                        {formatDateTime(notification.entryTimestamp)} by {notification.entryUserId}
+                        {formatDateTime(notification.createTimestamp)} by {notification.createUser}
                       </dd>
                     </div>
                     <div>

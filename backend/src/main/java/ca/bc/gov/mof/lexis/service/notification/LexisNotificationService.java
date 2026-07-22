@@ -166,8 +166,8 @@ public class LexisNotificationService {
         row.notificationLevel(),
         row.displayStartTimestamp().toLocalDate(),
         row.displayEndTimestamp().toLocalDate(),
-        row.entryUserId(),
-        row.entryTimestamp(),
+        row.createUser(),
+        row.createTimestamp(),
         row.updateUserId(),
         row.updateTimestamp(),
         row.audienceRoles().stream().sorted(Comparator.naturalOrder()).toList());

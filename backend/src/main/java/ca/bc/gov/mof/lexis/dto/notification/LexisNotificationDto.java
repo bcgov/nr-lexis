@@ -11,8 +11,8 @@ public record LexisNotificationDto(
     NotificationLevel notificationLevel,
     LocalDate displayStartDate,
     LocalDate displayEndDate,
-    String entryUserId,
-    LocalDateTime entryTimestamp,
+    String createUser,
+    LocalDateTime createTimestamp,
     String updateUserId,
     LocalDateTime updateTimestamp,
     List<String> audienceRoles) {}

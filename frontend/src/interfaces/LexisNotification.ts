@@ -7,8 +7,8 @@ export type LexisNotification = {
   notificationLevel: NotificationLevel
   displayStartDate: string
   displayEndDate: string
-  entryUserId: string
-  entryTimestamp: string
+  createUser: string
+  createTimestamp: string
   updateUserId: string
   updateTimestamp: string
   audienceRoles: string[]
