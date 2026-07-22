@@ -11,6 +11,7 @@ import {
 } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppNotification } from '@/components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import NotificationEditor from '@/components/NotificationEditor'
 import { hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
@@ -174,6 +175,8 @@ export default function NotificationsPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<NotificationMessage | null>(null)
   const [showRecentUpdateToast, setShowRecentUpdateToast] = useState(false)
+  const [notificationPendingDeletion, setNotificationPendingDeletion] =
+    useState<LexisNotification | null>(null)
 
   const loadNotifications = useCallback(
     async (clearMessage = true) => {
@@ -321,10 +324,6 @@ export default function NotificationsPage() {
   }
 
   const remove = async (notification: LexisNotification): Promise<void> => {
-    if (!window.confirm(`Delete the notification “${notification.title}”?`)) {
-      return
-    }
-
     setSaving(true)
     setMessage(null)
     try {
@@ -345,6 +344,7 @@ export default function NotificationsPage() {
         title: 'Notification could not be deleted',
         subtitle: 'Please try again.',
       })
+      throw new Error('Notification deletion failed.')
     } finally {
       setSaving(false)
     }
@@ -609,7 +609,7 @@ export default function NotificationsPage() {
                         size="sm"
                         renderIcon={TrashCan}
                         disabled={saving}
-                        onClick={() => void remove(notification)}
+                        onClick={() => setNotificationPendingDeletion(notification)}
                       >
                         Delete
                       </Button>
@@ -651,6 +651,24 @@ export default function NotificationsPage() {
           ))}
         </div>
       </section>
+
+      {notificationPendingDeletion && (
+        <ConfirmationModal
+          open
+          title="Delete this notification?"
+          description={
+            <>
+              <strong>{notificationPendingDeletion.title}</strong> will be removed from everyone’s
+              view right away. This can’t be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          danger
+          onConfirm={() => remove(notificationPendingDeletion)}
+          onClose={() => setNotificationPendingDeletion(null)}
+        />
+      )}
     </main>
   )
 }

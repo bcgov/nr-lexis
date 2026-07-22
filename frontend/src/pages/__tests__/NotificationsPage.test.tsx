@@ -1,10 +1,11 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { LexisNotification } from '@/interfaces/LexisNotification'
 import NotificationsPage from '@/pages/Notifications'
 import {
   createNotification,
+  deleteNotification,
   fetchAdminNotifications,
   fetchNotificationAudienceRoles,
   fetchNotifications,
@@ -51,6 +52,7 @@ const notification: LexisNotification = {
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedCreateNotification = vi.mocked(createNotification)
+const mockedDeleteNotification = vi.mocked(deleteNotification)
 const mockedFetchAdminNotifications = vi.mocked(fetchAdminNotifications)
 const mockedFetchNotificationAudienceRoles = vi.mocked(fetchNotificationAudienceRoles)
 const mockedFetchNotifications = vi.mocked(fetchNotifications)
@@ -62,6 +64,7 @@ describe('Notifications page', () => {
     mockedFetchAdminNotifications.mockResolvedValue([notification])
     mockedFetchNotificationAudienceRoles.mockResolvedValue(['LEXIS_ADMIN', 'LEXIS_READ_ONLY'])
     mockedCreateNotification.mockResolvedValue(notification)
+    mockedDeleteNotification.mockResolvedValue()
   })
 
   it('shows only the role-filtered notification view to non-administrators', async () => {
@@ -127,5 +130,26 @@ describe('Notifications page', () => {
 
     expect(screen.getByLabelText('Start date')).toHaveAttribute('readonly')
     expect(screen.getByLabelText('End date')).not.toHaveAttribute('readonly')
+  })
+
+  it('asks an administrator to confirm before deleting a notification', async () => {
+    const user = userEvent.setup()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    await screen.findByText('Winter service update')
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Delete this notification?' })
+    expect(dialog).toHaveTextContent('Winter service update will be removed from everyone’s view')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(mockedDeleteNotification).toHaveBeenCalledWith(notification.id))
   })
 })
