@@ -3,6 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import {
+  clearSessionExpiredLoginNotice,
+  hasSessionExpiredLoginNotice,
+  markSessionExpiredLoginNotice,
   SESSION_EXPIRED_EVENT,
   SESSION_IDLE_TIMEOUT_MS,
   SESSION_IDLE_WARNING_MS,
@@ -82,9 +85,11 @@ describe('AuthProvider logout', () => {
     consoleWarnSpy.mockRestore()
     vi.useRealTimers()
     window.history.replaceState({}, document.title, '/')
+    clearSessionExpiredLoginNotice()
   })
 
   it('signs out of Cognito', async () => {
+    markSessionExpiredLoginNotice()
     renderProbe()
 
     await waitFor(() => {
@@ -99,6 +104,7 @@ describe('AuthProvider logout', () => {
     })
     expect(authMocks.signOut).toHaveBeenCalledWith()
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    expect(hasSessionExpiredLoginNotice()).toBe(false)
   })
 
   it('uses the standard 15 minute idle timeout', () => {
@@ -162,6 +168,7 @@ describe('AuthProvider logout', () => {
     expect(pathnameWhenSignOutStarted).toBe('/')
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(window.location.pathname).toBe('/')
+    expect(hasSessionExpiredLoginNotice()).toBe(true)
   })
 
   it('resets the 15 minute inactivity timer when the user interacts with the page', async () => {
@@ -252,5 +259,6 @@ describe('AuthProvider logout', () => {
     expect(pathnameWhenSignOutStarted).toBe('/')
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(window.location.pathname).toBe('/')
+    expect(hasSessionExpiredLoginNotice()).toBe(false)
   })
 })

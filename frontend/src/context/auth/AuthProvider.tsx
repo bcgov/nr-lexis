@@ -287,7 +287,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         authenticatedSessionRef.current = false
         setCapabilities(DEFAULT_CAPABILITIES)
         setIsLoading(false)
-        markSessionExpiredLoginNotice()
+        if (reason === 'idle-timeout') {
+          markSessionExpiredLoginNotice()
+        } else {
+          clearSessionExpiredLoginNotice()
+        }
         redirectToLoginShell()
 
         if (shouldSignOut) {
@@ -452,6 +456,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   )
 
   const logout = useCallback(async () => {
+    sessionExpiryInFlightRef.current = true
     sessionGenerationRef.current += 1
     refreshPromiseRef.current = null
 

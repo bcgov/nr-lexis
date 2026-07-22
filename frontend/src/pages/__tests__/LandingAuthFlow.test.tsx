@@ -78,6 +78,12 @@ describe('Landing auth flow smoke', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('does not show a signed-out notice on the default login page', () => {
+    renderPage()
+
+    expect(screen.queryByText('You’ve been logged out')).not.toBeInTheDocument()
+  })
+
   it('shows the signed-out notice after an automatic session expiry', () => {
     markSessionExpiredLoginNotice()
 
