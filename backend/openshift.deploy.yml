@@ -106,6 +106,9 @@ parameters:
   - name: KEYCLOAK_ISSUER_URI
     description: Optional Keycloak realm issuer URI for machine-to-machine service clients
     value: ""
+  - name: ALLOWED_ORIGINS
+    description: Comma-separated browser origins allowed to call the backend
+    value: https://openapi.apps.gov.bc.ca
   - name: IDENTITY_LOOKUP_BASE_URL
     required: true
   - name: DATABASE_HOST
@@ -227,6 +230,8 @@ objects:
                   value: ${COGNITO_USERINFO_URI}
                 - name: KEYCLOAK_ISSUER_URI
                   value: ${KEYCLOAK_ISSUER_URI}
+                - name: ALLOWED_ORIGINS
+                  value: ${ALLOWED_ORIGINS}
                 - name: IDENTITY_LOOKUP_BASE_URL
                   value: ${IDENTITY_LOOKUP_BASE_URL}
                 - name: DATABASE_HOST
