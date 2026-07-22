@@ -24,7 +24,7 @@ public class OracleNotificationRepository {
       SELECT n.LEXIS_NOTIFICATION_ID,
              n.TITLE,
              n.CONTENT_HTML,
-             n.NOTIFICATION_LEVEL,
+             n.LEXIS_NOTIFICATION_LEVEL_CODE,
              n.PUBLISH_TIMESTAMP,
              n.DISPLAY_END_TIMESTAMP,
              n.CREATE_USER,
@@ -39,7 +39,7 @@ public class OracleNotificationRepository {
 
   private static final String ORDER_BY =
       """
-       ORDER BY CASE n.NOTIFICATION_LEVEL
+       ORDER BY CASE n.LEXIS_NOTIFICATION_LEVEL_CODE
                   WHEN 'CRITICAL' THEN 1
                   WHEN 'WARNING' THEN 2
                   ELSE 3
@@ -113,7 +113,7 @@ public class OracleNotificationRepository {
           LEXIS_NOTIFICATION_ID,
           TITLE,
           CONTENT_HTML,
-          NOTIFICATION_LEVEL,
+          LEXIS_NOTIFICATION_LEVEL_CODE,
           PUBLISH_TIMESTAMP,
           DISPLAY_END_TIMESTAMP,
           CREATE_USER,
@@ -145,7 +145,7 @@ public class OracleNotificationRepository {
             UPDATE THE.LEXIS_NOTIFICATION
                SET TITLE = ?,
                    CONTENT_HTML = ?,
-                   NOTIFICATION_LEVEL = ?,
+                   LEXIS_NOTIFICATION_LEVEL_CODE = ?,
                    DISPLAY_END_TIMESTAMP = ?,
                    UPDATE_USERID = ?,
                    UPDATE_TIMESTAMP = SYSTIMESTAMP
@@ -213,7 +213,7 @@ public class OracleNotificationRepository {
                     rs.getLong("LEXIS_NOTIFICATION_ID"),
                     rs.getString("TITLE"),
                     rs.getString("CONTENT_HTML"),
-                    NotificationLevel.valueOf(rs.getString("NOTIFICATION_LEVEL")),
+                    NotificationLevel.valueOf(rs.getString("LEXIS_NOTIFICATION_LEVEL_CODE")),
                     toLocalDateTime(rs.getTimestamp("PUBLISH_TIMESTAMP")),
                     toLocalDateTime(rs.getTimestamp("DISPLAY_END_TIMESTAMP")),
                     rs.getString("CREATE_USER"),

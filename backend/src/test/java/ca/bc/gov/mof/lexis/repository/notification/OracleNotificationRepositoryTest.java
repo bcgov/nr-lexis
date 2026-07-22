@@ -42,7 +42,7 @@ class OracleNotificationRepositoryTest {
     assertThat(sqlCaptor.getValue())
         .contains("audience_filter.ROLE_NAME IN (\n?")
         .contains("AND n.DISPLAY_END_TIMESTAMP >= SYSTIMESTAMP")
-        .contains("ORDER BY CASE n.NOTIFICATION_LEVEL");
+        .contains("ORDER BY CASE n.LEXIS_NOTIFICATION_LEVEL_CODE");
   }
 
   @Test
