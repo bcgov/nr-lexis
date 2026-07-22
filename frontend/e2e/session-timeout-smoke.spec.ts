@@ -93,6 +93,7 @@ test.describe('session timeout regression', () => {
             button.left >= containerBounds.left - 1 && button.right <= containerBounds.right + 1,
         ),
         buttonWidths: buttonBounds.map((button) => button.width),
+        buttonBorderRadii: buttons.map((button) => getComputedStyle(button).borderRadius),
         containerWidth: containerBounds.width,
       }
     })
@@ -100,6 +101,7 @@ test.describe('session timeout regression', () => {
     expect(layout.footerWithinContainer).toBe(true)
     expect(layout.buttonsWithinContainer).toBe(true)
     expect(layout.buttonWidths.every((width) => width < layout.containerWidth / 2)).toBe(true)
+    expect(layout.buttonBorderRadii).toEqual(['4px', '4px'])
 
     await page.clock.fastForward(SESSION_IDLE_WARNING_DURATION_MS - URGENT_COUNTDOWN_DURATION_MS)
 

@@ -60,6 +60,7 @@
   min-inline-size: 9.5rem;
   padding: 0 1rem;
   align-items: center;
+  border-radius: 0.25rem;
 }
 
 .lexis-session-timeout-warning .cds--modal-footer .cds--btn--secondary {
