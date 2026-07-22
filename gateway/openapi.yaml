@@ -210,7 +210,7 @@ components:
             type: string
           examples:
             federalSubmission:
-              summary: Synthetic federal ESF submission
+              summary: Synthetic XML shape; replace environment reference data before live validation
               externalValue: https://raw.githubusercontent.com/bcgov/nr-lexis/main/backend/src/test/resources/lexis-upload-samples/pass-federal-application.xml
   responses:
     BadRequest:

@@ -60,3 +60,8 @@ Environment verification covers:
 - missing scope returns `403`;
 - valid and invalid XML produce the expected validation results; and
 - a controlled valid submission persists the expected federal records.
+
+The reusable non-mutating TEST procedure is available in
+[`smoke-test/README.md`](smoke-test/README.md). It accepts runtime credentials and a live-valid XML
+fixture through ignored local configuration; no credentials or environment reference data are
+stored in the repository.

@@ -123,10 +123,15 @@ LEXIS validates the supplied application date and persists the service receipt d
 schedule is resolved from the biweekly list date, with the next available schedule used when an
 exact date is unavailable.
 
-Synthetic fixtures are available in `backend/src/test/resources/lexis-upload-samples/`:
+Synthetic XML-shape fixtures are available in `backend/src/test/resources/lexis-upload-samples/`:
 
 - `pass-federal-application.xml`
 - `fail-federal-jurisdiction.xml`
+
+Their client, location and timber-mark values are placeholders for automated tests and are not
+guaranteed to pass live environment reference-data validation. The non-mutating TEST procedure in
+[`gateway/smoke-test/README.md`](../gateway/smoke-test/README.md) accepts an operator-owned
+live-valid fixture without storing that data in the repository.
 
 ## Request Contract
 
