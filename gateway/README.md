@@ -22,8 +22,8 @@ application.
 
 [`openapi.yaml`](openapi.yaml) is the machine-readable external contract for the two gateway
 operations. It can be loaded into Swagger UI, Swagger Editor, Postman, or client-generation tools.
-Set the server URL to the assigned environment gateway and authorize with a NEXCOL runtime-client
-access token. The deployment provisioning client is not a calling credential.
+Select an available environment gateway from the OpenAPI `servers` list and authorize with a
+NEXCOL runtime-client access token. The deployment provisioning client is not a calling credential.
 
 It can be rendered in the
 [BC Government OpenAPI console](https://openapi.apps.gov.bc.ca?url=https://raw.githubusercontent.com/bcgov/nr-lexis/main/gateway/openapi.yaml).
@@ -35,6 +35,16 @@ The application deployment does not host Swagger UI or `/v3/api-docs`. The contr
 locally as soon as the file is checked out, from GitHub after the branch is pushed, and through the
 linked OpenAPI console after it is merged to `main`. Publishing the product and documentation to
 the API Directory is a separate API Services Portal action.
+
+### Environment endpoints
+
+| Environment | Gateway base URL | Status |
+|---|---|---|
+| TEST | `https://nr-lexis-nexcol-test-api-gov-bc-ca.test.api.gov.bc.ca` | Available |
+| PROD | `https://nr-lexis-nexcol.api.gov.bc.ca` | Projected; available after production provisioning |
+
+The PROD hostname follows the API Services production vanity-URL convention and is listed so
+consumers can prepare environment configuration before production provisioning is complete.
 
 ## Configuration
 
