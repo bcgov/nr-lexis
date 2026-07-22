@@ -147,8 +147,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        Keycloak access token obtained with the client-credentials grant. The token must
-        contain `lexis:federal-submission:submit` in its `scope` claim.
+        Keycloak access token obtained with the dedicated NEXCOL runtime client's
+        client-credentials grant. The deployment provisioning client is not a calling
+        credential. The token must contain `lexis:federal-submission:submit` in its
+        `scope` claim.
   parameters:
     UserReference:
       name: userReference

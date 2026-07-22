@@ -22,13 +22,19 @@ application.
 
 [`openapi.yaml`](openapi.yaml) is the machine-readable external contract for the two gateway
 operations. It can be loaded into Swagger UI, Swagger Editor, Postman, or client-generation tools.
-Set the server URL to the assigned environment gateway and authorize with a Keycloak access token.
+Set the server URL to the assigned environment gateway and authorize with a NEXCOL runtime-client
+access token. The deployment provisioning client is not a calling credential.
 
-After the specification is merged, it can be rendered in the
+It can be rendered in the
 [BC Government OpenAPI console](https://openapi.apps.gov.bc.ca?url=https://raw.githubusercontent.com/bcgov/nr-lexis/main/gateway/openapi.yaml).
 
 The specification is maintained separately from generated backend documentation because the LEXIS
 backend contains additional UI and administrative endpoints that are not part of the NEXCOL API.
+
+The application deployment does not host Swagger UI or `/v3/api-docs`. The contract is available
+locally as soon as the file is checked out, from GitHub after the branch is pushed, and through the
+linked OpenAPI console after it is merged to `main`. Publishing the product and documentation to
+the API Directory is a separate API Services Portal action.
 
 ## Configuration
 
@@ -42,6 +48,17 @@ Gateway configuration is maintained per environment through API Services tooling
 
 TEST and PROD use independent gateway and Keycloak client configurations. DEV uses ephemeral
 application deployments and has no long-lived NEXCOL gateway.
+
+## Backend ingress
+
+The current gateway forwards to the authenticated backend Route. Direct Route requests still need
+a valid token and the required scope, but they bypass gateway traffic controls and metrics.
+
+The target gateway-only topology forwards from the API Services data plane to the LEXIS OpenShift
+Service, permits that data plane in NetworkPolicy, and then removes the public backend Route. The
+LEXIS frontend already reaches the backend through its internal Service. Keycloak client/scope
+provisioning and backend JWKS retrieval are outbound flows, so this ingress change does not affect
+them. Complete and verify the Service connection before removing the Route.
 
 The integration flow and XML contract are documented in
 [`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).
