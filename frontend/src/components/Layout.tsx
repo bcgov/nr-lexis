@@ -34,6 +34,7 @@ import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
+import { fetchNotifications } from '@/service/notification-service'
 
 export type LayoutProps = {
   children: ReactNode
@@ -394,12 +395,14 @@ function Layout({ children }: LayoutProps) {
   const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(readSideNavCollapsedPreference)
   const [isMobileViewport, setIsMobileViewport] = useState(isMobileNavigationViewport)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [hasActiveNotifications, setHasActiveNotifications] = useState(false)
   const previousPathRef = useRef(location.pathname)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(
     readCollapsedSectionsPreference,
   )
   const isDarkTheme = theme === 'g100'
   const isDesktopSideNavCollapsed = isSideNavCollapsed && !isMobileViewport
+  const notificationAudienceKey = `${capabilities.principal ?? ''}:${capabilities.roles?.join('|') ?? ''}`
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
     [capabilities.principal],
@@ -576,6 +579,35 @@ function Layout({ children }: LayoutProps) {
       document.removeEventListener('pointerdown', handlePointerDown)
     }
   }, [closeProfile, isProfileOpen])
+
+  useEffect(() => {
+    let isCurrent = true
+
+    const loadNotificationIndicator = async (): Promise<void> => {
+      if (!capabilities.authenticated || !capabilities.principal) {
+        if (isCurrent) {
+          setHasActiveNotifications(false)
+        }
+        return
+      }
+
+      try {
+        const notifications = await fetchNotifications()
+        if (isCurrent) {
+          setHasActiveNotifications(notifications.length > 0)
+        }
+      } catch {
+        if (isCurrent) {
+          setHasActiveNotifications(false)
+        }
+      }
+    }
+
+    void loadNotificationIndicator()
+    return () => {
+      isCurrent = false
+    }
+  }, [capabilities.authenticated, capabilities.principal, notificationAudienceKey])
 
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsed))
@@ -766,6 +798,13 @@ function Layout({ children }: LayoutProps) {
                     <ul id={sectionListId} className="csp-side-nav__section-list">
                       {section.links.map((link) => {
                         const LinkIcon = link.icon
+                        const showNotificationIndicator =
+                          link.to === '/notifications' && hasActiveNotifications
+                        const accessibleLabel = showNotificationIndicator
+                          ? 'Notifications, active updates available'
+                          : isDesktopSideNavCollapsed
+                            ? link.label
+                            : undefined
                         return (
                           <li key={link.to}>
                             <NavLink
@@ -777,7 +816,7 @@ function Layout({ children }: LayoutProps) {
                                   : 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link'
                               }
                               aria-current={location.pathname === link.to ? 'page' : undefined}
-                              aria-label={isDesktopSideNavCollapsed ? link.label : undefined}
+                              aria-label={accessibleLabel}
                               title={isDesktopSideNavCollapsed ? link.label : undefined}
                               data-label={link.label}
                               onClick={() => closeMobileNavigation()}
@@ -787,6 +826,12 @@ function Layout({ children }: LayoutProps) {
                                 aria-hidden="true"
                               >
                                 <LinkIcon size={20} />
+                                {showNotificationIndicator && (
+                                  <span
+                                    className="csp-side-nav__notification-indicator"
+                                    aria-hidden="true"
+                                  />
+                                )}
                               </span>
                               <span className="cds--side-nav__link-text csp-side-nav__link-text">
                                 {link.label}

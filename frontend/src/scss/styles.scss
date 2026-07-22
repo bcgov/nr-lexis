@@ -585,6 +585,7 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   height: 20px;
   justify-content: center;
   margin-right: 16px;
+  position: relative;
   width: 20px;
 }
 
@@ -593,6 +594,17 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   fill: currentcolor;
   height: 20px;
   width: 20px;
+}
+
+.csp-side-nav__notification-indicator {
+  position: absolute;
+  inset-block-start: -0.125rem;
+  inset-inline-end: -0.125rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 2px solid var(--csp-layer-01);
+  border-radius: 50%;
+  background-color: var(--csp-interactive);
 }
 
 .csp-side-nav__link-text {
