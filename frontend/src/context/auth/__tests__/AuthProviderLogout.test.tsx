@@ -1,8 +1,12 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
-import { SESSION_EXPIRED_EVENT, SESSION_IDLE_TIMEOUT_MS } from '@/context/auth/session-expiry'
+import {
+  SESSION_EXPIRED_EVENT,
+  SESSION_IDLE_TIMEOUT_MS,
+  SESSION_IDLE_WARNING_MS,
+} from '@/context/auth/session-expiry'
 import { useAuth } from '@/context/auth/useAuth'
 import { fetchSessionCapabilities } from '@/service/session-service'
 
@@ -99,6 +103,7 @@ describe('AuthProvider logout', () => {
 
   it('uses the standard 15 minute idle timeout', () => {
     expect(SESSION_IDLE_TIMEOUT_MS).toBe(15 * 60 * 1000)
+    expect(SESSION_IDLE_WARNING_MS).toBe(5 * 60 * 1000)
   })
 
   it('clears local auth state after Cognito signout fails', async () => {
@@ -138,7 +143,14 @@ describe('AuthProvider logout', () => {
     window.dispatchEvent(new Event('keydown'))
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - 1)
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS)
+    })
+    expect(
+      screen.getByRole('alertdialog', { name: 'You’re about to be logged out' }),
+    ).toBeInTheDocument()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_WARNING_MS - 1)
     })
     expect(authMocks.signOut).not.toHaveBeenCalled()
 
@@ -164,20 +176,52 @@ describe('AuthProvider logout', () => {
     window.dispatchEvent(new Event('keydown'))
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - 1)
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS - 1)
     })
     window.dispatchEvent(new KeyboardEvent('keydown'))
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
     })
+    expect(document.querySelector('.lexis-session-timeout-warning')).not.toHaveClass('is-visible')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - 2)
+    })
     expect(authMocks.signOut).not.toHaveBeenCalled()
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS)
+      await vi.advanceTimersByTimeAsync(1)
     })
 
     expect(authMocks.signOut).toHaveBeenCalledTimes(1)
     expect(window.location.pathname).toBe('/')
+  })
+
+  it('extends the idle session only when the user chooses to stay logged in', async () => {
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('keydown'))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS)
+    })
+
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stay logged in' }))
+    expect(document.querySelector('.lexis-session-timeout-warning')).not.toHaveClass('is-visible')
+    expect(screen.getByText('You’re still logged in')).toBeInTheDocument()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS)
+    })
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
   })
 
   it.each([

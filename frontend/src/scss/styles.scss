@@ -1040,6 +1040,15 @@ legend.cds--label {
   line-height: 1.5;
 }
 
+.landing-session-expired-notification {
+  max-width: 56rem;
+  margin-top: 2.5rem;
+}
+
+.landing-session-expired-notification + .landing-actions {
+  margin-top: 2rem;
+}
+
 .landing-actions {
   display: flex;
   flex-wrap: wrap;

@@ -3,6 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  clearSessionExpiredLoginNotice,
+  markSessionExpiredLoginNotice,
+} from '@/context/auth/session-expiry'
 import LandingPage from '@/pages/Landing'
 import {
   createLoggedOutTestAuthContext,
@@ -39,6 +43,7 @@ const renderPage = () => {
 describe('Landing auth flow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearSessionExpiredLoginNotice()
 
     mockedUseAuth.mockReturnValue(
       createLoggedOutTestAuthContext({
@@ -71,6 +76,19 @@ describe('Landing auth flow smoke', () => {
     expect(
       screen.queryByRole('button', { name: 'Continue to Application' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('shows the signed-out notice after an automatic session expiry', () => {
+    markSessionExpiredLoginNotice()
+
+    renderPage()
+
+    expect(screen.getByText('You’ve been logged out')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Your session expired for security reasons and any unsaved changes were lost. Log in again to continue.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('runs Business BCeID login action from the landing entry button', async () => {
