@@ -191,7 +191,6 @@ jobs:
           overwrite: true
           parameters:
             -p ZONE="${{ inputs.target }}"
-            -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p ROLLOUT_TRIGGER="${{ github.run_id }}-${{ github.run_attempt }}"
@@ -204,6 +203,7 @@ jobs:
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
             -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
             -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
+            -p ALLOWED_ORIGINS="${{ vars.ALLOWED_ORIGINS || 'https://openapi.apps.gov.bc.ca' }}"
             -p IDENTITY_LOOKUP_BASE_URL="${{ vars.IDENTITY_LOOKUP_BASE_URL }}"
             -p DATABASE_HOST="$DATABASE_HOST"
             -p DATABASE_SERVICE_NAME="$DATABASE_SERVICE_NAME"

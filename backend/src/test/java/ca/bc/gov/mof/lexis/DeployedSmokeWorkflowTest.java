@@ -10,24 +10,21 @@ import org.junit.jupiter.api.Test;
 class DeployedSmokeWorkflowTest {
 
   @Test
-  void deployedSmokeShouldRequireLiveOracleReadinessAndFrontendProxyAuthentication()
-      throws IOException {
+  void deployedSmokeShouldVerifyTheBackendThroughTheFrontendProxy() throws IOException {
     String workflow = read(".github/workflows/reusable-tests.yml");
-    int liveGate = workflow.indexOf("- name: Verify live backend readiness and frontend proxy");
+    int liveGate = workflow.indexOf("- name: Verify frontend proxy to backend");
     int playwright = workflow.indexOf("- name: Run basic Playwright smoke suite");
 
     assertThat(workflow)
-        .contains(
-            "BACKEND_PREFIX: ${{ github.event.repository.name }}-api-"
-                + "${{ inputs.slot || inputs.target }}")
         .contains("for attempt in $(seq 1 24)")
         .contains("--connect-timeout 5")
         .contains("--max-time 15")
-        .contains("${BACKEND_BASE_URL}/actuator/health/readiness")
-        .contains("if [ \"${readiness_status}\" != \"200\" ]")
         .contains("${E2E_BASE_URL}/api/lexis/session/capabilities")
         .contains("if [ \"${capabilities_status}\" != \"401\" ]")
         .doesNotContain(
+            "BACKEND_PREFIX:",
+            "BACKEND_BASE_URL",
+            "/actuator/health/readiness",
             "capabilities_status} != \"404\"",
             "capabilities_status} != \"500\"",
             "capabilities_status} != \"200\"");

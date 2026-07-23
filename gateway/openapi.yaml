@@ -1,11 +1,14 @@
 openapi: 3.0.3
 info:
   title: LEXIS NEXCOL Federal Submission API
-  version: 1.0.0
+  version: 1.0.1
   description: |
     Machine-to-machine API for validating and submitting federal LEXIS XML through the
     API Services Gateway. Both operations require a Keycloak access token containing
     the `lexis:federal-submission:submit` scope.
+
+    Use **Authorize** with the raw `access_token`. Environment token endpoints and the
+    client-credentials request are documented in the authorization dialog.
   contact:
     name: LEXIS Development Team
   license:
@@ -145,10 +148,29 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        Keycloak access token obtained with the dedicated NEXCOL runtime client's
-        client-credentials grant. The deployment provisioning client is not a calling
-        credential. The token must contain `lexis:federal-submission:submit` in its
-        `scope` claim.
+        Obtain a short-lived access token outside Swagger with the dedicated NEXCOL
+        runtime client for the selected environment:
+
+        - TEST client ID: `lexis-nexcol-test`
+        - TEST token endpoint: `https://test.loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token`
+        - PROD client ID: `lexis-nexcol-prod`
+        - PROD token endpoint: `https://loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token`
+
+        Send an `application/x-www-form-urlencoded` `POST` to the token endpoint with
+        `grant_type=client_credentials`, `client_id`, and `client_secret`:
+
+        ```bash
+        curl -fsS -X POST "${TOKEN_URL}" \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          --data-urlencode "grant_type=client_credentials" \
+          --data-urlencode "client_id=${CLIENT_ID}" \
+          --data-urlencode "client_secret=${CLIENT_SECRET}"
+        ```
+
+        Paste only the response's raw `access_token` into this authorization field;
+        Swagger adds the `Bearer` prefix. The token must contain
+        `lexis:federal-submission:submit` in its `scope` claim. The deployment
+        provisioning client is not a calling credential.
   parameters:
     UserReference:
       name: userReference
@@ -202,14 +224,75 @@ components:
       description: |
         Legacy ESF submission envelope containing one LEXIS schema-version-2
         `LexisSubmission`, or the inner `LexisSubmission` XML document.
+        The example is synthetic; replace environment reference data before live validation.
       content:
         application/xml:
+          # Swagger UI needs XML root metadata to preserve the raw request example.
           schema:
-            type: string
-          examples:
-            federalSubmission:
-              summary: Synthetic XML shape; replace environment reference data before live validation
-              externalValue: https://raw.githubusercontent.com/bcgov/nr-lexis/main/backend/src/test/resources/lexis-upload-samples/pass-federal-application.xml
+            type: object
+            additionalProperties: true
+            xml:
+              name: ESFSubmission
+          example: |
+                <?xml version="1.0" encoding="UTF-8"?>
+                <esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
+                  <esf:submissionContent>
+                    <lexis:LexisSubmission>
+                      <lexis:applicant>
+                        <lexis:applicantDetails>
+                          <lexis:eicbNumber>123456</lexis:eicbNumber>
+                          <lexis:clientNumber>99887766</lexis:clientNumber>
+                          <lexis:clientLocnCode>99</lexis:clientLocnCode>
+                          <lexis:name>Sample Federal Applicant Ltd.</lexis:name>
+                          <lexis:address>555 Government Street</lexis:address>
+                          <lexis:city>Vancouver</lexis:city>
+                          <lexis:provinceState>BC</lexis:provinceState>
+                          <lexis:postalZipCode>V8V8V8</lexis:postalZipCode>
+                          <lexis:country>CA</lexis:country>
+                          <lexis:telephoneNumber>2505551212</lexis:telephoneNumber>
+                        </lexis:applicantDetails>
+                        <lexis:applicantContact>
+                          <lexis:contactSurname>SAMPLE</lexis:contactSurname>
+                          <lexis:contactFirstname>CONTACT</lexis:contactFirstname>
+                          <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>
+                        </lexis:applicantContact>
+                        <lexis:declarationCanadianResident>true</lexis:declarationCanadianResident>
+                        <lexis:declarationSubmittedOffersPast90Days>false</lexis:declarationSubmittedOffersPast90Days>
+                      </lexis:applicant>
+                      <lexis:applicationDetail>
+                        <lexis:jurisdictionCode>F</lexis:jurisdictionCode>
+                        <lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>
+                        <lexis:applStatusCode>A</lexis:applStatusCode>
+                        <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
+                        <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
+                        <lexis:re-advertisement>false</lexis:re-advertisement>
+                        <lexis:officeUseOnly>
+                          <lexis:internalOfficeUseRefId>700123</lexis:internalOfficeUseRefId>
+                          <lexis:internalOfficeUseApplicationDate>2026-01-10</lexis:internalOfficeUseApplicationDate>
+                          <lexis:internalOfficeUseBiWeeklyListDate>2026-01-16</lexis:internalOfficeUseBiWeeklyListDate>
+                          <lexis:internalOfficeUseApplicantUserid>NEXCOL</lexis:internalOfficeUseApplicantUserid>
+                          <lexis:internalOfficeUseLanguage>E</lexis:internalOfficeUseLanguage>
+                        </lexis:officeUseOnly>
+                      </lexis:applicationDetail>
+                      <lexis:productDetail>
+                        <lexis:productTypeCode>H</lexis:productTypeCode>
+                        <lexis:boomNumber>FED26-700123</lexis:boomNumber>
+                        <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+                        <lexis:productLocation>Generic Federal Sample Location</lexis:productLocation>
+                        <lexis:ageClass>S</lexis:ageClass>
+                        <lexis:avgLength>6.7</lexis:avgLength>
+                        <lexis:avgDiameter>12.8</lexis:avgDiameter>
+                        <lexis:harvestedTimber>
+                          <lexis:timberMark>ZZ999</lexis:timberMark>
+                          <lexis:numberOfPieces>321</lexis:numberOfPieces>
+                          <lexis:species>HE</lexis:species>
+                          <lexis:grade>H</lexis:grade>
+                          <lexis:quantityVolume>123</lexis:quantityVolume>
+                        </lexis:harvestedTimber>
+                      </lexis:productDetail>
+                    </lexis:LexisSubmission>
+                  </esf:submissionContent>
+                </esf:ESFSubmission>
   responses:
     BadRequest:
       description: Required request metadata or the XML request body is missing or malformed.

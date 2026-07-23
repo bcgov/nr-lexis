@@ -3,7 +3,7 @@
 The gateway is the external entry point for NEXCOL federal validation and submission traffic.
 
 ```text
-NEXCOL -> Keycloak token -> API gateway -> LEXIS backend
+NEXCOL -> Keycloak token -> API gateway -> OpenShift Service -> LEXIS backend
 ```
 
 ## Responsibilities
@@ -48,16 +48,24 @@ consumers can prepare environment configuration before production provisioning i
 
 ## Configuration
 
-Gateway configuration is maintained per environment through API Services tooling. It defines:
+[`nr-lexis-nexcol-test.kong.yaml`](nr-lexis-nexcol-test.kong.yaml) is the non-secret declarative
+configuration for the TEST gateway. It defines:
 
-- the environment-specific LEXIS upstream;
+- the cluster-local `nr-lexis-backend-test.da5fad-test.svc:8080` upstream;
 - validation and submission routes;
 - the trusted Keycloak issuer;
 - the `lexis:federal-submission:submit` OAuth scope; and
-- an optional dedicated audience.
+- exact-origin Swagger CORS behavior.
 
-TEST and PROD use independent gateway and Keycloak client configurations. DEV uses ephemeral
-application deployments and has no long-lived NEXCOL gateway.
+The gateway data plane and LEXIS run on the Gold cluster but in different namespaces. The backend
+NetworkPolicy admits the APS Gold gateway namespace (`name=b8840c`) only when its `environment`
+label matches the LEXIS deployment zone. The backend template declares no public Route and does not
+admit the OpenShift ingress router, so a Route left by an earlier `oc apply` cannot reach the pods.
+The public frontend Route remains available for interactive LEXIS traffic, but Caddy returns `404`
+for the two NEXCOL-only paths instead of proxying them.
+
+DEV uses ephemeral application deployments and has no long-lived NEXCOL gateway. Add a separate
+PROD gateway configuration only when the PROD LEXIS deployment is provisioned.
 
 The integration flow and XML contract are documented in
 [`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).

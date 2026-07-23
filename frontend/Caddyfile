@@ -30,6 +30,9 @@
 		}
 	}
 	rewrite @spa_router {http.matchers.file.relative}
+	# NEXCOL machine endpoints are exposed only by the API gateway.
+	@nexcol_api path /api/lexis/federal/submissions /api/lexis/federal/submissions/*
+	respond @nexcol_api 404
 	# Proxy requests to API service
 	reverse_proxy /api* {$BACKEND_URL} {
 		header_up Host {http.reverse_proxy.upstream.hostport}

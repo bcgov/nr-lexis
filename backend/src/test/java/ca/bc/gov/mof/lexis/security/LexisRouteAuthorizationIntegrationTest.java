@@ -43,7 +43,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
       "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
       "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json",
       "spring.profiles.active=stub-reports,stub-services",
-      "ALLOWED_ORIGINS=http://localhost:3000"
+      "ALLOWED_ORIGINS=http://localhost:3000,https://openapi.apps.gov.bc.ca"
     })
 @AutoConfigureMockMvc
 class LexisRouteAuthorizationIntegrationTest {
@@ -433,6 +433,38 @@ class LexisRouteAuthorizationIntegrationTest {
                 .header("Access-Control-Request-Headers", "Authorization"))
         .andExpect(status().isOk())
         .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+        .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+  }
+
+  @Test
+  void federalSubmissionPreflightShouldAllowOpenApiViewer() throws Exception {
+    mockMvc
+        .perform(
+            options("/api/lexis/federal/submissions/validation")
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
+                .header("Access-Control-Request-Method", "POST")
+                .header(
+                    "Access-Control-Request-Headers",
+                    "Authorization, Content-Type, X-Request-ID, X-Source-System"))
+        .andExpect(status().isOk())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"))
+        .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+  }
+
+  @Test
+  void federalCreateSubmissionPreflightShouldAllowOpenApiViewer() throws Exception {
+    mockMvc
+        .perform(
+            options("/api/lexis/federal/submissions")
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
+                .header("Access-Control-Request-Method", "POST")
+                .header(
+                    "Access-Control-Request-Headers",
+                    "Authorization, Content-Type, X-Idempotency-Key, X-Request-ID, X-Source-System"))
+        .andExpect(status().isOk())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"))
         .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
   }
 
@@ -1882,10 +1914,13 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("userReference", "FED-REF-1")
                 .param("originalFileName", "federal-submission.xml")
                 .contentType(MediaType.APPLICATION_XML)
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
                 .header("X-Idempotency-Key", "AUTHORIZATION-INTEGRATION-2")
                 .content("<xml />")
                 .with(federalUploadScopeJwt()))
-        .andExpect(status().isUnprocessableEntity());
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"));
   }
 
   @Test

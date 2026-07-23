@@ -131,6 +131,23 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
+  void openApiViewerOriginShouldReachTheBackendThroughDeploymentConfiguration()
+      throws IOException {
+    String deployment =
+        Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
+    String workflow =
+        Files.readString(resolve(Path.of(".github", "workflows", "reusable-deploy.yml")));
+
+    assertThat(deployment)
+        .contains("- name: ALLOWED_ORIGINS")
+        .contains("value: ${ALLOWED_ORIGINS}");
+    assertThat(workflow)
+        .contains(
+            "-p ALLOWED_ORIGINS=\"${{ vars.ALLOWED_ORIGINS"
+                + " || 'https://openapi.apps.gov.bc.ca' }}\"");
+  }
+
+  @Test
   void expirySchedulerShouldUseOracleShedLock() throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
@@ -218,7 +235,7 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void edgeTerminatedHttpBackendShouldNotReceiveServingCertificateSecret() throws IOException {
+  void clusterLocalHttpBackendShouldNotReceiveServingCertificateSecret() throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
     String deployment =
@@ -228,9 +245,11 @@ class BackendRuntimeConfigTest {
         .contains("server:\n  port: 8080")
         .doesNotContain("server.ssl", "key-store:");
     assertThat(deployment)
+        .contains("name: ${NAME}-backend-${ZONE}")
         .contains("port: 8080")
-        .contains("termination: edge")
         .doesNotContain(
+            "kind: Route",
+            "termination: edge",
             "service.alpha.openshift.io/serving-cert-secret-name",
             "- name: tls-certs",
             "mountPath: /etc/tls-certs",

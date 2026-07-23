@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 class GoldOpenShiftConfigurationTest {
 
   private static final String GOLD_APPS = "apps.gold.devops.gov.bc.ca";
+
   @Test
   void deployAndCleanupJobsShouldUseConfiguredOpenShiftServer() throws IOException {
     String deploy = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
@@ -34,14 +35,19 @@ class GoldOpenShiftConfigurationTest {
   }
 
   @Test
-  void applicationRoutesShouldUseGold() throws IOException {
+  void frontendRouteAndInternalBackendShouldUseGoldTopology() throws IOException {
     String backend = Files.readString(resolve("backend/openshift.deploy.yml"));
     String frontend = Files.readString(resolve("frontend/openshift.deploy.yml"));
     String workflows = readWorkflowFiles();
 
     assertThat(backend)
-        .contains("value: " + GOLD_APPS)
-        .doesNotContain("api.silver.devops.gov.bc.ca");
+        .contains("name: ${NAME}-backend-${ZONE}")
+        .contains("environment: ${ZONE}\n                  name: b8840c")
+        .doesNotContain(
+            "kind: Route",
+            "network.openshift.io/policy-group: ingress",
+            "api.silver.devops.gov.bc.ca",
+            GOLD_APPS);
     assertThat(frontend).contains("value: " + GOLD_APPS).doesNotContain("silver.devops.gov.bc.ca");
     assertThat(workflows)
         .contains(GOLD_APPS)
