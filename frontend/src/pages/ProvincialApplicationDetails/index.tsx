@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Accordion,
-  AccordionItem,
   Button,
   Column,
   DismissibleTag,
@@ -3722,6 +3720,18 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-documents"
                       >
                         <h2 className="detail-tile-title">Documents</h2>
+                        {canAddApplicationDocuments && (
+                          <DetailDocumentUploadPanel
+                            key={`application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
+                            workflowType="application"
+                            targetNumber={String(detail.applicationNumber ?? '')}
+                            inputId="applicationDocumentUpload"
+                            disabled={!detail.applicationNumber}
+                            onDirtyChange={setDocumentUploadDirty}
+                            onBusyChange={setDocumentUploadBusy}
+                            onUploadComplete={refreshApplicationDocuments}
+                          />
+                        )}
                         {!!showDocumentUploadUnavailableMessage &&
                           canUploadApplicationDocuments && (
                             <AppNotification
@@ -3829,29 +3839,6 @@ const ProvincialApplicationDetailsPage = () => {
                               </Table>
                             </TableFrame>
                           </section>
-                        )}
-                        {canAddApplicationDocuments && (
-                          <Accordion className="application-documents-upload-accordion">
-                            <AccordionItem
-                              title="Upload new documents"
-                              open={
-                                !hasApplicationDocuments ||
-                                documentUploadDirty ||
-                                documentUploadBusy
-                              }
-                            >
-                              <DetailDocumentUploadPanel
-                                key={`application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
-                                workflowType="application"
-                                targetNumber={String(detail.applicationNumber ?? '')}
-                                inputId="applicationDocumentUpload"
-                                disabled={!detail.applicationNumber}
-                                onDirtyChange={setDocumentUploadDirty}
-                                onBusyChange={setDocumentUploadBusy}
-                                onUploadComplete={refreshApplicationDocuments}
-                              />
-                            </AccordionItem>
-                          </Accordion>
                         )}
                       </Tile>
                     </Column>

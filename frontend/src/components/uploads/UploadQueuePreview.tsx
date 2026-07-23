@@ -46,6 +46,7 @@ export type UploadQueuePreviewProps = {
   canReview?: boolean
   reviewItems?: UploadQueueItem[]
   reviewSupplementalContent?: ReactNode
+  hideActions?: boolean
 }
 
 const formatFileType = (file: File): string => {
@@ -96,6 +97,7 @@ function UploadQueuePreview({
   canReview,
   reviewItems,
   reviewSupplementalContent,
+  hideActions = false,
 }: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const [reviewQueueIdentity, setReviewQueueIdentity] = useState<string | null>(null)
@@ -258,7 +260,7 @@ function UploadQueuePreview({
           </p>
         </div>
         <div className="admin-upload-preview-actions">
-          {actionsPlacement === 'header' && actionControls}
+          {!hideActions && actionsPlacement === 'header' && actionControls}
         </div>
       </div>
 
@@ -369,7 +371,7 @@ function UploadQueuePreview({
           )}
         </>
       )}
-      {actionsPlacement === 'footer' && (
+      {!hideActions && actionsPlacement === 'footer' && (
         <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
           <div>
             {isReviewStep && onBack && (

@@ -3392,43 +3392,75 @@ legend.cds--label {
 }
 
 .detail-document-upload {
+  margin-block: 0 1rem;
+}
+
+.detail-document-upload__trigger {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.detail-document-upload-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
+.detail-document-upload-modal .cds--modal-scroll-content {
+  mask-image: none;
+}
+
+.detail-document-upload-modal__form {
   display: grid;
-  gap: 1rem;
-  margin-block: 1rem;
+  gap: 1.25rem;
+  padding-block-end: 1rem;
 }
 
-.detail-document-upload__workspace {
-  grid-template-columns: 1fr;
+.detail-document-upload-modal__subtitle {
+  margin: 0;
+  color: var(--cds-text-secondary);
 }
 
-.detail-document-upload .admin-upload-panel__header h2 {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
+.detail-document-upload-modal .detail-document-upload__invoice-fields {
+  margin: 0;
 }
 
-.detail-document-upload .admin-upload-panel .cds--text-area__wrapper {
-  display: block;
-  inline-size: min(100%, 50rem);
-  max-inline-size: 50rem;
-  margin: 1rem 0 0;
+.detail-document-upload-modal .admin-upload-drop-zone-field {
+  margin-block-start: 0;
 }
 
-.detail-document-upload .admin-upload-panel .cds--text-area {
+.detail-document-upload-modal .admin-upload-drop-zone--fspts {
   inline-size: 100%;
   max-inline-size: 100%;
 }
 
-.detail-document-upload__invoice-fields {
-  margin-block-start: 1rem;
-  padding: 0;
+.detail-document-upload-modal .cds--text-area__wrapper,
+.detail-document-upload-modal .cds--text-area {
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+
+.detail-document-upload-modal .cds--text-area__wrapper {
+  margin: 0;
+}
+
+.detail-document-upload-modal .admin-upload-panel {
+  padding: 1rem;
+}
+
+.detail-document-upload-modal .admin-upload-panel__header h2 {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+.detail-document-upload-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 671px) {
   .admin-upload-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .detail-document-upload__workspace {
     grid-template-columns: 1fr;
   }
 
@@ -3796,15 +3828,6 @@ legend.cds--label {
 
 .application-detail-documents .legacy-search-grid .legacy-search-actions {
   margin-top: 0;
-}
-
-.application-documents-upload-accordion {
-  margin-top: 1rem;
-}
-
-.application-documents-upload-accordion .cds--accordion__content {
-  padding-inline-end: 0;
-  padding-inline-start: 0;
 }
 
 .application-detail-remarks .legacy-search-actions {

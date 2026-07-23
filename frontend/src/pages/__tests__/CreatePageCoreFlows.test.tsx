@@ -303,8 +303,11 @@ describe('Create Page Core Flows', () => {
     }
 
     await selectApplicationCreateTab('Documents')
-    expect(screen.getByText('Upload application documents')).toBeInTheDocument()
-    expect(screen.getByText('Save the application before uploading documents.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add document' })).toHaveAttribute(
+      'title',
+      'Save the application before uploading documents.',
+    )
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()

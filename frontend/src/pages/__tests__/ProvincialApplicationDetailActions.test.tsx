@@ -491,6 +491,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
     await selectApplicationDetailTab('Documents')
     expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     expect(await screen.findByText('locked-doc.pdf')).toBeInTheDocument()
     screen
       .getAllByRole('button', { name: 'Delete' })
