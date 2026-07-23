@@ -33,7 +33,7 @@ const LandingPage = () => {
   return (
     <main className="landing-grid-container" id="main-content" aria-busy={isLoading}>
       <Grid fullWidth className="landing-grid">
-        <Column className="landing-content-col" sm={4} md={8} lg={8}>
+        <Column className="landing-content-col" sm={4} md={8} lg={9}>
           <div className="landing-content-wrapper">
             <div className="landing-logo-mark">
               <img src={logo} alt="Government of British Columbia" className="landing-logo" />
@@ -90,7 +90,7 @@ const LandingPage = () => {
           </div>
         </Column>
 
-        <Column className="landing-img-col" sm={4} md={8} lg={8}>
+        <Column className="landing-img-col" sm={4} md={8} lg={7}>
           <img src={landingImage} alt="" className="landing-img" aria-hidden="true" />
         </Column>
       </Grid>
