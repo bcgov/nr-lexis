@@ -1,4 +1,4 @@
-export const SESSION_IDLE_TIMEOUT_MS = 15 * 60 * 1000
+export const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000
 export const SESSION_IDLE_WARNING_MS = 5 * 60 * 1000
 export const SESSION_EXPIRED_EVENT = 'lexis:session-expired'
 const SESSION_EXPIRED_LOGIN_NOTICE_KEY = 'lexis.session-expired-login-notice'

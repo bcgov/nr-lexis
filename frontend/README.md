@@ -32,7 +32,10 @@ rollout but not an image rebuild.
 | `VITE_USER_POOLS_WEB_CLIENT_ID` | Cognito app client id | - |
 | `VITE_COGNITO_DOMAIN` | Cognito hosted UI domain, without protocol | - |
 | `VITE_REDIRECT_SIGN_IN` | OAuth callback URL | http://localhost:3000/ |
-| `VITE_REDIRECT_SIGN_OUT` | Full shared FAM logout chain registered in Cognito; the final application return must be the deployed `/logout` route | - |
+| `VITE_REDIRECT_SIGN_OUT` | Cognito-registered app return URL used by fallback Amplify sign-out | http://localhost:3000 |
+| `VITE_LOGOUT_SITEMINDER_URL` | Siteminder logoff endpoint used by the federated logout chain | - |
+| `VITE_LOGOUT_KEYCLOAK_URL` | Keycloak end-session endpoint used by the federated logout chain | - |
+| `VITE_LOGOUT_KEYCLOAK_CLIENT_ID` | Cognito client id registered in the shared Keycloak client | - |
 | `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
 | `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
 | `VITE_LEXIS_PROD_RTM_ONLY` | Restricts frontend routes and navigation to the Average Monthly Values module for LEXIS admins | false |

@@ -244,7 +244,6 @@ jobs:
     steps:
       - name: Resolve frontend logout URL
         env:
-          COGNITO_LOGOUT_CHAIN_URL: ${{ vars.COGNITO_LOGOUT_CHAIN_URL }}
           CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}
           DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
           LEXIS_SLOT: ${{ inputs.slot || inputs.target }}
@@ -256,11 +255,7 @@ jobs:
               echo "::error title=Invalid DEV logout slot::Expected a Cognito slot from 0 through 49."
               exit 1
             fi
-            if [ -z "${COGNITO_LOGOUT_CHAIN_URL}" ]; then
-              echo "::error title=Missing DEV logout chain::COGNITO_LOGOUT_CHAIN_URL is required for DEV."
-              exit 1
-            fi
-            sign_out="${COGNITO_LOGOUT_CHAIN_URL}https://${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca/logout"
+            sign_out="https://${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca"
           else
             sign_out="${CONFIGURED_SIGN_OUT}"
           fi
@@ -297,6 +292,9 @@ jobs:
             -p VITE_COGNITO_DOMAIN="${{ vars.VITE_COGNITO_DOMAIN }}"
             -p VITE_REDIRECT_SIGN_IN="${{ vars.VITE_REDIRECT_SIGN_IN }}"
             -p VITE_REDIRECT_SIGN_OUT="$VITE_REDIRECT_SIGN_OUT"
+            -p VITE_LOGOUT_SITEMINDER_URL="${{ vars.VITE_LOGOUT_SITEMINDER_URL }}"
+            -p VITE_LOGOUT_KEYCLOAK_URL="${{ vars.VITE_LOGOUT_KEYCLOAK_URL }}"
+            -p VITE_LOGOUT_KEYCLOAK_CLIENT_ID="${{ vars.VITE_LOGOUT_KEYCLOAK_CLIENT_ID }}"
             -p VITE_COGNITO_SCOPES="${{ vars.VITE_COGNITO_SCOPES }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
             -p VITE_LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"

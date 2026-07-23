@@ -1,8 +1,15 @@
 import { expect, test, type Page } from '@playwright/test'
+import {
+  createUnsignedToken,
+  installSyntheticCognitoSession,
+  type SyntheticCognitoSession,
+} from './utils'
 
-const SESSION_IDLE_WARNING_DELAY_MS = 10 * 60 * 1000
+const SESSION_IDLE_WARNING_DELAY_MS = 25 * 60 * 1000
 const SESSION_IDLE_WARNING_DURATION_MS = 5 * 60 * 1000
 const URGENT_COUNTDOWN_DURATION_MS = 30 * 1000
+const SESSION_START_ISO = '2026-07-22T12:00:00.000Z'
+const TEST_USERNAME = 'SESSION.TIMEOUT.TESTER'
 
 const authenticatedSession = {
   authenticated: true,
@@ -51,9 +58,64 @@ const installSyntheticLexisApi = async (page: Page) => {
   })
 }
 
+const installSyntheticCognitoRefresh = async (
+  page: Page,
+  syntheticSession: SyntheticCognitoSession,
+) => {
+  const sessionStartSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000)
+
+  let refreshRequestCount = 0
+  await page.route('https://cognito-idp.ca-central-1.amazonaws.com/**', async (route) => {
+    const target = route.request().headers()['x-amz-target']
+    if (!target?.endsWith('GetTokensFromRefreshToken')) {
+      await route.abort()
+      return
+    }
+
+    refreshRequestCount += 1
+    const refreshedAtSeconds = sessionStartSeconds + 29 * 60 + 30
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/x-amz-json-1.1',
+      body: JSON.stringify({
+        AuthenticationResult: {
+          AccessToken: createUnsignedToken({
+            sub: 'session-timeout-test-user',
+            username: TEST_USERNAME,
+            client_id: syntheticSession.clientId,
+            token_use: 'access',
+            iat: refreshedAtSeconds,
+            exp: refreshedAtSeconds + 5 * 60,
+          }),
+          IdToken: createUnsignedToken({
+            sub: 'session-timeout-test-user',
+            'custom:org_unit_no': '1903',
+            token_use: 'id',
+            iat: refreshedAtSeconds,
+            exp: refreshedAtSeconds + 5 * 60,
+          }),
+          RefreshToken: 'rotated-refresh-token',
+          ExpiresIn: 300,
+          TokenType: 'Bearer',
+        },
+      }),
+    })
+  })
+
+  return () => refreshRequestCount
+}
+
 test.describe('session timeout regression', () => {
   test('opens, renders, and resets the warning without real-time waiting', async ({ page }) => {
-    await page.clock.install({ time: new Date('2026-07-22T12:00:00.000Z') })
+    await page.clock.install({ time: new Date(SESSION_START_ISO) })
+    const sessionStartSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000)
+    const syntheticSession = await installSyntheticCognitoSession(page, {
+      username: TEST_USERNAME,
+      orgUnitNo: '1903',
+      issuedAtSeconds: sessionStartSeconds,
+      refreshToken: 'initial-refresh-token',
+    })
+    const getRefreshRequestCount = await installSyntheticCognitoRefresh(page, syntheticSession)
     await installSyntheticLexisApi(page)
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
@@ -112,6 +174,19 @@ test.describe('session timeout regression', () => {
     await dialog.getByRole('button', { name: 'Stay logged in' }).click()
     await expect(dialog).toBeHidden()
     await expect(page.getByText('You’re still logged in', { exact: true })).toBeVisible()
+    expect(getRefreshRequestCount()).toBe(1)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ prefix, username }) =>
+            window.localStorage.getItem(`${prefix}.${username}.refreshToken`),
+          {
+            prefix: syntheticSession.storagePrefix,
+            username: syntheticSession.username,
+          },
+        ),
+      )
+      .toBe('rotated-refresh-token')
 
     await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS)
     await expect(dialog).toBeVisible()
