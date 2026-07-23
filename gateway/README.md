@@ -67,23 +67,6 @@ for the two NEXCOL-only paths instead of proxying them.
 DEV uses ephemeral application deployments and has no long-lived NEXCOL gateway. Add a separate
 PROD gateway configuration only when the PROD LEXIS deployment is provisioned.
 
-### Apply TEST configuration
-
-Deploy the LEXIS OpenShift configuration first so the gateway NetworkPolicy rule is present, then
-dry-run and publish the checked-in gateway snapshot:
-
-```bash
-gwa config set host api-gov-bc-ca.test.api.gov.bc.ca
-gwa config set namespace gw-lexis-nexcol
-gwa publish-gateway gateway/nr-lexis-nexcol-test.kong.yaml --dry-run
-gwa publish-gateway gateway/nr-lexis-nexcol-test.kong.yaml
-gwa status --hosts
-```
-
-The GWA login token and NEXCOL runtime credentials remain outside the repository. A TEST rollout is
-complete only after the gateway reports the Service upstream as healthy and direct requests through
-the frontend and retired backend host cannot reach the NEXCOL endpoints.
-
 The integration flow and XML contract are documented in
 [`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).
 
