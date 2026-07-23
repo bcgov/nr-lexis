@@ -28,7 +28,7 @@ const openDocumentUploadModal = async (): Promise<void> => {
 describe.sequential('Provincial Application Detail Actions - documents', () => {
   beforeEach(setupApplicationDetailTests)
 
-  it('shows permit lookup failures as unavailable and fails closed for industry uploads', async () => {
+  it('keeps permit-based document upload notices on the Documents tab', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       industryUser: true,
@@ -58,6 +58,13 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { level: 3, name: 'No permits found' }),
+    ).not.toBeInTheDocument()
+
+    await selectApplicationDetailTab('Owner')
+    expect(
+      screen.queryByText(
+        'Application document upload is unavailable while permit information cannot be retrieved.',
+      ),
     ).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Documents')
@@ -233,6 +240,11 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
+    expect(await screen.findByText('Owner client details')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Application document upload is unavailable for expired applications.'),
+    ).not.toBeInTheDocument()
+
     await selectApplicationDetailTab('Documents')
 
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
@@ -261,13 +273,14 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
+
     expect(
       await screen.findByText(
         'Application document upload is unavailable for industry users when the application has a complete permit.',
       ),
     ).toBeInTheDocument()
 
-    await selectApplicationDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
   })

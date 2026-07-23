@@ -3736,7 +3736,8 @@ const ProvincialApplicationDetailsPage = () => {
                             onUploadComplete={refreshApplicationDocuments}
                           />
                         )}
-                        {!!showDocumentUploadUnavailableMessage &&
+                        {selectedApplicationTab === 'documents' &&
+                          !!showDocumentUploadUnavailableMessage &&
                           canUploadApplicationDocuments && (
                             <AppNotification
                               kind="info"
