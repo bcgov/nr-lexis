@@ -3725,6 +3725,13 @@ legend.cds--label {
   min-width: 0;
 }
 
+.application-detail-tabs-column > .application-detail-tab-panel {
+  // Keep the shared gray detail canvas behind short tab content through the
+  // bottom of the viewport. The 16rem allowance covers the fixed header,
+  // page chrome, and the contained tab list above the panel.
+  min-block-size: calc(100dvh - 16rem);
+}
+
 .application-tabs__list {
   inline-size: fit-content;
   max-inline-size: 100%;
