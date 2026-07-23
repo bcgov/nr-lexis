@@ -1112,7 +1112,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
 
     await selectDetailTab('Remarks')
-    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
 
     await selectDetailTab('Documents')
@@ -1169,7 +1169,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       arrange: () => undefined,
       edit: async () => {
         await selectDetailTab('Remarks')
-        await userEvent.type(screen.getByLabelText('Federal application remark'), 'Remark draft')
+        await userEvent.type(screen.getByLabelText('New Remark'), 'Remark draft')
       },
     },
     {
@@ -1631,8 +1631,14 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('Federal application remark'), 'New note')
-    await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
+    const newRemarkInput = screen.getByLabelText('New Remark')
+    expect(newRemarkInput.closest('.legacy-search-actions')).toHaveTextContent('Save Remark')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    expect(await screen.findByText('Remark is required.')).toBeInTheDocument()
+
+    await userEvent.type(newRemarkInput, 'New note')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
 
     await waitFor(() => {
       expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'New note', undefined)
@@ -1640,10 +1646,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    const remarkInput = screen.getByLabelText('Federal application remark')
+    const remarkInput = screen.getByLabelText('Edit Remark 44')
     await userEvent.clear(remarkInput)
     await userEvent.type(remarkInput, 'Updated note')
-    await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Update Remark' }))
 
     await waitFor(() => {
       expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'Updated note', 44)
@@ -1694,7 +1700,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
     expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
-    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
@@ -1866,7 +1872,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Application')
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
     await selectDetailTab('Remarks')
-    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     await selectDetailTab('Shipping Details')
     expect(screen.queryByRole('button', { name: 'Edit shipping details' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()

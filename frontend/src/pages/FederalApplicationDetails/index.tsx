@@ -149,6 +149,7 @@ const FederalApplicationDetailsPage = () => {
   const [statusRemark, setStatusRemark] = useState('')
   const [remarkDraft, setRemarkDraft] = useState('')
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null)
+  const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [permitForm, setPermitForm] = useState<FederalPermitMutation>(emptyPermitForm)
   const [isEditingFederalPermit, setIsEditingFederalPermit] = useState(false)
   const [isSavingMutation, setIsSavingMutation] = useState(false)
@@ -534,14 +535,22 @@ const FederalApplicationDetailsPage = () => {
   }, [detail])
 
   const onSaveRemark = useCallback(async (): Promise<boolean> => {
-    if (!applicationNumber || !canMutateFederalApplication || !remarkDraft.trim()) return false
+    if (!applicationNumber || !canMutateFederalApplication || isSavingRemark) return false
+
+    const normalizedRemark = remarkDraft.trim()
+    if (!normalizedRemark) {
+      setRemarkValidationMessage('Remark is required.')
+      return false
+    }
+
+    setRemarkValidationMessage('')
     setActionErrorMessage('')
     setActionInfoMessage('')
     setIsSavingRemark(true)
     try {
       const result = await saveFederalApplicationRemark(
         applicationNumber,
-        remarkDraft.trim(),
+        normalizedRemark,
         editingRemarkId ?? undefined,
       )
       if (!result.success) {
@@ -552,6 +561,7 @@ const FederalApplicationDetailsPage = () => {
       setRemarksErrorMessage('')
       setEditingRemarkId(null)
       setRemarkDraft('')
+      setRemarkValidationMessage('')
       setActionInfoMessage(result.message || 'Federal application remark saved.')
       return true
     } catch (error) {
@@ -561,7 +571,7 @@ const FederalApplicationDetailsPage = () => {
     } finally {
       setIsSavingRemark(false)
     }
-  }, [applicationNumber, canMutateFederalApplication, editingRemarkId, remarkDraft])
+  }, [applicationNumber, canMutateFederalApplication, editingRemarkId, isSavingRemark, remarkDraft])
 
   const refreshFederalApplicationDocuments = useCallback(async () => {
     if (!applicationNumber) {
@@ -691,6 +701,7 @@ const FederalApplicationDetailsPage = () => {
     setStatusRemark('')
     setRemarkDraft('')
     setEditingRemarkId(null)
+    setRemarkValidationMessage('')
     setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
     setIsEditingFederalPermit(false)
     setDocumentUploadDirty(false)
@@ -1263,47 +1274,53 @@ const FederalApplicationDetailsPage = () => {
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        <Tile>
+                        <Tile className="application-detail-section application-detail-remarks">
                           <h2 className="detail-tile-title">Remarks</h2>
                           {canMutateFederalApplication && (
-                            <>
-                              <div className="legacy-search-grid">
-                                <TextArea
-                                  id="federalApplicationRemark"
-                                  labelText="Federal application remark"
-                                  maxCount={250}
-                                  value={remarkDraft}
-                                  onChange={(event) => setRemarkDraft(event.target.value)}
-                                />
-                              </div>
-                              <div className="legacy-search-actions">
+                            <div className="legacy-search-actions">
+                              <TextArea
+                                id="federalApplicationRemark"
+                                labelText={
+                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark'
+                                }
+                                maxCount={250}
+                                value={remarkDraft}
+                                invalid={!!remarkValidationMessage}
+                                invalidText={remarkValidationMessage}
+                                onChange={(event) => {
+                                  setRemarkDraft(event.target.value)
+                                  if (remarkValidationMessage) {
+                                    setRemarkValidationMessage('')
+                                  }
+                                }}
+                              />
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={isSavingRemark}
+                                onClick={() => void onSaveRemark()}
+                              >
+                                {isSavingRemark
+                                  ? 'Saving...'
+                                  : editingRemarkId
+                                    ? 'Update Remark'
+                                    : 'Save Remark'}
+                              </Button>
+                              {editingRemarkId && (
                                 <Button
-                                  kind="primary"
+                                  kind="ghost"
                                   size="sm"
-                                  disabled={isSavingRemark || !remarkDraft.trim()}
-                                  onClick={() => void onSaveRemark()}
+                                  disabled={isSavingRemark}
+                                  onClick={() => {
+                                    setEditingRemarkId(null)
+                                    setRemarkDraft('')
+                                    setRemarkValidationMessage('')
+                                  }}
                                 >
-                                  {isSavingRemark
-                                    ? 'Saving...'
-                                    : editingRemarkId
-                                      ? 'Update remark'
-                                      : 'Add remark'}
+                                  Cancel Edit
                                 </Button>
-                                {editingRemarkId && (
-                                  <Button
-                                    kind="secondary"
-                                    size="sm"
-                                    disabled={isSavingRemark}
-                                    onClick={() => {
-                                      setEditingRemarkId(null)
-                                      setRemarkDraft('')
-                                    }}
-                                  >
-                                    Cancel edit
-                                  </Button>
-                                )}
-                              </div>
-                            </>
+                              )}
+                            </div>
                           )}
                           {remarksErrorMessage ? (
                             <EmptyState
@@ -1339,6 +1356,7 @@ const FederalApplicationDetailsPage = () => {
                                             onClick={() => {
                                               setEditingRemarkId(item.remarkId)
                                               setRemarkDraft(item.remark)
+                                              setRemarkValidationMessage('')
                                             }}
                                           >
                                             Edit
