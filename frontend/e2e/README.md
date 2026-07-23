@@ -40,9 +40,9 @@ regression coverage uses a separate TEST-only Playwright config.
 - CI explicitly masks the credential values and suppresses Playwright HTML reports, screenshots,
   video, and traces for the credentialed regression suite because those runs type real test
   credentials. Credentialed regression artifacts are not uploaded from the public workflow.
-- Logout follows the shared FAM chain used by other ministry applications. The Cognito app client
-  and `VITE_REDIRECT_SIGN_OUT` must use the same environment-specific chain and return to the
-  deployed LEXIS `/logout` route, which renders the signed-out login screen.
+- Logout follows the FSPTS chain: Siteminder → Keycloak → Cognito → LEXIS. The app builds the
+  nested URL from the three `VITE_LOGOUT_*` values so Cognito runs last, clears its session, and
+  returns to the Cognito-registered LEXIS origin in `VITE_REDIRECT_SIGN_OUT`.
 
 ## Run commands
 

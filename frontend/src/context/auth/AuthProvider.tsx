@@ -9,6 +9,7 @@ import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
 import { AppNotification } from '@/components/AppNotification'
 import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
+import { startFederatedLogout } from '@/context/auth/logout-chain'
 import { hasRole } from '@/context/auth/role-utils'
 import {
   clearSessionExpiredLoginNotice,
@@ -95,7 +96,16 @@ const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
 const PROD_RTM_ONLY_ACTION = '/lexisAgentAdmin'
 
 const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER])
-const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'scroll', 'focus']
+const SESSION_ACTIVITY_EVENTS = [
+  'mousemove',
+  'mousedown',
+  'keydown',
+  'scroll',
+  'touchstart',
+  'wheel',
+]
+const SESSION_ACTIVITY_THROTTLE_MS = 1_000
+const SESSION_KEEPALIVE_THROTTLE_MS = 60_000
 
 const cognitoSignOut = async (): Promise<void> => {
   await signOut()
@@ -285,13 +295,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         apiService.clearRecordVersions()
         clearAllPageDataCache()
         authenticatedSessionRef.current = false
-        setCapabilities(DEFAULT_CAPABILITIES)
-        setIsLoading(false)
         if (reason === 'idle-timeout') {
           markSessionExpiredLoginNotice()
         } else {
           clearSessionExpiredLoginNotice()
         }
+
+        if (shouldSignOut && startFederatedLogout()) {
+          return
+        }
+
+        setCapabilities(DEFAULT_CAPABILITIES)
+        setIsLoading(false)
         redirectToLoginShell()
 
         if (shouldSignOut) {
@@ -398,6 +413,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     let warningTimeoutId: number | undefined
     let expiryTimeoutId: number | undefined
+    let lastActivityReset = 0
+    let lastKeepalive = 0
     const clearTimers = () => {
       if (warningTimeoutId !== undefined) {
         window.clearTimeout(warningTimeoutId)
@@ -427,16 +444,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
         SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS,
       )
     }
+    const onActivity = () => {
+      if (sessionWarningOpenRef.current) {
+        return
+      }
+
+      const now = Date.now()
+      if (now - lastActivityReset >= SESSION_ACTIVITY_THROTTLE_MS) {
+        lastActivityReset = now
+        resetIdleTimer()
+      }
+      if (now - lastKeepalive >= SESSION_KEEPALIVE_THROTTLE_MS) {
+        lastKeepalive = now
+        void fetchAuthSession({ forceRefresh: false })
+          .then((session) => {
+            if (!session.tokens?.accessToken) {
+              void expireSession('token-unavailable')
+            }
+          })
+          .catch(() => {
+            void expireSession('token-unavailable')
+          })
+      }
+    }
 
     resetIdleTimer()
     SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
-      window.addEventListener(eventName, resetIdleTimer, { passive: true })
+      window.addEventListener(eventName, onActivity, { passive: true })
     })
 
     return () => {
       clearTimers()
       SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
-        window.removeEventListener(eventName, resetIdleTimer)
+        window.removeEventListener(eventName, onActivity)
       })
     }
   }, [capabilities.authenticated, expireSession, idleTimerVersion])
@@ -468,6 +508,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiService.clearRecordVersions()
       clearAllPageDataCache()
       authenticatedSessionRef.current = false
+
+      if (isCognitoConfigured && startFederatedLogout()) {
+        return
+      }
+
       setCapabilities(DEFAULT_CAPABILITIES)
       setIsLoading(false)
       redirectToLoginShell()
@@ -480,10 +525,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [closeSessionWarning])
 
-  const extendSession = useCallback(() => {
-    setShowSessionExtendedMessage(true)
-    closeSessionWarning(true)
-  }, [closeSessionWarning])
+  const extendSession = useCallback(async () => {
+    try {
+      const { tokens } = (await fetchAuthSession({ forceRefresh: true })) ?? {}
+      if (!tokens?.accessToken) {
+        throw new Error('Cognito did not return a refreshed access token.')
+      }
+      setShowSessionExtendedMessage(true)
+      closeSessionWarning(true)
+    } catch {
+      await expireSession('token-unavailable')
+    }
+  }, [closeSessionWarning, expireSession])
 
   const grantedActionSet = useMemo(() => {
     return new Set(capabilities.grantedActions.map(normalizeAction))
@@ -530,7 +583,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         <AppNotification
           kind="success"
           title="You’re still logged in"
-          subtitle="Your session has been extended for another 15 minutes."
+          subtitle="Your session has been extended."
           onCloseButtonClick={() => setShowSessionExtendedMessage(false)}
         />
       )}
@@ -538,7 +591,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         open={sessionWarningExpiresAt !== null}
         expiresAt={sessionWarningExpiresAt}
         launcherButtonRef={sessionWarningLauncherRef}
-        onStayLoggedIn={extendSession}
+        onStayLoggedIn={() => void extendSession()}
         onLogOut={() => void logout()}
       />
     </AuthContext>

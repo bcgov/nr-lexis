@@ -18,8 +18,12 @@ const authMocks = vi.hoisted(() => ({
   signInWithRedirect: vi.fn(),
   signOut: vi.fn(),
 }))
+const logoutChainMocks = vi.hoisted(() => ({
+  startFederatedLogout: vi.fn(),
+}))
 
 vi.mock('aws-amplify/auth', () => authMocks)
+vi.mock('@/context/auth/logout-chain', () => logoutChainMocks)
 
 vi.mock('@/config/fam/config', () => ({
   businessBceidProviderName: 'DEV-BCEIDBUSINESS',
@@ -69,6 +73,7 @@ describe('AuthProvider logout', () => {
       },
     })
     authMocks.signOut.mockResolvedValue(undefined)
+    logoutChainMocks.startFederatedLogout.mockReturnValue(false)
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\tester',
@@ -104,6 +109,22 @@ describe('AuthProvider logout', () => {
     })
     expect(authMocks.signOut).toHaveBeenCalledWith()
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    expect(hasSessionExpiredLoginNotice()).toBe(false)
+  })
+
+  it('uses the FSPTS-style federated logout chain when it is configured', async () => {
+    logoutChainMocks.startFederatedLogout.mockReturnValue(true)
+    markSessionExpiredLoginNotice()
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
+
+    expect(logoutChainMocks.startFederatedLogout).toHaveBeenCalledOnce()
+    expect(authMocks.signOut).not.toHaveBeenCalled()
     expect(hasSessionExpiredLoginNotice()).toBe(false)
   })
 
@@ -204,6 +225,36 @@ describe('AuthProvider logout', () => {
     expect(window.location.pathname).toBe('/')
   })
 
+  it('keeps the Cognito token fresh while the user remains active', async () => {
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+    authMocks.fetchAuthSession.mockClear()
+    vi.useFakeTimers()
+
+    window.dispatchEvent(new MouseEvent('mousemove'))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(authMocks.fetchAuthSession).toHaveBeenCalledOnce()
+    expect(authMocks.fetchAuthSession).toHaveBeenLastCalledWith({ forceRefresh: false })
+
+    window.dispatchEvent(new MouseEvent('mousemove'))
+    expect(authMocks.fetchAuthSession).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+    window.dispatchEvent(new MouseEvent('mousemove'))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(authMocks.fetchAuthSession).toHaveBeenCalledTimes(2)
+    expect(authMocks.fetchAuthSession).toHaveBeenLastCalledWith({ forceRefresh: false })
+  })
+
   it('extends the idle session only when the user chooses to stay logged in', async () => {
     renderProbe()
 
@@ -221,14 +272,44 @@ describe('AuthProvider logout', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stay logged in' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Stay logged in' }))
+      await Promise.resolve()
+    })
+    expect(authMocks.fetchAuthSession).toHaveBeenCalledWith({ forceRefresh: true })
     expect(document.querySelector('.lexis-session-timeout-warning')).not.toHaveClass('is-visible')
     expect(screen.getByText('You’re still logged in')).toBeInTheDocument()
+    expect(screen.getByText('Your session has been extended.')).toBeInTheDocument()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS)
     })
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
+
+  it('ends the session when the forced refresh cannot extend it', async () => {
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('keydown'))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS)
+    })
+    authMocks.fetchAuthSession.mockRejectedValueOnce(new Error('refresh token expired'))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Stay logged in' }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(authMocks.fetchAuthSession).toHaveBeenCalledWith({ forceRefresh: true })
+    expect(authMocks.signOut).toHaveBeenCalledOnce()
+    expect(hasSessionExpiredLoginNotice()).toBe(false)
   })
 
   it.each([

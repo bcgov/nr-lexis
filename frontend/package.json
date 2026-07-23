@@ -15,7 +15,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,scss}\" \"e2e/*smoke.spec.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "vitest --mode test",
-    "test:session-timeout": "vitest --mode test --run src/components/SessionTimeoutWarning/SessionTimeoutWarning.test.tsx src/context/auth/__tests__/AuthProviderLogout.test.tsx src/pages/__tests__/LandingAuthFlow.test.tsx",
+    "test:session-timeout": "vitest --mode test --run src/components/SessionTimeoutWarning/SessionTimeoutWarning.test.tsx src/context/auth/__tests__/AuthProviderLogout.test.tsx src/context/auth/__tests__/logout-chain.test.ts src/pages/__tests__/LandingAuthFlow.test.tsx",
     "test:cov": "vitest run --mode test --coverage --maxWorkers=2",
     "build": "vite build",
     "pree2e": "playwright install chromium",
