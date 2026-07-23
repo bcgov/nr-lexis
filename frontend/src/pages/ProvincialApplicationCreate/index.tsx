@@ -1980,14 +1980,27 @@ const ProvincialApplicationCreatePage = () => {
       )}
       <Modal
         open={packageSavePromptOpen}
+        passiveModal
         size="xs"
         modalHeading="Application not saved"
-        primaryButtonText="OK"
+        className="application-create-package-save-modal"
         launcherButtonRef={createPackageButtonRef}
+        selectorPrimaryFocus="#applicationCreatePackageSavePromptOk"
         onRequestClose={() => setPackageSavePromptOpen(false)}
-        onRequestSubmit={() => setPackageSavePromptOpen(false)}
       >
-        <p>Please save this application before adding packages.</p>
+        <div className="application-create-package-save-prompt">
+          <p>Please save this application before adding packages.</p>
+          <div className="application-create-package-save-prompt__actions">
+            <Button
+              id="applicationCreatePackageSavePromptOk"
+              type="button"
+              kind="primary"
+              onClick={() => setPackageSavePromptOpen(false)}
+            >
+              OK
+            </Button>
+          </div>
+        </div>
       </Modal>
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}

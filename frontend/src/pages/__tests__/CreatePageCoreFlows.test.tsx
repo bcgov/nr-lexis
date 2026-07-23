@@ -379,11 +379,17 @@ describe('Create Page Core Flows', () => {
     expect(
       within(dialog).getByText('Please save this application before adding packages.'),
     ).toBeInTheDocument()
+    expect(dialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()
+    const acknowledgeButton = within(dialog).getByRole('button', { name: 'OK' })
+    expect(acknowledgeButton).toHaveClass('cds--btn--primary')
+    expect(acknowledgeButton.parentElement).toHaveClass(
+      'application-create-package-save-prompt__actions',
+    )
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
     const modalRoot = dialog.closest('.cds--modal')
     expect(modalRoot).not.toBeNull()
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'OK' }))
+    await userEvent.click(acknowledgeButton)
 
     await waitFor(() => {
       expect(modalRoot).not.toHaveClass('is-visible')

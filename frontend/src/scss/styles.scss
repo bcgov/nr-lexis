@@ -3820,6 +3820,28 @@ legend.cds--label {
   margin-top: 1rem;
 }
 
+.application-create-package-save-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
+.application-create-package-save-prompt {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.application-create-package-save-prompt p {
+  margin: 0;
+}
+
+.application-create-package-save-prompt__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.application-create-package-save-prompt__actions .cds--btn {
+  min-inline-size: 7.5rem;
+}
+
 .application-detail-tab-grid {
   padding-inline: 0;
   row-gap: 1.5rem;
