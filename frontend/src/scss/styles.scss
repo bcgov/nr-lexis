@@ -1732,7 +1732,7 @@ legend.cds--label {
   font-size: 1rem;
   line-height: 1.4;
   letter-spacing: 0.01rem;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .legacy-search-table-frame .cds--data-table tbody tr:hover td,
@@ -2799,7 +2799,7 @@ legend.cds--label {
   font-weight: 400;
   letter-spacing: 0.01rem;
   line-height: 1.125rem;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .admin-upload-queue__table tbody tr:last-child td {
@@ -3206,7 +3206,7 @@ legend.cds--label {
 .rtm-amv-table-wrap .cds--data-table th,
 .rtm-amv-table-wrap .cds--data-table td {
   inline-size: 9.25rem;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .rtm-amv-table-wrap .cds--data-table th:first-child,
@@ -4123,6 +4123,11 @@ legend.cds--label {
   border: 0;
   color: var(--csp-text-primary);
   width: 100%;
+}
+
+.app-shell table th,
+.app-shell table td {
+  vertical-align: middle;
 }
 
 .cds--data-table thead th {
