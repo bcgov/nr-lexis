@@ -16,6 +16,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableSelectRow,
   TextArea,
   TextInput,
   Tile,
@@ -606,6 +607,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(() =>
     requestedApplicationTab === 'items' ? 1 : 0,
   )
+  const [selectedPackageNumber, setSelectedPackageNumber] = useState('')
   const [selectedApplicationTab, setSelectedApplicationTab] = useState<ApplicationDetailTabKey>(
     () => (requestedApplicationTab === 'items' ? 'items' : 'owner'),
   )
@@ -3653,34 +3655,26 @@ const ProvincialApplicationDetailsPage = () => {
                               <Table useZebraStyles>
                                 <TableHead>
                                   <TableRow>
+                                    <TableHeader aria-label="Package selection" />
                                     <TableHeader>Package number</TableHeader>
                                     <TableHeader>Volume (m³)</TableHeader>
                                     <TableHeader>Pieces</TableHeader>
-                                    <TableHeader>Action</TableHeader>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
                                   {filteredPackages.map((item) => (
                                     <TableRow key={item.packageNumber}>
+                                      <TableSelectRow
+                                        radio
+                                        id={`application-package-select-${item.packageNumber}`}
+                                        name="application-package-selection"
+                                        ariaLabel={`Select package ${item.packageNumber}`}
+                                        checked={selectedPackageNumber === item.packageNumber}
+                                        onSelect={() => focusPackageInItems(item.packageNumber)}
+                                      />
                                       <TableCell>{item.packageNumber}</TableCell>
                                       <TableCell>{item.volume.toLocaleString()}</TableCell>
                                       <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
-                                      <TableCell>
-                                        <Button
-                                          kind="ghost"
-                                          size="sm"
-                                          aria-label={`${
-                                            canEditPackages || canAddPackages || canAddScales
-                                              ? 'Edit'
-                                              : 'View'
-                                          } package ${item.packageNumber} items`}
-                                          onClick={() => focusPackageInItems(item.packageNumber)}
-                                        >
-                                          {canEditPackages || canAddPackages || canAddScales
-                                            ? 'Edit Items'
-                                            : 'View Items'}
-                                        </Button>
-                                      </TableCell>
                                     </TableRow>
                                   ))}
                                   {filteredPackages.length === 0 && (
@@ -3711,6 +3705,7 @@ const ProvincialApplicationDetailsPage = () => {
                         onDetailChanged={refreshApplicationDetailPreservingDrafts}
                         onDirtyChange={setApplicationItemsDirty}
                         onBusyChange={setApplicationItemsBusy}
+                        onSelectedPackageChange={setSelectedPackageNumber}
                         focusedPackageNumber={focusedPackageNumber}
                         focusedPackageRequestId={focusedPackageRequestId}
                         focusScalesRequestId={shouldFocusScaleSection ? focusedPackageRequestId : 0}

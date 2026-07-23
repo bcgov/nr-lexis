@@ -875,16 +875,17 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(within(secondPackageRow as HTMLElement).getByText('200')).toBeInTheDocument()
     expect(within(secondPackageRow as HTMLElement).getByText('8')).toBeInTheDocument()
 
-    fireEvent.click(
-      within(secondPackageRow as HTMLElement).getByRole('button', {
-        name: 'Edit package PKG-2 items',
-      }),
-    )
+    const secondPackageRadio = within(secondPackageRow as HTMLElement).getByRole('radio', {
+      name: 'Select package PKG-2',
+    })
+    expect(secondPackageRadio).not.toBeChecked()
+    fireEvent.click(secondPackageRadio)
 
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
       expect(screen.getByLabelText('Package Comments')).toHaveValue('Second package')
     })
+    expect(secondPackageRadio).toBeChecked()
 
     await act(async () => {
       resolveFirstPackageDetails?.({
@@ -955,7 +956,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(screen.getByLabelText('Package Comments')).toHaveValue('PKG-1 comments'),
     )
     fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'DRAFT-A' } })
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Selected Package' }), 'PKG-2')
+    const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
+      '.cds--tile',
+    )
+    expect(packagesSection).toBeTruthy()
+    const secondPackageRadio = within(packagesSection as HTMLElement).getByRole('radio', {
+      name: 'Select package PKG-2',
+    })
+    fireEvent.click(secondPackageRadio)
 
     const confirmation = await screen.findByRole('dialog', {
       name: 'Discard package drafts?',
@@ -963,14 +971,21 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(confirmation).toHaveAccessibleDescription(/discard unsaved package, species, and scale/)
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-1')
+    expect(
+      within(packagesSection as HTMLElement).getByRole('radio', {
+        name: 'Select package PKG-1',
+      }),
+    ).toBeChecked()
+    expect(secondPackageRadio).not.toBeChecked()
     expect(screen.getByLabelText('Timber Mark')).toHaveValue('DRAFT-A')
 
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Selected Package' }), 'PKG-2')
+    fireEvent.click(secondPackageRadio)
     await userEvent.click(screen.getByRole('button', { name: 'Discard and switch' }))
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-2')
       expect(screen.getByLabelText('Timber Mark')).toHaveValue('')
     })
+    expect(secondPackageRadio).toBeChecked()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
