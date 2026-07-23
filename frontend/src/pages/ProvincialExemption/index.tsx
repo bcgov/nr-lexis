@@ -936,7 +936,6 @@ const ProvincialExemptionPage = () => {
                           onClick={() => onHeaderClick(column.id)}
                         >
                           {column.label}
-                          {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
                         </button>
                       </TableHeader>
                     ))}

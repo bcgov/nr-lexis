@@ -261,7 +261,7 @@ describe('Provincial Review Action State Smoke', () => {
       .map((header) => header.textContent?.replace(/\s+/g, ' ').trim())
 
     expect(headers).toEqual([
-      'Application (DESC)',
+      'Application',
       'Status',
       'Application volume (m³)',
       'Species end use sort',
@@ -303,7 +303,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
     mockedSearchApplicationReviews.mockClear()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Application (DESC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Application' }))
 
     await waitFor(() => {
       expect(

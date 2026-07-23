@@ -192,7 +192,7 @@ describe('Provincial Offer Search Actions', () => {
       expect(searchButton).toBeEnabled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Listing date (ASC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Listing date' }))
 
     await waitFor(() => {
       expect(

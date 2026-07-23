@@ -765,9 +765,6 @@ const ProvincialApplicationPage = () => {
                             onClick={() => onHeaderClick(column.sortField!)}
                           >
                             {column.label}
-                            {sortField === column.sortField
-                              ? ` (${sortDirection.toUpperCase()})`
-                              : ''}
                           </button>
                         ) : (
                           column.label

@@ -377,7 +377,7 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
     mockedSearchProvincialApplications.mockClear()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Application (DESC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Application' }))
 
     await waitFor(() => {
       expect(

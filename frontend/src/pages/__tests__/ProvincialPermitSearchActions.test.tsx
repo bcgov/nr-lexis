@@ -320,7 +320,7 @@ describe('Provincial Permit Search Actions', () => {
       expect(searchButton).toBeEnabled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Permit (DESC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Permit' }))
 
     await waitFor(() => {
       expect(

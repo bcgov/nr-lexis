@@ -892,9 +892,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             onClick={() => onFeeSort(column.id)}
                           >
                             {column.label}
-                            {feeSortField === column.id
-                              ? ` (${feeSortDirection.toUpperCase()})`
-                              : ''}
                           </button>
                         </TableHeader>
                       ))}
@@ -1020,9 +1017,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             onClick={() => onFilSort(column.id)}
                           >
                             {column.label}
-                            {filSortField === column.id
-                              ? ` (${filSortDirection.toUpperCase()})`
-                              : ''}
                           </button>
                         </TableHeader>
                       ))}
@@ -1175,9 +1169,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             onClick={() => onScheduleSort(column.id)}
                           >
                             {column.label}
-                            {scheduleSortField === column.id
-                              ? ` (${scheduleSortDirection.toUpperCase()})`
-                              : ''}
                           </button>
                         </TableHeader>
                       ))}
