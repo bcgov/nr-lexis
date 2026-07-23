@@ -9,12 +9,16 @@ authentication remains independent of this integration.
 NEXCOL
   -> Keycloak client-credentials token
   -> API gateway
+  -> OpenShift backend Service
   -> LEXIS federal validation or submission endpoint
   -> LEXIS federal application tables
 ```
 
 The API gateway is the supported external entry point. LEXIS also validates the forwarded token
-and independently enforces the same authentication and authorization requirements.
+and independently enforces the same authentication and authorization requirements. The gateway
+uses the cluster-local backend Service; the deployment template declares no Spring Boot Route and
+does not admit the OpenShift ingress router, while the public frontend proxy does not forward these
+two machine-only paths.
 
 ## Authentication
 
@@ -92,12 +96,13 @@ with the resulting access token; do not enter the provisioning client credential
 
 ## Endpoints
 
-Both endpoints are live in every backend environment. TEST and PROD provide the supported NEXCOL
-gateway and service-client integration; DEV has no supported NEXCOL gateway/client configuration.
+Both endpoints exist in every backend deployment but are externally exposed only through a
+configured API gateway. TEST provides the supported NEXCOL gateway and service-client integration;
+DEV has no supported NEXCOL gateway/client configuration, and PROD remains unprovisioned.
 
 The machine-readable gateway contract is available in
-[`gateway/openapi.yaml`](../gateway/openapi.yaml). Its `servers` list contains the gateway URLs that
-are currently available for integration.
+[`gateway/openapi.yaml`](../gateway/openapi.yaml). Its `servers` list contains the TEST URL and the
+projected PROD URL documented above.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|

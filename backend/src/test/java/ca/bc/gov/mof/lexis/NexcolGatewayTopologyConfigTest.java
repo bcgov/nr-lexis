@@ -1,0 +1,72 @@
+package ca.bc.gov.mof.lexis;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+
+class NexcolGatewayTopologyConfigTest {
+
+  private static final String NEXCOL_PATH = "/api/lexis/federal/submissions";
+  private static final String TEST_SERVICE = "nr-lexis-backend-test.da5fad-test.svc";
+
+  @Test
+  void gatewayShouldUseTheClusterLocalBackendService() throws IOException {
+    String gateway = Files.readString(resolve("gateway/nr-lexis-nexcol-test.kong.yaml"));
+
+    assertThat(occurrences(gateway, "host: " + TEST_SERVICE)).isEqualTo(2);
+    assertThat(occurrences(gateway, "port: 8080")).isEqualTo(2);
+    assertThat(occurrences(gateway, "protocol: http")).isEqualTo(2);
+    assertThat(gateway)
+        .contains(
+            "methods:\n          - POST",
+            "methods:\n          - OPTIONS",
+            "scope:\n            - lexis:federal-submission:submit")
+        .doesNotContain("nr-lexis-api-test.apps.gold.devops.gov.bc.ca");
+  }
+
+  @Test
+  void backendShouldOnlyAdmitTheFrontendGatewayAndMonitoring() throws IOException {
+    String backend = Files.readString(resolve("backend/openshift.deploy.yml"));
+    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+
+    assertThat(backend)
+        .contains(
+            "app: ${NAME}-frontend-${ZONE}",
+            "environment: ${ZONE}\n                  name: b8840c",
+            "network.openshift.io/policy-group: monitoring")
+        .doesNotContain(
+            "kind: Route",
+            "network.openshift.io/policy-group: ingress",
+            "- name: SLOT");
+    assertThat(occurrences(workflow, "-p SLOT=")).isOne();
+  }
+
+  @Test
+  void frontendRouteShouldHideOnlyTheNexcolMachineEndpoints() throws IOException {
+    String caddy = Files.readString(resolve("frontend/Caddyfile"));
+    String frontend = Files.readString(resolve("frontend/openshift.deploy.yml"));
+    String matcher =
+        "@nexcol_api path " + NEXCOL_PATH + " " + NEXCOL_PATH + "/*";
+
+    assertThat(frontend).contains("kind: Route");
+    assertThat(caddy)
+        .contains(matcher, "respond @nexcol_api 404", "reverse_proxy /api* {$BACKEND_URL}")
+        .doesNotContain("@nexcol_api path /api/lexis/application-submissions");
+    assertThat(caddy.indexOf(matcher)).isLessThan(caddy.indexOf("reverse_proxy /api*"));
+  }
+
+  private static int occurrences(String value, String target) {
+    return value.split(java.util.regex.Pattern.quote(target), -1).length - 1;
+  }
+
+  private static Path resolve(String path) {
+    Path fromRepositoryRoot = Path.of(path);
+    if (Files.exists(fromRepositoryRoot)) {
+      return fromRepositoryRoot;
+    }
+    return Path.of("..", path);
+  }
+}

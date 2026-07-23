@@ -10,9 +10,6 @@ parameters:
   - name: ZONE
     description: PR number, 'test', or 'prod'
     required: true
-  - name: SLOT
-    description: Route hostname slot — PR % 50 for previews, or test/prod
-    required: true
   - name: IMAGE_TAG
     description: Container image tag (PR number, 'test', or 'prod')
     value: latest
@@ -128,9 +125,6 @@ parameters:
     required: true
   - name: LEXIS_VIRUS_SCAN_TIMEOUT
     value: 10s
-  - name: DOMAIN
-    description: Cluster apps domain (no leading dot)
-    value: apps.gold.devops.gov.bc.ca
 
 objects:
   - apiVersion: apps/v1
@@ -391,24 +385,6 @@ objects:
           port: 8080
           protocol: TCP
 
-  - apiVersion: route.openshift.io/v1
-    kind: Route
-    metadata:
-      name: ${NAME}-backend-api-${ZONE}
-      labels:
-        app: ${NAME}-backend-${ZONE}
-        app.kubernetes.io/instance: ${ZONE}
-    spec:
-      host: ${NAME}-api-${SLOT}.${DOMAIN}
-      to:
-        kind: Service
-        name: ${NAME}-backend-${ZONE}
-      port:
-        targetPort: 8080-tcp
-      tls:
-        termination: edge
-        insecureEdgeTerminationPolicy: Redirect
-
   - apiVersion: autoscaling/v2
     kind: HorizontalPodAutoscaler
     metadata:
@@ -499,7 +475,8 @@ objects:
                   app: ${NAME}-frontend-${ZONE}
             - namespaceSelector:
                 matchLabels:
-                  network.openshift.io/policy-group: ingress
+                  environment: ${ZONE}
+                  name: b8840c
             - namespaceSelector:
                 matchLabels:
                   network.openshift.io/policy-group: monitoring

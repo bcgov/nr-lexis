@@ -146,7 +146,9 @@ Grouped by area; see `controller/` for request and response contracts.
 | Admin and uploads | `/api/lexis/admin/*`, `/api/lexis/*Upload` | Policy administration and upload workflows. |
 
 See [../docs/nexcol-keycloak-service-client.md](../docs/nexcol-keycloak-service-client.md) for
-the NEXCOL Keycloak service-client setup and request shape.
+the NEXCOL Keycloak service-client setup and request shape. OpenShift exposes this backend only
+through its cluster-local Service. Interactive browser APIs arrive through the frontend proxy;
+the NEXCOL-only paths arrive through the API gateway.
 
 See [../docs/permit-invoicing.md](../docs/permit-invoicing.md) for GBMS ordering, recovery, and
 rollout modes. See [../docs/outbound-email.md](../docs/outbound-email.md) for non-production mail
