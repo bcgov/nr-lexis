@@ -116,6 +116,24 @@ describe('Provincial Offer Detail Actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('groups each offer form area in a distinct section', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    const sections = [
+      screen.getByRole('group', { name: 'Application details' }),
+      screen.getByRole('group', { name: 'Offering company details' }),
+      screen.getByRole('group', { name: 'Offer details' }),
+      screen.getByRole('group', { name: 'Offer withdrawals' }),
+      screen.getByRole('group', { name: 'Approval' }),
+    ]
+
+    for (const section of sections) {
+      expect(section).toHaveClass('offer-form-section')
+      expect(section.closest('.provincial-offer-sections')).toBeInTheDocument()
+    }
+  })
+
   it('updates editable legacy offer fields from the detail page', async () => {
     renderPage()
 

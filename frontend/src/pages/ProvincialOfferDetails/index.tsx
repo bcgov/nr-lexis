@@ -456,8 +456,8 @@ const ProvincialOfferDetailsPage = () => {
             loading={isRefreshingDetail}
             loadingDescription="Refreshing provincial offer detail..."
           />
-          <Tile className="provincial-offer-create">
-            <fieldset className="legacy-form-fieldset">
+          <Tile className="provincial-offer-create provincial-offer-sections">
+            <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Application details</legend>
               <div className="legacy-search-grid">
                 <TextInput
@@ -498,7 +498,7 @@ const ProvincialOfferDetailsPage = () => {
               </div>
             </fieldset>
 
-            <fieldset className="legacy-form-fieldset">
+            <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Offering company details</legend>
               <div className="legacy-search-grid">
                 <TextInput
@@ -524,7 +524,7 @@ const ProvincialOfferDetailsPage = () => {
               </div>
             </fieldset>
 
-            <fieldset className="legacy-form-fieldset">
+            <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Offer details</legend>
               <div className="legacy-search-grid">
                 <TextInput
@@ -594,7 +594,7 @@ const ProvincialOfferDetailsPage = () => {
               </div>
             </fieldset>
 
-            <fieldset className="legacy-form-fieldset">
+            <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Offer withdrawals</legend>
               <div className="legacy-search-grid">
                 <IsoDatePicker
@@ -621,7 +621,7 @@ const ProvincialOfferDetailsPage = () => {
               </div>
             </fieldset>
 
-            <fieldset className="legacy-form-fieldset">
+            <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Approval</legend>
               <div className="legacy-search-grid">
                 <IsoDatePicker

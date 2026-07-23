@@ -1468,6 +1468,28 @@ legend.cds--label {
   line-height: 1.5rem;
 }
 
+.provincial-offer-sections > .offer-form-section {
+  margin: 0;
+  padding: 1.25rem 1.5rem 1.5rem;
+  border: 1px solid var(--csp-border-subtle-01);
+  border-radius: 0.5rem;
+}
+
+.provincial-offer-sections > .offer-form-section + .offer-form-section {
+  margin-block-start: 1rem;
+  padding-block-start: 1.25rem;
+}
+
+.provincial-offer-sections > .offer-form-section > legend {
+  width: 100%;
+  margin: 0 0 1rem;
+  padding: 0;
+  color: var(--csp-text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+}
+
 .create-form-grid {
   align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));

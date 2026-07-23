@@ -657,8 +657,8 @@ const ProvincialOfferCreatePage = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
-        <Tile className="provincial-offer-create create-form-tile">
-          <fieldset className="legacy-form-fieldset create-form-section">
+        <Tile className="provincial-offer-create create-form-tile provincial-offer-sections">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Application details</legend>
             <div className="legacy-search-grid create-form-grid">
               <TextInput
@@ -726,7 +726,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset create-form-section">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Offering company details</legend>
             <div className="legacy-search-grid create-form-grid">
               <TextInput
@@ -793,7 +793,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset create-form-section">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Offer details</legend>
             <div className="legacy-search-grid create-form-grid">
               {contextVolume && (
@@ -895,7 +895,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset create-form-section">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Offer withdrawals</legend>
             <div className="legacy-search-grid create-form-grid">
               <TextInput
@@ -909,7 +909,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset create-form-section">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Approval</legend>
             {canManageOfferApproval ? (
               <div className="legacy-search-grid create-form-grid">
