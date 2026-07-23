@@ -1738,85 +1738,87 @@ const ProvincialApplicationCreatePage = () => {
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile
-                className="create-form-tile application-detail-section"
-                role="region"
-                aria-labelledby="application-create-packages-heading"
-              >
-                <h2 id="application-create-packages-heading" className="detail-tile-title">
-                  Packages / Scales
-                </h2>
-                <div className="legacy-search-grid create-form-grid">
-                  <div className="legacy-field-stack">
-                    <SearchableSelect
-                      id="applicationSpeciesCandidate"
-                      labelText="Application species"
-                      value={applicationSpeciesCandidate}
-                      disabled={isApplicationSpeciesSelectDisabled}
-                      invalid={!!fieldError('speciesCodes')}
-                      invalidText={fieldError('speciesCodes')}
-                      placeholder={speciesPlaceholder}
-                      options={applicationSpeciesSelectOptions}
-                      onBlur={() => markFieldTouched('speciesCodes')}
-                      onChange={setApplicationSpeciesCandidate}
-                    />
-                    {isApplicationSpeciesSelectDisabled && !!fieldError('speciesCodes') && (
-                      <p className="legacy-search-error" role="alert">
-                        {fieldError('speciesCodes')}
-                      </p>
-                    )}
-                    <div className="application-species-actions">
-                      <Button
-                        type="button"
-                        kind="secondary"
-                        size="sm"
-                        disabled={
-                          !applicationSpeciesCandidate ||
-                          !availableApplicationSpeciesOptions.some(
-                            (option) => option.code === applicationSpeciesCandidate,
-                          )
-                        }
-                        onClick={onAddApplicationSpecies}
-                      >
-                        Add application species
-                      </Button>
-                      <ul
-                        className="application-species-list"
-                        aria-label="Selected application species"
-                      >
-                        {form.speciesCodes.map((speciesCode) => (
-                          <li key={speciesCode}>
-                            <DismissibleTag
-                              type="blue"
-                              text={speciesCode}
-                              title={`Remove ${speciesCode} from application`}
-                              dismissTooltipLabel={`Remove ${speciesCode} from application`}
-                              onClose={() => onRemoveApplicationSpecies(speciesCode)}
-                            />
-                          </li>
-                        ))}
-                      </ul>
+              <div className="application-items-grid">
+                <Tile
+                  className="create-form-tile application-detail-section"
+                  role="region"
+                  aria-labelledby="application-create-packages-heading"
+                >
+                  <h2 id="application-create-packages-heading" className="detail-tile-title">
+                    Packages / Scales
+                  </h2>
+                  <div className="legacy-search-grid create-form-grid">
+                    <div className="legacy-field-stack">
+                      <SearchableSelect
+                        id="applicationSpeciesCandidate"
+                        labelText="Application species"
+                        value={applicationSpeciesCandidate}
+                        disabled={isApplicationSpeciesSelectDisabled}
+                        invalid={!!fieldError('speciesCodes')}
+                        invalidText={fieldError('speciesCodes')}
+                        placeholder={speciesPlaceholder}
+                        options={applicationSpeciesSelectOptions}
+                        onBlur={() => markFieldTouched('speciesCodes')}
+                        onChange={setApplicationSpeciesCandidate}
+                      />
+                      {isApplicationSpeciesSelectDisabled && !!fieldError('speciesCodes') && (
+                        <p className="legacy-search-error" role="alert">
+                          {fieldError('speciesCodes')}
+                        </p>
+                      )}
+                      <div className="application-species-actions">
+                        <Button
+                          type="button"
+                          kind="secondary"
+                          size="sm"
+                          disabled={
+                            !applicationSpeciesCandidate ||
+                            !availableApplicationSpeciesOptions.some(
+                              (option) => option.code === applicationSpeciesCandidate,
+                            )
+                          }
+                          onClick={onAddApplicationSpecies}
+                        >
+                          Add application species
+                        </Button>
+                        <ul
+                          className="application-species-list"
+                          aria-label="Selected application species"
+                        >
+                          {form.speciesCodes.map((speciesCode) => (
+                            <li key={speciesCode}>
+                              <DismissibleTag
+                                type="blue"
+                                text={speciesCode}
+                                title={`Remove ${speciesCode} from application`}
+                                dismissTooltipLabel={`Remove ${speciesCode} from application`}
+                                onClose={() => onRemoveApplicationSpecies(speciesCode)}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
+                    <SearchableSelect
+                      id="applicationEndUse"
+                      labelText="Application end use"
+                      value={form.endUseCode}
+                      disabled={
+                        form.speciesCodes.length === 0 ||
+                        isLoadingApplicationEndUses ||
+                        applicationEndUseSelectOptions.length === 0
+                      }
+                      placeholder={endUsePlaceholder}
+                      options={applicationEndUseSelectOptions}
+                      onChange={(value) => {
+                        markFormEdited()
+                        setForm((current) => ({ ...current, endUseCode: value }))
+                      }}
+                    />
                   </div>
-                  <SearchableSelect
-                    id="applicationEndUse"
-                    labelText="Application end use"
-                    value={form.endUseCode}
-                    disabled={
-                      form.speciesCodes.length === 0 ||
-                      isLoadingApplicationEndUses ||
-                      applicationEndUseSelectOptions.length === 0
-                    }
-                    placeholder={endUsePlaceholder}
-                    options={applicationEndUseSelectOptions}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, endUseCode: value }))
-                    }}
-                  />
-                </div>
+                </Tile>
                 {productTypeSupportsPackages(form.productTypeCode) && (
-                  <section className="application-items-section application-items-section--package-details application-create-package-shell">
+                  <section className="application-items-card application-items-section application-items-section--package-details">
                     <div className="application-items-section-header">
                       <h3>Package Details</h3>
                       <SearchableSelect
@@ -1859,7 +1861,7 @@ const ProvincialApplicationCreatePage = () => {
                     </div>
                   </section>
                 )}
-              </Tile>
+              </div>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
               <Tile

@@ -365,7 +365,12 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Packages / Scales')
-    expect(await screen.findByRole('heading', { name: 'Package Details' })).toBeInTheDocument()
+    const packageDetailsHeading = await screen.findByRole('heading', {
+      name: 'Package Details',
+    })
+    const packageDetailsCard = packageDetailsHeading.closest('section')
+    expect(packageDetailsCard).toHaveClass('application-items-card')
+    expect(packageDetailsCard?.parentElement).toHaveClass('application-items-grid')
 
     const createPackageButton = screen.getByRole('button', { name: 'Create New Package' })
     await userEvent.click(createPackageButton)
