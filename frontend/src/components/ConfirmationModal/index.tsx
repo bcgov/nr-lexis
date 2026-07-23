@@ -1,5 +1,5 @@
 import { Button, Loading, Modal } from '@carbon/react'
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 import './ConfirmationModal.css'
 
@@ -49,7 +49,7 @@ const ConfirmationModal = ({
   const cancelButtonId = `lexis-confirmation-cancel-${generatedId}`
   const descriptionId = `lexis-confirmation-description-${generatedId}`
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || !description) return
     const modalNode = modalRef.current
     const dialog = modalNode?.matches('[role="dialog"]')

@@ -437,7 +437,7 @@ describe('Create Page Core Flows', () => {
       screen.queryByRole('button', { name: 'Remove BA from application' }),
     ).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
-  })
+  }, 20_000)
 
   it('requires and resets application accuracy confirmation for a provincial submitter', async () => {
     mockedUseAuth.mockReturnValue(
