@@ -322,6 +322,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(within(applicationItemSummary as HTMLElement).getByText('5')).toBeInTheDocument()
     const packageDetailsSection = screen.getByText('Package Details').closest('section')
     expect(packageDetailsSection).toBeTruthy()
+    expect(packageDetailsSection).toHaveClass('application-items-card')
     expect(
       within(packageDetailsSection as HTMLElement).getByText('Total Scale Volume'),
     ).toBeInTheDocument()

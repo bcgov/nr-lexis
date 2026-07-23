@@ -10,9 +10,8 @@ import {
   TableRow,
   TextArea,
   TextInput,
-  Tile,
 } from '@carbon/react'
-import { Box } from '@carbon/icons-react'
+import { Box, List } from '@carbon/icons-react'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -1346,62 +1345,67 @@ function ProvincialApplicationItemsPanel({
   )
 
   return (
-    <Tile id="application-items" className="application-detail-section application-items-panel">
-      <header className="application-items-panel__header">
-        <h2 className="detail-tile-title application-items-panel__title">
-          <Box size={20} aria-hidden="true" />
-          <span>Items</span>
-        </h2>
-      </header>
-      {itemsLoading && <InlineLoading description="Loading item data..." />}
-      {referenceOptionsLoading && (canEditPackages || canAddPackages || canAddScales) && (
-        <InlineLoading description="Loading authoritative item options..." />
-      )}
-      {referenceOptionsUnavailable && (canEditPackages || canAddPackages || canAddScales) && (
-        <AppNotification
-          kind="warning"
-          title="Item options unavailable"
-          subtitle="Package saves, package creation, and scale additions are disabled because authoritative Oracle options could not be verified."
-          lowContrast
-        />
-      )}
-      {!!itemsErrorMessage && (
-        <AppNotification
-          kind="error"
-          title="Item action failed"
-          subtitle={itemsErrorMessage}
-          lowContrast
-          onCloseButtonClick={() => setItemsErrorMessage('')}
-        />
-      )}
-      {!!itemsInfoMessage && (
-        <AppNotification
-          kind="success"
-          title="Item action completed"
-          subtitle={itemsInfoMessage}
-          lowContrast
-          onCloseButtonClick={() => setItemsInfoMessage('')}
-        />
-      )}
+    <div id="application-items" className="application-detail-section application-items-panel">
+      <section className="application-items-card application-items-overview">
+        <header className="application-items-panel__header">
+          <h2 className="detail-tile-title application-items-panel__title">
+            <List size={20} aria-hidden="true" />
+            <span>Items</span>
+          </h2>
+        </header>
+        {itemsLoading && <InlineLoading description="Loading item data..." />}
+        {referenceOptionsLoading && (canEditPackages || canAddPackages || canAddScales) && (
+          <InlineLoading description="Loading authoritative item options..." />
+        )}
+        {referenceOptionsUnavailable && (canEditPackages || canAddPackages || canAddScales) && (
+          <AppNotification
+            kind="warning"
+            title="Item options unavailable"
+            subtitle="Package saves, package creation, and scale additions are disabled because authoritative Oracle options could not be verified."
+            lowContrast
+          />
+        )}
+        {!!itemsErrorMessage && (
+          <AppNotification
+            kind="error"
+            title="Item action failed"
+            subtitle={itemsErrorMessage}
+            lowContrast
+            onCloseButtonClick={() => setItemsErrorMessage('')}
+          />
+        )}
+        {!!itemsInfoMessage && (
+          <AppNotification
+            kind="success"
+            title="Item action completed"
+            subtitle={itemsInfoMessage}
+            lowContrast
+            onCloseButtonClick={() => setItemsInfoMessage('')}
+          />
+        )}
 
-      <dl className="application-items-metric-strip" aria-label="Application item summary">
-        {[
-          ['Application Total Pieces', applicationTotalPieces.toLocaleString()],
-          ['Packages', packageNumbers.length.toLocaleString()],
-          ['Selected Package Number', selectedPackageNumber || 'None selected'],
-          ['Selected Scale Volume', packageForm.scaledVolume || 'Not provided'],
-        ].map(([label, value]) => (
-          <div key={label} className="application-items-metric">
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
+        <dl className="application-items-metric-strip" aria-label="Application item summary">
+          {[
+            ['Application Total Pieces', applicationTotalPieces.toLocaleString()],
+            ['Packages', packageNumbers.length.toLocaleString()],
+            ['Selected Package Number', selectedPackageNumber || 'None selected'],
+            ['Selected Scale Volume', packageForm.scaledVolume || 'Not provided'],
+          ].map(([label, value]) => (
+            <div key={label} className="application-items-metric">
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       <div className="application-items-grid">
-        <section className="application-items-section application-items-section--package-details">
+        <section className="application-items-card application-items-section application-items-section--package-details">
           <div className="application-items-section-header">
-            <h3>Package Details</h3>
+            <h3 className="application-items-section-title--icon">
+              <Box size={20} aria-hidden="true" />
+              <span>Package Details</span>
+            </h3>
             <SearchableSelect
               id="applicationItemsPackageSelect"
               labelText="Selected Package"
@@ -1672,7 +1676,7 @@ function ProvincialApplicationItemsPanel({
           </div>
         </section>
 
-        <section className="application-items-section application-items-section--create-package">
+        <section className="application-items-card application-items-section application-items-section--create-package">
           <h3>Create Package</h3>
           <div className="application-items-form">
             <TextInput
@@ -1856,7 +1860,7 @@ function ProvincialApplicationItemsPanel({
         <section
           id="application-items-scales"
           ref={scalesSectionRef}
-          className="application-items-section application-items-section--scales"
+          className="application-items-card application-items-section application-items-section--scales"
         >
           <h3>Scales</h3>
           <div className="application-items-form">
@@ -2028,7 +2032,7 @@ function ProvincialApplicationItemsPanel({
         }}
         onClose={() => setPendingPackageSelection('')}
       />
-    </Tile>
+    </div>
   )
 }
 
