@@ -1700,8 +1700,8 @@ legend.cds--label {
 }
 
 .legacy-search-table-content > .cds--data-table-content {
-  inline-size: max-content;
-  min-inline-size: 100%;
+  inline-size: 100%;
+  min-inline-size: 0;
   overflow: visible;
 }
 
@@ -1716,7 +1716,7 @@ legend.cds--label {
 
 .legacy-search-table-frame .cds--data-table {
   --cds-text-secondary: var(--csp-text-primary);
-  inline-size: max-content;
+  inline-size: 100%;
   min-inline-size: 100%;
 }
 
@@ -1727,7 +1727,8 @@ legend.cds--label {
   font-weight: 700;
   line-height: 1.4;
   letter-spacing: 0.01rem;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .legacy-search-table-frame .cds--data-table tbody td,
