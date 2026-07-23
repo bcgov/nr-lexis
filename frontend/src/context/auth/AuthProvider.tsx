@@ -423,24 +423,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
         window.clearTimeout(expiryTimeoutId)
       }
     }
-    const startSessionWarning = () => {
+    const startSessionWarning = (expiresAt: number) => {
       sessionWarningOpenRef.current = true
       const activeElement = document.activeElement
       sessionWarningLauncherRef.current =
         activeElement instanceof HTMLElement ? activeElement : null
-      const expiresAt = Date.now() + SESSION_IDLE_WARNING_MS
       setSessionWarningExpiresAt(expiresAt)
-      expiryTimeoutId = window.setTimeout(() => {
+      expiryTimeoutId = window.setTimeout(
+        () => {
+          void expireSession('idle-timeout')
+        },
+        Math.max(0, expiresAt - Date.now()),
+      )
+    }
+    const checkIdleDeadline = (expiresAt: number) => {
+      const remaining = expiresAt - Date.now()
+      if (remaining <= 0) {
         void expireSession('idle-timeout')
-      }, SESSION_IDLE_WARNING_MS)
+        return
+      }
+      startSessionWarning(expiresAt)
     }
     const resetIdleTimer = () => {
       if (sessionWarningOpenRef.current) {
         return
       }
       clearTimers()
+      const expiresAt = Date.now() + SESSION_IDLE_TIMEOUT_MS
       warningTimeoutId = window.setTimeout(
-        startSessionWarning,
+        () => checkIdleDeadline(expiresAt),
         SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS,
       )
     }

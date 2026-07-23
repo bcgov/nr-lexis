@@ -128,8 +128,8 @@ describe('AuthProvider logout', () => {
     expect(hasSessionExpiredLoginNotice()).toBe(false)
   })
 
-  it('uses the standard 15 minute idle timeout', () => {
-    expect(SESSION_IDLE_TIMEOUT_MS).toBe(15 * 60 * 1000)
+  it('uses the FSPTS 30 minute idle timeout', () => {
+    expect(SESSION_IDLE_TIMEOUT_MS).toBe(30 * 60 * 1000)
     expect(SESSION_IDLE_WARNING_MS).toBe(5 * 60 * 1000)
   })
 
@@ -154,7 +154,7 @@ describe('AuthProvider logout', () => {
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
   })
 
-  it('expires authenticated sessions after 15 minutes of inactivity', async () => {
+  it('expires authenticated sessions after 30 minutes of inactivity', async () => {
     window.history.replaceState({}, document.title, '/admin')
     let pathnameWhenSignOutStarted = ''
     authMocks.signOut.mockImplementation(async () => {
@@ -192,7 +192,7 @@ describe('AuthProvider logout', () => {
     expect(hasSessionExpiredLoginNotice()).toBe(true)
   })
 
-  it('resets the 15 minute inactivity timer when the user interacts with the page', async () => {
+  it('resets the 30 minute inactivity timer when the user interacts with the page', async () => {
     window.history.replaceState({}, document.title, '/admin')
     renderProbe()
 

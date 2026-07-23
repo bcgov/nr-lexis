@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-const SESSION_IDLE_WARNING_DELAY_MS = 10 * 60 * 1000
+const SESSION_IDLE_WARNING_DELAY_MS = 25 * 60 * 1000
 const SESSION_IDLE_WARNING_DURATION_MS = 5 * 60 * 1000
 const URGENT_COUNTDOWN_DURATION_MS = 30 * 1000
 const SESSION_START_ISO = '2026-07-22T12:00:00.000Z'
@@ -104,7 +104,7 @@ const installSyntheticCognitoSession = async (page: Page) => {
     }
 
     refreshRequestCount += 1
-    const refreshedAtSeconds = sessionStartSeconds + 14 * 60 + 30
+    const refreshedAtSeconds = sessionStartSeconds + 29 * 60 + 30
     await route.fulfill({
       status: 200,
       contentType: 'application/x-amz-json-1.1',
