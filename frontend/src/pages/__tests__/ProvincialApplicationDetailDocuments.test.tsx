@@ -215,7 +215,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(screen.getByLabelText(/Document description/)).toBeVisible()
   })
 
-  it('disables application upload for expired applications', async () => {
+  it('allows application uploads for expired applications to match legacy', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       applicationStatusCode: 'EXP',
@@ -236,12 +236,9 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await selectApplicationDetailTab('Documents')
 
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
-    expect(
-      await screen.findByText(
-        'Application document upload is unavailable for expired applications.',
-      ),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    await openDocumentUploadModal()
+    expect(screen.getByLabelText(/Document description/)).toBeVisible()
   })
 
   it('disables application upload for industry users when a permit is complete', async () => {
@@ -593,11 +590,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
 
     await selectApplicationDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
-    expect(
-      await screen.findByText(
-        'Application document upload is unavailable for expired applications.',
-      ),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
 
     const documentName = await screen.findByText('expired-doc.pdf')
     const documentRow = documentName.closest('tr')

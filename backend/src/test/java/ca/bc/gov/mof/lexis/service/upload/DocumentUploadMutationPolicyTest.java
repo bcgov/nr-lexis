@@ -40,10 +40,10 @@ class DocumentUploadMutationPolicyTest {
 
   @Test
   void missingCanonicalServicesShouldFailClosed() {
-    assertThatThrownBy(() -> policy.requireApplicationMutable(1000123L))
+    assertThatThrownBy(() -> policy.requireApplicationAttachmentTarget(1000123L))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Application status is unavailable for mutation.");
-    assertThatThrownBy(() -> policy.requireExemptionMutable("EX-205"))
+    assertThatThrownBy(() -> policy.requireExemptionAttachmentTarget("EX-205"))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Exemption status is unavailable for mutation.");
     assertThatThrownBy(() -> policy.requirePermitMutable(7000123L))
@@ -64,10 +64,10 @@ class DocumentUploadMutationPolicyTest {
         .thenReturn(Optional.of(exemption(null)));
     when(permitService.findByPermitNumber(7000123L)).thenReturn(Optional.of(permit(null)));
 
-    assertThatThrownBy(() -> policy.requireApplicationMutable(1000123L))
+    assertThatThrownBy(() -> policy.requireApplicationAttachmentTarget(1000123L))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Application status is unavailable for mutation.");
-    assertThatThrownBy(() -> policy.requireExemptionMutable("EX-205"))
+    assertThatThrownBy(() -> policy.requireExemptionAttachmentTarget("EX-205"))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Exemption status is unavailable for mutation.");
     assertThatThrownBy(() -> policy.requirePermitMutable(7000123L))
@@ -79,7 +79,7 @@ class DocumentUploadMutationPolicyTest {
   }
 
   @Test
-  void expiredCanonicalRecordsShouldBeReadOnly() {
+  void expiredApplicationAndExemptionTargetsShouldAllowDocumentUploads() {
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
@@ -89,12 +89,10 @@ class DocumentUploadMutationPolicyTest {
         .thenReturn(Optional.of(exemption("EXP")));
     when(permitService.findByPermitNumber(7000123L)).thenReturn(Optional.of(permit("exp")));
 
-    assertThatThrownBy(() -> policy.requireApplicationMutable(1000123L))
-        .isInstanceOf(AccessDeniedException.class)
-        .hasMessage("Expired applications are read-only.");
-    assertThatThrownBy(() -> policy.requireExemptionMutable("EX-205"))
-        .isInstanceOf(AccessDeniedException.class)
-        .hasMessage("Expired exemptions are read-only.");
+    assertThatCode(() -> policy.requireApplicationAttachmentTarget(1000123L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> policy.requireExemptionAttachmentTarget("EX-205"))
+        .doesNotThrowAnyException();
     assertThatThrownBy(() -> policy.requirePermitMutable(7000123L))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Expired permits are read-only.");
@@ -111,8 +109,10 @@ class DocumentUploadMutationPolicyTest {
         .thenReturn(Optional.of(exemption("CAN")));
     when(permitService.findByPermitNumber(7000123L)).thenReturn(Optional.of(permit("ACT")));
 
-    assertThatCode(() -> policy.requireApplicationMutable(1000123L)).doesNotThrowAnyException();
-    assertThatCode(() -> policy.requireExemptionMutable(" EX-205 ")).doesNotThrowAnyException();
+    assertThatCode(() -> policy.requireApplicationAttachmentTarget(1000123L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> policy.requireExemptionAttachmentTarget(" EX-205 "))
+        .doesNotThrowAnyException();
     assertThatCode(() -> policy.requirePermitMutable(7000123L)).doesNotThrowAnyException();
     assertThatCode(() -> policy.requireInvoicePermitActive(7000123L)).doesNotThrowAnyException();
   }

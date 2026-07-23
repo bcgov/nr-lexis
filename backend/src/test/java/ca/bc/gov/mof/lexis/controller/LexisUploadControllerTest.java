@@ -130,7 +130,7 @@ class LexisUploadControllerTest {
     assertThat(response.getBody()).isEqualTo(payload);
     verify(provincialAuthorizationService, times(2))
         .requireApplicationAttachmentPersistence(authentication, 7000123L);
-    verify(documentUploadMutationPolicy).requireApplicationMutable(7000123L);
+    verify(documentUploadMutationPolicy).requireApplicationAttachmentTarget(7000123L);
     verify(applicationEditLockService)
         .acquire(7000123L, "idir\\jsmith", "idir\\jsmith", false);
     verify(uploadService).uploadApplication(file, 7000123L, "App file", "idir\\jsmith");
@@ -404,19 +404,19 @@ class LexisUploadControllerTest {
   }
 
   @Test
-  void fileApplicationUploadShouldRejectExpiredCanonicalTargetBeforeLock() {
+  void fileApplicationUploadShouldRejectUnavailableCanonicalTargetBeforeLock() {
     LexisUploadController controller = controller();
     MultipartFile file = sampleFile("application.pdf");
-    doThrow(new AccessDeniedException("Expired applications are read-only."))
+    doThrow(new AccessDeniedException("Application status is unavailable for mutation."))
         .when(documentUploadMutationPolicy)
-        .requireApplicationMutable(7000123L);
+        .requireApplicationAttachmentTarget(7000123L);
 
     assertThatThrownBy(
             () ->
                 controller.fileApplicationUpload(
                     file, null, 7000123L, "App file", null, null))
         .isInstanceOf(AccessDeniedException.class)
-        .hasMessage("Expired applications are read-only.");
+        .hasMessage("Application status is unavailable for mutation.");
 
     verify(provincialAuthorizationService, times(2))
         .requireApplicationAttachmentPersistence(null, 7000123L);
@@ -533,7 +533,7 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(documentUploadMutationPolicy).requireExemptionMutable("E-123");
+    verify(documentUploadMutationPolicy).requireExemptionAttachmentTarget("E-123");
     verify(applicationEditLockService)
         .acquireExemption("E-123", "idir\\jsmith", "idir\\jsmith", false);
     verify(uploadService).uploadExemption(file, "E-123", "Exemption file", "idir\\jsmith");
@@ -567,19 +567,19 @@ class LexisUploadControllerTest {
   }
 
   @Test
-  void fileExemptionUploadShouldRejectExpiredCanonicalTargetBeforeLock() {
+  void fileExemptionUploadShouldRejectUnavailableCanonicalTargetBeforeLock() {
     LexisUploadController controller = controller();
     MultipartFile file = sampleFile("exemption.pdf");
-    doThrow(new AccessDeniedException("Expired exemptions are read-only."))
+    doThrow(new AccessDeniedException("Exemption status is unavailable for mutation."))
         .when(documentUploadMutationPolicy)
-        .requireExemptionMutable("E-123");
+        .requireExemptionAttachmentTarget("E-123");
 
     assertThatThrownBy(
             () ->
                 controller.fileExemptionUpload(
                     file, null, "E-123", "Exemption file", null, null))
         .isInstanceOf(AccessDeniedException.class)
-        .hasMessage("Expired exemptions are read-only.");
+        .hasMessage("Exemption status is unavailable for mutation.");
 
     verify(provincialAuthorizationService, times(2))
         .requireExemptionAttachmentMutation(null, "E-123");

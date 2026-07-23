@@ -930,7 +930,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeDisabled()
   })
 
-  it('denies exemption document delete after expiry', async () => {
+  it('allows exemption uploads but denies document delete after expiry', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,
       exemptionStatusCode: 'EXP',
@@ -960,6 +960,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     const documentRow = (await screen.findByText('expired-exemption-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(

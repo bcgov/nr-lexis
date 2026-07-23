@@ -412,12 +412,6 @@ const canDeleteApplicationDocuments = (
   return industryUser && [APPLICATION_STATUS_PERMITTED, APPLICATION_STATUS_EXPIRED].includes(status)
 }
 
-const isExpiredApplication = (detail: ProvincialApplicationDetail | null): boolean => {
-  const statusCode = detail?.applicationStatusCode?.trim().toUpperCase() ?? ''
-  const statusDescription = detail?.statusDescription?.trim().toUpperCase() ?? ''
-  return statusCode === APPLICATION_STATUS_EXPIRED || statusDescription === 'EXPIRED'
-}
-
 const hasCompletePermit = (permitRows: ApplicationPermitRow[]): boolean =>
   permitRows.some((row) =>
     row.permitStatusDescription.trim().toUpperCase().includes(COMPLETE_PERMIT_STATUS_TEXT),
@@ -436,9 +430,6 @@ const applicationDocumentUploadUnavailableMessage = (
   }
   if (detail?.readOnly) {
     return 'Application document upload is unavailable for read-only applications.'
-  }
-  if (isExpiredApplication(detail)) {
-    return 'Application document upload is unavailable for expired applications.'
   }
   if (detail?.industryUser && hasCompletePermit(permitRows)) {
     return 'Application document upload is unavailable for industry users when the application has a complete permit.'

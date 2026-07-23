@@ -639,8 +639,7 @@ const ProvincialExemptionDetailsPage = () => {
     regionOptions,
   ])
 
-  const canUploadExemptionDocuments =
-    canPerform('/fileExemptionUpload') && persistedStatusCode !== 'EXP' && !exemptionEditLocked
+  const canUploadExemptionDocuments = canPerform('/fileExemptionUpload') && !exemptionEditLocked
   const canDeleteExemptionDocuments =
     isApplicationApprover &&
     persistedStatusCode.length > 0 &&

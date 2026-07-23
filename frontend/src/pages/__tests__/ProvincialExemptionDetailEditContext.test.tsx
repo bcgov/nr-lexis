@@ -954,7 +954,13 @@ describe('Provincial exemption edit context', () => {
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
   })
 
-  it('keeps an expired exemption fully read-only', async () => {
+  it('keeps expired exemption fields read-only while allowing document uploads', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === 'saveExemption' || action === '/fileExemptionUpload',
+      }),
+    )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...exemptionDetail,
       exemptionStatusCode: 'EXP',
@@ -985,7 +991,7 @@ describe('Provincial exemption edit context', () => {
     expect(screen.getAllByText('Expired')).not.toHaveLength(0)
     expect(screen.queryByRole('button', { name: 'Edit exemption' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Documents' }))
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 
