@@ -1662,6 +1662,10 @@ legend.cds--label {
   background-color: transparent;
 }
 
+.legacy-search-table-toolbar .cds--toolbar-content {
+  justify-content: flex-start;
+}
+
 .provincial-review-table-toolbar {
   display: flex;
   align-items: center;
