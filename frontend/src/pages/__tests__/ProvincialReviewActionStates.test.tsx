@@ -58,7 +58,7 @@ const reviewResponse = {
   content: [
     {
       applicationNumber: '1000123',
-      volume: 210.5,
+      volume: 1,
       speciesEndUse: 'LOG',
       listingDate: '2026-02-01',
       status: 'NEW',
@@ -67,7 +67,7 @@ const reviewResponse = {
     },
     {
       applicationNumber: '1000456',
-      volume: 95,
+      volume: 1212,
       speciesEndUse: 'LUM',
       listingDate: '2026-02-26',
       status: 'PND',
@@ -275,8 +275,8 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000456')
 
-    expect(screen.getByText('210.5')).toBeInTheDocument()
-    expect(screen.getByText('95.0')).toBeInTheDocument()
+    expect(screen.getByText('1.0')).toBeInTheDocument()
+    expect(screen.getByText('1212.0')).toBeInTheDocument()
   })
 
   it.each([

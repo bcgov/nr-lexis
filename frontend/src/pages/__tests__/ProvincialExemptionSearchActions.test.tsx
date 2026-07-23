@@ -471,7 +471,10 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    await userEvent.click(screen.getByRole('button', { name: /Balance remaining/ }))
+    expect(screen.getByRole('button', { name: 'Exemption' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Balance remaining (m³)' }))
+
+    expect(screen.getByRole('button', { name: 'Balance remaining (m³)' })).toBeInTheDocument()
 
     await waitFor(() => {
       expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
