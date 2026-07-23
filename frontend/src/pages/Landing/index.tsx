@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Column, Grid } from '@carbon/react'
+import { Button, Column, Grid, InlineNotification } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
 import { AppNotification } from '../../components/AppNotification'
 import type { LoginProvider } from '@/context/auth/types'
+import {
+  clearSessionExpiredLoginNotice,
+  hasSessionExpiredLoginNotice,
+} from '@/context/auth/session-expiry'
 import { useAuth } from '@/context/auth/useAuth'
 import logo from '@/assets/BCID_H_rgb_pos.png'
 import landingImage from '@/assets/landing.jpg'
@@ -13,6 +17,13 @@ const LandingPage = () => {
   const { defaultRoute, isLoading, isLoggedIn, login, usesExternalLogin } = useAuth()
 
   const [errorMessage, setErrorMessage] = useState('')
+  const [showSessionExpiredMessage] = useState(hasSessionExpiredLoginNotice)
+
+  useEffect(() => {
+    if (showSessionExpiredMessage) {
+      clearSessionExpiredLoginNotice()
+    }
+  }, [showSessionExpiredMessage])
 
   useEffect(() => {
     if (!isLoading && isLoggedIn) {
@@ -45,6 +56,17 @@ const LandingPage = () => {
                 Create and manage applications, view offers and permits
               </p>
             </div>
+
+            {showSessionExpiredMessage && (
+              <InlineNotification
+                className="landing-session-expired-notification"
+                kind="warning"
+                lowContrast
+                hideCloseButton
+                title="You’ve been logged out"
+                subtitle="Your session expired for security reasons and any unsaved changes were lost. Log in again to continue."
+              />
+            )}
 
             <div className="landing-actions">
               {!isLoggedIn && (

@@ -6,11 +6,16 @@ import {
   isCognitoConfigured,
 } from '@/config/fam/config'
 import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
+import { AppNotification } from '@/components/AppNotification'
+import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { hasRole } from '@/context/auth/role-utils'
 import {
+  clearSessionExpiredLoginNotice,
+  markSessionExpiredLoginNotice,
   redirectToLoginShell,
   SESSION_EXPIRED_EVENT,
+  SESSION_IDLE_WARNING_MS,
   SESSION_IDLE_TIMEOUT_MS,
   type SessionExpiredEventDetail,
   type SessionExpiredReason,
@@ -246,37 +251,60 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const sessionGenerationRef = useRef(0)
   const sessionExpiryInFlightRef = useRef(false)
   const authenticatedSessionRef = useRef(false)
+  const sessionWarningOpenRef = useRef(false)
+  const sessionWarningLauncherRef = useRef<HTMLElement | null>(null)
+  const [sessionWarningExpiresAt, setSessionWarningExpiresAt] = useState<number | null>(null)
+  const [showSessionExtendedMessage, setShowSessionExtendedMessage] = useState(false)
+  const [idleTimerVersion, setIdleTimerVersion] = useState(0)
   const usesExternalLogin = isCognitoConfigured
 
-  const expireSession = useCallback(async (reason: SessionExpiredReason) => {
-    if (sessionExpiryInFlightRef.current) {
-      return
-    }
-
-    sessionExpiryInFlightRef.current = true
-    sessionGenerationRef.current += 1
-    refreshPromiseRef.current = null
-    const shouldSignOut =
-      isCognitoConfigured && (authenticatedSessionRef.current || reason === 'idle-timeout')
-
-    try {
-      apiService.clearCachedGetData()
-      apiService.clearRecordVersions()
-      clearAllPageDataCache()
-      authenticatedSessionRef.current = false
-      setCapabilities(DEFAULT_CAPABILITIES)
-      setIsLoading(false)
-      redirectToLoginShell()
-
-      if (shouldSignOut) {
-        await cognitoSignOut()
-      }
-    } catch (error) {
-      console.warn(`Unable to complete Cognito sign-out after ${reason}.`, error)
-    } finally {
-      sessionExpiryInFlightRef.current = false
+  const closeSessionWarning = useCallback((resetIdleTimer = false) => {
+    sessionWarningOpenRef.current = false
+    setSessionWarningExpiresAt(null)
+    if (resetIdleTimer) {
+      setIdleTimerVersion((currentVersion) => currentVersion + 1)
     }
   }, [])
+
+  const expireSession = useCallback(
+    async (reason: SessionExpiredReason) => {
+      if (sessionExpiryInFlightRef.current) {
+        return
+      }
+
+      sessionExpiryInFlightRef.current = true
+      sessionGenerationRef.current += 1
+      refreshPromiseRef.current = null
+      const shouldSignOut =
+        isCognitoConfigured && (authenticatedSessionRef.current || reason === 'idle-timeout')
+
+      try {
+        closeSessionWarning()
+        setShowSessionExtendedMessage(false)
+        apiService.clearCachedGetData()
+        apiService.clearRecordVersions()
+        clearAllPageDataCache()
+        authenticatedSessionRef.current = false
+        setCapabilities(DEFAULT_CAPABILITIES)
+        setIsLoading(false)
+        if (reason === 'idle-timeout') {
+          markSessionExpiredLoginNotice()
+        } else {
+          clearSessionExpiredLoginNotice()
+        }
+        redirectToLoginShell()
+
+        if (shouldSignOut) {
+          await cognitoSignOut()
+        }
+      } catch (error) {
+        console.warn(`Unable to complete Cognito sign-out after ${reason}.`, error)
+      } finally {
+        sessionExpiryInFlightRef.current = false
+      }
+    },
+    [closeSessionWarning],
+  )
 
   const refresh = useCallback(async () => {
     if (refreshPromiseRef.current) {
@@ -368,14 +396,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return undefined
     }
 
-    let timeoutId: number | undefined
-    const resetIdleTimer = () => {
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId)
+    let warningTimeoutId: number | undefined
+    let expiryTimeoutId: number | undefined
+    const clearTimers = () => {
+      if (warningTimeoutId !== undefined) {
+        window.clearTimeout(warningTimeoutId)
       }
-      timeoutId = window.setTimeout(() => {
+      if (expiryTimeoutId !== undefined) {
+        window.clearTimeout(expiryTimeoutId)
+      }
+    }
+    const startSessionWarning = () => {
+      sessionWarningOpenRef.current = true
+      const activeElement = document.activeElement
+      sessionWarningLauncherRef.current =
+        activeElement instanceof HTMLElement ? activeElement : null
+      const expiresAt = Date.now() + SESSION_IDLE_WARNING_MS
+      setSessionWarningExpiresAt(expiresAt)
+      expiryTimeoutId = window.setTimeout(() => {
         void expireSession('idle-timeout')
-      }, SESSION_IDLE_TIMEOUT_MS)
+      }, SESSION_IDLE_WARNING_MS)
+    }
+    const resetIdleTimer = () => {
+      if (sessionWarningOpenRef.current) {
+        return
+      }
+      clearTimers()
+      warningTimeoutId = window.setTimeout(
+        startSessionWarning,
+        SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS,
+      )
     }
 
     resetIdleTimer()
@@ -384,14 +434,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     })
 
     return () => {
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId)
-      }
+      clearTimers()
       SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
         window.removeEventListener(eventName, resetIdleTimer)
       })
     }
-  }, [capabilities.authenticated, expireSession])
+  }, [capabilities.authenticated, expireSession, idleTimerVersion])
 
   const login = useCallback(
     async (provider: LoginProvider = 'idir') => {
@@ -408,10 +456,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   )
 
   const logout = useCallback(async () => {
+    sessionExpiryInFlightRef.current = true
     sessionGenerationRef.current += 1
     refreshPromiseRef.current = null
 
     try {
+      closeSessionWarning()
+      setShowSessionExtendedMessage(false)
+      clearSessionExpiredLoginNotice()
       apiService.clearCachedGetData()
       apiService.clearRecordVersions()
       clearAllPageDataCache()
@@ -426,7 +478,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch (error) {
       console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
     }
-  }, [])
+  }, [closeSessionWarning])
+
+  const extendSession = useCallback(() => {
+    setShowSessionExtendedMessage(true)
+    closeSessionWarning(true)
+  }, [closeSessionWarning])
 
   const grantedActionSet = useMemo(() => {
     return new Set(capabilities.grantedActions.map(normalizeAction))
@@ -466,5 +523,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     canPerform,
   }
 
-  return <AuthContext value={contextValue}>{children}</AuthContext>
+  return (
+    <AuthContext value={contextValue}>
+      {children}
+      {showSessionExtendedMessage && (
+        <AppNotification
+          kind="success"
+          title="You’re still logged in"
+          subtitle="Your session has been extended for another 15 minutes."
+          onCloseButtonClick={() => setShowSessionExtendedMessage(false)}
+        />
+      )}
+      <SessionTimeoutWarning
+        open={sessionWarningExpiresAt !== null}
+        expiresAt={sessionWarningExpiresAt}
+        launcherButtonRef={sessionWarningLauncherRef}
+        onStayLoggedIn={extendSession}
+        onLogOut={() => void logout()}
+      />
+    </AuthContext>
+  )
 }

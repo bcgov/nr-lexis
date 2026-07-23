@@ -1,14 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  clearSessionExpiredLoginNotice,
+  hasSessionExpiredLoginNotice,
+  markSessionExpiredLoginNotice,
   notifySessionExpired,
   redirectToLoginShell,
   SESSION_EXPIRED_EVENT,
   SESSION_IDLE_TIMEOUT_MS,
+  SESSION_IDLE_WARNING_MS,
 } from '@/context/auth/session-expiry'
 
 describe('session expiry helpers', () => {
   afterEach(() => {
     window.history.replaceState({}, document.title, '/')
+    clearSessionExpiredLoginNotice()
   })
 
   it('emits session-expired events with the expiry reason', () => {
@@ -29,6 +34,17 @@ describe('session expiry helpers', () => {
 
   it('standardizes authenticated idle expiry to 15 minutes', () => {
     expect(SESSION_IDLE_TIMEOUT_MS).toBe(15 * 60 * 1000)
+    expect(SESSION_IDLE_WARNING_MS).toBe(5 * 60 * 1000)
+  })
+
+  it('keeps the signed-out notice until the login shell consumes it', () => {
+    expect(hasSessionExpiredLoginNotice()).toBe(false)
+
+    markSessionExpiredLoginNotice()
+    expect(hasSessionExpiredLoginNotice()).toBe(true)
+
+    clearSessionExpiredLoginNotice()
+    expect(hasSessionExpiredLoginNotice()).toBe(false)
   })
 
   it('returns expired users to the login shell through SPA navigation', () => {
