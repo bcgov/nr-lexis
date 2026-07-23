@@ -32,8 +32,8 @@ describe('session expiry helpers', () => {
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
   })
 
-  it('standardizes authenticated idle expiry to 15 minutes', () => {
-    expect(SESSION_IDLE_TIMEOUT_MS).toBe(15 * 60 * 1000)
+  it('matches the FSPTS 30 minute authenticated idle expiry', () => {
+    expect(SESSION_IDLE_TIMEOUT_MS).toBe(30 * 60 * 1000)
     expect(SESSION_IDLE_WARNING_MS).toBe(5 * 60 * 1000)
   })
 

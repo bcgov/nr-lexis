@@ -20,7 +20,7 @@ const configuredRuntimeAuth = {
   VITE_COGNITO_SCOPES: 'openid profile email',
   VITE_ZONE: 'dev',
 }
-const configuredSignOutUrl = 'https://auth.example.test/logout'
+const configuredSignOutUrl = 'https://nr-lexis-test.apps.gold.devops.gov.bc.ca'
 
 const loadConfig = async (): Promise<AmplifyConfig> => {
   vi.resetModules()
@@ -37,7 +37,7 @@ describe('FAM auth config', () => {
     window.config = {}
   })
 
-  it('keeps sign-in on the current origin and uses the configured sign-out chain', async () => {
+  it('keeps sign-in on the current origin and uses the configured app return URL', async () => {
     window.config = {
       ...configuredRuntimeAuth,
       VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.gold.devops.gov.bc.ca/dashboard',

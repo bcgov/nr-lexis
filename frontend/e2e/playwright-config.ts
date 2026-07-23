@@ -29,6 +29,13 @@ export const createE2EConfig = ({ testMatch, use }: E2EConfigOptions): Playwrigh
     : {
         command: 'npm run dev -- --host 127.0.0.1 --port 4173',
         url: 'http://127.0.0.1:4173',
+        env: {
+          VITE_USER_POOLS_ID: process.env.VITE_USER_POOLS_ID ?? 'ca-central-1_local',
+          VITE_USER_POOLS_WEB_CLIENT_ID:
+            process.env.VITE_USER_POOLS_WEB_CLIENT_ID ?? 'local-e2e-client',
+          VITE_COGNITO_DOMAIN:
+            process.env.VITE_COGNITO_DOMAIN ?? 'local-e2e.auth.ca-central-1.amazoncognito.com',
+        },
         reuseExistingServer: !process.env.CI,
         timeout: E2E_TIMEOUT_MS,
       },
