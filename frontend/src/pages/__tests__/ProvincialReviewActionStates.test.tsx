@@ -271,6 +271,14 @@ describe('Provincial Review Action State Smoke', () => {
     ])
   })
 
+  it('renders application volume with legacy one-decimal precision', async () => {
+    renderPage()
+    await screen.findByText('1000456')
+
+    expect(screen.getByText('210.5')).toBeInTheDocument()
+    expect(screen.getByText('95.0')).toBeInTheDocument()
+  })
+
   it.each([
     ['Listing date', 'listingDate'],
     ['Region', 'regionCode'],

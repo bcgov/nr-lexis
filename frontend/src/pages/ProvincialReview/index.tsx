@@ -147,6 +147,9 @@ const STATUS_EMAIL_UNAVAILABLE_HELPER =
   'Status emails are sent only for rejected or withdrawn applications.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
+
+const formatApplicationVolume = (volume: number): string => volume.toFixed(1)
+
 const isReviewableSourceStatus = (status: string | null | undefined): boolean =>
   REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(status ?? ''))
 
@@ -1105,7 +1108,7 @@ const ProvincialReviewPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{row.volume}</TableCell>
+                      <TableCell>{formatApplicationVolume(row.volume)}</TableCell>
                       <TableCell>{row.speciesEndUse}</TableCell>
                       <TableCell>{row.listingDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
