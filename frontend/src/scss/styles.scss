@@ -3987,8 +3987,12 @@ legend.cds--label {
   align-items: end;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(180px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   margin-bottom: 0.75rem;
+}
+
+.application-items-inline-form > * {
+  min-width: 0;
 }
 
 .exemption-application-add-form {
@@ -4086,7 +4090,7 @@ legend.cds--label {
   }
 
   .application-items-inline-form {
-    grid-template-columns: minmax(220px, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 
