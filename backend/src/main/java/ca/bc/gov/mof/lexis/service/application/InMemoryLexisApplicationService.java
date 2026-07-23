@@ -394,7 +394,12 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         null,
         null,
         record.packages(),
-        record.remarks(),
+        record.remarks().stream()
+            .sorted(
+                Comparator.comparing(
+                    LexisApplicationDetailDto.LexisRemarkDto::remarkId,
+                    Comparator.nullsFirst(Comparator.naturalOrder())))
+            .toList(),
         record.offers(),
         "system");
   }

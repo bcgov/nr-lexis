@@ -309,7 +309,7 @@ const ProvincialSummaryPage = () => {
               page: 0,
               pageSize: 5,
               sortField: 'applicationNumber',
-              sortDirection: 'asc',
+              sortDirection: 'desc',
             }),
           ),
           loadMetric(canAccessSummaryRoute('federalApplications'), () =>

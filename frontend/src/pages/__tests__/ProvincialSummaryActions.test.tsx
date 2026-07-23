@@ -128,7 +128,12 @@ describe('Provincial Summary action smoke', () => {
       expect.objectContaining({ page: 0, pageSize: 1 }),
     )
     expect(mockedPreviewApplicationReviews).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 0, pageSize: 5 }),
+      expect.objectContaining({
+        page: 0,
+        pageSize: 5,
+        sortField: 'applicationNumber',
+        sortDirection: 'desc',
+      }),
     )
     expect(mockedCountFederalApplications).toHaveBeenCalledWith(
       expect.objectContaining({ page: 0, pageSize: 1 }),

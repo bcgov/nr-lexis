@@ -214,6 +214,20 @@ class LexisApplicationRepositoryTest {
         .isEqualTo("idir\\application-editor");
   }
 
+  @Test
+  void detailShouldSortRemarksByLegacyRemarkNumber() {
+    LexisApplicationRepository repository = new RemarkOrderingLexisApplicationRepository();
+
+    assertThat(repository.findByApplicationNumber(900123L))
+        .isPresent()
+        .get()
+        .satisfies(
+            detail ->
+                assertThat(detail.remarks())
+                    .extracting(LexisApplicationDetailDto.LexisRemarkDto::remarkId)
+                    .containsExactly(10L, 20L));
+  }
+
   @ParameterizedTest
   @ValueSource(
       strings = {
@@ -383,6 +397,33 @@ class LexisApplicationRepositoryTest {
     }
   }
 
+  private static final class RemarkOrderingLexisApplicationRepository
+      extends LexisApplicationRepository {
+
+    RemarkOrderingLexisApplicationRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      try {
+        if ("LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?)".equals(procedureSignature)) {
+          return List.of(rowMapper.map(applicationDetailResultSet()));
+        }
+        if ("LEXIS_GROUP_5.FIND_REMARKS_BY_APP(?,?)".equals(procedureSignature)) {
+          return List.of(rowMapper.map(remarkResultSet(20L)), rowMapper.map(remarkResultSet(10L)));
+        }
+        return List.of();
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+  }
+
   private static ResultSet applicationDetailResultSet() throws SQLException {
     ResultSet resultSet = org.mockito.Mockito.mock(ResultSet.class);
     when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(900123L);
@@ -390,6 +431,17 @@ class LexisApplicationRepositoryTest {
     when(resultSet.getString("ENTRY_USERID")).thenReturn("idir\\application-author");
     when(resultSet.getString("UPDATE_USERID")).thenReturn("idir\\application-editor");
     when(resultSet.wasNull()).thenReturn(false);
+    return resultSet;
+  }
+
+  private static ResultSet remarkResultSet(long remarkId) throws SQLException {
+    ResultSet resultSet = org.mockito.Mockito.mock(ResultSet.class);
+    when(resultSet.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(remarkId);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("REMARK")).thenReturn("Remark " + remarkId);
+    when(resultSet.getString("ENTRY_USERID")).thenReturn("idir\\remark-author");
+    when(resultSet.getTimestamp("ENTRY_TIMESTAMP"))
+        .thenReturn(Timestamp.valueOf("2026-07-23 08:30:00"));
     return resultSet;
   }
 }

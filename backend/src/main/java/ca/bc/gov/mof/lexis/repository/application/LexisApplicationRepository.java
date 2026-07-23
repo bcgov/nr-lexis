@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.ResultSet;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -460,10 +461,16 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
 
   private List<LexisApplicationDetailDto.LexisRemarkDto> loadRemarksByApplication(Long applicationNumber) {
     return queryCursorProcedureFailClosed(
-        FIND_REMARKS_BY_APPLICATION,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        this::mapRemarkRow);
+            FIND_REMARKS_BY_APPLICATION,
+            cs -> cs.setString(1, applicationNumber.toString()),
+            2,
+            this::mapRemarkRow)
+        .stream()
+        .sorted(
+            Comparator.comparing(
+                LexisApplicationDetailDto.LexisRemarkDto::remarkId,
+                Comparator.nullsFirst(Comparator.naturalOrder())))
+        .toList();
   }
 
   LexisApplicationDetailDto.LexisRemarkDto mapRemarkRow(ResultSet rs) {
