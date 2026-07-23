@@ -578,6 +578,22 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     })
     expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Expired after review')
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue('')
+    expect(
+      within(reviewTile).getByRole('combobox', {
+        name: /application status/i,
+      }),
+    ).toBeDisabled()
+    expect(within(reviewTile).getByLabelText(/review remark/i)).toBeDisabled()
+    expect(within(reviewTile).getByLabelText(/client email address/i)).toBeDisabled()
+    expect(
+      within(reviewTile).queryByRole('button', { name: 'Approve Application' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(reviewTile).queryByRole('button', { name: 'Update Review Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(reviewTile).queryByRole('button', { name: 'Update Status and Send Email' }),
+    ).not.toBeInTheDocument()
   })
 
   it('blocks status email when the authoritative client account has no valid address', async () => {

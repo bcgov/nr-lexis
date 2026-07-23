@@ -417,6 +417,9 @@ const hasCompletePermit = (permitRows: ApplicationPermitRow[]): boolean =>
     row.permitStatusDescription.trim().toUpperCase().includes(COMPLETE_PERMIT_STATUS_TEXT),
   )
 
+const isExpiredApplication = (detail: ProvincialApplicationDetail | null): boolean =>
+  detail?.applicationStatusCode?.trim().toUpperCase() === APPLICATION_STATUS_EXPIRED
+
 const applicationDocumentUploadUnavailableMessage = (
   detail: ProvincialApplicationDetail | null,
   permitRows: ApplicationPermitRow[],
@@ -932,6 +935,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canChangeApplicantType = canPerform('/changeApplicantType')
   const canReviewApplication = canPerform('/applicationsReview')
+  const canEditApplicationReview = canReviewApplication && !isExpiredApplication(detail)
   const canViewReview = canViewRemarks && canReviewApplication
   const normalizedReviewStatusCode = useMemo(
     () => normalizeReviewStatus(reviewStatusCode),
@@ -2280,7 +2284,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
 
   const onApproveApplication = useCallback(async (): Promise<boolean> => {
-    if (!detail || !canReviewApplication || isSubmittingReviewAction) {
+    if (!detail || !canEditApplicationReview || isSubmittingReviewAction) {
       return false
     }
 
@@ -2306,7 +2310,7 @@ const ProvincialApplicationDetailsPage = () => {
     }
   }, [
     applyReviewStatusResult,
-    canReviewApplication,
+    canEditApplicationReview,
     detail,
     isSubmittingReviewAction,
     reviewStatusRemark,
@@ -2316,7 +2320,7 @@ const ProvincialApplicationDetailsPage = () => {
     async (sendEmail: boolean): Promise<boolean> => {
       if (
         !detail ||
-        !canReviewApplication ||
+        !canEditApplicationReview ||
         isSubmittingReviewAction ||
         reviewOptionsAvailability !== 'available' ||
         reviewStatusOptions.length === 0
@@ -2378,7 +2382,7 @@ const ProvincialApplicationDetailsPage = () => {
     [
       applyReviewStatusResult,
       buildReviewStatusPayload,
-      canReviewApplication,
+      canEditApplicationReview,
       detail,
       isSubmittingReviewAction,
       reviewOptionsAvailability,
@@ -2453,7 +2457,7 @@ const ProvincialApplicationDetailsPage = () => {
     : ''
   const remarkDirty = canManageRemarks && remarkBody !== remarkBaselineBody
   const reviewDirty =
-    canReviewApplication &&
+    canEditApplicationReview &&
     (normalizedReviewStatusCode !== normalizeReviewStatus(reviewStatusBaselineCode) ||
       reviewStatusRemark !== reviewStatusRemarkBaseline)
   const isApplicationDirty =
@@ -2721,7 +2725,11 @@ const ProvincialApplicationDetailsPage = () => {
             value={reviewStatusCode}
             placeholder="Select status"
             options={reviewStatusOptions}
-            disabled={reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0}
+            disabled={
+              !canEditApplicationReview ||
+              reviewOptionsAvailability !== 'available' ||
+              reviewStatusOptions.length === 0
+            }
             invalid={isReviewStatusInvalid}
             invalidText={reviewValidationMessage}
             onChange={(value) => {
@@ -2734,6 +2742,7 @@ const ProvincialApplicationDetailsPage = () => {
             labelText="Client email address"
             helperText={REVIEW_EMAIL_PREVIEW_HELPER}
             value={reviewStatusEmailAddress}
+            disabled={!canEditApplicationReview}
             invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
             invalidText={reviewValidationMessage}
             onChange={(event) => {
@@ -2753,7 +2762,11 @@ const ProvincialApplicationDetailsPage = () => {
             invalid={isReviewRemarkInvalid}
             invalidText={reviewValidationMessage}
             value={reviewStatusRemark}
-            disabled={reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0}
+            disabled={
+              !canEditApplicationReview ||
+              reviewOptionsAvailability !== 'available' ||
+              reviewStatusOptions.length === 0
+            }
             onChange={(event) => {
               setReviewStatusRemark(event.target.value.slice(0, 250))
               setReviewValidationMessage('')
@@ -2769,41 +2782,43 @@ const ProvincialApplicationDetailsPage = () => {
             onCloseButtonClick={() => setReviewValidationMessage('')}
           />
         )}
-        <div className="legacy-search-actions">
-          <Button
-            kind="primary"
-            size="sm"
-            disabled={isSubmittingReviewAction}
-            onClick={() => void onApproveApplication()}
-          >
-            Approve Application
-          </Button>
-          <Button
-            kind="secondary"
-            size="sm"
-            disabled={
-              isSubmittingReviewAction ||
-              reviewOptionsAvailability !== 'available' ||
-              reviewStatusOptions.length === 0
-            }
-            onClick={() => void onUpdateReviewStatus(false)}
-          >
-            Update Review Status
-          </Button>
-          <Button
-            kind="tertiary"
-            size="sm"
-            disabled={
-              isSubmittingReviewAction ||
-              !canSendReviewStatusEmail ||
-              reviewOptionsAvailability !== 'available' ||
-              reviewStatusOptions.length === 0
-            }
-            onClick={() => void onUpdateReviewStatus(true)}
-          >
-            Update Status and Send Email
-          </Button>
-        </div>
+        {canEditApplicationReview && (
+          <div className="legacy-search-actions">
+            <Button
+              kind="primary"
+              size="sm"
+              disabled={isSubmittingReviewAction}
+              onClick={() => void onApproveApplication()}
+            >
+              Approve Application
+            </Button>
+            <Button
+              kind="secondary"
+              size="sm"
+              disabled={
+                isSubmittingReviewAction ||
+                reviewOptionsAvailability !== 'available' ||
+                reviewStatusOptions.length === 0
+              }
+              onClick={() => void onUpdateReviewStatus(false)}
+            >
+              Update Review Status
+            </Button>
+            <Button
+              kind="tertiary"
+              size="sm"
+              disabled={
+                isSubmittingReviewAction ||
+                !canSendReviewStatusEmail ||
+                reviewOptionsAvailability !== 'available' ||
+                reviewStatusOptions.length === 0
+              }
+              onClick={() => void onUpdateReviewStatus(true)}
+            >
+              Update Status and Send Email
+            </Button>
+          </div>
+        )}
       </Tile>
     ) : (
       <Tile
