@@ -170,7 +170,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   it.each([
     ['EXE', 'Exempted - New'],
     ['PMT', 'Permitted'],
-    ['EXP', 'Expired'],
     ['PND', 'Pending'],
     ['REJ', 'Rejected'],
     ['WDN', 'Withdrawn'],

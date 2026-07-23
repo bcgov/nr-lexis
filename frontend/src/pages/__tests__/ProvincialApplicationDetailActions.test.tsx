@@ -408,7 +408,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedFetchProvincialExemptionDetail).toHaveBeenCalledWith('EX-555')
   })
 
-  it('uses server edit policy instead of inferring permissions from application status', async () => {
+  it('hides expired application mutation actions even when server edit flags are true', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       applicationStatusCode: 'EXP',
@@ -431,14 +431,27 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     await selectApplicationDetailTab('Application')
+    expect(await screen.findByText('Application summary')).toBeInTheDocument()
     expect(
-      await within(getApplicationSummaryTile()).findByRole('combobox', {
+      within(getApplicationSummaryTile()).queryByRole('combobox', {
         name: 'Exemption reason',
       }),
-    ).toBeEnabled()
+    ).toBeNull()
 
     await selectApplicationDetailTab('Items')
-    expect(await screen.findByRole('button', { name: 'Save Package' })).toBeEnabled()
+    expect(await screen.findByText('Package Details')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Selected Package' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Package' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reset package drafts' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete Package' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add Species' })).toBeNull()
+    expect(screen.queryByText('Create Package')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add Scale' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reset scale' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Lookup Scale' })).toBeNull()
+
+    await selectApplicationDetailTab('Offers')
+    expect(screen.queryByRole('button', { name: 'Create offer' })).toBeNull()
   })
 
   it('blocks application edits when another user holds the edit lock', async () => {

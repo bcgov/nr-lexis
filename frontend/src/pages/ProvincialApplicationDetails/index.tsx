@@ -906,8 +906,9 @@ const ProvincialApplicationDetailsPage = () => {
   const hasApplicationDocuments =
     documentLookupAvailability === 'available' && documentRows.length > 0
   const canViewRemarks = canPerform('/applicationRemarks')
+  const isApplicationExpired = isExpiredApplication(detail)
   const canUseApplicationMutations =
-    canPerform('createApplication') && !detail?.locked && !detail?.readOnly
+    canPerform('createApplication') && !detail?.locked && !detail?.readOnly && !isApplicationExpired
   const canEditPackages = canUseApplicationMutations && !!detail?.canEditPackages
   const canAddPackages = canUseApplicationMutations && !!detail?.canAddPackages
   const canAddScales = canUseApplicationMutations && !!detail?.canAddScales
@@ -928,6 +929,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canCreateApplicationOffer = Boolean(
     detail &&
+    !isApplicationExpired &&
     canPerform('/offersSearch') &&
     canPerform('createOffer') &&
     detail.canCreateOffers &&
@@ -937,7 +939,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canChangeApplicantType = canPerform('/changeApplicantType')
   const canReviewApplication = canPerform('/applicationsReview')
-  const canEditApplicationReview = canReviewApplication && !isExpiredApplication(detail)
+  const canEditApplicationReview = canReviewApplication && !isApplicationExpired
   const canViewReview = canViewRemarks && canReviewApplication
   const normalizedReviewStatusCode = useMemo(
     () => normalizeReviewStatus(reviewStatusCode),
@@ -3699,6 +3701,7 @@ const ProvincialApplicationDetailsPage = () => {
                         canAddPackages={canAddPackages}
                         canAddScales={canAddScales}
                         canUpdatePackageNumber={canUpdatePackageNumber}
+                        hideMutationActions={isApplicationExpired}
                         authoritativeOptionsAvailability={packageReferenceOptionsAvailability}
                         productTypeOptions={packageProductTypeOptions}
                         growthTypeOptions={packageGrowthTypeOptions}
