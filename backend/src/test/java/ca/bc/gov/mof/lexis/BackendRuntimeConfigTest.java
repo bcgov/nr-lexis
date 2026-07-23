@@ -235,7 +235,7 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void edgeTerminatedHttpBackendShouldNotReceiveServingCertificateSecret() throws IOException {
+  void clusterLocalHttpBackendShouldNotReceiveServingCertificateSecret() throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
     String deployment =
@@ -245,9 +245,11 @@ class BackendRuntimeConfigTest {
         .contains("server:\n  port: 8080")
         .doesNotContain("server.ssl", "key-store:");
     assertThat(deployment)
+        .contains("name: ${NAME}-backend-${ZONE}")
         .contains("port: 8080")
-        .contains("termination: edge")
         .doesNotContain(
+            "kind: Route",
+            "termination: edge",
             "service.alpha.openshift.io/serving-cert-secret-name",
             "- name: tls-certs",
             "mountPath: /etc/tls-certs",

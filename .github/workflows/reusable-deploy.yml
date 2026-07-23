@@ -191,7 +191,6 @@ jobs:
           overwrite: true
           parameters:
             -p ZONE="${{ inputs.target }}"
-            -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p ROLLOUT_TRIGGER="${{ github.run_id }}-${{ github.run_attempt }}"
