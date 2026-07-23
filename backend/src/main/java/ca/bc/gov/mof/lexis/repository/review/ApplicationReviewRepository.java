@@ -44,12 +44,17 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_END_USE_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
+  private static final String FIND_CANDIDATE_EXCOL_VALUES =
+      LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_REMARKS_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_REMARKS_BY_APP(?,?)";
   private static final String UPDATE_EXEMPTION_APPLICATION =
       LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_EXEMPTION_APP_REMARK =
       LEXIS_GROUP_14_PACKAGE + "INSERT_EXEMPTION_APP_REMARK(?,?,?,?,?,?)";
+  private static final String PRODUCT_TYPE_UNMANUFACTURED = "T";
 
   public ApplicationReviewRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -89,14 +94,16 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
             ? queryLegacyDynamicCountProcedure(
                 COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
             : Math.max(0, knownTotal);
-    return queryLegacyDynamicPage(
-        FIND_APPLICATIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        criteria.page(),
-        criteria.size(),
-        totalElements,
-        this::toSearchResult);
+    Page<ReviewSearchRow> rows =
+        queryLegacyDynamicPage(
+            FIND_APPLICATIONS_BY_CRITERIA,
+            sqlWhere.sql(),
+            sqlWhere.bindValues(),
+            criteria.page(),
+            criteria.size(),
+            totalElements,
+            this::toReviewSearchRow);
+    return rows.map(this::toSearchResult);
   }
 
   public int count(ApplicationReviewSearchCriteria criteria) {
@@ -106,13 +113,15 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   public Slice<ApplicationReviewSearchResultDto> slice(ApplicationReviewSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return queryLegacyDynamicSlice(
-        FIND_APPLICATIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        criteria.page(),
-        criteria.size(),
-        this::toSearchResult);
+    Slice<ReviewSearchRow> rows =
+        queryLegacyDynamicSlice(
+            FIND_APPLICATIONS_BY_CRITERIA,
+            sqlWhere.sql(),
+            sqlWhere.bindValues(),
+            criteria.page(),
+            criteria.size(),
+            this::toReviewSearchRow);
+    return rows.map(this::toSearchResult);
   }
 
   private SqlWhere buildSearchWhere(ApplicationReviewSearchCriteria criteria) {
@@ -381,17 +390,117 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     return new ApplicationStatusUpdateRow(true, insertedRemark.orElse(null));
   }
 
-  private ApplicationReviewSearchResultDto toSearchResult(ResultSet rs) {
-    return new ApplicationReviewSearchResultDto(
+  private ReviewSearchRow toReviewSearchRow(ResultSet rs) {
+    return new ReviewSearchRow(
         getLong(rs, "APPLICATION_NUMBER"),
         firstNonNull(
             getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
             getDouble(rs, "APPLICATION_VOLUME")),
-        firstNonNull(getString(rs, "END_USE_SORT"), getString(rs, "EXPORT_PRODUCT_TYPE_CODE")),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
+        getLong(rs, "ORG_UNIT_NO"),
         getLocalDate(rs, "ADVERTISING_DATE"),
         firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_APPLICATION_STATUS_CODE")),
         firstNonNull(getString(rs, "REGION_CODE"), getString(rs, "REGION")),
         "Y".equalsIgnoreCase(getString(rs, "SHOW_INFO_ICON")));
+  }
+
+  private ApplicationReviewSearchResultDto toSearchResult(ReviewSearchRow row) {
+    return new ApplicationReviewSearchResultDto(
+        row.applicationNumber(),
+        row.volume(),
+        legacySpeciesEndUseSort(row.applicationNumber(), row.productTypeCode(), row.orgUnitNo()),
+        row.listingDate(),
+        row.status(),
+        row.region(),
+        row.showInfoIcon());
+  }
+
+  private String legacySpeciesEndUseSort(
+      Long applicationNumber, String productTypeCode, Long orgUnitNo) {
+    if (applicationNumber == null || applicationNumber < 1 || orgUnitNo == null || orgUnitNo < 1) {
+      return null;
+    }
+
+    List<EndUseSortRow> endUses = findEndUsesByApplicationNumber(applicationNumber);
+    if (endUses.isEmpty()) {
+      return null;
+    }
+
+    EndUseSortRow firstEndUse = endUses.get(0);
+    List<String> candidates =
+        findCandidateExcolCodes(
+            endUses.size(), firstEndUse.speciesCode(), firstEndUse.endUseCode(), orgUnitNo);
+    if (candidates.size() == 1) {
+      return candidates.get(0);
+    }
+
+    for (String candidate : candidates) {
+      if (matchesLegacyExcolCandidate(candidate, endUses, firstEndUse, productTypeCode)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private List<EndUseSortRow> findEndUsesByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_END_USE_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs -> new EndUseSortRow(getString(rs, "EXPORT_SPECIES_CODE"), getString(rs, "EXPORT_END_USE_CODE")));
+  }
+
+  private List<String> findCandidateExcolCodes(
+      int speciesCount, String speciesCode, String endUseCode, Long orgUnitNo) {
+    String pattern = excolPattern(speciesCount);
+    if (pattern == null
+        || speciesCode == null
+        || endUseCode == null
+        || orgUnitNo == null
+        || orgUnitNo < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_CANDIDATE_EXCOL_VALUES,
+        cs -> {
+          cs.setString(1, pattern);
+          cs.setString(2, speciesCode);
+          cs.setString(3, endUseCode);
+          cs.setLong(4, orgUnitNo);
+        },
+        5,
+        rs -> getString(rs, "EXCOL_TRANSLATION_VALUE"));
+  }
+
+  private boolean matchesLegacyExcolCandidate(
+      String candidate,
+      List<EndUseSortRow> endUses,
+      EndUseSortRow firstEndUse,
+      String productTypeCode) {
+    if (candidate == null || firstEndUse.endUseCode() == null) {
+      return false;
+    }
+    for (EndUseSortRow endUse : endUses) {
+      if (endUse.speciesCode() == null || !candidate.contains(endUse.speciesCode())) {
+        return false;
+      }
+    }
+    return PRODUCT_TYPE_UNMANUFACTURED.equalsIgnoreCase(productTypeCode)
+        || candidate.contains(firstEndUse.endUseCode());
+  }
+
+  private String excolPattern(int speciesCount) {
+    if (speciesCount < 1) {
+      return null;
+    }
+    StringBuilder pattern = new StringBuilder();
+    for (int i = 0; i < speciesCount; i++) {
+      pattern.append("__/");
+    }
+    return pattern.append("__").toString();
   }
 
   private Optional<ApplicationUpdateRecord> loadApplicationUpdateRecord(Long applicationNumber) {
@@ -559,6 +668,18 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       cs.setTimestamp(index, value);
     }
   }
+
+  private record ReviewSearchRow(
+      Long applicationNumber,
+      Double volume,
+      String productTypeCode,
+      Long orgUnitNo,
+      LocalDate listingDate,
+      String status,
+      String region,
+      boolean showInfoIcon) {}
+
+  private record EndUseSortRow(String speciesCode, String endUseCode) {}
 
   private record ApplicationUpdateRecord(
       Long applicationNumber,

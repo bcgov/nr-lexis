@@ -86,13 +86,12 @@ class ApplicationReviewRepositoryTest {
 
   @Test
   void searchShouldLoadRequestedLegacyPageWithCountTotal() {
-    List<ApplicationReviewSearchResultDto> firstPage =
+    List<ReviewRowInput> firstPage =
         java.util.stream.LongStream.rangeClosed(900101L, 900110L)
             .mapToObj(ApplicationReviewRepositoryTest::reviewResult)
             .toList();
     TestApplicationReviewRepository repository =
-        new TestApplicationReviewRepository(
-            List.<List<?>>of(firstPage, List.of(reviewResult(900111L))));
+        new TestApplicationReviewRepository(List.of(firstPage, List.of(reviewResult(900111L))));
 
     Page<ApplicationReviewSearchResultDto> results =
         repository.search(
@@ -105,9 +104,44 @@ class ApplicationReviewRepositoryTest {
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
-  private static ApplicationReviewSearchResultDto reviewResult(long applicationNumber) {
-    return new ApplicationReviewSearchResultDto(
-        applicationNumber, 100d, "Cedar", LocalDate.of(2026, 1, 1), "New", "Region", true);
+  @Test
+  void searchShouldDeriveLegacySpeciesEndUseSortInsteadOfUsingProductType() {
+    ParityApplicationReviewRepository repository =
+        new ParityApplicationReviewRepository(
+            "H", 1903L, List.of(new EndUseInput("AL", "PL")), List.of("AL/PL"));
+
+    Page<ApplicationReviewSearchResultDto> results =
+        repository.search(
+            new ApplicationReviewSearchCriteria(null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(results.getContent())
+        .extracting(ApplicationReviewSearchResultDto::speciesEndUse)
+        .containsExactly("AL/PL");
+    assertThat(repository.endUseCalls()).isOne();
+    assertThat(repository.candidateCalls()).isOne();
+  }
+
+  @Test
+  void searchShouldUseTheLegacyCandidateContainingEveryApplicationSpecies() {
+    ParityApplicationReviewRepository repository =
+        new ParityApplicationReviewRepository(
+            "H",
+            1903L,
+            List.of(new EndUseInput("AL", "PL"), new EndUseInput("BA", "PL")),
+            List.of("AL/PL", "AL/BA/PL"));
+
+    Page<ApplicationReviewSearchResultDto> results =
+        repository.search(
+            new ApplicationReviewSearchCriteria(null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(results.getContent())
+        .extracting(ApplicationReviewSearchResultDto::speciesEndUse)
+        .containsExactly("AL/BA/PL");
+    assertThat(repository.candidateCalls()).isOne();
+  }
+
+  private static ReviewRowInput reviewResult(long applicationNumber) {
+    return new ReviewRowInput(applicationNumber, "H", 1903L);
   }
 
   @Test
@@ -531,8 +565,128 @@ class ApplicationReviewRepositoryTest {
     return jdbcTemplate;
   }
 
+  private record EndUseInput(String speciesCode, String endUseCode) {}
+
+  private record ReviewRowInput(Long applicationNumber, String productTypeCode, Long orgUnitNo) {}
+
+  private static ResultSet newReviewResultSet(ReviewRowInput row) {
+    try {
+      ResultSet resultSet = mock(ResultSet.class);
+      when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(row.applicationNumber());
+      when(resultSet.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(1.0d);
+      when(resultSet.getString("END_USE_SORT")).thenReturn("H");
+      when(resultSet.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn(row.productTypeCode());
+      when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(row.orgUnitNo());
+      when(resultSet.getString("STATUS_DESCRIPTION")).thenReturn("New");
+      when(resultSet.getString("REGION_CODE")).thenReturn("RNO");
+      return resultSet;
+    } catch (SQLException ex) {
+      throw new AssertionError(ex);
+    }
+  }
+
+  private static ResultSet newEndUseResultSet(EndUseInput endUse) {
+    try {
+      ResultSet resultSet = mock(ResultSet.class);
+      when(resultSet.getString("EXPORT_SPECIES_CODE")).thenReturn(endUse.speciesCode());
+      when(resultSet.getString("EXPORT_END_USE_CODE")).thenReturn(endUse.endUseCode());
+      return resultSet;
+    } catch (SQLException ex) {
+      throw new AssertionError(ex);
+    }
+  }
+
+  private static ResultSet newCandidateResultSet(String candidate) {
+    try {
+      ResultSet resultSet = mock(ResultSet.class);
+      when(resultSet.getString("EXCOL_TRANSLATION_VALUE")).thenReturn(candidate);
+      return resultSet;
+    } catch (SQLException ex) {
+      throw new AssertionError(ex);
+    }
+  }
+
+  private static final class ParityApplicationReviewRepository
+      extends ApplicationReviewRepository {
+    private final String productTypeCode;
+    private final Long orgUnitNo;
+    private final List<EndUseInput> endUses;
+    private final List<String> candidates;
+    private int endUseCalls;
+    private int candidateCalls;
+
+    ParityApplicationReviewRepository(
+        String productTypeCode,
+        Long orgUnitNo,
+        List<EndUseInput> endUses,
+        List<String> candidates) {
+      super(null);
+      this.productTypeCode = productTypeCode;
+      this.orgUnitNo = orgUnitNo;
+      this.endUses = List.copyOf(endUses);
+      this.candidates = List.copyOf(candidates);
+    }
+
+    int endUseCalls() {
+      return endUseCalls;
+    }
+
+    int candidateCalls() {
+      return candidateCalls;
+    }
+
+    @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature, String whereSql, List<String> bindValues) {
+      return 1;
+    }
+
+    @Override
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues,
+        int page,
+        SqlRowMapper<T> rowMapper) {
+      if (page > 0) {
+        return List.of();
+      }
+      return List.of(
+          mapRow(rowMapper, newReviewResultSet(new ReviewRowInput(46102L, productTypeCode, orgUnitNo))));
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedure(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      if ("LEXIS_GROUP_5.FIND_END_USE_BY_APP(?,?)".equals(procedureSignature)) {
+        endUseCalls++;
+        return endUses.stream()
+            .map(endUse -> mapRow(rowMapper, newEndUseResultSet(endUse)))
+            .toList();
+      }
+      if ("LEXIS_CODES.FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)".equals(procedureSignature)) {
+        candidateCalls++;
+        return candidates.stream()
+            .map(candidate -> mapRow(rowMapper, newCandidateResultSet(candidate)))
+            .toList();
+      }
+      return List.of();
+    }
+
+    private <T> T mapRow(SqlRowMapper<T> rowMapper, ResultSet resultSet) {
+      try {
+        return rowMapper.map(resultSet);
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+  }
+
   private static final class TestApplicationReviewRepository extends ApplicationReviewRepository {
-    private final List<List<?>> pages;
+    private final List<List<ReviewRowInput>> pages;
     private String whereSql;
     private List<String> bindValues;
     private int pageCalls;
@@ -541,7 +695,7 @@ class ApplicationReviewRepositoryTest {
       this(List.of());
     }
 
-    TestApplicationReviewRepository(List<List<?>> pages) {
+    TestApplicationReviewRepository(List<List<ReviewRowInput>> pages) {
       super(null);
       this.pages = pages;
     }
@@ -559,6 +713,15 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
+    protected <T> List<T> queryCursorProcedure(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      return List.of();
+    }
+
+    @Override
     protected int queryLegacyDynamicCountProcedure(
         String procedureSignature,
         String whereSql,
@@ -569,7 +732,6 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
@@ -582,7 +744,17 @@ class ApplicationReviewRepositoryTest {
       if (page >= pages.size()) {
         return List.of();
       }
-      return (List<T>) pages.get(page);
+      return pages.get(page).stream()
+          .map(row -> mapRow(rowMapper, newReviewResultSet(row)))
+          .toList();
+    }
+
+    private <T> T mapRow(SqlRowMapper<T> rowMapper, ResultSet resultSet) {
+      try {
+        return rowMapper.map(resultSet);
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
     }
   }
 }
