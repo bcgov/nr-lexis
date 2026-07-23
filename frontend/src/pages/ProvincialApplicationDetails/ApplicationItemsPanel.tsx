@@ -12,6 +12,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Box } from '@carbon/icons-react'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -1346,7 +1347,12 @@ function ProvincialApplicationItemsPanel({
 
   return (
     <Tile id="application-items" className="application-detail-section application-items-panel">
-      <h2 className="detail-tile-title">Items</h2>
+      <header className="application-items-panel__header">
+        <h2 className="detail-tile-title application-items-panel__title">
+          <Box size={20} aria-hidden="true" />
+          <span>Items</span>
+        </h2>
+      </header>
       {itemsLoading && <InlineLoading description="Loading item data..." />}
       {referenceOptionsLoading && (canEditPackages || canAddPackages || canAddScales) && (
         <InlineLoading description="Loading authoritative item options..." />
