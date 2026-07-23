@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { installSyntheticCognitoSession } from './utils'
 
 const authenticatedAdminSession = {
   authenticated: true,
@@ -270,6 +271,10 @@ const installSyntheticLexisApi = async (page: Page) => {
 
 test.describe('FSPTS-aligned LEXIS shell', () => {
   test.beforeEach(async ({ page }) => {
+    await installSyntheticCognitoSession(page, {
+      username: authenticatedAdminSession.principal,
+      orgUnitNo: authenticatedAdminSession.orgUnitNo,
+    })
     await installSyntheticLexisApi(page)
   })
 

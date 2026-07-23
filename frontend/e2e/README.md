@@ -14,9 +14,9 @@ regression coverage uses a separate TEST-only Playwright config.
 
 - Defaults to `E2E_BASE_URL=http://127.0.0.1:4173`.
 - If `E2E_BASE_URL` is a deployed URL in CI, Playwright does not start a local `webServer`.
-- The default config only runs `smoke.spec.ts`. Local role simulation is intentionally not
-  supported.
-- `playwright.regression.config.ts` runs the scheduled TEST credentialed regression specs.
+- The default config only runs files ending in `smoke.spec.ts`.
+- `playwright.regression.config.ts` runs files ending in `regression.spec.ts`, including the
+  synthetic session-timeout scenario and the TEST credentialed regression specs.
 
 ## CI setup
 
@@ -40,14 +40,15 @@ regression coverage uses a separate TEST-only Playwright config.
 - CI explicitly masks the credential values and suppresses Playwright HTML reports, screenshots,
   video, and traces for the credentialed regression suite because those runs type real test
   credentials. Credentialed regression artifacts are not uploaded from the public workflow.
-- Logout follows the FSPTS chain: Siteminder → Keycloak → Cognito → LEXIS. The app builds the
-  nested URL from the three `VITE_LOGOUT_*` values so Cognito runs last, clears its session, and
-  returns to the Cognito-registered LEXIS origin in `VITE_REDIRECT_SIGN_OUT`.
+- Logout follows the FSPTS chain: Siteminder → Keycloak → Cognito → LEXIS. The app builds the nested
+  URL from the three `VITE_LOGOUT_*` values so Cognito runs last, clears its session, and returns to
+  the Cognito-registered LEXIS origin in `VITE_REDIRECT_SIGN_OUT`.
 
 ## Run commands
 
 ```bash
 npm run e2e
+npm run e2e:session-timeout
 npm run e2e:regression
 npm run e2e:regression:idir
 npm run e2e:ui
