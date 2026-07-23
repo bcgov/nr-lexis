@@ -1476,19 +1476,6 @@ const ProvincialExemptionDetailsPage = () => {
                                 ),
                               },
                               {
-                                label: 'Status',
-                                value: (
-                                  <StatusTag
-                                    status={
-                                      detail.exemptionStatusDescription ??
-                                      detail.exemptionStatusCode ??
-                                      ''
-                                    }
-                                    fallbackLabel="Not provided"
-                                  />
-                                ),
-                              },
-                              {
                                 label: 'Owner client number',
                                 value: displayValue(detail.ownerClientNumber),
                               },

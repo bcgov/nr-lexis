@@ -196,6 +196,11 @@ describe('Provincial exemption edit context', () => {
       'data-status-variant',
       'positive',
     )
+    const summaryCard = (
+      await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
+    ).closest('.cds--tile')
+    expect(summaryCard).toBeTruthy()
+    expect(within(summaryCard as HTMLElement).queryByText('Status')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Fees' }))
