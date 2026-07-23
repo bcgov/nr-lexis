@@ -381,7 +381,7 @@ describe('Provincial Review Action State Smoke', () => {
       )
     })
     expect(
-      await screen.findByText('Updated application 1000123 and queued email.'),
+      await screen.findByText('Updated application 1000123 and email sent.'),
     ).toBeInTheDocument()
   }, 15000)
 
@@ -435,7 +435,7 @@ describe('Provincial Review Action State Smoke', () => {
       )
     })
     expect(
-      await screen.findByText('Updated application 1000456 and queued email.'),
+      await screen.findByText('Updated application 1000456 and email sent.'),
     ).toBeInTheDocument()
   }, 15000)
 

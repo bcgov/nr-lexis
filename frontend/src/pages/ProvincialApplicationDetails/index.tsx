@@ -2372,7 +2372,7 @@ const ProvincialApplicationDetailsPage = () => {
         applyReviewStatusResult(updateResult, payloadResult.payload.remark)
         setActionInfoMessage(
           sendEmail
-            ? 'Application status updated and email queued.'
+            ? 'Application status updated and email sent.'
             : updateResult.message || 'Application status updated.',
         )
         return true

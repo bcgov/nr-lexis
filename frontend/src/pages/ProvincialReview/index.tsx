@@ -659,7 +659,7 @@ const ProvincialReviewPage = () => {
         } else {
           setReviewActionStatus({
             kind: 'success',
-            message: `Updated application ${rejectApplicationNumber} and queued email.`,
+            message: `Updated application ${rejectApplicationNumber} and email sent.`,
           })
         }
       }
