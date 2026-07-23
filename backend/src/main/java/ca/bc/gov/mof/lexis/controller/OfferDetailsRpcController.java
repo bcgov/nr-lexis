@@ -1057,8 +1057,7 @@ public class OfferDetailsRpcController {
       LOGGER.warn("Application details RPC service unavailable - returning blank species grade");
       return "";
     }
-    return ApplicationDetailsRpcService.toSpeciesEndUseSort(
-        applicationDetailsService.getSpeciesForApplication(applicationNumber));
+    return applicationDetailsService.getApplicationSpeciesEndUseSort(applicationNumber);
   }
 
   private String fallbackApplicationNumber(String value) {

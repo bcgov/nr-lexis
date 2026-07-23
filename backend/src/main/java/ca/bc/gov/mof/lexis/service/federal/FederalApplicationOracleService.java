@@ -49,6 +49,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
   private final FederalApplicationRepository repository;
   private final FederalPermitDetailRepository permitRepository;
   private final ApplicationDetailsRpcRepository applicationDetailsRepository;
+  private final ApplicationDetailsRpcService applicationDetailsService;
   private final ApplicationReviewRepository applicationReviewRepository;
   private final ClientLookupService clientLookupService;
   private final ApplicationEditLockService editLockService;
@@ -59,6 +60,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       FederalApplicationRepository repository,
       FederalPermitDetailRepository permitRepository,
       ApplicationDetailsRpcRepository applicationDetailsRepository,
+      ApplicationDetailsRpcService applicationDetailsService,
       ApplicationReviewRepository applicationReviewRepository,
       ClientLookupService clientLookupService,
       ApplicationEditLockService editLockService) {
@@ -66,6 +68,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         repository,
         permitRepository,
         applicationDetailsRepository,
+        applicationDetailsService,
         applicationReviewRepository,
         clientLookupService,
         editLockService,
@@ -76,6 +79,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       FederalApplicationRepository repository,
       FederalPermitDetailRepository permitRepository,
       ApplicationDetailsRpcRepository applicationDetailsRepository,
+      ApplicationDetailsRpcService applicationDetailsService,
       ApplicationReviewRepository applicationReviewRepository,
       ClientLookupService clientLookupService,
       ApplicationEditLockService editLockService,
@@ -83,6 +87,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     this.repository = repository;
     this.permitRepository = permitRepository;
     this.applicationDetailsRepository = applicationDetailsRepository;
+    this.applicationDetailsService = applicationDetailsService;
     this.applicationReviewRepository = applicationReviewRepository;
     this.clientLookupService = clientLookupService;
     this.editLockService = editLockService;
@@ -153,15 +158,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         .map(
             detail -> {
               String endUse =
-                  ApplicationDetailsRpcService.toSpeciesEndUseSort(
-                      applicationDetailsRepository
-                          .findEndUsesByApplicationNumberRequired(applicationNumber)
-                          .stream()
-                          .map(
-                              row ->
-                                  new ApplicationDetailsRpcService.SpeciesEndUseItem(
-                                      row.speciesCode(), row.endUseCode(), null))
-                          .toList());
+                  applicationDetailsService.getApplicationSpeciesEndUseSort(applicationNumber);
               String productType =
                   applicationDetailsRepository
                       .findProductTypeDescription(detail.productType())

@@ -774,6 +774,51 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  public String getApplicationSpeciesEndUseSort(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return "";
+    }
+
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord application =
+        repository.findApplicationUpdateRecord(applicationNumber).orElse(null);
+    if (application == null
+        || application.orgUnitNumber() == null
+        || application.orgUnitNumber() < 1) {
+      return "";
+    }
+
+    List<ApplicationDetailsRpcRepository.EndUseRow> endUses =
+        repository.findEndUsesByApplicationNumberRequired(applicationNumber);
+    if (endUses.isEmpty()) {
+      return "";
+    }
+
+    ApplicationDetailsRpcRepository.EndUseRow firstEndUse = endUses.get(0);
+    String firstSpeciesCode = trimToNull(firstEndUse.speciesCode());
+    String firstEndUseCode = trimToNull(firstEndUse.endUseCode());
+    if (firstSpeciesCode == null || firstEndUseCode == null) {
+      return "";
+    }
+
+    List<ApplicationDetailsRpcRepository.ExcolValidationRow> candidates =
+        repository.findCandidateExcolCodesRequired(
+            endUses.size(), firstSpeciesCode, firstEndUseCode, application.orgUnitNumber());
+    if (candidates.size() == 1) {
+      String candidate = trimToNull(candidates.get(0).excolCode());
+      return candidate == null ? "" : candidate;
+    }
+
+    for (ApplicationDetailsRpcRepository.ExcolValidationRow candidateRow : candidates) {
+      String candidate = trimToNull(candidateRow.excolCode());
+      if (matchesLegacyApplicationEndUseSort(
+          candidate, endUses, firstEndUseCode, application.productTypeCode())) {
+        return candidate;
+      }
+    }
+    return "";
+  }
+
+  @Override
   public List<SpeciesEndUseItem> getSpeciesForApplication(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
@@ -2129,6 +2174,24 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       }
     }
     return true;
+  }
+
+  private boolean matchesLegacyApplicationEndUseSort(
+      String candidate,
+      List<ApplicationDetailsRpcRepository.EndUseRow> endUses,
+      String firstEndUseCode,
+      String productTypeCode) {
+    if (candidate == null || firstEndUseCode == null) {
+      return false;
+    }
+    for (ApplicationDetailsRpcRepository.EndUseRow endUse : endUses) {
+      String speciesCode = trimToNull(endUse.speciesCode());
+      if (speciesCode == null || !candidate.contains(speciesCode)) {
+        return false;
+      }
+    }
+    return EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(trimToNull(productTypeCode))
+        || candidate.contains(firstEndUseCode);
   }
 
   private CodeItem toCodeItem(ApplicationDetailsRpcRepository.CodeRow row) {

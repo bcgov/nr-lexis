@@ -668,10 +668,7 @@ class PurchaseOfferControllerTest {
 
   private void mockApplicationSpeciesGradeCode() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.getSpeciesForApplication(1000456L))
-        .thenReturn(
-            List.of(
-                new ApplicationDetailsRpcService.SpeciesEndUseItem("FI", "LUM", "Lumber"),
-                new ApplicationDetailsRpcService.SpeciesEndUseItem("HE", "LUM", "Lumber")));
+    when(applicationDetailsService.getApplicationSpeciesEndUseSort(1000456L))
+        .thenReturn("FI/HE/LUM");
   }
 }

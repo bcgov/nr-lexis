@@ -3172,7 +3172,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
     }
 
-    return buildLegacyPackageEndUseSort(endUses);
+    return "";
   }
 
   private String buildBlanketPackageEndUseSort(String packageNumber) {

@@ -1469,6 +1469,39 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void applicationSpeciesEndUseSortShouldUseCanonicalLegacyCandidate() {
+    when(repository.findEndUsesByApplicationNumberRequired(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.EndUseRow("FI", "LUM"),
+                new ApplicationDetailsRpcRepository.EndUseRow("HE", "LUM")));
+    when(repository.findCandidateExcolCodesRequired(2, "FI", "LUM", 11L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/HE/OT"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LUM")));
+
+    String result = service.getApplicationSpeciesEndUseSort(1000456L);
+
+    assertThat(result).isEqualTo("HE/FI/LUM");
+  }
+
+  @Test
+  void applicationSpeciesEndUseSortShouldBeBlankWhenNoCandidateMatches() {
+    when(repository.findEndUsesByApplicationNumberRequired(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("FI", "LUM")));
+    when(repository.findCandidateExcolCodesRequired(1, "FI", "LUM", 11L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/OT")));
+
+    String result = service.getApplicationSpeciesEndUseSort(1000456L);
+
+    assertThat(result).isEmpty();
+  }
+
+  @Test
   void getSpeciesForPackageShouldResolveEndUseDescriptions() {
     when(repository.findEndUsesByPackageNumberRequired("PKG-903"))
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("CED", "PUL")));
