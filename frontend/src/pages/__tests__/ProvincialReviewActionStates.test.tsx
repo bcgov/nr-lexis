@@ -251,9 +251,12 @@ describe('Provincial Review Action State Smoke', () => {
     expect(newRowCheckbox).toBeEnabled()
     expect(pendingRowCheckbox).toBeEnabled()
 
-    const rejectButtons = screen.getAllByRole('button', { name: 'Reject' })
-    expect(rejectButtons[0]).toBeEnabled()
-    expect(rejectButtons[1]).toBeEnabled()
+    const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
+    const disapproveButtons = screen.getAllByRole('button', { name: 'Disapprove' })
+    expect(approveButtons[0]).toBeEnabled()
+    expect(approveButtons[1]).toBeEnabled()
+    expect(disapproveButtons[0]).toBeEnabled()
+    expect(disapproveButtons[1]).toBeEnabled()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
 
@@ -290,7 +293,7 @@ describe('Provincial Review Action State Smoke', () => {
       'Species end use sort',
       'Listing date',
       'Region',
-      'Action',
+      'Actions',
     ])
   })
 
@@ -355,11 +358,31 @@ describe('Provincial Review Action State Smoke', () => {
     expect(await screen.findByText('Approved 1 application(s).')).toBeInTheDocument()
   })
 
-  it('rejects a single NEW row with an editable client email recipient', async () => {
+  it('approves a single reviewable application from the row action', async () => {
+    renderPage()
+    await screen.findByText('1000456')
+
+    const pendingRow = screen.getByText('1000456').closest('tr')
+    expect(pendingRow).not.toBeNull()
+    await userEvent.click(
+      within(pendingRow as HTMLTableRowElement).getByRole('button', { name: 'Approve' }),
+    )
+
+    await waitFor(() => {
+      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+      expect(mockedApproveApplicationReview).toHaveBeenCalledWith(
+        '1000456',
+        'application-1000456-version',
+      )
+    })
+    expect(await screen.findByText('Approved 1 application(s).')).toBeInTheDocument()
+  })
+
+  it('disapproves a single NEW row with an editable client email recipient', async () => {
     renderPage()
     await screen.findByText('1000123')
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
     await waitFor(() => {
       expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000123')
@@ -408,17 +431,17 @@ describe('Provincial Review Action State Smoke', () => {
     ).toBeInTheDocument()
   }, 15000)
 
-  it('prefills an owner rejection with the owner client-location email', async () => {
+  it('prefills an owner disapproval with the owner client-location email', async () => {
     renderPage()
     await screen.findByText('1000123')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
     await waitFor(() => {
       expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
     })
   })
 
-  it('rejects a single PND row through the same review workflow', async () => {
+  it('disapproves a single PND row through the same review workflow', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummary,
       applicationNumber: '1000456',
@@ -428,7 +451,7 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000456')
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[1])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[1])
 
     await waitFor(() => {
       expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000456')
@@ -470,7 +493,7 @@ describe('Provincial Review Action State Smoke', () => {
 
     renderPage()
     await screen.findByText('1000123')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
     await waitFor(() =>
       expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
     )
@@ -544,7 +567,7 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000123')
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
     await waitFor(() => {
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '00')
@@ -613,18 +636,18 @@ describe('Provincial Review Action State Smoke', () => {
 
     renderPage()
     await screen.findByText('1000123')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
     await waitFor(() =>
       expect(screen.getByLabelText('Client email address')).toHaveValue('owner@example.com'),
     )
   })
 
-  it('validates single-row rejection before status update', async () => {
+  it('validates single-row disapproval before status update', async () => {
     renderPage()
     await screen.findByText('1000123')
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
     await waitFor(() =>
       expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
     )
@@ -654,7 +677,7 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000123')
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
     await waitFor(() => expect(screen.getByLabelText('Client email address')).not.toBeDisabled())
     expect(screen.getByLabelText('Client email address')).toHaveValue('')
@@ -685,7 +708,7 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000123')
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
     await waitFor(() =>
       expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
     )
@@ -899,7 +922,8 @@ describe('Provincial Review Action State Smoke', () => {
     expect(rowCheckbox).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: 'Select all rows on this page' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
-    expect(screen.getAllByRole('button', { name: 'Reject' })[0]).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: 'Approve' })[0]).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: 'Disapprove' })[0]).toBeDisabled()
 
     const tooltipTrigger = rowCheckbox.closest('.disabled-button-tooltip') as HTMLElement
     expect(tooltipTrigger).toBeTruthy()

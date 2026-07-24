@@ -1712,6 +1712,13 @@ legend.cds--label {
   border-block-start: 1px solid var(--csp-border-subtle-01);
 }
 
+.provincial-review-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .legacy-search-result-count {
   margin: 0;
   color: var(--csp-text-primary);

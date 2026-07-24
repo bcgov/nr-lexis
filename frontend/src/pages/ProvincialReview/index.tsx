@@ -542,7 +542,7 @@ const ProvincialReviewPage = () => {
       if (!canApproveApplications) {
         setReviewActionStatus({
           kind: 'error',
-          message: 'Your account is not authorized to reject applications.',
+          message: 'Your account is not authorized to disapprove applications.',
         })
         return
       }
@@ -688,30 +688,13 @@ const ProvincialReviewPage = () => {
     }
   }
 
-  const onApproveSelectedClick = async () => {
-    if (!canApproveApplications) {
-      setReviewActionStatus({
-        kind: 'error',
-        message: 'Your account is not authorized to approve applications.',
-      })
-      return
-    }
-
-    const selectedNumbers = selectedReviewableRows.map((row) => row.applicationNumber)
-    if (selectedNumbers.length === 0) {
-      setReviewActionStatus({
-        kind: 'error',
-        message: 'Select at least one NEW or PND application before approving.',
-      })
-      return
-    }
-
+  const approveApplications = async (applicationNumbers: string[]) => {
     setSubmittingApproval(true)
     setReviewActionStatus(null)
 
     try {
       const approvalResults = []
-      for (const applicationNumber of selectedNumbers) {
+      for (const applicationNumber of applicationNumbers) {
         try {
           const recordVersion = await fetchCurrentApplicationRecordVersion(applicationNumber)
           const result = await approveApplicationReview(applicationNumber, recordVersion)
@@ -759,6 +742,47 @@ const ProvincialReviewPage = () => {
     } finally {
       setSubmittingApproval(false)
     }
+  }
+
+  const onApproveSelectedClick = async () => {
+    if (!canApproveApplications) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to approve applications.',
+      })
+      return
+    }
+
+    const selectedNumbers = selectedReviewableRows.map((row) => row.applicationNumber)
+    if (selectedNumbers.length === 0) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Select at least one NEW or PND application before approving.',
+      })
+      return
+    }
+
+    await approveApplications(selectedNumbers)
+  }
+
+  const onApproveApplicationClick = async (applicationNumber: string, sourceStatus: string) => {
+    if (!canApproveApplications) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to approve applications.',
+      })
+      return
+    }
+
+    if (!isReviewableSourceStatus(sourceStatus)) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Only NEW or PND applications can be approved.',
+      })
+      return
+    }
+
+    await approveApplications([applicationNumber])
   }
 
   return (
@@ -1063,7 +1087,7 @@ const ProvincialReviewPage = () => {
                         )}
                       </TableHeader>
                     ))}
-                    <TableHeader>Action</TableHeader>
+                    <TableHeader>Actions</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1112,20 +1136,38 @@ const ProvincialReviewPage = () => {
                       <TableCell>{row.listingDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
                       <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          disabled={
-                            !canApproveApplications ||
-                            !isReviewableSourceStatus(row.status) ||
-                            optionsUnavailable ||
-                            !rejectStatusAvailable ||
-                            submittingReject
-                          }
-                          onClick={() => void onOpenRejectPanel(row.applicationNumber)}
-                        >
-                          Reject
-                        </Button>
+                        <div className="provincial-review-row-actions">
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            disabled={
+                              !canApproveApplications ||
+                              !isReviewableSourceStatus(row.status) ||
+                              submittingApproval ||
+                              submittingReject
+                            }
+                            onClick={() =>
+                              void onApproveApplicationClick(row.applicationNumber, row.status)
+                            }
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            disabled={
+                              !canApproveApplications ||
+                              !isReviewableSourceStatus(row.status) ||
+                              optionsUnavailable ||
+                              !rejectStatusAvailable ||
+                              submittingApproval ||
+                              submittingReject
+                            }
+                            onClick={() => void onOpenRejectPanel(row.applicationNumber)}
+                          >
+                            Disapprove
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
