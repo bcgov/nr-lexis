@@ -445,6 +445,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationDetailTab('Owner')
     expect(await screen.findByText('owner@example.test')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Owner client details', level: 2 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Owner client details', level: 3 }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('Notification email')).not.toBeInTheDocument()
   })
 

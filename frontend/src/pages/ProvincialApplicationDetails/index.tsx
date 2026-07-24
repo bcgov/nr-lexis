@@ -187,12 +187,19 @@ const optionLabel = (option: SearchOption): string =>
 
 export type ClientDataSummaryProps = {
   title: string
+  showTitle?: boolean
   clientData: ApplicationClientData | null
   isLoading: boolean
   detailFields?: Array<[string, string]>
 }
 
-function ClientDataSummary({ title, clientData, isLoading, detailFields }: ClientDataSummaryProps) {
+function ClientDataSummary({
+  title,
+  showTitle = true,
+  clientData,
+  isLoading,
+  detailFields,
+}: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
   const [dismissedClientLookupMessageKey, setDismissedClientLookupMessageKey] = useState<
@@ -214,7 +221,7 @@ function ClientDataSummary({ title, clientData, isLoading, detailFields }: Clien
         loading={isLoading}
         loadingDescription={`Refreshing ${title.toLowerCase()}...`}
       />
-      <h3 className="application-client-summary__title">{title}</h3>
+      {showTitle && <h3 className="application-client-summary__title">{title}</h3>}
       <dl className="detail-field-grid">
         {[
           ...(detailFields ?? []),
@@ -2593,6 +2600,7 @@ const ProvincialApplicationDetailsPage = () => {
     ownerClientData || isLoadingOwnerClientData ? (
       <ClientDataSummary
         title="Owner client details"
+        showTitle={false}
         clientData={ownerClientData}
         isLoading={isLoadingOwnerClientData}
         detailFields={ownerClientDetailFields}
@@ -3033,7 +3041,7 @@ const ProvincialApplicationDetailsPage = () => {
                         id="application-owner-details"
                         className="application-detail-section application-detail-clients"
                       >
-                        <h2 className="detail-tile-title">Owner</h2>
+                        <h2 className="detail-tile-title">Owner client details</h2>
                         {ownerClientSummaryContent ?? (
                           <EmptyState
                             title="Owner details unavailable"
