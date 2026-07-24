@@ -1472,9 +1472,10 @@ legend.cds--label {
   margin: 0 0 1rem;
   padding: 0;
   color: var(--csp-text-primary);
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.5rem;
+  // Match the regular-weight title treatment used by detail-section cards.
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
 }
 
 .provincial-offer-sections > .offer-form-section {
