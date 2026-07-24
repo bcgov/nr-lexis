@@ -220,6 +220,21 @@ describe('Provincial Review Action State Smoke', () => {
     ).toBeInTheDocument()
   })
 
+  it('places the search action last and includes the search icon', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    const searchActions = screen.getByRole('group', { name: 'Review search actions' })
+    expect(
+      within(searchActions)
+        .getAllByRole('button')
+        .map((button) => button.textContent?.trim()),
+    ).toEqual(['Clear Filters', 'Search'])
+    expect(
+      within(searchActions).getByRole('button', { name: 'Search' }).querySelector('svg'),
+    ).not.toBeNull()
+  })
+
   it('enables review actions and select-all for mixed NEW and PND rows', async () => {
     renderPage()
     await screen.findByText('1000123')

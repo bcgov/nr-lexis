@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { Search } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -847,16 +848,17 @@ const ProvincialReviewPage = () => {
                 onChange={(value) => updateFilter('listingToDate', value)}
               />
             </div>
-            <div className="legacy-search-actions">
+            <div className="legacy-search-actions" role="group" aria-label="Review search actions">
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
+                Clear Filters
+              </Button>
               <Button
                 kind="primary"
                 onClick={onSearch}
                 disabled={loading || hasDateValidationError}
+                renderIcon={Search}
               >
                 Search
-              </Button>
-              <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
-                Clear Filters
               </Button>
             </div>
           </div>
