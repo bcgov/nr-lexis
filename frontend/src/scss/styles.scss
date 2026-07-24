@@ -3797,6 +3797,15 @@ legend.cds--label {
   min-block-size: calc(100dvh - 16rem);
 }
 
+// Create-page actions follow the tab panel rather than living inside it.
+// Let the panel end with its form content so Cancel and Save remain adjacent
+// to the form instead of being pushed below a viewport-sized gray canvas.
+.provincial-application-create-page
+  .application-detail-tabs-column
+  > .application-detail-tab-panel {
+  min-block-size: auto;
+}
+
 .application-tabs__list {
   inline-size: fit-content;
   max-inline-size: 100%;
