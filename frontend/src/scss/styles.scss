@@ -1694,7 +1694,9 @@ legend.cds--label {
 }
 
 .legacy-search-table-toolbar .cds--toolbar-content {
+  align-items: center;
   justify-content: flex-start;
+  padding-inline-start: 1rem;
 }
 
 .provincial-review-table-toolbar {

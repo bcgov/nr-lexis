@@ -293,6 +293,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
     await expect(page.getByText('2 results found', { exact: true })).toBeVisible()
+    const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
+    await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
+    await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
     await expect(page.locator('a.csp-side-nav__link[data-label="Applications"]')).toHaveCSS(
       'font-weight',
       '400',
