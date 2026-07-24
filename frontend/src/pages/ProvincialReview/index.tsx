@@ -764,7 +764,7 @@ const ProvincialReviewPage = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
-          title="Provincial review"
+          title="Provincial application review"
           subtitle="Review and action provincial applications awaiting a decision."
         />
       </Column>

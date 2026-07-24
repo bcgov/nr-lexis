@@ -212,6 +212,14 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
+  it('uses the legacy provincial application review page title', async () => {
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Provincial application review' }),
+    ).toBeInTheDocument()
+  })
+
   it('enables review actions and select-all for mixed NEW and PND rows', async () => {
     renderPage()
     await screen.findByText('1000123')
