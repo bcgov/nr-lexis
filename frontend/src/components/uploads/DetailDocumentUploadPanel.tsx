@@ -558,6 +558,7 @@ const DetailDocumentUploadPanel = ({
 
   const documentNoun = workflowType === 'invoice' ? 'invoice' : 'document'
   const modalHeading = `Add ${documentNoun}`
+  const modalInitialFocusId = `${inputId}UploadModalContent`
 
   return (
     <div className="detail-document-upload" id={inputId}>
@@ -600,6 +601,7 @@ const DetailDocumentUploadPanel = ({
           modalHeading={modalHeading}
           aria-label={modalHeading}
           className="detail-document-upload-modal"
+          selectorPrimaryFocus={`#${modalInitialFocusId}`}
           onRequestClose={closeUploadModal}
           preventCloseOnClickOutside
         >
@@ -624,7 +626,11 @@ const DetailDocumentUploadPanel = ({
           )}
 
           {uploadStep === 'upload' && (
-            <div className="detail-document-upload-modal__form">
+            <div
+              id={modalInitialFocusId}
+              tabIndex={-1}
+              className="detail-document-upload-modal__form"
+            >
               <p className="detail-document-upload-modal__subtitle">
                 All fields are required unless marked optional.
               </p>

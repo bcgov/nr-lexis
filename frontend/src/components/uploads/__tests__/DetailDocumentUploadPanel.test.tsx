@@ -71,6 +71,23 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getByLabelText(/Document description/)).toHaveValue('')
   })
 
+  it('does not focus the close button when the upload modal opens', async () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+
+    await waitFor(() => {
+      expect(document.getElementById('applicationDocumentsUploadModalContent')).toHaveFocus()
+    })
+    expect(screen.getByRole('button', { name: 'Close' })).not.toHaveFocus()
+  })
+
   it('shows a visible refresh error after a successful upload when refresh fails', async () => {
     const refreshDocuments = vi.fn().mockRejectedValue(new Error('refresh failed'))
     const file = new File(['document upload'], 'application-document.pdf', {
