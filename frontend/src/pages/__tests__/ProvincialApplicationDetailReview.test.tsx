@@ -452,6 +452,50 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       screen.queryByRole('heading', { name: 'Owner client details', level: 3 }),
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Notification email')).not.toBeInTheDocument()
+
+    const applicantTypeField = screen
+      .getAllByText('Applicant type')
+      .find((element) => element.tagName === 'DT')
+      ?.closest('.detail-field-item')
+    expect(applicantTypeField).toBeTruthy()
+    expect(
+      within(applicantTypeField as HTMLElement).getByText('Owner'),
+    ).toBeInTheDocument()
+  })
+
+  it('uses a business label for ministerial applicant types', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValueOnce({
+      ...applicationDetail,
+      agentClientNumber: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'M',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Owner')
+    const applicantTypeField = screen
+      .getAllByText('Applicant type')
+      .find((element) => element.tagName === 'DT')
+      ?.closest('.detail-field-item')
+    expect(applicantTypeField).toBeTruthy()
+    expect(
+      within(applicantTypeField as HTMLElement).getByText('Ministerial'),
+    ).toBeInTheDocument()
   })
 
   it('defaults owner application review mail to the owner client-location email', async () => {

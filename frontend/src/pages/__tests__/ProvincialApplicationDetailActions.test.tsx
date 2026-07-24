@@ -288,7 +288,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(field).toBeTruthy()
       expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
     }
-    expectSummaryField('Applicant type', 'A - Agent')
+    expectSummaryField('Applicant type', 'Agent')
     expectSummaryField('Owner client location', '00')
     expectSummaryField('Owner contact name', 'Owner Contact')
     expectSummaryField('Growth type', 'O')
@@ -833,7 +833,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const summaryControls = within(await selectApplicationSummaryTile())
     const applicantType = await summaryControls.findByLabelText('Applicant type')
     expect(applicantType).toHaveAttribute('readonly')
-    expect(applicantType).toHaveValue('A - Agent')
+    expect(applicantType).toHaveValue('Agent')
     expect(summaryControls.getByLabelText('Application status')).toHaveAttribute('readonly')
     expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
     expect(getSummaryComboBox(summaryControls, 'Applicant type')).toBeUndefined()

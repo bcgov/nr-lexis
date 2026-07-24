@@ -185,6 +185,19 @@ const OIC_INDICATOR_OPTIONS: SearchOption[] = [
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
 
+const applicantTypeLabel = (value: string | null | undefined): string => {
+  switch (value?.trim().toUpperCase()) {
+    case 'A':
+      return 'Agent'
+    case 'M':
+      return 'Ministerial'
+    case 'O':
+      return 'Owner'
+    default:
+      return value?.trim() ?? ''
+  }
+}
+
 export type ClientDataSummaryProps = {
   title: string
   showTitle?: boolean
@@ -2574,13 +2587,7 @@ const ProvincialApplicationDetailsPage = () => {
     Boolean(linkedExemptionNumber) &&
     canAccessExemptionRoutes &&
     (!detail?.industryUser || industryViewableExemptionNumber === linkedExemptionNumber)
-  const ownerApplicantTypeOption = optionsWithCurrentValue(
-    APPLICANT_TYPE_OPTIONS,
-    ownerApplicantTypeCode,
-  ).find((option) => option.value === ownerApplicantTypeCode)
-  const ownerApplicantTypeLabel = ownerApplicantTypeOption
-    ? optionLabel(ownerApplicantTypeOption)
-    : ownerApplicantTypeCode
+  const ownerApplicantTypeLabel = applicantTypeLabel(ownerApplicantTypeCode)
   const summaryJurisdictionCode = summaryForm?.jurisdictionCode ?? ''
   const summaryJurisdictionOption = optionsWithCurrentValue(
     JURISDICTION_OPTIONS,
