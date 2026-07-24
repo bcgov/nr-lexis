@@ -1,18 +1,18 @@
 _format_version: "3.0"
 services:
-  - name: nr-lexis-nexcol-test
+  - name: nr-lexis-nexcol-prod
     tags:
       - ns.gw-lexis-nexcol
-    host: nr-lexis-backend-test.da5fad-test.svc
+    host: nr-lexis-backend-prod.da5fad-prod.svc
     port: 8080
     protocol: http
     retries: 0
     routes:
-      - name: nr-lexis-nexcol-federal-submissions-test
+      - name: nr-lexis-nexcol-federal-submissions-prod
         tags:
           - ns.gw-lexis-nexcol
         hosts:
-          - nr-lexis-nexcol.test.api.gov.bc.ca
+          - nr-lexis-nexcol.api.gov.bc.ca
         paths:
           - /api/lexis/federal/submissions
           - /api/lexis/federal/submissions/validation
@@ -30,7 +30,7 @@ services:
         enabled: true
         config:
           allowed_iss:
-            - https://test.loginproxy.gov.bc.ca/auth/realms/forests
+            - https://loginproxy.gov.bc.ca/auth/realms/forests
           allowed_aud: null
           run_on_preflight: true
           iss_key_grace_period: 10
@@ -79,19 +79,19 @@ services:
           credentials: false
           max_age: 3600
           preflight_continue: false
-  - name: nr-lexis-nexcol-test-swagger-cors
+  - name: nr-lexis-nexcol-prod-swagger-cors
     tags:
       - ns.gw-lexis-nexcol
-    host: nr-lexis-backend-test.da5fad-test.svc
+    host: nr-lexis-backend-prod.da5fad-prod.svc
     port: 8080
     protocol: http
     retries: 0
     routes:
-      - name: nr-lexis-nexcol-test-swagger-cors
+      - name: nr-lexis-nexcol-prod-swagger-cors
         tags:
           - ns.gw-lexis-nexcol
         hosts:
-          - nr-lexis-nexcol-test.api.gov.bc.ca
+          - nr-lexis-nexcol.api.gov.bc.ca
         paths:
           - /api/lexis/federal/submissions/validation
           - /api/lexis/federal/submissions
