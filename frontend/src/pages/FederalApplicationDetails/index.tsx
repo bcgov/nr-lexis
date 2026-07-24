@@ -79,7 +79,7 @@ import {
   shippingReferenceLabel,
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
-import { allowedFederalStatusTransitions, federalStatusReadOnlyMessage } from './status-transitions'
+import { allowedFederalStatusTransitions } from './status-transitions'
 
 type FederalApplicationScaleRow = ApplicationPackageScaleRow & {
   packageNumber: string
@@ -1045,60 +1045,44 @@ const FederalApplicationDetailsPage = () => {
                           },
                         ]}
                       />
-                      {canMutateFederalApplication && (
+                      {canMutateFederalApplication && statusTransitions.length > 0 && (
                         <Tile>
-                          <h2 className="detail-tile-title">
-                            {statusTransitions.length > 0
-                              ? 'Update federal status'
-                              : 'Federal status'}
-                          </h2>
-                          {statusTransitions.length > 0 ? (
-                            <>
-                              <div className="legacy-search-grid">
-                                <Select
-                                  id="federalApplicationStatus"
-                                  labelText="Status"
-                                  value={statusCode}
-                                  onChange={(event) => setStatusCode(event.target.value)}
-                                >
-                                  {statusTransitions.map((transition) => (
-                                    <SelectItem
-                                      key={transition.code}
-                                      value={transition.code}
-                                      text={transition.label}
-                                    />
-                                  ))}
-                                </Select>
-                                <TextArea
-                                  id="federalApplicationStatusRemark"
-                                  labelText="Remark"
-                                  value={statusRemark}
-                                  onChange={(event) => setStatusRemark(event.target.value)}
+                          <h2 className="detail-tile-title">Update federal status</h2>
+                          <div className="legacy-search-grid">
+                            <Select
+                              id="federalApplicationStatus"
+                              labelText="Status"
+                              value={statusCode}
+                              onChange={(event) => setStatusCode(event.target.value)}
+                            >
+                              {statusTransitions.map((transition) => (
+                                <SelectItem
+                                  key={transition.code}
+                                  value={transition.code}
+                                  text={transition.label}
                                 />
-                              </div>
-                              <Button
-                                kind="primary"
-                                size="sm"
-                                disabled={
-                                  isSavingMutation ||
-                                  !statusCode ||
-                                  ((statusCode === 'REJ' || statusCode === 'WDN') &&
-                                    !statusRemark.trim())
-                                }
-                                onClick={() => void onSaveStatus()}
-                              >
-                                {isSavingMutation ? 'Saving...' : 'Update status'}
-                              </Button>
-                            </>
-                          ) : (
-                            <p role="status">
-                              {federalStatusReadOnlyMessage(
-                                applicationStatusCode,
-                                detail.listingDate,
-                                businessToday,
-                              )}
-                            </p>
-                          )}
+                              ))}
+                            </Select>
+                            <TextArea
+                              id="federalApplicationStatusRemark"
+                              labelText="Remark"
+                              value={statusRemark}
+                              onChange={(event) => setStatusRemark(event.target.value)}
+                            />
+                          </div>
+                          <Button
+                            kind="primary"
+                            size="sm"
+                            disabled={
+                              isSavingMutation ||
+                              !statusCode ||
+                              ((statusCode === 'REJ' || statusCode === 'WDN') &&
+                                !statusRemark.trim())
+                            }
+                            onClick={() => void onSaveStatus()}
+                          >
+                            {isSavingMutation ? 'Saving...' : 'Update status'}
+                          </Button>
                         </Tile>
                       )}
                     </Column>

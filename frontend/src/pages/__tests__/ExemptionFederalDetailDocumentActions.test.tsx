@@ -1451,11 +1451,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(remark).toHaveValue('Not eligible')
   })
 
-  it('renders terminal federal status as read only without a mutation form', async () => {
+  it('hides the federal status action area after the approved application listing day', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
-      statusCode: 'REJ',
-      statusDescription: 'Rejected',
+      statusCode: 'APP',
+      statusDescription: 'Approved',
+      listingDate: '2020-01-01',
     })
 
     render(
@@ -1467,7 +1468,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
-    expect(await screen.findByText('No status changes are available from REJ.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Federal status' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Update federal status' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
   })
