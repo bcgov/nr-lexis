@@ -149,6 +149,16 @@ const federalApplicationDetail = {
   federalPermit: null,
 }
 
+const federalApplicationDocumentRows = [
+  {
+    id: 'federal-document-1',
+    name: 'inspection-file.pdf',
+    description: 'Synthetic document',
+    type: 'Inspection Files',
+    deletable: true,
+  },
+]
+
 const shippingReferenceOptions = {
   countries: [{ code: 'US', name: 'United States' }],
   transportTypes: [{ code: 'T', name: 'Truck' }],
@@ -239,8 +249,10 @@ const installSyntheticLexisApi = async (page: Page) => {
         body = federalApplicationDetail
         break
       case '/api/lexis/federal/applications/888/remarks':
-      case '/api/lexis/rpc/application-details/document-details':
         body = []
+        break
+      case '/api/lexis/rpc/application-details/document-details':
+        body = federalApplicationDocumentRows
         break
       case '/api/lexis/shipping-reference-options':
         body = shippingReferenceOptions
@@ -574,6 +586,18 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         return getComputedStyle(content).overflowX
       }),
     ).toBe('visible')
+  })
+
+  test('left-aligns table row actions with their actions heading', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/federal/application/888', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('tab', { name: 'Documents' }).click()
+
+    const documentsTable = page.getByRole('region', { name: 'Federal application documents' })
+    const rowActions = documentsTable.locator('.legacy-search-actions')
+
+    await expect(documentsTable).toBeVisible()
+    await expect(rowActions).toHaveCSS('justify-content', 'flex-start')
   })
 
   test('gives long create forms FSPTS section rhythm without mobile overflow', async ({ page }) => {
