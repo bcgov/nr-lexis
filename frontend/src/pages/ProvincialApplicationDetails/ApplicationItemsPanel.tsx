@@ -388,6 +388,7 @@ function ProvincialApplicationItemsPanel({
   const [pendingPackageSelection, setPendingPackageSelection] = useState('')
   const scalesSectionRef = useRef<HTMLElement>(null)
   const lastScrolledToScalesRequestIdRef = useRef(0)
+  const lastHandledFocusedPackageRequestRef = useRef('')
   const beginItemsRequest = useLatestRequestGuard()
   const selectedPackageDraftDirty =
     packageDraftTouched &&
@@ -578,6 +579,11 @@ function ProvincialApplicationItemsPanel({
     },
     [scaleDraftDirty, selectedPackageDraftDirty, selectedPackageNumber],
   )
+  const requestPackageSelectionRef = useRef(requestPackageSelection)
+
+  useEffect(() => {
+    requestPackageSelectionRef.current = requestPackageSelection
+  }, [requestPackageSelection])
 
   useEffect(() => {
     dispatchPackageSelection({ type: 'sync', packageNumbers: packageNumbersFromDetail })
@@ -588,10 +594,18 @@ function ProvincialApplicationItemsPanel({
   }, [onSelectedPackageChange, selectedPackageNumber])
 
   useEffect(() => {
-    if (focusedPackageNumber && packageNumbers.includes(focusedPackageNumber)) {
-      queueMicrotask(() => requestPackageSelection(focusedPackageNumber))
+    const focusRequestKey = `${focusedPackageRequestId ?? 0}:${focusedPackageNumber ?? ''}`
+    if (
+      !focusedPackageNumber ||
+      !packageNumbers.includes(focusedPackageNumber) ||
+      lastHandledFocusedPackageRequestRef.current === focusRequestKey
+    ) {
+      return
     }
-  }, [focusedPackageNumber, focusedPackageRequestId, packageNumbers, requestPackageSelection])
+
+    lastHandledFocusedPackageRequestRef.current = focusRequestKey
+    queueMicrotask(() => requestPackageSelectionRef.current(focusedPackageNumber))
+  }, [focusedPackageNumber, focusedPackageRequestId, packageNumbers])
 
   useEffect(() => {
     let cancelled = false

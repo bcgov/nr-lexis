@@ -127,6 +127,62 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
+  it('keeps a manual package selection after handling a deep-link package focus', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+        { packageNumber: 'PKG-2', volume: 50, pieceCount: 3 },
+      ],
+    })
+    mockedFetchApplicationPackageDetails.mockImplementation(async (packageNumber) => ({
+      success: true,
+      packageNumber,
+      volume: packageNumber === 'PKG-2' ? '50.0' : '100.0',
+      scaledVolume: packageNumber === 'PKG-2' ? 10 : 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: packageNumber === 'PKG-2' ? 'Second package' : 'First package',
+      statusDescription: 'Active',
+      reprocessed: 'N',
+      ageClass: 'O',
+      ageClassDescription: 'Old',
+      productType: 'LOG',
+      productTypeDescription: 'Logs',
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321?tab=items&packageNumber=PKG-1']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const packageSelector = await screen.findByRole('combobox', { name: 'Selected Package' })
+    await waitFor(() => {
+      expect(packageSelector).toHaveValue('PKG-1')
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
+    })
+
+    await chooseComboBoxOption(packageSelector, 'PKG-2')
+    await waitFor(() => {
+      expect(packageSelector).toHaveValue('PKG-2')
+      expect(screen.getByLabelText('Package Comments')).toHaveValue('Second package')
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(packageSelector).toHaveValue('PKG-2')
+    expect(mockedFetchApplicationPackageDetails).toHaveBeenLastCalledWith('PKG-2')
+  })
+
   it('blocks application summary and package edits for exemption approvers', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
