@@ -671,6 +671,34 @@ describe('Create Page Core Flows', () => {
     })
   })
 
+  it('debounces client lookups while an owner client number is typed', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Clients')
+    const ownerClientNumberInput = screen.getByLabelText('Owner client number')
+    mockedFetchApplicationClientLocations.mockClear()
+
+    for (const value of ['0', '00', '000', '0001', '00011', '000111', '0001111', '00011111']) {
+      fireEvent.change(ownerClientNumberInput, { target: { value } })
+    }
+
+    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledTimes(1)
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
+    })
+  })
+
   it('ignores forged agent prefill when applicant type changes are not authorized', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -1850,6 +1878,40 @@ describe('Create Page Core Flows', () => {
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080')
   }, 15000)
+
+  it('debounces offer context lookups while an application number is typed', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/offers/create']}>
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    mockedValidateOfferApplication.mockClear()
+    mockedFetchOfferApplicationDetails.mockClear()
+    mockedFetchOfferPackageList.mockClear()
+    mockedFetchOfferApplicationVolume.mockClear()
+
+    for (const value of ['4', '46', '460', '4605', '46053']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(mockedValidateOfferApplication).not.toHaveBeenCalled()
+    expect(mockedFetchOfferApplicationDetails).not.toHaveBeenCalled()
+    expect(mockedFetchOfferPackageList).not.toHaveBeenCalled()
+    expect(mockedFetchOfferApplicationVolume).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedValidateOfferApplication).toHaveBeenCalledTimes(1)
+      expect(mockedValidateOfferApplication).toHaveBeenCalledWith('46053')
+      expect(mockedFetchOfferApplicationDetails).toHaveBeenCalledTimes(1)
+      expect(mockedFetchOfferPackageList).toHaveBeenCalledTimes(1)
+      expect(mockedFetchOfferApplicationVolume).toHaveBeenCalledTimes(1)
+    })
+  })
 
   it('blocks offers against a federal application before loading offer details', async () => {
     const eligibilityError = 'Application 2001 does not have a valid jurisdiction to accept offers'

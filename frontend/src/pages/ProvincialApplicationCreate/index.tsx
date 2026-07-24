@@ -51,6 +51,7 @@ import {
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import {
   fetchProvincialApplicationOptions,
   type SearchOption,
@@ -327,6 +328,14 @@ const ProvincialApplicationCreatePage = () => {
   const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState<number>(
     APPLICATION_CREATE_TAB_INDEX.summary,
   )
+  const debouncedOwnerClientNumber = useDebouncedValue(form.ownerClientNumber)
+  const debouncedAgentClientNumber = useDebouncedValue(form.agentClientNumber)
+  const ownerClientNumberForLookup = formEdited
+    ? debouncedOwnerClientNumber
+    : form.ownerClientNumber
+  const agentClientNumberForLookup = formEdited
+    ? debouncedAgentClientNumber
+    : form.agentClientNumber
 
   useEffect(() => {
     if (createdApplicationNavigation) {
@@ -468,7 +477,7 @@ const ProvincialApplicationCreatePage = () => {
   }, [exemptionReasons])
 
   useEffect(() => {
-    const ownerClientNumber = form.ownerClientNumber.trim()
+    const ownerClientNumber = ownerClientNumberForLookup.trim()
     if (!ownerClientNumber) {
       let isActive = true
       void Promise.resolve().then(() => {
@@ -525,7 +534,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.ownerClientNumber])
+  }, [ownerClientNumberForLookup])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -554,7 +563,7 @@ const ProvincialApplicationCreatePage = () => {
       }
     }
 
-    const agentClientNumber = form.agentClientNumber.trim()
+    const agentClientNumber = agentClientNumberForLookup.trim()
     if (!agentClientNumber) {
       let isActive = true
       void Promise.resolve().then(() => {
@@ -611,10 +620,10 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.agentClientNumber, form.applicantTypeCode])
+  }, [agentClientNumberForLookup, form.applicantTypeCode])
 
   useEffect(() => {
-    const ownerClientNumber = form.ownerClientNumber.trim()
+    const ownerClientNumber = ownerClientNumberForLookup.trim()
     const ownerClientLocationCode = form.ownerClientLocationCode.trim()
     if (!ownerClientNumber || !ownerClientLocationCode) {
       let isActive = true
@@ -669,7 +678,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.ownerClientLocationCode, form.ownerClientNumber])
+  }, [form.ownerClientLocationCode, ownerClientNumberForLookup])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -688,7 +697,7 @@ const ProvincialApplicationCreatePage = () => {
       }
     }
 
-    const agentClientNumber = form.agentClientNumber.trim()
+    const agentClientNumber = agentClientNumberForLookup.trim()
     const agentClientLocationCode = form.agentClientLocationCode.trim()
     if (!agentClientNumber || !agentClientLocationCode) {
       let isActive = true
@@ -743,7 +752,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.agentClientLocationCode, form.agentClientNumber, form.applicantTypeCode])
+  }, [agentClientNumberForLookup, form.agentClientLocationCode, form.applicantTypeCode])
 
   useEffect(() => {
     const region = form.region.trim()

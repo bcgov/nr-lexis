@@ -1417,6 +1417,54 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
+  it('debounces owner client lookups while the client number is typed', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Application')
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00')
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
+      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
+        '00011122',
+        '00',
+        'owner',
+        '321',
+      )
+    })
+    mockedFetchApplicationClientData.mockClear()
+    mockedFetchApplicationClientLocations.mockClear()
+    mockedFetchApplicationClientContacts.mockClear()
+
+    const ownerClientNumberInput = screen.getByLabelText('Owner client number')
+    for (const value of ['0', '00', '000', '0004', '00044', '000444', '0004444', '00044444']) {
+      fireEvent.change(ownerClientNumberInput, { target: { value } })
+    }
+
+    expect(mockedFetchApplicationClientData).not.toHaveBeenCalled()
+    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
+    expect(mockedFetchApplicationClientContacts).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00044444', '00')
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00044444', 'owner')
+      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
+        '00044444',
+        '00',
+        'owner',
+        '321',
+      )
+    })
+  })
+
   it('does not substitute the owner email when an agent applicant has no email', async () => {
     mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
       clientNumber,
