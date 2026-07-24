@@ -2588,6 +2588,13 @@ const ProvincialApplicationDetailsPage = () => {
     canAccessExemptionRoutes &&
     (!detail?.industryUser || industryViewableExemptionNumber === linkedExemptionNumber)
   const ownerApplicantTypeLabel = applicantTypeLabel(ownerApplicantTypeCode)
+  const ownerClientLocationCode = summaryForm?.ownerClientLocationCode?.trim() ?? ''
+  const ownerClientLocationName = ownerClientLocations.find(
+    (location) => location.locationCode === ownerClientLocationCode,
+  )?.locationName
+  const ownerClientLocationDisplay = ownerClientLocationName
+    ? `${ownerClientLocationCode} - ${ownerClientLocationName}`
+    : ownerClientLocationCode
   const summaryJurisdictionCode = summaryForm?.jurisdictionCode ?? ''
   const summaryJurisdictionOption = optionsWithCurrentValue(
     JURISDICTION_OPTIONS,
@@ -2599,7 +2606,7 @@ const ProvincialApplicationDetailsPage = () => {
   const ownerClientDetailFields: Array<[string, string]> = [
     ['Client number', summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? '')],
     ['Applicant type', ownerApplicantTypeLabel],
-    ['Client location', summaryForm?.ownerClientLocationCode ?? ''],
+    ['Client location', ownerClientLocationDisplay],
     ['Contact name', summaryForm?.ownerContactName ?? ''],
     ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
   ]

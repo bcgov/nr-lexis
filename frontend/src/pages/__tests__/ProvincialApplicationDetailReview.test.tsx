@@ -419,7 +419,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the owner client-location email without a separate notification field', async () => {
+  it('shows the owner client location and email without a separate notification field', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValueOnce({
       ...applicationDetail,
       agentClientNumber: null,
@@ -460,6 +460,15 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(applicantTypeField).toBeTruthy()
     expect(
       within(applicantTypeField as HTMLElement).getByText('Owner'),
+    ).toBeInTheDocument()
+
+    const clientLocationField = screen
+      .getAllByText('Client location')
+      .find((element) => element.tagName === 'DT')
+      ?.closest('.detail-field-item')
+    expect(clientLocationField).toBeTruthy()
+    expect(
+      within(clientLocationField as HTMLElement).getByText('00 - Owner Main Location'),
     ).toBeInTheDocument()
   })
 
