@@ -55,7 +55,7 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useDebouncedSearchFilters } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -172,9 +172,14 @@ const FederalPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const pageSize = urlState.pageSize
+  const requestFilters = useDebouncedSearchFilters(filters, {
+    applicationNumber: filters.applicationNumber,
+    packageNumber: filters.packageNumber,
+    clientNumber: filters.clientNumber,
+  })
+  const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setExemptionSelectionStatus(null)
@@ -315,16 +320,16 @@ const FederalPage = () => {
   )
 
   useEffect(() => {
-    if (searchParams.toString().length === 0) {
+    if (!hasSearchQuery) {
       return
     }
 
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
     })
-  }, [debouncedUrlState, runSearch, searchParams])
+  }, [hasSearchQuery, requestFilters, runSearch, urlState.page, urlState.pageSize])
 
   useEffect(() => {
     const hasSearchQuery = searchParams.toString().length > 0

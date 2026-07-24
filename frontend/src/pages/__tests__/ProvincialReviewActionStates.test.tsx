@@ -305,6 +305,29 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByText('1212.0')).toBeInTheDocument()
   })
 
+  it('debounces backend searches while the application number is typed', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+    mockedSearchApplicationReviews.mockClear()
+
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    for (const value of ['4', '46', '460', '4605', '46053']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
+      expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ applicationNumber: '46053' }),
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
   it.each([
     ['Listing date', 'listingDate'],
     ['Region', 'regionCode'],

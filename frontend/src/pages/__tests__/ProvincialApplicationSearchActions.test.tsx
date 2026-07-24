@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -507,7 +507,12 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
     mockedSearchProvincialApplications.mockClear()
 
-    await userEvent.type(screen.getByLabelText('Application number'), '987')
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    for (const value of ['9', '98', '987']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
 
     await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
@@ -520,6 +525,24 @@ describe('Provincial Application Search Actions', () => {
         expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
+  })
+
+  it('searches immediately when a date filter changes', async () => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockClear()
+
+    fireEvent.change(screen.getByLabelText('Received from date'), {
+      target: { value: '2026-07-24' },
+    })
+
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ receivedFromDate: '2026-07-24' }),
+      }),
+      expect.any(Object),
+    )
   })
 
   it('sends selected region org unit numbers to the application search request', async () => {

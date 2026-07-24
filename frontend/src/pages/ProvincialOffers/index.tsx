@@ -57,7 +57,7 @@ import {
   parseSortDirectionParam,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useDebouncedSearchFilters } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -175,11 +175,16 @@ const ProvincialOffersPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const requestFilters = useDebouncedSearchFilters(filters, {
+    applicationNumber: filters.applicationNumber,
+    packageNumber: filters.packageNumber,
+    clientNumber: filters.clientNumber,
+  })
+  const hasSearchQuery = searchParams.toString().length > 0
   const updateFilter = useCallback(
     <K extends keyof ProvincialOfferSearchFilters>(
       key: K,
@@ -327,18 +332,26 @@ const ProvincialOffersPage = () => {
   )
 
   useEffect(() => {
-    if (searchParams.toString().length === 0) {
+    if (!hasSearchQuery) {
       return
     }
 
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch, searchParams])
+  }, [
+    hasSearchQuery,
+    requestFilters,
+    runSearch,
+    urlState.page,
+    urlState.pageSize,
+    urlState.sortDirection,
+    urlState.sortField,
+  ])
 
   useEffect(() => {
     const loadOptions = async () => {

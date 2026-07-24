@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -122,6 +122,31 @@ describe('Provincial Offer Search Actions', () => {
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
+  })
+
+  it('debounces backend searches while text filters are typed', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage()
+    await screen.findByText('OFF-1001')
+    mockedSearchProvincialOffers.mockClear()
+
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    for (const value of ['4', '46', '460', '4605', '46053']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(1)
+      expect(mockedSearchProvincialOffers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ applicationNumber: '46053' }),
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('defaults listing to date from the first list-date label and leaves blank last', async () => {

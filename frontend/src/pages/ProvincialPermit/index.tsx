@@ -59,7 +59,7 @@ import {
   type SearchTotalCache,
 } from '@/pages/shared/search-total-cache'
 import IsoDatePicker from '../../components/IsoDatePicker'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useDebouncedSearchFilters } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -178,11 +178,18 @@ const ProvincialPermitPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const requestFilters = useDebouncedSearchFilters(filters, {
+    applicationNumber: filters.applicationNumber,
+    packageNumber: filters.packageNumber,
+    permitNumber: filters.permitNumber,
+    invoiceNumber: filters.invoiceNumber,
+    ownerClientNumber: filters.ownerClientNumber,
+    applicantClientNumber: filters.applicantClientNumber,
+  })
   const updateFilter = useCallback(
     <K extends keyof ProvincialPermitSearchFilters>(
       key: K,
@@ -313,13 +320,20 @@ const ProvincialPermitPage = () => {
 
   useEffect(() => {
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch])
+  }, [
+    requestFilters,
+    runSearch,
+    urlState.page,
+    urlState.pageSize,
+    urlState.sortDirection,
+    urlState.sortField,
+  ])
 
   useEffect(() => {
     const loadOptions = async () => {

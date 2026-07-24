@@ -68,7 +68,7 @@ import {
   parseSortDirectionParam,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useDebouncedSearchFilters } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -260,11 +260,19 @@ const ProvincialExemptionPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const requestFilters = useDebouncedSearchFilters(filters, {
+    applicationNumber: filters.applicationNumber,
+    packageNumber: filters.packageNumber,
+    exemptionNumber: filters.exemptionNumber,
+    applicantClientNumber: filters.applicantClientNumber,
+    ownerClientNumber: filters.ownerClientNumber,
+  })
+  const awaitingDefaultApprovalFilters =
+    shouldDefaultApprovalFilters && searchParams.toString().length === 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setApprovalStatus(null)
@@ -412,18 +420,26 @@ const ProvincialExemptionPage = () => {
   )
 
   useEffect(() => {
-    if (searchParams.toString().length === 0 && shouldDefaultApprovalFilters) {
+    if (awaitingDefaultApprovalFilters) {
       return
     }
 
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch, searchParams, shouldDefaultApprovalFilters])
+  }, [
+    awaitingDefaultApprovalFilters,
+    requestFilters,
+    runSearch,
+    urlState.page,
+    urlState.pageSize,
+    urlState.sortDirection,
+    urlState.sortField,
+  ])
 
   useEffect(() => {
     const hasSearchQuery = searchParams.toString().length > 0

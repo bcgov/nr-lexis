@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -175,6 +175,29 @@ describe('Federal Search Actions', () => {
       }),
       expect.any(Object),
     )
+  })
+
+  it('debounces backend searches while text filters are typed', async () => {
+    renderPage()
+    await screen.findByText('FED-1001')
+    mockedSearchFederalApplications.mockClear()
+
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    for (const value of ['4', '46', '460', '4605', '46053']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(1)
+      expect(mockedSearchFederalApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ applicationNumber: '46053' }),
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('select-all includes every eligible row and excludes ineligible rows', async () => {

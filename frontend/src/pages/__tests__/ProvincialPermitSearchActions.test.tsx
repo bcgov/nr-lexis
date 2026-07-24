@@ -118,6 +118,31 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
+  it('debounces backend searches while text filters are typed', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage()
+    await screen.findByText('7001')
+    mockedSearchProvincialPermits.mockClear()
+
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    for (const value of ['4', '46', '460', '4605', '46053']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
+      expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ applicationNumber: '46053' }),
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
   it('persists the invoice number in URL-backed filters and clears it with the form', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
