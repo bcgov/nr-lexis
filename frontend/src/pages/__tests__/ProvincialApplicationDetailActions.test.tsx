@@ -1341,7 +1341,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       reviewTile.getByRole('combobox', { name: 'Application status' }),
       'Rejected',
     )
-    fireEvent.change(reviewTile.getByLabelText('Review remark'), {
+    fireEvent.change(reviewTile.getByLabelText('Status change remark'), {
       target: { value: 'Needs correction' },
     })
 

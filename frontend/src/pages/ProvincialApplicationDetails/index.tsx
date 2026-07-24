@@ -128,7 +128,7 @@ const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUSES_WITH_PERSISTED_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating review status.'
 const REVIEW_REMARK_REQUIRED_MESSAGE =
-  'Review remark is required when rejecting, withdrawing, or expiring an application.'
+  'Status change remark is required when rejecting, withdrawing, or expiring an application.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
 type ApplicationDetailTabKey =
   | 'owner'
@@ -2761,7 +2761,8 @@ const ProvincialApplicationDetailsPage = () => {
         <div className="legacy-search-grid">
           <TextArea
             id="applicationDetailReviewRemark"
-            labelText="Review remark"
+            labelText="Status change remark"
+            helperText="Saved with the status change and included in an email notification, if one is sent."
             maxCount={250}
             invalid={isReviewRemarkInvalid}
             invalidText={reviewValidationMessage}
