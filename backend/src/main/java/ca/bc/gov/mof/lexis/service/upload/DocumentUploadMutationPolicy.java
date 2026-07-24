@@ -35,8 +35,7 @@ public class DocumentUploadMutationPolicy {
 
   /**
    * Validates an application target before attaching a document.
-   *
-   * <p>Legacy LEXIS allows authorized users to attach documents after an application expires.
+   * Legacy LEXIS allows authorized users to attach documents after an application expires.
    */
   public void requireApplicationAttachmentTarget(Long applicationNumber) {
     LexisApplicationService service = applicationServiceProvider.getIfAvailable();
