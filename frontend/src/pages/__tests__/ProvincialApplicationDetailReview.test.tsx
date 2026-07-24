@@ -458,9 +458,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       .find((element) => element.tagName === 'DT')
       ?.closest('.detail-field-item')
     expect(applicantTypeField).toBeTruthy()
-    expect(
-      within(applicantTypeField as HTMLElement).getByText('Owner'),
-    ).toBeInTheDocument()
+    expect(within(applicantTypeField as HTMLElement).getByText('Owner')).toBeInTheDocument()
 
     const clientLocationField = screen
       .getAllByText('Client location')
@@ -502,9 +500,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       .find((element) => element.tagName === 'DT')
       ?.closest('.detail-field-item')
     expect(applicantTypeField).toBeTruthy()
-    expect(
-      within(applicantTypeField as HTMLElement).getByText('Ministerial'),
-    ).toBeInTheDocument()
+    expect(within(applicantTypeField as HTMLElement).getByText('Ministerial')).toBeInTheDocument()
   })
 
   it('defaults owner application review mail to the owner client-location email', async () => {
