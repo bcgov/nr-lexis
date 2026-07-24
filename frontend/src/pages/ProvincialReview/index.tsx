@@ -532,7 +532,7 @@ const ProvincialReviewPage = () => {
     setRejectStatusCode(REJECT_STATUS_CODE)
     setRejectEmailAddress('')
     setRejectRemark('')
-    setSendRejectEmail(true)
+    setSendRejectEmail(false)
     setRejectValidationMessage('')
     setLoadingRejectEmail(false)
   }, [])
@@ -559,7 +559,7 @@ const ProvincialReviewPage = () => {
       setRejectStatusCode(REJECT_STATUS_CODE)
       setRejectEmailAddress('')
       setRejectRemark('')
-      setSendRejectEmail(true)
+      setSendRejectEmail(false)
       setRejectValidationMessage('')
       setLoadingRejectEmail(true)
 
@@ -893,9 +893,8 @@ const ProvincialReviewPage = () => {
         open={Boolean(rejectApplicationNumber)}
         passiveModal
         size="md"
-        modalLabel="Application review"
         modalHeading={`Update application ${rejectApplicationNumber}`}
-        aria-label="Application review"
+        aria-label={`Update application ${rejectApplicationNumber}`}
         className="review-reject-modal"
         preventCloseOnClickOutside
         selectorPrimaryFocus="#reviewRejectStatus"
@@ -918,7 +917,9 @@ const ProvincialReviewPage = () => {
             onChange={(value) => {
               const statusCode = value.toUpperCase()
               setRejectStatusCode(statusCode)
-              setSendRejectEmail(EMAIL_STATUS_CODES.has(statusCode))
+              if (!EMAIL_STATUS_CODES.has(statusCode)) {
+                setSendRejectEmail(false)
+              }
               setRejectValidationMessage('')
             }}
           />

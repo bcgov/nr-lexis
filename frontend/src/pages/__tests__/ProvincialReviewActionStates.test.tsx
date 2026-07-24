@@ -378,7 +378,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(await screen.findByText('Approved 1 application(s).')).toBeInTheDocument()
   })
 
-  it('disapproves a single NEW row with an editable client email recipient', async () => {
+  it('disapproves a single NEW row and sends email only when opted in', async () => {
     renderPage()
     await screen.findByText('1000123')
 
@@ -392,7 +392,11 @@ describe('Provincial Review Action State Smoke', () => {
     })
 
     expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Rejected')
-    expect(screen.getByRole('checkbox', { name: 'Send status email' })).toBeChecked()
+    const sendStatusEmailCheckbox = screen.getByRole('checkbox', { name: 'Send status email' })
+    expect(sendStatusEmailCheckbox).not.toBeChecked()
+    expect(screen.queryByText('Application review')).not.toBeInTheDocument()
+    await userEvent.click(sendStatusEmailCheckbox)
+    expect(sendStatusEmailCheckbox).toBeChecked()
     expect(screen.getByLabelText('Client email address')).not.toHaveAttribute('readonly')
     expect(
       screen.getByText(
@@ -458,6 +462,7 @@ describe('Provincial Review Action State Smoke', () => {
       expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
     })
 
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Pending application rejected')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
@@ -575,6 +580,7 @@ describe('Provincial Review Action State Smoke', () => {
       expect(screen.getByLabelText('Client email address')).toHaveValue('agent@example.com')
     })
 
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
@@ -690,6 +696,9 @@ describe('Provincial Review Action State Smoke', () => {
       ),
     ).toBeInTheDocument()
 
+    const sendStatusEmailCheckbox = screen.getByRole('checkbox', { name: 'Send status email' })
+    expect(sendStatusEmailCheckbox).not.toBeChecked()
+    await userEvent.click(sendStatusEmailCheckbox)
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
     await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
 
@@ -704,7 +713,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
-  it('updates a rejected application without sending email when email delivery is unchecked', async () => {
+  it('updates a rejected application without sending email by default', async () => {
     renderPage()
     await screen.findByText('1000123')
 
@@ -713,7 +722,7 @@ describe('Provincial Review Action State Smoke', () => {
       expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
     )
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
+    expect(screen.getByRole('checkbox', { name: 'Send status email' })).not.toBeChecked()
     expect(screen.getByLabelText('Client email address')).not.toHaveAttribute('readonly')
 
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected without notification')
