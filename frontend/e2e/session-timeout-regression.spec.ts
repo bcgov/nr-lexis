@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   createUnsignedToken,
+  E2E_BASE_URL,
   installSyntheticCognitoSession,
   type SyntheticCognitoSession,
 } from './utils'
@@ -21,6 +22,10 @@ const authenticatedSession = {
   grantedActions: ['/applicationSearch'],
 }
 
+type SyntheticSessionState = {
+  authenticated: boolean
+}
+
 const applicationSearchOptions = {
   exemptionTypes: [],
   exemptionReasons: [],
@@ -31,13 +36,24 @@ const applicationSearchOptions = {
   currentSchedules: [],
 }
 
-const installSyntheticLexisApi = async (page: Page) => {
+const installSyntheticLexisApi = async (
+  page: Page,
+  sessionState: SyntheticSessionState = { authenticated: true },
+) => {
   await page.route('**/api/lexis/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname
     let body: unknown
 
     switch (pathname) {
       case '/api/lexis/session/capabilities':
+        if (!sessionState.authenticated) {
+          await route.fulfill({
+            status: 401,
+            contentType: 'application/problem+json',
+            body: JSON.stringify({ title: 'Unauthorized', status: 401 }),
+          })
+          return
+        }
         body = authenticatedSession
         break
       case '/api/lexis/applications/search/options':
@@ -54,6 +70,21 @@ const installSyntheticLexisApi = async (page: Page) => {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(body),
+    })
+  })
+}
+
+const installSyntheticLogoutRedirect = async (page: Page, sessionState: SyntheticSessionState) => {
+  const loginUrl = new URL('/', E2E_BASE_URL).toString()
+
+  await page.route('**/clp-cgi/logoff.cgi**', async (route) => {
+    sessionState.authenticated = false
+    await route.fulfill({
+      status: 302,
+      headers: {
+        location: loginUrl,
+      },
+      body: '',
     })
   })
 }
@@ -191,5 +222,49 @@ test.describe('session timeout regression', () => {
     await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS)
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText('5:00', { exact: true })).toBeVisible()
+  })
+
+  test('shows the warning after automatic inactivity logout', async ({ page }) => {
+    await page.clock.install({ time: new Date(SESSION_START_ISO) })
+    const sessionState = { authenticated: true }
+    const sessionStartSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000)
+    await installSyntheticCognitoSession(page, {
+      username: TEST_USERNAME,
+      orgUnitNo: '1903',
+      issuedAtSeconds: sessionStartSeconds,
+    })
+    await installSyntheticLexisApi(page, sessionState)
+    await installSyntheticLogoutRedirect(page, sessionState)
+    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+    ).toBeVisible()
+
+    await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS + SESSION_IDLE_WARNING_DURATION_MS)
+
+    await expect(page.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeVisible()
+    await expect(page.getByText('You’ve been logged out', { exact: true })).toBeVisible()
+  })
+
+  test('does not show the warning after manual logout', async ({ page }) => {
+    const sessionState = { authenticated: true }
+    await installSyntheticCognitoSession(page, {
+      username: TEST_USERNAME,
+      orgUnitNo: '1903',
+    })
+    await installSyntheticLexisApi(page, sessionState)
+    await installSyntheticLogoutRedirect(page, sessionState)
+    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+
+    const profileButton = page.locator('button[aria-controls="profile-panel"]')
+    await profileButton.click()
+    const signOutButton = page
+      .locator('#profile-panel.is-open')
+      .getByRole('button', { name: /sign out/i })
+    await signOutButton.click()
+
+    await expect(page.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeVisible()
+    await expect(page.getByText('You’ve been logged out', { exact: true })).toHaveCount(0)
   })
 })

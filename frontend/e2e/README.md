@@ -16,7 +16,8 @@ regression coverage uses a separate TEST-only Playwright config.
 - If `E2E_BASE_URL` is a deployed URL in CI, Playwright does not start a local `webServer`.
 - The default config only runs files ending in `smoke.spec.ts`.
 - `playwright.regression.config.ts` runs files ending in `regression.spec.ts`, including the
-  synthetic session-timeout scenario and the TEST credentialed regression specs.
+  synthetic session-timeout, automatic/manual logout warning scenarios, and the TEST credentialed
+  regression specs.
 
 ## CI setup
 

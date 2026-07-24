@@ -352,9 +352,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
           }
 
-          if (tokenReady) {
-            clearOauthCallbackParams()
+          if (!tokenReady) {
+            // The deployed capabilities endpoint is protected. Calling it after logout would
+            // raise a second expiry event and consume the inactivity notice before it renders.
+            if (sessionGenerationRef.current === refreshGeneration) {
+              sessionExpiryInFlightRef.current = false
+              authenticatedSessionRef.current = false
+              setCapabilities(DEFAULT_CAPABILITIES)
+            }
+            return
           }
+
+          clearOauthCallbackParams()
         }
 
         const data = await fetchSessionCapabilities()
