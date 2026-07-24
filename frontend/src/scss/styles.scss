@@ -538,7 +538,7 @@ body {
   width: 14px;
 }
 
-.csp-side-nav__link {
+a.csp-side-nav__link.cds--side-nav__link {
   align-items: center;
   display: flex;
   height: 40px;
@@ -564,7 +564,7 @@ body {
   background-color: var(--csp-layer-hover);
 }
 
-.csp-side-nav__link.cds--side-nav__link--active {
+a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   background-color: var(--csp-layer-02);
   border-left-color: var(--csp-interactive);
   color: var(--csp-text-primary);

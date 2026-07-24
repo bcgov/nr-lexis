@@ -148,12 +148,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     label: 'Reports',
     links: [
       {
-        to: '/reports/applicationReport',
-        label: 'Applications Report',
-        icon: Report,
-        requiredActions: ['/applicationReport'],
-      },
-      {
         to: '/reports/biweeklyListing',
         label: 'Advertising List',
         icon: Report,

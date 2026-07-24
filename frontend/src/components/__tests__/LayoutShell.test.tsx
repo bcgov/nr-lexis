@@ -108,7 +108,7 @@ describe('Layout shell', () => {
       'aria-expanded',
       'false',
     )
-    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
   })
 
   it('persists preference updates without storing auth or user data', async () => {
@@ -338,13 +338,13 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /Create\/Edit Offer/i })).not.toBeInTheDocument()
   })
 
-  it('renders navigation when an auth mock omits roles', () => {
+  it('renders legacy report navigation when an auth mock omits roles', () => {
     const capabilitiesWithoutRoles = {
       authenticated: true,
       principal: 'idir\\partial',
       welcomeTarget: '/reports',
       legacyPath: null,
-      grantedActions: ['/applicationReport'],
+      grantedActions: ['/applicationReport', 'mofrListing'],
       forestClientNumber: null,
     } as LexisSessionCapabilities
 
@@ -352,17 +352,18 @@ describe('Layout shell', () => {
       createTestAuthContext({
         capabilities: capabilitiesWithoutRoles,
         defaultRoute: '/reports',
-        canPerform: (action: string) => action === '/applicationReport',
+        canPerform: (action: string) => ['/applicationReport', 'mofrListing'].includes(action),
       }),
     )
 
     renderLayout('/reports')
 
     expect(screen.getByRole('navigation', { name: 'Side navigation' })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Applications Report/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toHaveAttribute(
       'href',
-      '/reports/applicationReport',
+      '/reports/biweeklyListing',
     )
+    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Menu$/i })).not.toBeInTheDocument()
   })
 
@@ -414,7 +415,7 @@ describe('Layout shell', () => {
   it('supports collapsing and expanding side-nav sections', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
 
@@ -422,24 +423,24 @@ describe('Layout shell', () => {
       'aria-expanded',
       'false',
     )
-    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
 
     expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
   })
 
   it('keeps section links available as icons when the full side nav is collapsed', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
-    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
 
-    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {

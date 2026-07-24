@@ -293,6 +293,18 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
     await expect(page.getByText('2 results found', { exact: true })).toBeVisible()
+    await expect(page.locator('a.csp-side-nav__link[data-label="Applications"]')).toHaveCSS(
+      'font-weight',
+      '400',
+    )
+    await expect(page.locator('a.csp-side-nav__link[data-label="Exemptions"]')).toHaveCSS(
+      'font-weight',
+      '400',
+    )
+    await expect(
+      page.locator('a.csp-side-nav__link[data-label="Applications Report"]'),
+    ).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
       const rootStyle = getComputedStyle(document.documentElement)
