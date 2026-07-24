@@ -64,6 +64,33 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).not.toBeInTheDocument()
   })
 
+  it('shows a green creation confirmation after redirecting from application creation', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/application/321',
+            state: {
+              applicationCreationNotice: {
+                applicationNumber: '321',
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Action complete')).toBeInTheDocument()
+    expect(screen.getByText('Created application 321.')).toBeInTheDocument()
+  })
+
   it('uses the legacy application detail tab order', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>

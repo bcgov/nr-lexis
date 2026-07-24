@@ -21,7 +21,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import PageHeader from '@/components/PageHeader'
@@ -130,6 +130,11 @@ const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Status change remark is required when rejecting, withdrawing, or expiring an application.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
+type ApplicationCreationNavigationState = {
+  applicationCreationNotice?: {
+    applicationNumber: string
+  }
+}
 type ApplicationDetailTabKey =
   | 'owner'
   | 'agent'
@@ -495,6 +500,7 @@ const latestPersistedReviewRemark = (
 
 const ProvincialApplicationDetailsPage = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { canPerform, capabilities } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -513,6 +519,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [creationSuccessMessage, setCreationSuccessMessage] = useState('')
   const [actionWarningMessage, setActionWarningMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
@@ -640,6 +647,26 @@ const ProvincialApplicationDetailsPage = () => {
     setFocusedPackageNumber(packageNumber)
     setFocusedPackageRequestId((current) => current + 1)
   }, [])
+
+  useEffect(() => {
+    const creationNotice = (location.state as ApplicationCreationNavigationState | null)
+      ?.applicationCreationNotice
+    const createdApplicationNumber = creationNotice?.applicationNumber.trim()
+
+    if (!createdApplicationNumber) {
+      return
+    }
+
+    setCreationSuccessMessage(`Created application ${createdApplicationNumber}.`)
+    navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+      },
+      { replace: true, state: null },
+    )
+  }, [location.hash, location.pathname, location.search, location.state, navigate])
 
   const loadApplicationDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
@@ -2887,6 +2914,17 @@ const ProvincialApplicationDetailsPage = () => {
           subtitle={errorMessage}
           lowContrast
           onCloseButtonClick={() => setErrorMessage('')}
+        />
+      )}
+
+      {!!creationSuccessMessage && (
+        <AppNotification
+          kind="success"
+          title="Action complete"
+          subtitle={creationSuccessMessage}
+          lowContrast
+          autoDismissMs={8000}
+          onCloseButtonClick={() => setCreationSuccessMessage('')}
         />
       )}
 

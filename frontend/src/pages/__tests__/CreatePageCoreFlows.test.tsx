@@ -345,7 +345,13 @@ describe('Create Page Core Flows', () => {
       endUseCode: 'SA',
       comments: 'Ready',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901', {
+      state: {
+        applicationCreationNotice: {
+          applicationNumber: '901',
+        },
+      },
+    })
   })
 
   it('requires the application to be saved before creating a package', async () => {
@@ -498,7 +504,13 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Save application' }))
 
     await waitFor(() => expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(1))
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/906')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/906', {
+      state: {
+        applicationCreationNotice: {
+          applicationNumber: '906',
+        },
+      },
+    })
     await waitFor(() =>
       expect(
         screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
@@ -650,7 +662,13 @@ describe('Create Page Core Flows', () => {
       endUseCode: 'SA',
       comments: 'Ready',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902', {
+      state: {
+        applicationCreationNotice: {
+          applicationNumber: '902',
+        },
+      },
+    })
   })
 
   it('ignores forged agent prefill when applicant type changes are not authorized', async () => {

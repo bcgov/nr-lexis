@@ -101,6 +101,11 @@ type ProvincialApplicationCreateForm = {
 
 type ProvincialApplicationCreateField = keyof ProvincialApplicationCreateForm & string
 
+type CreatedApplicationNavigation = {
+  path: string
+  applicationNumber: string
+}
+
 const APPLICATION_CREATE_TAB_INDEX = {
   summary: 0,
   clients: 1,
@@ -282,7 +287,8 @@ const ProvincialApplicationCreatePage = () => {
   )
   const draftBaselineRef = useRef(form)
   const [formEdited, setFormEdited] = useState(false)
-  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
+  const [createdApplicationNavigation, setCreatedApplicationNavigation] =
+    useState<CreatedApplicationNavigation | null>(null)
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
   const [growthTypes, setGrowthTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
@@ -323,10 +329,16 @@ const ProvincialApplicationCreatePage = () => {
   )
 
   useEffect(() => {
-    if (createdRecordPath) {
-      navigate(createdRecordPath)
+    if (createdApplicationNavigation) {
+      navigate(createdApplicationNavigation.path, {
+        state: {
+          applicationCreationNotice: {
+            applicationNumber: createdApplicationNavigation.applicationNumber,
+          },
+        },
+      })
     }
-  }, [createdRecordPath, navigate])
+  }, [createdApplicationNavigation, navigate])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -1156,7 +1168,10 @@ const ProvincialApplicationCreatePage = () => {
         setFormEdited(false)
         if (result.createdId) {
           if (navigateToCreatedRecord) {
-            setCreatedRecordPath(`/provincial/application/${encodeURIComponent(result.createdId)}`)
+            setCreatedApplicationNavigation({
+              path: `/provincial/application/${encodeURIComponent(result.createdId)}`,
+              applicationNumber: result.createdId,
+            })
           }
           return true
         }
