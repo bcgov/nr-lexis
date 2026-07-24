@@ -164,6 +164,7 @@ const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
 const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
 const REVIEW_EMAIL_PREVIEW_HELPER =
   "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
+const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
 const APPLICATION_STATUS_LABELS: Record<string, string> = {
   APP: 'Approved',
   EXP: 'Expired',
@@ -997,7 +998,10 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canChangeApplicantType = canPerform('/changeApplicantType')
   const canReviewApplication = canPerform('/applicationsReview')
-  const canEditApplicationReview = canReviewApplication && !isApplicationExpired
+  const canEditApplicationReview =
+    canReviewApplication &&
+    !isApplicationExpired &&
+    REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(detail?.applicationStatusCode ?? ''))
   const canViewReview = canViewRemarks && canReviewApplication
   const normalizedReviewStatusCode = useMemo(
     () => normalizeReviewStatus(reviewStatusCode),

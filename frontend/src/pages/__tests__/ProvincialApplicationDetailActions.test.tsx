@@ -1464,6 +1464,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('saves all dirty application sections sequentially before leaving', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'NEW',
+      statusDescription: 'New',
+    })
     const router = createMemoryRouter(
       [
         {
