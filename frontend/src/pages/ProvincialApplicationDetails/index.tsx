@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
+  Checkbox,
   Column,
   DismissibleTag,
   Grid,
@@ -21,6 +22,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Edit } from '@carbon/icons-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -172,6 +174,7 @@ const APPLICATION_STATUS_LABELS: Record<string, string> = {
 }
 const APPLICANT_TYPE_OPTIONS: SearchOption[] = [
   { value: 'O', label: 'Owner' },
+  { value: 'M', label: 'Ministerial' },
   { value: 'A', label: 'Agent' },
 ]
 const JURISDICTION_OPTIONS: SearchOption[] = [
@@ -309,6 +312,7 @@ type ApplicationSummaryFormState = {
 }
 
 type ApplicationSummaryField = keyof ApplicationSummaryFormState & string
+type SummarySaveSource = 'summary' | 'owner'
 
 const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
   applicationDate: detail.applicationDate ?? '',
@@ -558,6 +562,9 @@ const ProvincialApplicationDetailsPage = () => {
     useState<ApplicationSummaryFormState | null>(null)
   const [summaryVolumeWarningAccepted, setSummaryVolumeWarningAccepted] = useState(false)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
+  const [isEditingOwnerDetails, setIsEditingOwnerDetails] = useState(false)
+  const [pendingSummarySaveSource, setPendingSummarySaveSource] =
+    useState<SummarySaveSource>('summary')
   const [summaryAccuracyConfirmationOpen, setSummaryAccuracyConfirmationOpen] = useState(false)
   const [summaryAccuracyConfirmed, setSummaryAccuracyConfirmed] = useState(false)
   const [summaryAccuracyApplicationNumber, setSummaryAccuracyApplicationNumber] = useState<
@@ -694,6 +701,7 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
+    setPendingSummarySaveSource('summary')
     if (!applicationNumber) {
       seededReviewFieldsApplicationRef.current = null
       setErrorMessage('Application number is missing from the route.')
@@ -709,6 +717,7 @@ const ProvincialApplicationDetailsPage = () => {
       setLoading(false)
       setSummaryForm(null)
       setSummaryBaselineForm(null)
+      setIsEditingOwnerDetails(false)
       setReviewStatusCode('')
       setReviewStatusRemark('')
       setReviewStatusBaselineCode('')
@@ -727,6 +736,7 @@ const ProvincialApplicationDetailsPage = () => {
     setActionErrorMessage('')
     setActionInfoMessage('')
     if (!retainingCurrentDetail) {
+      setIsEditingOwnerDetails(false)
       setIndustryViewableExemptionNumber(null)
       setDocumentRows([])
       setPermitRows([])
@@ -1233,9 +1243,9 @@ const ProvincialApplicationDetailsPage = () => {
       applicantTypeCode: firstValidationError(
         () => requiredFieldError(summaryForm.applicantTypeCode, 'Applicant type'),
         () =>
-          summaryForm.applicantTypeCode === 'O' || summaryForm.applicantTypeCode === 'A'
+          ['O', 'M', 'A'].includes(summaryForm.applicantTypeCode)
             ? null
-            : 'Applicant type must be Owner or Agent.',
+            : 'Applicant type must be Owner, Ministerial, or Agent.',
       ),
       productTypeCode: firstValidationError(
         () => requiredFieldError(summaryForm.productTypeCode, 'Product type'),
@@ -2105,6 +2115,54 @@ const ProvincialApplicationDetailsPage = () => {
     [],
   )
 
+  const onOwnerApplicantTypeChange = useCallback((applicantTypeCode: string) => {
+    setSummaryForm((current) => {
+      if (!current) {
+        return current
+      }
+
+      const next = {
+        ...current,
+        applicantTypeCode,
+        agentClientNumber:
+          applicantTypeCode === 'A'
+            ? current.agentClientNumber || current.ownerClientNumber
+            : current.agentClientNumber,
+      }
+      return normalizeSummaryAgentFields(next)
+    })
+    setSummaryVolumeWarningAccepted(false)
+    setActionWarningMessage('')
+  }, [])
+
+  const onCancelOwnerDetails = useCallback(() => {
+    setSummaryForm((current) => {
+      if (!current || !summaryBaselineForm) {
+        return current
+      }
+
+      return {
+        ...current,
+        ownerClientNumber: summaryBaselineForm.ownerClientNumber,
+        ownerClientLocationCode: summaryBaselineForm.ownerClientLocationCode,
+        ownerContactName: summaryBaselineForm.ownerContactName,
+        applicantTypeCode: summaryBaselineForm.applicantTypeCode,
+        agentClientNumber: summaryBaselineForm.agentClientNumber,
+        agentClientLocationCode: summaryBaselineForm.agentClientLocationCode,
+        agentContactName: summaryBaselineForm.agentContactName,
+      }
+    })
+    setIsEditingOwnerDetails(false)
+    setShowSummaryValidationErrors(false)
+    setSummaryVolumeWarningAccepted(false)
+    setActionErrorMessage('')
+    setActionWarningMessage('')
+    setSummaryAccuracyConfirmationOpen(false)
+    setSummaryAccuracyConfirmed(false)
+    setSummaryAccuracyApplicationNumber(null)
+    setPendingSummarySaveSource('summary')
+  }, [summaryBaselineForm])
+
   const onAddApplicationSpecies = useCallback(() => {
     const nextSpecies = applicationSpeciesCandidate.trim()
     if (!nextSpecies) {
@@ -2274,22 +2332,39 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
+    setPendingSummarySaveSource('summary')
   }, [])
 
-  const onRequestSaveSummary = useCallback(() => {
-    if (!requiresApplicationAccuracyAcknowledgement) {
-      void onSaveSummary()
-      return
-    }
-    setSummaryAccuracyConfirmed(false)
-    setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
-    setSummaryAccuracyConfirmationOpen(true)
-  }, [applicationNumber, onSaveSummary, requiresApplicationAccuracyAcknowledgement])
+  const completeSummarySave = useCallback(
+    async (source: SummarySaveSource, accuracyAcknowledged = false): Promise<boolean> => {
+      const saved = await onSaveSummary(true, accuracyAcknowledged)
+      if (saved && source === 'owner') {
+        setIsEditingOwnerDetails(false)
+        setActionInfoMessage('Owner client details saved.')
+      }
+      return saved
+    },
+    [onSaveSummary],
+  )
+
+  const onRequestSaveSummary = useCallback(
+    (source: SummarySaveSource) => {
+      if (!requiresApplicationAccuracyAcknowledgement) {
+        void completeSummarySave(source)
+        return
+      }
+      setPendingSummarySaveSource(source)
+      setSummaryAccuracyConfirmed(false)
+      setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
+      setSummaryAccuracyConfirmationOpen(true)
+    },
+    [applicationNumber, completeSummarySave, requiresApplicationAccuracyAcknowledgement],
+  )
 
   const onConfirmSummaryAccuracy = useCallback(async () => {
     if (!summaryAccuracyConfirmed || isSavingSummary) return
-    await onSaveSummary(true, true)
-  }, [isSavingSummary, onSaveSummary, summaryAccuracyConfirmed])
+    await completeSummarySave(pendingSummarySaveSource, true)
+  }, [completeSummarySave, isSavingSummary, pendingSummarySaveSource, summaryAccuracyConfirmed])
 
   const buildReviewStatusPayload = useCallback(
     (requireEmail: boolean) => {
@@ -2577,6 +2652,7 @@ const ProvincialApplicationDetailsPage = () => {
         (detail ? normalizeSummaryAgentFields(toSummaryFormState(detail)) : null),
     )
     setSummaryVolumeWarningAccepted(false)
+    setIsEditingOwnerDetails(false)
     closeSummaryAccuracyConfirmation()
     setShowSummaryValidationErrors(false)
     setApplicationSpeciesCandidate('')
@@ -2985,14 +3061,16 @@ const ProvincialApplicationDetailsPage = () => {
           {summaryOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Application options unavailable" />
           )}
-          {selectedApplicationTab === 'application' && requiredSummaryOptionsMissing && (
-            <AppNotification
-              kind="warning"
-              title="Application summary options unavailable"
-              subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
-              lowContrast
-            />
-          )}
+          {(selectedApplicationTab === 'application' ||
+            (selectedApplicationTab === 'owner' && isEditingOwnerDetails)) &&
+            requiredSummaryOptionsMissing && (
+              <AppNotification
+                kind="warning"
+                title="Application summary options unavailable"
+                subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
+                lowContrast
+              />
+            )}
           {canReviewApplication && reviewOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Review options unavailable" />
           )}
@@ -3076,13 +3154,172 @@ const ProvincialApplicationDetailsPage = () => {
                         id="application-owner-details"
                         className="application-detail-section application-detail-clients"
                       >
-                        <h2 className="detail-tile-title">Owner client details</h2>
-                        {ownerClientSummaryContent ?? (
-                          <EmptyState
-                            title="Owner details unavailable"
-                            description="No owner client lookup details are available for this application."
-                            headingLevel={3}
-                          />
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Owner client details</h2>
+                          {canEditSummary && summaryForm && !isEditingOwnerDetails && (
+                            <Button
+                              kind="tertiary"
+                              size="sm"
+                              renderIcon={Edit}
+                              onClick={() => {
+                                setActionErrorMessage('')
+                                setActionWarningMessage('')
+                                setIsEditingOwnerDetails(true)
+                              }}
+                            >
+                              Edit owner client details
+                            </Button>
+                          )}
+                        </div>
+                        {isEditingOwnerDetails && summaryForm ? (
+                          <>
+                            <div className="legacy-search-grid application-client-edit-grid">
+                              <TextInput
+                                id="applicationOwnerClientNumberEdit"
+                                labelText="Client number"
+                                value={summaryForm.ownerClientNumber}
+                                invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
+                                invalidText={visibleSummaryFieldError('ownerClientNumber')}
+                                disabled={isSavingSummary}
+                                onChange={(event) =>
+                                  onSummaryFormChange('ownerClientNumber', event.target.value)
+                                }
+                              />
+                              {canChangeApplicantType ? (
+                                <SearchableSelect
+                                  id="applicationOwnerApplicantTypeEdit"
+                                  labelText="Applicant type"
+                                  value={summaryForm.applicantTypeCode}
+                                  placeholder="Select applicant type"
+                                  options={optionsWithCurrentValue(
+                                    APPLICANT_TYPE_OPTIONS,
+                                    summaryForm.applicantTypeCode,
+                                  )}
+                                  invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
+                                  invalidText={visibleSummaryFieldError('applicantTypeCode')}
+                                  disabled={isSavingSummary}
+                                  onChange={(value) =>
+                                    onOwnerApplicantTypeChange(value.toUpperCase())
+                                  }
+                                />
+                              ) : (
+                                <TextInput
+                                  id="applicationOwnerApplicantTypeEdit"
+                                  labelText="Applicant type"
+                                  value={ownerApplicantTypeLabel}
+                                  readOnly
+                                />
+                              )}
+                              <SearchableSelect
+                                id="applicationOwnerClientLocationEdit"
+                                labelText="Client location"
+                                value={summaryForm.ownerClientLocationCode}
+                                invalid={Boolean(
+                                  visibleSummaryFieldError('ownerClientLocationCode'),
+                                )}
+                                invalidText={visibleSummaryFieldError('ownerClientLocationCode')}
+                                disabled={
+                                  isSavingSummary ||
+                                  !summaryForm.ownerClientNumber.trim() ||
+                                  isLoadingOwnerClientLocations
+                                }
+                                placeholder={ownerClientLocationPlaceholder}
+                                options={ownerClientLocations
+                                  .filter(isSelectableClientLocation)
+                                  .map((clientLocation) => ({
+                                    value: clientLocation.locationCode,
+                                    label: clientLocation.locationName,
+                                  }))}
+                                onChange={(value) =>
+                                  onSummaryFormChange('ownerClientLocationCode', value)
+                                }
+                              />
+                              {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
+                                <SearchableSelect
+                                  id="applicationOwnerContactNameEdit"
+                                  labelText="Contact name"
+                                  value={summaryForm.ownerContactName}
+                                  invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                  invalidText={visibleSummaryFieldError('ownerContactName')}
+                                  disabled={
+                                    isSavingSummary ||
+                                    !summaryForm.ownerClientLocationCode.trim() ||
+                                    isLoadingOwnerClientContacts
+                                  }
+                                  placeholder={ownerContactPlaceholder}
+                                  options={ownerClientContacts
+                                    .filter(isSelectableClientContact)
+                                    .map((contact) => ({
+                                      value: contact.contactName,
+                                      label: contact.contactName,
+                                    }))}
+                                  onChange={(value) =>
+                                    onSummaryFormChange('ownerContactName', value)
+                                  }
+                                />
+                              ) : (
+                                <TextInput
+                                  id="applicationOwnerContactNameEdit"
+                                  labelText="Contact name"
+                                  value={summaryForm.ownerContactName}
+                                  invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                  invalidText={visibleSummaryFieldError('ownerContactName')}
+                                  disabled={
+                                    isSavingSummary || !summaryForm.ownerClientLocationCode.trim()
+                                  }
+                                  placeholder="Enter contact name"
+                                  onChange={(event) =>
+                                    onSummaryFormChange('ownerContactName', event.target.value)
+                                  }
+                                />
+                              )}
+                              <Checkbox
+                                id="applicationOwnerAgentUsedEdit"
+                                labelText="I am an agent"
+                                checked={summaryForm.applicantTypeCode === 'A'}
+                                disabled={isSavingSummary || !canChangeApplicantType}
+                                onChange={(_, { checked }) =>
+                                  onOwnerApplicantTypeChange(checked ? 'A' : 'O')
+                                }
+                              />
+                            </div>
+                            <ClientDataSummary
+                              title="Owner client details"
+                              showTitle={false}
+                              clientData={ownerClientData}
+                              isLoading={isLoadingOwnerClientData}
+                            />
+                            <div className="legacy-search-actions">
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={isSavingSummary}
+                                onClick={onCancelOwnerDetails}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={
+                                  isSavingSummary ||
+                                  summaryOptionsAvailability !== 'available' ||
+                                  requiredSummaryOptionsMissing
+                                }
+                                onClick={() => onRequestSaveSummary('owner')}
+                              >
+                                {isSavingSummary ? 'Saving...' : 'Save changes'}
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          (ownerClientSummaryContent ?? (
+                            <EmptyState
+                              title="Owner details unavailable"
+                              description="No owner client lookup details are available for this application."
+                              headingLevel={3}
+                            />
+                          ))
                         )}
                       </Tile>
                     </Column>
@@ -3341,10 +3578,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   options={optionsWithCurrentValue(
                                     APPLICANT_TYPE_OPTIONS,
                                     summaryForm.applicantTypeCode,
-                                  ).map((option) => ({
-                                    value: option.value,
-                                    label: optionLabel(option),
-                                  }))}
+                                  )}
                                   invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
                                   invalidText={visibleSummaryFieldError('applicantTypeCode')}
                                   onChange={(value) =>
@@ -3626,7 +3860,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   summaryOptionsAvailability !== 'available' ||
                                   requiredSummaryOptionsMissing
                                 }
-                                onClick={onRequestSaveSummary}
+                                onClick={() => onRequestSaveSummary('summary')}
                               >
                                 {isSavingSummary ? 'Saving...' : 'Save Summary'}
                               </Button>
@@ -4086,8 +4320,10 @@ const ProvincialApplicationDetailsPage = () => {
             open
             confirmed={summaryAccuracyConfirmed}
             busy={isSavingSummary}
-            confirmLabel="Save summary"
-            pendingLabel="Saving summary…"
+            confirmLabel={pendingSummarySaveSource === 'owner' ? 'Save changes' : 'Save summary'}
+            pendingLabel={
+              pendingSummarySaveSource === 'owner' ? 'Saving changes…' : 'Saving summary…'
+            }
             onConfirmedChange={setSummaryAccuracyConfirmed}
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}

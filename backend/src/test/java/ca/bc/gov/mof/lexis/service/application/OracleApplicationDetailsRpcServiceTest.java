@@ -1200,7 +1200,7 @@ class OracleApplicationDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
-    assertThat(response.errors()).contains("The applicant type code must be O or A.");
+    assertThat(response.errors()).contains("The applicant type code must be O, M, or A.");
     verifyNoInteractions(repository);
   }
 
@@ -3472,6 +3472,51 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void updateApplicationSummaryShouldPersistMinisterialAndClearStaleAgentFields() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithAgent()));
+    stubPersistedApplicationEndUse(11L, true);
+    when(repository.updateApplication(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "M",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().applicantTypeCode()).isEqualTo("M");
+    assertThat(recordCaptor.getValue().agentClientNumber()).isNull();
+    assertThat(recordCaptor.getValue().agentClientLocationCode()).isNull();
+    assertThat(recordCaptor.getValue().agentContactName()).isNull();
+  }
+
+  @Test
   void updateApplicationSummaryShouldRejectVolumeBelowPersistedPackageTotal() {
     ApplicationDetailsRpcRepository.PackageMutationRow packageRow =
         new ApplicationDetailsRpcRepository.PackageMutationRow(
@@ -3908,7 +3953,7 @@ class OracleApplicationDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
-    assertThat(response.errors()).containsExactly("The applicant type code must be O or A.");
+    assertThat(response.errors()).containsExactly("The applicant type code must be O, M, or A.");
     verify(repository, never()).updateApplication(any());
   }
 

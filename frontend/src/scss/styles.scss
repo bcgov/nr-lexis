@@ -3888,6 +3888,15 @@ legend.cds--label {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.application-client-edit-grid {
+  align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.application-client-edit-grid + .application-client-summary {
+  margin-block-start: 1.5rem;
+}
+
 .application-detail-tab-panel .cds--form-item + .lexis-table-frame,
 .application-detail-section .cds--form-item + .lexis-table-frame {
   margin-top: 0.5rem;

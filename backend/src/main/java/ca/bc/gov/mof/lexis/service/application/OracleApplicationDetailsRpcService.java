@@ -43,6 +43,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String APPLICATION_DETAILS_LOCKED_MESSAGE =
       "Application details can only be edited while the application is new or approved.";
   private static final String APPLICANT_TYPE_OWNER = "O";
+  private static final String APPLICANT_TYPE_MINISTERIAL = "M";
   private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String JURISDICTION_PROVINCIAL = "P";
   private static final String JURISDICTION_FEDERAL = "F";
@@ -2375,7 +2376,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String applicantTypeCode =
         firstNonBlank(input.applicantTypeCode(), APPLICANT_TYPE_OWNER).toUpperCase(Locale.ROOT);
-    boolean ownerApplicant = APPLICANT_TYPE_OWNER.equals(applicantTypeCode);
+    boolean agentApplicant = APPLICANT_TYPE_AGENT.equals(applicantTypeCode);
 
     return new CreateApplicationRequest(
         input.federalApplicationNumber(),
@@ -2386,8 +2387,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         input.averageLogVolume() == null ? 0.0d : input.averageLogVolume(),
         trimToNull(input.productLocation()),
         input.exportScheduleId(),
-        ownerApplicant ? null : trimToNull(input.agentClientNumber()),
-        ownerApplicant ? null : trimToNull(input.agentClientLocationCode()),
+        agentApplicant ? trimToNull(input.agentClientNumber()) : null,
+        agentApplicant ? trimToNull(input.agentClientLocationCode()) : null,
         trimToNull(input.ownerClientNumber()),
         trimToNull(input.ownerClientLocationCode()),
         trimToNull(input.exemptionNumber()),
@@ -2398,7 +2399,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         trimToNull(input.productTypeCode()),
         firstNonBlank(input.jurisdictionCode(), JURISDICTION_PROVINCIAL),
         trimToNull(input.growthTypeCode()),
-        ownerApplicant ? null : trimToNull(input.agentContactName()),
+        agentApplicant ? trimToNull(input.agentContactName()) : null,
         trimToNull(input.ownerContactName()),
         firstNonBlank(input.oicIndicator(), OIC_INDICATOR_NO),
         trimToNull(input.endUseCode()),
@@ -2546,8 +2547,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (applicantTypeCode == null) {
       errors.add(required("applicant type code"));
     } else if (!APPLICANT_TYPE_OWNER.equals(applicantTypeCode)
+        && !APPLICANT_TYPE_MINISTERIAL.equals(applicantTypeCode)
         && !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
-      errors.add("The applicant type code must be O or A.");
+      errors.add("The applicant type code must be O, M, or A.");
     }
     if (APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
       if (trimToNull(request.agentClientNumber()) == null) {
@@ -2651,8 +2653,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (applicantTypeCode == null) {
       errors.add(required("applicant type code"));
     } else if (!APPLICANT_TYPE_OWNER.equals(applicantTypeCode)
+        && !APPLICANT_TYPE_MINISTERIAL.equals(applicantTypeCode)
         && !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
-      errors.add("The applicant type code must be O or A.");
+      errors.add("The applicant type code must be O, M, or A.");
     }
     if (APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
       if (trimToNull(record.agentClientNumber()) == null) {
@@ -2964,8 +2967,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.applicantTypeCode() == null
             ? existing.applicantTypeCode()
             : request.applicantTypeCode();
-    boolean ownerApplicant =
-        APPLICANT_TYPE_OWNER.equalsIgnoreCase(trimToNull(applicantTypeCode));
+    boolean agentApplicant =
+        APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(applicantTypeCode));
     String productTypeCode =
         request.productTypeCode() == null
             ? existing.productTypeCode()
@@ -2992,16 +2995,16 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         updateUserId,
         Instant.now(),
         request.exportScheduleId() == null ? existing.exportScheduleId() : request.exportScheduleId(),
-        ownerApplicant
-            ? null
-            : request.agentClientNumber() == null
+        agentApplicant
+            ? request.agentClientNumber() == null
                 ? existing.agentClientNumber()
-                : request.agentClientNumber(),
-        ownerApplicant
-            ? null
-            : request.agentClientLocationCode() == null
+                : request.agentClientNumber()
+            : null,
+        agentApplicant
+            ? request.agentClientLocationCode() == null
                 ? existing.agentClientLocationCode()
-                : request.agentClientLocationCode(),
+                : request.agentClientLocationCode()
+            : null,
         request.ownerClientNumber() == null ? existing.ownerClientNumber() : request.ownerClientNumber(),
         request.ownerClientLocationCode() == null
             ? existing.ownerClientLocationCode()
@@ -3016,11 +3019,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         productTypeCode,
         existing.jurisdictionCode(),
         request.growthTypeCode() == null ? existing.growthTypeCode() : request.growthTypeCode(),
-        ownerApplicant
-            ? null
-            : request.agentContactName() == null
+        agentApplicant
+            ? request.agentContactName() == null
                 ? existing.agentContactName()
-                : request.agentContactName(),
+                : request.agentContactName()
+            : null,
         request.ownerContactName() == null ? existing.ownerContactName() : request.ownerContactName(),
         request.oicIndicator() == null ? existing.oicIndicator() : request.oicIndicator());
   }
