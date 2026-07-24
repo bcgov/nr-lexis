@@ -499,14 +499,26 @@ class TestDeploymentTopologyConfigTest {
     String caddyfile = Files.readString(resolve("frontend/Caddyfile"));
 
     assertThat(caddyfile)
-        .contains("@immutable_assets path /assets/*")
+        .contains("@immutable_assets {\n\t\tpath /assets/*\n\t\tfile\n\t}")
         .contains(
             "header @immutable_assets Cache-Control \"public, max-age=31536000, immutable\"")
+        .contains("@missing_assets {\n\t\tpath /assets/*\n\t\tnot file\n\t}")
+        .contains("header @missing_assets Cache-Control \"no-store\"")
         .contains("@dynamic_responses {\n\t\tnot path /assets/*\n\t}")
         .contains(
             "header @dynamic_responses Cache-Control"
                 + " \"no-store, no-cache, must-revalidate, proxy-revalidate\"");
-    assertThat(occurrences(caddyfile, "Cache-Control")).isEqualTo(2);
+    assertThat(occurrences(caddyfile, "Cache-Control")).isEqualTo(3);
+  }
+
+  @Test
+  void frontendShouldNotRewriteMissingFingerprintAssetsToTheSpaShell() throws IOException {
+    String caddyfile = Files.readString(resolve("frontend/Caddyfile"));
+
+    assertThat(caddyfile)
+        .contains("@spa_router {\n\t\tnot path /api* /assets/*")
+        .contains("file {\n\t\t\ttry_files {path} /index.html\n\t\t}")
+        .contains("rewrite @spa_router {http.matchers.file.relative}");
   }
 
   private static String workflowJob(String workflow, String jobName, String nextJobName) {

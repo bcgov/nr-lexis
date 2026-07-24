@@ -3,6 +3,7 @@ import { Suspense, useMemo } from 'react'
 import { RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { getNoRoleRoutes, getProtectedRoutes, getPublicRoutes } from '@/routes/routePaths'
+import RouteErrorPage from '@/routes/RouteErrorPage'
 
 const AppRoutes = () => {
   const { hasAnyRole, isLoading, isLoggedIn } = useAuth()
@@ -15,7 +16,18 @@ const AppRoutes = () => {
     }
     return getProtectedRoutes()
   }, [hasAnyRole, isLoggedIn])
-  const browserRouter = useMemo(() => createBrowserRouter(routesToUse), [routesToUse])
+  const routesWithErrorBoundary = useMemo(
+    () =>
+      routesToUse.map((route) => ({
+        ...route,
+        errorElement: route.errorElement ?? <RouteErrorPage />,
+      })),
+    [routesToUse],
+  )
+  const browserRouter = useMemo(
+    () => createBrowserRouter(routesWithErrorBoundary),
+    [routesWithErrorBoundary],
+  )
 
   if (isLoading) {
     return <Loading withOverlay={true} description="Loading session..." />

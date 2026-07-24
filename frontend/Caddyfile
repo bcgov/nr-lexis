@@ -24,7 +24,7 @@
 	encode zstd gzip
 	file_server
 	@spa_router {
-		not path /api*
+		not path /api* /assets/*
 		file {
 			try_files {path} /index.html
 		}
@@ -40,8 +40,16 @@
 	}
 	# Vite fingerprints production asset filenames, so assets can use a one-year immutable cache policy.
 	# Keep the SPA shell, runtime config, API responses, and unversioned public files uncached.
-	@immutable_assets path /assets/*
+	@immutable_assets {
+		path /assets/*
+		file
+	}
 	header @immutable_assets Cache-Control "public, max-age=31536000, immutable"
+	@missing_assets {
+		path /assets/*
+		not file
+	}
+	header @missing_assets Cache-Control "no-store"
 	@dynamic_responses {
 		not path /assets/*
 	}
