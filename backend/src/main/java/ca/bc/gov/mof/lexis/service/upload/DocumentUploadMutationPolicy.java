@@ -50,7 +50,7 @@ public class DocumentUploadMutationPolicy {
   /**
    * Validates an exemption target before attaching a document.
    *
-   * <p>Legacy LEXIS allows authorized users to attach documents after an exemption expires.
+   * Legacy LEXIS allows authorized users to attach documents after an exemption expires.
    */
   public void requireExemptionAttachmentTarget(String exemptionNumber) {
     ExemptionService service = exemptionServiceProvider.getIfAvailable();
