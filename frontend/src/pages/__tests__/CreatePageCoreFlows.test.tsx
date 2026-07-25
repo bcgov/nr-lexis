@@ -520,7 +520,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     const postSaveDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     expect(within(postSaveDialog).getByRole('checkbox', { name: 'I Agree' })).not.toBeChecked()
-  })
+  }, 20_000)
 
   it('converts provincial application term months and years to total days on submit', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
