@@ -1158,7 +1158,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               totalItems={isLoadingPolicies && exportSchedules.length === 0 ? undefined : totalRows}
             >
               {exportSchedules.length > 0 ? (
-                <Table useZebraStyles>
+                <Table useZebraStyles className="admin-export-schedule-table">
                   <TableHead>
                     <TableRow>
                       {SCHEDULE_SORT_COLUMNS.map((column) => (

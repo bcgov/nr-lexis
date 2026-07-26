@@ -1170,6 +1170,10 @@ legend.cds--label {
   margin-bottom: 1rem;
 }
 
+.admin-section-heading > :first-child {
+  min-inline-size: 0;
+}
+
 .admin-section-heading .dashboard-title {
   margin-block-end: 0.5rem;
 }
@@ -1230,6 +1234,12 @@ legend.cds--label {
 
   .admin-identity-workspace__actions {
     justify-content: flex-end;
+  }
+}
+
+@media (max-width: 671px) {
+  .admin-section-heading {
+    flex-direction: column;
   }
 }
 
@@ -1329,6 +1339,26 @@ legend.cds--label {
   border: 0;
   border-radius: 4px;
   overflow: visible;
+}
+
+@media (max-width: 671px) {
+  .provincial-application-search-filters .legacy-search-actions > .cds--btn--secondary,
+  .federal-application-search-filters .legacy-search-actions > .cds--btn--secondary,
+  .provincial-application-search-filters .disabled-button-tooltip,
+  .federal-application-search-filters .disabled-button-tooltip,
+  .provincial-application-search-filters .disabled-button-tooltip > .cds--btn,
+  .federal-application-search-filters .disabled-button-tooltip > .cds--btn {
+    inline-size: 100%;
+    max-inline-size: 100%;
+  }
+
+  .provincial-application-search-filters .legacy-search-actions .cds--btn--secondary,
+  .federal-application-search-filters .legacy-search-actions .cds--btn--secondary {
+    block-size: auto;
+    min-block-size: 2.5rem;
+    padding-block: 0.625rem;
+    white-space: normal;
+  }
 }
 
 .provincial-application-search-filters .cds--label,
@@ -1759,6 +1789,11 @@ legend.cds--label {
   --cds-text-secondary: var(--csp-text-primary);
   inline-size: 100%;
   min-inline-size: 100%;
+}
+
+.legacy-search-table-frame .cds--data-table.admin-export-schedule-table {
+  inline-size: max(100%, 72rem);
+  min-inline-size: 72rem;
 }
 
 .legacy-search-table-frame .cds--data-table thead th,
@@ -3927,7 +3962,7 @@ legend.cds--label {
   --cds-field: var(--csp-background);
   --cds-field-hover: var(--csp-layer-hover);
   background-color: var(--csp-layer-01);
-  border: 1px solid #ececec;
+  border: 1px solid var(--csp-border-subtle-01);
   border-radius: 0.5rem;
   box-sizing: border-box;
   min-width: 0;

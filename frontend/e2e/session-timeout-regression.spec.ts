@@ -154,6 +154,8 @@ test.describe('session timeout regression', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
     ).toBeVisible()
+    await page.getByRole('switch', { name: 'Toggle dark mode' }).click()
+    await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
 
     await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS)
 
@@ -170,7 +172,12 @@ test.describe('session timeout regression', () => {
     const layout = await dialog.evaluate((container) => {
       const footer = container.querySelector('.cds--modal-footer')
       const buttons = Array.from(container.querySelectorAll('.cds--modal-footer .cds--btn'))
-      if (!(footer instanceof HTMLElement) || buttons.length !== 2) {
+      const secondaryButton = container.querySelector('.cds--modal-footer .cds--btn--secondary')
+      if (
+        !(footer instanceof HTMLElement) ||
+        !(secondaryButton instanceof HTMLElement) ||
+        buttons.length !== 2
+      ) {
         throw new Error('Session timeout modal actions were not rendered.')
       }
 
@@ -187,6 +194,8 @@ test.describe('session timeout regression', () => {
         ),
         buttonWidths: buttonBounds.map((button) => button.width),
         buttonBorderRadii: buttons.map((button) => getComputedStyle(button).borderRadius),
+        footerBackground: getComputedStyle(footer).backgroundColor,
+        secondaryButtonBackground: getComputedStyle(secondaryButton).backgroundColor,
         containerWidth: containerBounds.width,
       }
     })
@@ -195,6 +204,8 @@ test.describe('session timeout regression', () => {
     expect(layout.buttonsWithinContainer).toBe(true)
     expect(layout.buttonWidths.every((width) => width < layout.containerWidth / 2)).toBe(true)
     expect(layout.buttonBorderRadii).toEqual(['4px', '4px'])
+    expect(layout.secondaryButtonBackground).toBe(layout.footerBackground)
+    expect(layout.secondaryButtonBackground).not.toBe('rgb(255, 255, 255)')
 
     await page.clock.fastForward(SESSION_IDLE_WARNING_DURATION_MS - URGENT_COUNTDOWN_DURATION_MS)
 

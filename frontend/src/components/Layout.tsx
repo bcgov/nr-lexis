@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Calendar,
   ChevronDown,
@@ -415,6 +415,22 @@ function Layout({ children }: LayoutProps) {
     }
   }
 
+  const focusProfileToggle = useCallback((): void => {
+    window.requestAnimationFrame(() => {
+      document.getElementById('profile-panel-toggle')?.focus()
+    })
+  }, [])
+
+  const closeProfile = useCallback(
+    (returnFocus = false): void => {
+      setIsProfileOpen(false)
+      if (returnFocus) {
+        focusProfileToggle()
+      }
+    },
+    [focusProfileToggle],
+  )
+
   const toggleMobileNavigation = (): void => {
     setIsProfileOpen(false)
     setIsMobileNavOpen((current) => !current)
@@ -480,9 +496,13 @@ function Layout({ children }: LayoutProps) {
       return undefined
     }
 
+    const focusFrame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>('#profile-panel .profile-panel__close')?.focus()
+    })
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsProfileOpen(false)
+        closeProfile(true)
       }
     }
 
@@ -494,17 +514,18 @@ function Layout({ children }: LayoutProps) {
       const profilePanel = document.getElementById('profile-panel')
       const profileToggle = document.getElementById('profile-panel-toggle')
       if (!profilePanel?.contains(event.target) && !profileToggle?.contains(event.target)) {
-        setIsProfileOpen(false)
+        closeProfile()
       }
     }
 
-    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown, true)
     document.addEventListener('pointerdown', handlePointerDown)
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleKeyDown, true)
       document.removeEventListener('pointerdown', handlePointerDown)
     }
-  }, [isProfileOpen])
+  }, [closeProfile, isProfileOpen])
 
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.theme, theme)
@@ -598,6 +619,8 @@ function Layout({ children }: LayoutProps) {
           role="dialog"
           aria-label="Profile"
           aria-modal="false"
+          aria-hidden={isProfileOpen ? undefined : true}
+          inert={isProfileOpen ? undefined : true}
         >
           <div className="profile-panel__header">
             <h2 className="profile-panel__title">Profile</h2>
@@ -606,7 +629,7 @@ function Layout({ children }: LayoutProps) {
               className="profile-panel__close"
               kind="ghost"
               label="Close profile panel"
-              onClick={() => setIsProfileOpen(false)}
+              onClick={() => closeProfile(true)}
             >
               <Close size={20} />
             </IconButton>

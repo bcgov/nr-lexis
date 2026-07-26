@@ -406,6 +406,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await rows.nth(0).hover()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(31, 61, 90)')
+
+    await page.goto('/provincial/application/create', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('tab', { name: 'Packages / Scales' }).click()
+    const applicationItemsCard = page.locator('.application-items-card').first()
+    await expect(applicationItemsCard).toBeVisible()
+    await expect(applicationItemsCard).toHaveCSS('border-color', 'rgb(82, 82, 82)')
   })
 
   test('shows one striped RTM AMV table without growth controls or a blank grade row', async ({
@@ -510,6 +516,27 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(afterScroll.scrollLeft).toBeGreaterThan(0)
     expect(afterScroll.columnLeft).toBeGreaterThanOrEqual(afterScroll.viewportLeft - 1)
     expect(afterScroll.columnRight).toBeLessThanOrEqual(afterScroll.viewportRight + 1)
+  })
+
+  test('keeps long exemption actions within a narrow mobile viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 })
+
+    for (const route of ['/provincial/application', '/federal']) {
+      await page.goto(route, { waitUntil: 'domcontentloaded' })
+      const exemptionAction = page.getByRole('button', {
+        name: 'Create exemption for Selected Applications',
+      })
+      await expect(exemptionAction).toBeVisible()
+
+      const bounds = await exemptionAction.evaluate((button) => {
+        const rect = button.getBoundingClientRect()
+        return { left: rect.left, right: rect.right, scrollWidth: button.scrollWidth }
+      })
+
+      expect(bounds.left).toBeGreaterThanOrEqual(0)
+      expect(bounds.right).toBeLessThanOrEqual(320)
+      expect(bounds.scrollWidth).toBeLessThanOrEqual(Math.ceil(bounds.right - bounds.left))
+    }
   })
 
   test('uses FSPTS object-page chrome without mobile overflow', async ({ page }) => {
@@ -669,11 +696,25 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(resultsRegion).toBeVisible()
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      ),
-    ).toBe(false)
+    const mobileBounds = await page.evaluate(() => {
+      const workspace = document.querySelector('.admin-identity-workspace')
+      const manageLink = Array.from(document.querySelectorAll('a')).find(
+        (link) => link.textContent?.trim() === 'Manage in FAM',
+      )
+      if (!(workspace instanceof HTMLElement) || !(manageLink instanceof HTMLElement)) {
+        throw new Error('Admin identity workspace controls not found')
+      }
+
+      return {
+        viewportWidth: document.documentElement.clientWidth,
+        pageScrollWidth: document.documentElement.scrollWidth,
+        workspaceRight: workspace.getBoundingClientRect().right,
+        manageLinkRight: manageLink.getBoundingClientRect().right,
+      }
+    })
+    expect(mobileBounds.pageScrollWidth).toBe(mobileBounds.viewportWidth)
+    expect(mobileBounds.workspaceRight).toBeLessThanOrEqual(mobileBounds.viewportWidth)
+    expect(mobileBounds.manageLinkRight).toBeLessThanOrEqual(mobileBounds.viewportWidth)
   })
 
   test('contains the provincial workflow table on mobile', async ({ page }) => {
@@ -737,8 +778,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const overflow = await resultsRegion.evaluate((region) => ({
       clientWidth: region.clientWidth,
       scrollWidth: region.scrollWidth,
+      headerHeight: region.querySelector('thead tr')?.getBoundingClientRect().height,
     }))
     expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth)
+    expect(overflow.headerHeight).toBeLessThanOrEqual(80)
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

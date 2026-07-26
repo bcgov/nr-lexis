@@ -468,15 +468,45 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv')
 
     const profileToggle = screen.getByRole('button', { name: 'Open profile panel' })
+    const profilePanel = document.getElementById('profile-panel')
+
+    expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
+    expect(profilePanel).toHaveAttribute('inert')
+    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+
     await userEvent.click(profileToggle)
 
     expect(profileToggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('dialog', { name: 'Profile' })).toHaveClass('is-open')
+    expect(profilePanel).not.toHaveAttribute('aria-hidden')
+    expect(profilePanel).not.toHaveAttribute('inert')
+    await waitFor(() => {
+      expect(profilePanel?.querySelector('.profile-panel__close')).toHaveFocus()
+    })
 
     await userEvent.click(screen.getByRole('heading', { name: 'Current page content' }))
 
     expect(profileToggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByRole('dialog', { name: 'Profile' })).not.toHaveClass('is-open')
+    expect(profilePanel).not.toHaveClass('is-open')
+    expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
+    expect(profilePanel).toHaveAttribute('inert')
+    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+  })
+
+  it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+    await waitFor(() => {
+      expect(document.querySelector('#profile-panel .profile-panel__close')).toHaveFocus()
+    })
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Open profile panel' })).toHaveFocus()
+    })
+    expect(document.getElementById('profile-panel')).toHaveAttribute('inert')
   })
 
   it('keeps the persisted desktop preference separate from the closed mobile drawer', async () => {
