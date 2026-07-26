@@ -15,7 +15,7 @@ class ScheduledWorkflowDefaultsTest {
 
     assertThat(ageOutJob)
         .contains("name: PR Deployment Purge")
-        .contains("environment: dev")
+        .contains("environment:\n      name: dev\n      deployment: false")
         .contains("oc_namespace: ${{ secrets.oc_namespace }}")
         .contains("oc_token: ${{ secrets.oc_token }}")
         .contains("oc_server: ${{ vars.oc_server }}")

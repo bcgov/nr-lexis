@@ -134,7 +134,9 @@ permissions: {}
 jobs:
   backend:
     name: Deploy (backend)
-    environment: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -233,7 +235,9 @@ jobs:
 
   frontend:
     name: Deploy (frontend)
-    environment: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
+      deployment: false
     needs: [backend]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -302,3 +306,22 @@ jobs:
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"
           triggers: ${{ inputs.triggers }}
+
+  deployment-result:
+    name: Record deployment result
+    needs: [backend, frontend]
+    if: ${{ always() }}
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - name: Fail incomplete deployments
+        if: ${{ needs.backend.result != 'success' || needs.frontend.result != 'success' }}
+        run: |
+          echo "Backend deployment result: ${{ needs.backend.result }}"
+          echo "Frontend deployment result: ${{ needs.frontend.result }}"
+          exit 1
+
+      - name: Confirm deployment
+        run: echo "Backend and frontend deployments succeeded."

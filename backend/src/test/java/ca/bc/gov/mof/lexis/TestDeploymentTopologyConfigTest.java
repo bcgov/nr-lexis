@@ -81,6 +81,33 @@ class TestDeploymentTopologyConfigTest {
   }
 
   @Test
+  void reusableDeploymentShouldPublishOneAggregateEnvironmentResult() throws IOException {
+    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+    String backendJob = workflowJob(workflow, "backend", "frontend");
+    String frontendJob = workflowJob(workflow, "frontend", "deployment-result");
+    String deploymentResult =
+        workflow.substring(workflow.indexOf("  deployment-result:"));
+    String untrackedEnvironment =
+        "environment:\n"
+            + "      name: ${{ inputs.environment }}\n"
+            + "      deployment: false";
+
+    assertThat(backendJob).contains(untrackedEnvironment);
+    assertThat(frontendJob).contains(untrackedEnvironment);
+    assertThat(occurrences(workflow, untrackedEnvironment)).isEqualTo(2);
+    assertThat(deploymentResult)
+        .contains("name: Record deployment result")
+        .contains("needs: [backend, frontend]")
+        .contains("if: ${{ always() }}")
+        .contains("environment: ${{ inputs.environment }}")
+        .contains("permissions: {}")
+        .contains(
+            "if: ${{ needs.backend.result != 'success'"
+                + " || needs.frontend.result != 'success' }}")
+        .doesNotContain("deployment: false", "secrets.", "actions/checkout");
+  }
+
+  @Test
   void federalSubmissionCreateShouldNotBeFeatureGated() throws IOException {
     String deploymentConfiguration =
         Files.readString(resolve(".github/workflows/reusable-deploy.yml"))
