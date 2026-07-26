@@ -583,9 +583,11 @@ const ProvincialOffersPage = () => {
                       </TableCell>
                       <TableCell>{row.applicationNumber}</TableCell>
                       <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
-                      <TableCell>{row.offerWithdrawalDate || '-'}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {row.offerWithdrawalDate || '-'}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

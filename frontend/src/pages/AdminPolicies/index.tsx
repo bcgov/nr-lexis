@@ -905,15 +905,21 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   <TableBody>
                     {feePolicies.map((row) => (
                       <TableRow key={row.id}>
-                        <TableCell>{row.effectiveDate}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.effectiveDate}
+                        </TableCell>
                         <TableCell title={row.orgUnitName}>
                           {row.orgUnitCode || row.orgUnitNo}
                         </TableCell>
                         <TableCell>{row.policyPercentage}</TableCell>
                         <TableCell>{row.entryUserId}</TableCell>
-                        <TableCell>{row.entryTimestamp}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.entryTimestamp}
+                        </TableCell>
                         <TableCell>{row.updateUserId}</TableCell>
-                        <TableCell>{row.updateTimestamp}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.updateTimestamp}
+                        </TableCell>
                         <TableCell>
                           <div className="admin-policy-row-actions">
                             <Button
@@ -1030,12 +1036,18 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   <TableBody>
                     {filPolicies.map((row) => (
                       <TableRow key={row.id}>
-                        <TableCell>{row.effectiveDate}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.effectiveDate}
+                        </TableCell>
                         <TableCell>{row.filPercentage}</TableCell>
                         <TableCell>{row.entryUserId}</TableCell>
-                        <TableCell>{row.entryTimestamp}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.entryTimestamp}
+                        </TableCell>
                         <TableCell>{row.updateUserId}</TableCell>
-                        <TableCell>{row.updateTimestamp}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.updateTimestamp}
+                        </TableCell>
                         <TableCell>
                           <div className="admin-policy-row-actions">
                             <Button
@@ -1179,12 +1191,24 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                     {exportSchedules.map((row) => (
                       <TableRow key={row.exportScheduleId || row.advertisingDate}>
                         <TableCell>{row.exportScheduleId}</TableCell>
-                        <TableCell>{row.advertisingDate}</TableCell>
-                        <TableCell>{row.applicationReceiptDate}</TableCell>
-                        <TableCell>{row.offerReceiptDate}</TableCell>
-                        <TableCell>{row.offerEndDate}</TableCell>
-                        <TableCell>{row.offerWithdrawalDate}</TableCell>
-                        <TableCell>{row.teacMeetingDate}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.advertisingDate}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.applicationReceiptDate}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.offerReceiptDate}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.offerEndDate}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.offerWithdrawalDate}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.teacMeetingDate}
+                        </TableCell>
                         <TableCell>
                           {canSearchApplications ? (
                             <Link

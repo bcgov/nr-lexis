@@ -1,5 +1,6 @@
 import { InlineLoading, TableToolbar, TableToolbarContent } from '@carbon/react'
 import type { ReactNode } from 'react'
+import TableFrame from './TableFrame'
 
 export type SearchResultsTableFrameProps = {
   children: ReactNode
@@ -34,18 +35,16 @@ function SearchResultsTableFrame({
           </TableToolbar>
         </div>
       )}
-      <div
+      <TableFrame
+        ariaLabel="Search results table"
         className={
           loading ? 'legacy-search-table-content is-loading' : 'legacy-search-table-content'
         }
-        role="region"
-        aria-label="Search results table"
-        tabIndex={0}
         inert={loading ? true : undefined}
         aria-busy={loading}
       >
         {children}
-      </div>
+      </TableFrame>
       {loading && (
         <div className="legacy-search-table-loader">
           <InlineLoading description={loadingDescription} />

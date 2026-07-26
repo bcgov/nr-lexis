@@ -539,7 +539,7 @@ const ProvincialPermitPage = () => {
                       <TableCell>{row.applicantClientNumber}</TableCell>
                       <TableCell>{row.ownerClientNumber}</TableCell>
                       <TableCell>{row.totalVolume}</TableCell>
-                      <TableCell>{row.issueDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.issueDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
                     </TableRow>
                   ))}

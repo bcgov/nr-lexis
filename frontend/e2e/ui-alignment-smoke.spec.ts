@@ -381,31 +381,50 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.app-shell')).toHaveClass(/is-side-nav-collapsed/)
   })
 
-  test('applies FSPTS row striping and blue hover to rendered data tables in both themes', async ({
-    page,
-  }) => {
+  test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
 
-    const table = page.getByRole('region', { name: 'Search results table' }).getByRole('table')
+    const resultsRegion = page.getByRole('region', { name: 'Search results table' })
+    const table = resultsRegion.getByRole('table')
     const rows = table.locator('tbody tr')
     const firstRowCell = rows.nth(0).locator('td').first()
     const secondRowCell = rows.nth(1).locator('td').first()
 
     await expect(rows).toHaveCount(2)
+    await expect(table.getByRole('columnheader', { name: 'Application', exact: true })).toHaveCSS(
+      'white-space',
+      'nowrap',
+    )
+    await expect(table.locator('.legacy-search-table-date').first()).toHaveCSS(
+      'white-space',
+      'nowrap',
+    )
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(243, 243, 245)')
 
     await rows.nth(0).hover()
-    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(223, 234, 248)')
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
 
     await page.getByRole('switch', { name: 'Toggle dark mode' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
+    await expect(page.getByRole('link', { name: 'Add Application' })).toHaveCSS(
+      'color',
+      'rgb(120, 169, 255)',
+    )
+    await expect(page.getByRole('button', { name: 'Clear Filters' })).toHaveCSS(
+      'color',
+      'rgb(255, 255, 255)',
+    )
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCSS(
+      'background-color',
+      'rgb(0, 115, 230)',
+    )
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(57, 57, 57)')
 
     await rows.nth(0).hover()
-    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(31, 61, 90)')
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
 
     await page.goto('/provincial/application/create', { waitUntil: 'domcontentloaded' })
     await page.getByRole('tab', { name: 'Packages / Scales' }).click()
@@ -432,7 +451,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const firstRowCell = table.locator('tbody tr').first().locator('td').first()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await table.locator('tbody tr').first().hover()
-    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(223, 234, 248)')
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
   })
 
   test('keeps the search shell within a mobile viewport', async ({ page }) => {
@@ -452,6 +471,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Search' })).toBeVisible()
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
+    await expect(page.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
+      'tabindex',
+      '0',
+    )
 
     await openNavigation.click()
 
@@ -693,9 +716,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const resultsRegion = page.getByRole('region', { name: 'Search results table' })
     await expect(resultsRegion.getByText('JSMITH')).toBeVisible()
     await expect(workspace.locator('.cds--pagination')).toBeVisible()
+    await expect(resultsRegion).not.toHaveAttribute('tabindex')
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(resultsRegion).toBeVisible()
+    const resultWidths = await resultsRegion.evaluate((region) => ({
+      clientWidth: region.clientWidth,
+      scrollWidth: region.scrollWidth,
+    }))
+    expect(resultWidths.scrollWidth).toBeLessThanOrEqual(resultWidths.clientWidth + 1)
+    await expect(resultsRegion).not.toHaveAttribute('tabindex')
     const mobileBounds = await page.evaluate(() => {
       const workspace = document.querySelector('.admin-identity-workspace')
       const manageLink = Array.from(document.querySelectorAll('a')).find(

@@ -1143,7 +1143,7 @@ const ProvincialReviewPage = () => {
                       </TableCell>
                       <TableCell>{formatApplicationVolume(row.volume)}</TableCell>
                       <TableCell>{row.speciesEndUse}</TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
                       <TableCell>
                         <div className="provincial-review-row-actions">

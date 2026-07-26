@@ -679,8 +679,8 @@ const FederalPage = () => {
                       </TableCell>
                       <TableCell>{row.clientNumber}</TableCell>
                       <TableCell>{row.reason}</TableCell>
-                      <TableCell>{row.receivedDate}</TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.receivedDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
                       <TableCell>{row.exemptionType || '-'}</TableCell>
                       <TableCell>
                         {row.exemptionNumber ? (

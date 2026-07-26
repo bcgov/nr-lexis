@@ -835,7 +835,7 @@ const ProvincialApplicationPage = () => {
                           '-'
                         )}
                       </TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

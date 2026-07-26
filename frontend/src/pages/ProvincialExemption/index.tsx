@@ -1010,8 +1010,10 @@ const ProvincialExemptionPage = () => {
                         <TableCell>{row.ownerClientNumber}</TableCell>
                         <TableCell>{row.approvedVolume}</TableCell>
                         <TableCell>{row.balanceRemaining}</TableCell>
-                        <TableCell>{row.listingDate}</TableCell>
-                        <TableCell>{row.expiryDate}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.listingDate}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">{row.expiryDate}</TableCell>
                         <TableCell>{row.region}</TableCell>
                       </TableRow>
                     )
