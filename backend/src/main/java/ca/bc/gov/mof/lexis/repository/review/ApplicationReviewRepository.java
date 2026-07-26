@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.review;
 
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
@@ -8,8 +9,6 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Slice;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
@@ -19,12 +18,20 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,10 +51,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
-  private static final String FIND_END_USE_BY_APPLICATION =
-      LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
-  private static final String FIND_CANDIDATE_EXCOL_VALUES =
-      LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_REMARKS_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_REMARKS_BY_APP(?,?)";
   private static final String UPDATE_EXEMPTION_APPLICATION =
@@ -103,7 +106,9 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
             criteria.size(),
             totalElements,
             this::toReviewSearchRow);
-    return rows.map(this::toSearchResult);
+    Map<Long, String> speciesEndUseSorts = legacySpeciesEndUseSorts(rows.getContent());
+    return rows.map(
+        row -> toSearchResult(row, speciesEndUseSorts.get(row.applicationNumber())));
   }
 
   public int count(ApplicationReviewSearchCriteria criteria) {
@@ -121,7 +126,9 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
             criteria.page(),
             criteria.size(),
             this::toReviewSearchRow);
-    return rows.map(this::toSearchResult);
+    Map<Long, String> speciesEndUseSorts = legacySpeciesEndUseSorts(rows.getContent());
+    return rows.map(
+        row -> toSearchResult(row, speciesEndUseSorts.get(row.applicationNumber())));
   }
 
   private SqlWhere buildSearchWhere(ApplicationReviewSearchCriteria criteria) {
@@ -404,32 +411,222 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         "Y".equalsIgnoreCase(getString(rs, "SHOW_INFO_ICON")));
   }
 
-  private ApplicationReviewSearchResultDto toSearchResult(ReviewSearchRow row) {
+  private ApplicationReviewSearchResultDto toSearchResult(
+      ReviewSearchRow row, String speciesEndUseSort) {
     return new ApplicationReviewSearchResultDto(
         row.applicationNumber(),
         row.volume(),
-        legacySpeciesEndUseSort(row.applicationNumber(), row.productTypeCode(), row.orgUnitNo()),
+        speciesEndUseSort,
         row.listingDate(),
         row.status(),
         row.region(),
         row.showInfoIcon());
   }
 
+  private Map<Long, String> legacySpeciesEndUseSorts(List<ReviewSearchRow> rows) {
+    if (rows == null || rows.isEmpty()) {
+      return Map.of();
+    }
+
+    Set<Long> applicationNumbers = new LinkedHashSet<>();
+    for (ReviewSearchRow row : rows) {
+      if (row.applicationNumber() != null
+          && row.applicationNumber() > 0
+          && row.orgUnitNo() != null
+          && row.orgUnitNo() > 0) {
+        applicationNumbers.add(row.applicationNumber());
+      }
+    }
+    if (applicationNumbers.isEmpty()) {
+      return Map.of();
+    }
+
+    Map<Long, List<EndUseSortRow>> endUsesByApplication = new LinkedHashMap<>();
+    for (EndUseSortRow endUse : findEndUsesByApplicationNumbers(applicationNumbers)) {
+      if (endUse.applicationNumber() != null
+          && applicationNumbers.contains(endUse.applicationNumber())) {
+        endUsesByApplication
+            .computeIfAbsent(endUse.applicationNumber(), ignored -> new ArrayList<>())
+            .add(endUse);
+      }
+    }
+
+    Set<Long> orgUnitNumbers = new LinkedHashSet<>();
+    Set<String> speciesCodes = new LinkedHashSet<>();
+    Set<String> endUseCodes = new LinkedHashSet<>();
+    for (ReviewSearchRow row : rows) {
+      List<EndUseSortRow> endUses = endUsesByApplication.get(row.applicationNumber());
+      if (endUses == null || endUses.isEmpty()) {
+        continue;
+      }
+      EndUseSortRow firstEndUse = endUses.get(0);
+      if (firstEndUse.speciesCode() != null && firstEndUse.endUseCode() != null) {
+        orgUnitNumbers.add(row.orgUnitNo());
+        speciesCodes.add(firstEndUse.speciesCode());
+        endUseCodes.add(firstEndUse.endUseCode());
+      }
+    }
+
+    Map<ExcolCandidateKey, LinkedHashSet<String>> candidatesByKey = new LinkedHashMap<>();
+    for (ExcolCandidateRow candidate :
+        findCandidateExcolRows(orgUnitNumbers, speciesCodes, endUseCodes)) {
+      if (candidate.orgUnitNo() == null
+          || candidate.speciesCode() == null
+          || candidate.endUseCode() == null
+          || candidate.excolValue() == null) {
+        continue;
+      }
+      candidatesByKey
+          .computeIfAbsent(
+              new ExcolCandidateKey(
+                  candidate.orgUnitNo(), candidate.speciesCode(), candidate.endUseCode()),
+              ignored -> new LinkedHashSet<>())
+          .add(candidate.excolValue());
+    }
+
+    Map<Long, String> sorts = new LinkedHashMap<>();
+    for (ReviewSearchRow row : rows) {
+      List<EndUseSortRow> endUses =
+          endUsesByApplication.getOrDefault(row.applicationNumber(), List.of());
+      if (endUses.isEmpty()) {
+        continue;
+      }
+      EndUseSortRow firstEndUse = endUses.get(0);
+      String pattern = excolPattern(endUses.size());
+      List<String> candidates =
+          candidatesByKey
+              .getOrDefault(
+                  new ExcolCandidateKey(
+                      row.orgUnitNo(), firstEndUse.speciesCode(), firstEndUse.endUseCode()),
+                  new LinkedHashSet<>())
+              .stream()
+              .filter(candidate -> matchesLegacyExcolPattern(candidate, pattern))
+              .toList();
+      String sort =
+          legacySpeciesEndUseSort(row.productTypeCode(), endUses, firstEndUse, candidates);
+      if (sort != null) {
+        sorts.put(row.applicationNumber(), sort);
+      }
+    }
+    return sorts;
+  }
+
+  protected List<EndUseSortRow> findEndUsesByApplicationNumbers(
+      Collection<Long> applicationNumbers) {
+    List<Long> normalized =
+        applicationNumbers == null
+            ? List.of()
+            : applicationNumbers.stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(value -> value > 0)
+                .distinct()
+                .toList();
+    if (normalized.isEmpty()) {
+      return List.of();
+    }
+
+    // Legacy uses the first returned end-use row as the candidate lookup key, so preserve database
+    // encounter order rather than introducing a modern-only ordering rule.
+    String sql =
+        """
+        SELECT APPLICATION_NUMBER, EXPORT_SPECIES_CODE, EXPORT_END_USE_CODE
+          FROM EXPORT_EXMPTN_APPL_SPCS_ENDUSE
+         WHERE APPLICATION_NUMBER IN (%s)
+        """
+            .formatted(placeholders(normalized.size()));
+    try {
+      return jdbcTemplate.query(
+          sql,
+          ps -> {
+            for (int index = 0; index < normalized.size(); index++) {
+              ps.setLong(index + 1, normalized.get(index));
+            }
+          },
+          (rs, rowNumber) ->
+              new EndUseSortRow(
+                  getLong(rs, "APPLICATION_NUMBER"),
+                  getString(rs, "EXPORT_SPECIES_CODE"),
+                  getString(rs, "EXPORT_END_USE_CODE")));
+    } catch (DataAccessException ex) {
+      logger.warn(
+          "event=lexis_application_review operation=batch_end_use_enrichment outcome=failed failureType={}",
+          exceptionType(ex));
+      return List.of();
+    }
+  }
+
+  protected List<ExcolCandidateRow> findCandidateExcolRows(
+      Collection<Long> orgUnitNumbers,
+      Collection<String> speciesCodes,
+      Collection<String> endUseCodes) {
+    List<Long> normalizedOrgUnits =
+        orgUnitNumbers == null
+            ? List.of()
+            : orgUnitNumbers.stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(value -> value > 0)
+                .distinct()
+                .toList();
+    List<String> normalizedSpecies =
+        normalizedCodes(speciesCodes);
+    List<String> normalizedEndUses =
+        normalizedCodes(endUseCodes);
+    if (normalizedOrgUnits.isEmpty()
+        || normalizedSpecies.isEmpty()
+        || normalizedEndUses.isEmpty()) {
+      return List.of();
+    }
+
+    // The legacy cursor is also unordered and the first matching candidate wins.
+    String sql =
+        """
+        SELECT DISTINCT ORG_UNIT_NO,
+                        EXPORT_SPECIES_CODE,
+                        EXPORT_END_USE_CODE,
+                        EXCOL_TRANSLATION_VALUE
+          FROM SPECIES_GRADE_ENDUSE_RGN_XREF
+         WHERE ORG_UNIT_NO IN (%s)
+           AND EXPORT_SPECIES_CODE IN (%s)
+           AND EXPORT_END_USE_CODE IN (%s)
+        """
+            .formatted(
+                placeholders(normalizedOrgUnits.size()),
+                placeholders(normalizedSpecies.size()),
+                placeholders(normalizedEndUses.size()));
+    try {
+      return jdbcTemplate.query(
+          sql,
+          ps -> {
+            int index = 1;
+            for (Long orgUnitNumber : normalizedOrgUnits) {
+              ps.setLong(index++, orgUnitNumber);
+            }
+            for (String speciesCode : normalizedSpecies) {
+              ps.setString(index++, speciesCode);
+            }
+            for (String endUseCode : normalizedEndUses) {
+              ps.setString(index++, endUseCode);
+            }
+          },
+          (rs, rowNumber) ->
+              new ExcolCandidateRow(
+                  getLong(rs, "ORG_UNIT_NO"),
+                  getString(rs, "EXPORT_SPECIES_CODE"),
+                  getString(rs, "EXPORT_END_USE_CODE"),
+                  getString(rs, "EXCOL_TRANSLATION_VALUE")));
+    } catch (DataAccessException ex) {
+      logger.warn(
+          "event=lexis_application_review operation=batch_excol_enrichment outcome=failed failureType={}",
+          exceptionType(ex));
+      return List.of();
+    }
+  }
+
   private String legacySpeciesEndUseSort(
-      Long applicationNumber, String productTypeCode, Long orgUnitNo) {
-    if (applicationNumber == null || applicationNumber < 1 || orgUnitNo == null || orgUnitNo < 1) {
-      return null;
-    }
-
-    List<EndUseSortRow> endUses = findEndUsesByApplicationNumber(applicationNumber);
-    if (endUses.isEmpty()) {
-      return null;
-    }
-
-    EndUseSortRow firstEndUse = endUses.get(0);
-    List<String> candidates =
-        findCandidateExcolCodes(
-            endUses.size(), firstEndUse.speciesCode(), firstEndUse.endUseCode(), orgUnitNo);
+      String productTypeCode,
+      List<EndUseSortRow> endUses,
+      EndUseSortRow firstEndUse,
+      List<String> candidates) {
     if (candidates.size() == 1) {
       return candidates.get(0);
     }
@@ -440,39 +637,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       }
     }
     return null;
-  }
-
-  private List<EndUseSortRow> findEndUsesByApplicationNumber(Long applicationNumber) {
-    if (applicationNumber == null || applicationNumber < 1) {
-      return List.of();
-    }
-    return queryCursorProcedure(
-        FIND_END_USE_BY_APPLICATION,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        rs -> new EndUseSortRow(getString(rs, "EXPORT_SPECIES_CODE"), getString(rs, "EXPORT_END_USE_CODE")));
-  }
-
-  private List<String> findCandidateExcolCodes(
-      int speciesCount, String speciesCode, String endUseCode, Long orgUnitNo) {
-    String pattern = excolPattern(speciesCount);
-    if (pattern == null
-        || speciesCode == null
-        || endUseCode == null
-        || orgUnitNo == null
-        || orgUnitNo < 1) {
-      return List.of();
-    }
-    return queryCursorProcedure(
-        FIND_CANDIDATE_EXCOL_VALUES,
-        cs -> {
-          cs.setString(1, pattern);
-          cs.setString(2, speciesCode);
-          cs.setString(3, endUseCode);
-          cs.setLong(4, orgUnitNo);
-        },
-        5,
-        rs -> getString(rs, "EXCOL_TRANSLATION_VALUE"));
   }
 
   private boolean matchesLegacyExcolCandidate(
@@ -492,6 +656,31 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         || candidate.contains(firstEndUse.endUseCode());
   }
 
+  private boolean matchesLegacyExcolPattern(String candidate, String pattern) {
+    if (candidate == null || pattern == null) {
+      return false;
+    }
+    if (matchesFixedOracleLikePattern(candidate, pattern)) {
+      return true;
+    }
+    return candidate.length() >= pattern.length() + 1
+        && candidate.charAt(pattern.length()) == ' '
+        && matchesFixedOracleLikePattern(candidate.substring(0, pattern.length()), pattern);
+  }
+
+  private boolean matchesFixedOracleLikePattern(String value, String pattern) {
+    if (value.length() != pattern.length()) {
+      return false;
+    }
+    for (int index = 0; index < pattern.length(); index++) {
+      char patternCharacter = pattern.charAt(index);
+      if (patternCharacter != '_' && patternCharacter != value.charAt(index)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private String excolPattern(int speciesCount) {
     if (speciesCount < 1) {
       return null;
@@ -501,6 +690,21 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       pattern.append("__/");
     }
     return pattern.append("__").toString();
+  }
+
+  private List<String> normalizedCodes(Collection<String> codes) {
+    if (codes == null) {
+      return List.of();
+    }
+    return codes.stream()
+        .map(this::trim)
+        .filter(java.util.Objects::nonNull)
+        .distinct()
+        .toList();
+  }
+
+  private String placeholders(int count) {
+    return String.join(",", Collections.nCopies(count, "?"));
   }
 
   private Optional<ApplicationUpdateRecord> loadApplicationUpdateRecord(Long applicationNumber) {
@@ -679,7 +883,18 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       String region,
       boolean showInfoIcon) {}
 
-  private record EndUseSortRow(String speciesCode, String endUseCode) {}
+  protected record EndUseSortRow(
+      Long applicationNumber, String speciesCode, String endUseCode) {
+    public EndUseSortRow {}
+  }
+
+  protected record ExcolCandidateRow(
+      Long orgUnitNo, String speciesCode, String endUseCode, String excolValue) {
+    public ExcolCandidateRow {}
+  }
+
+  private record ExcolCandidateKey(
+      Long orgUnitNo, String speciesCode, String endUseCode) {}
 
   private record ApplicationUpdateRecord(
       Long applicationNumber,

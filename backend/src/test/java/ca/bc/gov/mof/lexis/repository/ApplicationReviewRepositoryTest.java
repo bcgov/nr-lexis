@@ -14,6 +14,7 @@ import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -128,7 +129,7 @@ class ApplicationReviewRepositoryTest {
             "H",
             1903L,
             List.of(new EndUseInput("AL", "PL"), new EndUseInput("BA", "PL")),
-            List.of("AL/PL", "AL/BA/PL"));
+            List.of("AL/CE/PL", "AL/BA/PL"));
 
     Page<ApplicationReviewSearchResultDto> results =
         repository.search(
@@ -137,6 +138,42 @@ class ApplicationReviewRepositoryTest {
     assertThat(results.getContent())
         .extracting(ApplicationReviewSearchResultDto::speciesEndUse)
         .containsExactly("AL/BA/PL");
+    assertThat(repository.candidateCalls()).isOne();
+  }
+
+  @Test
+  void searchShouldIncludeTheLegacyCandidateSuffixPattern() {
+    ParityApplicationReviewRepository repository =
+        new ParityApplicationReviewRepository(
+            "H", 1903L, List.of(new EndUseInput("CE", "UT")), List.of("CE/UT SH"));
+
+    Page<ApplicationReviewSearchResultDto> results =
+        repository.search(
+            new ApplicationReviewSearchCriteria(
+                null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(results.getContent())
+        .extracting(ApplicationReviewSearchResultDto::speciesEndUse)
+        .containsExactly("CE/UT SH");
+  }
+
+  @Test
+  void searchShouldBatchSortEnrichmentAcrossTheRequestedPage() {
+    BatchingApplicationReviewRepository repository =
+        new BatchingApplicationReviewRepository(200);
+
+    Page<ApplicationReviewSearchResultDto> results =
+        repository.search(
+            new ApplicationReviewSearchCriteria(
+                null, null, null, null, null, null, List.of(), null, 0, 200));
+
+    assertThat(results.getContent()).hasSize(200);
+    assertThat(results.getContent())
+        .extracting(ApplicationReviewSearchResultDto::speciesEndUse)
+        .containsOnly("AL/PL");
+    assertThat(repository.pageCalls()).isEqualTo(20);
+    assertThat(repository.requestedApplicationCount()).isEqualTo(200);
+    assertThat(repository.endUseCalls()).isOne();
     assertThat(repository.candidateCalls()).isOne();
   }
 
@@ -585,27 +622,6 @@ class ApplicationReviewRepositoryTest {
     }
   }
 
-  private static ResultSet newEndUseResultSet(EndUseInput endUse) {
-    try {
-      ResultSet resultSet = mock(ResultSet.class);
-      when(resultSet.getString("EXPORT_SPECIES_CODE")).thenReturn(endUse.speciesCode());
-      when(resultSet.getString("EXPORT_END_USE_CODE")).thenReturn(endUse.endUseCode());
-      return resultSet;
-    } catch (SQLException ex) {
-      throw new AssertionError(ex);
-    }
-  }
-
-  private static ResultSet newCandidateResultSet(String candidate) {
-    try {
-      ResultSet resultSet = mock(ResultSet.class);
-      when(resultSet.getString("EXCOL_TRANSLATION_VALUE")).thenReturn(candidate);
-      return resultSet;
-    } catch (SQLException ex) {
-      throw new AssertionError(ex);
-    }
-  }
-
   private static final class ParityApplicationReviewRepository
       extends ApplicationReviewRepository {
     private final String productTypeCode;
@@ -656,24 +672,120 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
-    protected <T> List<T> queryCursorProcedure(
+    protected List<EndUseSortRow> findEndUsesByApplicationNumbers(
+        Collection<Long> applicationNumbers) {
+      endUseCalls++;
+      Long applicationNumber = applicationNumbers.iterator().next();
+      return endUses.stream()
+          .map(
+              endUse ->
+                  new EndUseSortRow(
+                      applicationNumber, endUse.speciesCode(), endUse.endUseCode()))
+          .toList();
+    }
+
+    @Override
+    protected List<ExcolCandidateRow> findCandidateExcolRows(
+        Collection<Long> orgUnitNumbers,
+        Collection<String> speciesCodes,
+        Collection<String> endUseCodes) {
+      candidateCalls++;
+      EndUseInput firstEndUse = endUses.get(0);
+      return candidates.stream()
+          .map(
+              candidate ->
+                  new ExcolCandidateRow(
+                      orgUnitNo,
+                      firstEndUse.speciesCode(),
+                      firstEndUse.endUseCode(),
+                      candidate))
+          .toList();
+    }
+
+    private <T> T mapRow(SqlRowMapper<T> rowMapper, ResultSet resultSet) {
+      try {
+        return rowMapper.map(resultSet);
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+  }
+
+  private static final class BatchingApplicationReviewRepository
+      extends ApplicationReviewRepository {
+    private final int resultCount;
+    private int pageCalls;
+    private int requestedApplicationCount;
+    private int endUseCalls;
+    private int candidateCalls;
+
+    BatchingApplicationReviewRepository(int resultCount) {
+      super(null);
+      this.resultCount = resultCount;
+    }
+
+    int pageCalls() {
+      return pageCalls;
+    }
+
+    int requestedApplicationCount() {
+      return requestedApplicationCount;
+    }
+
+    int endUseCalls() {
+      return endUseCalls;
+    }
+
+    int candidateCalls() {
+      return candidateCalls;
+    }
+
+    @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature, String whereSql, List<String> bindValues) {
+      return resultCount;
+    }
+
+    @Override
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
+        String whereSql,
+        List<String> bindValues,
+        int page,
         SqlRowMapper<T> rowMapper) {
-      if ("LEXIS_GROUP_5.FIND_END_USE_BY_APP(?,?)".equals(procedureSignature)) {
-        endUseCalls++;
-        return endUses.stream()
-            .map(endUse -> mapRow(rowMapper, newEndUseResultSet(endUse)))
-            .toList();
+      pageCalls++;
+      int start = page * 10;
+      int end = Math.min(start + 10, resultCount);
+      if (start >= end) {
+        return List.of();
       }
-      if ("LEXIS_CODES.FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)".equals(procedureSignature)) {
-        candidateCalls++;
-        return candidates.stream()
-            .map(candidate -> mapRow(rowMapper, newCandidateResultSet(candidate)))
-            .toList();
-      }
-      return List.of();
+      return java.util.stream.LongStream.range(start, end)
+          .mapToObj(
+              offset ->
+                  mapRow(
+                      rowMapper,
+                      newReviewResultSet(
+                          new ReviewRowInput(900001L + offset, "H", 1903L))))
+          .toList();
+    }
+
+    @Override
+    protected List<EndUseSortRow> findEndUsesByApplicationNumbers(
+        Collection<Long> applicationNumbers) {
+      endUseCalls++;
+      requestedApplicationCount = applicationNumbers.size();
+      return applicationNumbers.stream()
+          .map(applicationNumber -> new EndUseSortRow(applicationNumber, "AL", "PL"))
+          .toList();
+    }
+
+    @Override
+    protected List<ExcolCandidateRow> findCandidateExcolRows(
+        Collection<Long> orgUnitNumbers,
+        Collection<String> speciesCodes,
+        Collection<String> endUseCodes) {
+      candidateCalls++;
+      return List.of(new ExcolCandidateRow(1903L, "AL", "PL", "AL/PL"));
     }
 
     private <T> T mapRow(SqlRowMapper<T> rowMapper, ResultSet resultSet) {
@@ -713,11 +825,16 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
-    protected <T> List<T> queryCursorProcedure(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
+    protected List<EndUseSortRow> findEndUsesByApplicationNumbers(
+        Collection<Long> applicationNumbers) {
+      return List.of();
+    }
+
+    @Override
+    protected List<ExcolCandidateRow> findCandidateExcolRows(
+        Collection<Long> orgUnitNumbers,
+        Collection<String> speciesCodes,
+        Collection<String> endUseCodes) {
       return List.of();
     }
 
