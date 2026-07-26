@@ -362,6 +362,7 @@ public interface ApplicationDetailsRpcService {
       Long applicationNumber,
       String applicationStatusCode,
       String jurisdictionCode,
+      String productTypeCode,
       Long exportScheduleId,
       LocalDate advertisingDate,
       boolean hasPackageBeforeApproval,

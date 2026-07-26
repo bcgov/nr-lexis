@@ -550,6 +550,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             application.applicationNumber(),
             trimToNull(application.applicationStatusCode()),
             trimToNull(application.jurisdictionCode()),
+            trimToNull(application.productTypeCode()),
             application.exportScheduleId(),
             application.advertisingDate(),
             hasPackageBeforeApproval,

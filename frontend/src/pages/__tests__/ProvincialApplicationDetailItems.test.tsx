@@ -29,6 +29,7 @@ import {
   mockedFetchApplicationPackageSpecies,
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationPermits,
+  mockedFetchApplicationRemainingSpecies,
   mockedFetchApplicationScaleDetails,
   mockedFetchApplicationSummarySnapshot,
   mockedFetchApplicationUniqueScales,
@@ -351,6 +352,66 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByRole('button', { name: 'Save Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+  })
+
+  it('hides package and scale mutations for standing timber applications', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      productTypeCode: 'S',
+      packages: [],
+      canEditPackages: true,
+      canAddPackages: true,
+      canAddScales: true,
+      canUpdatePackageNumber: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+    expect(await screen.findByText('Package Details')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add Scale' })).not.toBeInTheDocument()
+  })
+
+  it('keeps authoritative empty remaining-species results empty', async () => {
+    mockedFetchApplicationRemainingSpecies.mockResolvedValue([])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+    await waitFor(() => {
+      expect(mockedFetchApplicationRemainingSpecies).toHaveBeenCalled()
+    })
+
+    const packageSpecies = screen.getAllByRole('combobox', { name: 'Species' })[0]
+    await userEvent.click(packageSpecies)
+    expect(screen.queryByRole('option', { name: 'CE - Cedar' })).not.toBeInTheDocument()
+
+    const createSpecies = screen.getByRole('combobox', {
+      name: 'Create Package Species',
+    })
+    await userEvent.click(createSpecies)
+    expect(screen.queryByRole('option', { name: 'CE - Cedar' })).not.toBeInTheDocument()
   })
 
   it('edits package species and saves application item details', async () => {

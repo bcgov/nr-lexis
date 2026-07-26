@@ -756,7 +756,7 @@ function ProvincialApplicationItemsPanel({
       try {
         const remaining = await fetchApplicationRemainingSpecies(region, productType, speciesDraft)
         if (!cancelled) {
-          setRemainingSpeciesOptions(remaining.length > 0 ? remaining : speciesOptions)
+          setRemainingSpeciesOptions(remaining)
         }
       } catch {
         if (!cancelled) {
@@ -789,7 +789,7 @@ function ProvincialApplicationItemsPanel({
           createSpeciesDraft,
         )
         if (!cancelled) {
-          setCreateRemainingSpeciesOptions(remaining.length > 0 ? remaining : speciesOptions)
+          setCreateRemainingSpeciesOptions(remaining)
         }
       } catch {
         if (!cancelled) {

@@ -165,6 +165,8 @@ const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
 const REVIEW_EMAIL_PREVIEW_HELPER =
   "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
 const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
+const productTypeSupportsPackages = (productTypeCode?: string | null): boolean =>
+  ['H', 'T'].includes((productTypeCode ?? '').trim().toUpperCase())
 const APPLICATION_STATUS_LABELS: Record<string, string> = {
   APP: 'Approved',
   EXP: 'Expired',
@@ -966,11 +968,15 @@ const ProvincialApplicationDetailsPage = () => {
     documentLookupAvailability === 'available' && documentRows.length > 0
   const canViewRemarks = canPerform('/applicationRemarks')
   const isApplicationExpired = isExpiredApplication(detail)
+  const applicationProductSupportsPackages = productTypeSupportsPackages(detail?.productTypeCode)
   const canUseApplicationMutations =
     canPerform('createApplication') && !detail?.locked && !detail?.readOnly && !isApplicationExpired
-  const canEditPackages = canUseApplicationMutations && !!detail?.canEditPackages
-  const canAddPackages = canUseApplicationMutations && !!detail?.canAddPackages
-  const canAddScales = canUseApplicationMutations && !!detail?.canAddScales
+  const canEditPackages =
+    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canEditPackages
+  const canAddPackages =
+    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canAddPackages
+  const canAddScales =
+    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canAddScales
   const canEditSummary = canUseApplicationMutations && !!detail?.canEditApplicationDetails
   const needsApplicationOptions =
     canEditSummary || canEditPackages || canAddPackages || canAddScales
@@ -4021,7 +4027,9 @@ const ProvincialApplicationDetailsPage = () => {
                         canAddPackages={canAddPackages}
                         canAddScales={canAddScales}
                         canUpdatePackageNumber={canUpdatePackageNumber}
-                        hideMutationActions={isApplicationExpired}
+                        hideMutationActions={
+                          isApplicationExpired || !applicationProductSupportsPackages
+                        }
                         authoritativeOptionsAvailability={packageReferenceOptionsAvailability}
                         productTypeOptions={packageProductTypeOptions}
                         growthTypeOptions={packageGrowthTypeOptions}

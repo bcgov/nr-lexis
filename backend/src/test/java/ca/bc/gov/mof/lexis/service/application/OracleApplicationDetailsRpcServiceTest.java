@@ -4024,6 +4024,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     1000456L,
                     "APP",
                     "P",
+                    "H",
                     12L,
                     LocalDate.of(2026, 7, 8),
                     approvalDate,
@@ -4048,6 +4049,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(context).isPresent();
     assertThat(context.get().applicationStatusCode()).isEqualTo("APP");
+    assertThat(context.get().productTypeCode()).isEqualTo("H");
     assertThat(context.get().advertisingDate()).isEqualTo(LocalDate.of(2026, 7, 8));
     assertThat(context.get().hasPackageBeforeApproval()).isTrue();
     assertThat(context.get().hasScaleBeforeApproval()).isFalse();
@@ -4063,6 +4065,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     1000456L,
                     "NEW",
                     "P",
+                    "H",
                     12L,
                     LocalDate.of(2026, 7, 8),
                     null,
@@ -4235,6 +4238,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     1000456L,
                     "PMT",
                     "P",
+                    "H",
                     12L,
                     LocalDate.of(2026, 7, 8),
                     null,

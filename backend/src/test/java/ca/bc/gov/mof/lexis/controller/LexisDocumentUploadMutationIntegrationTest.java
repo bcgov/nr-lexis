@@ -309,7 +309,17 @@ class LexisDocumentUploadMutationIntegrationTest {
   private ApplicationDetailsRpcService.ApplicationEditContext applicationEditContext(
       boolean hasCompletePermit) {
     return new ApplicationDetailsRpcService.ApplicationEditContext(
-        APPLICATION_NUMBER, "NEW", "P", 1L, null, false, false, hasCompletePermit, null, false);
+        APPLICATION_NUMBER,
+        "NEW",
+        "P",
+        "H",
+        1L,
+        null,
+        false,
+        false,
+        hasCompletePermit,
+        null,
+        false);
   }
 
   private ExemptionDetailDto exemption(String status) {

@@ -767,7 +767,17 @@ class ProvincialAuthorizationServiceTest {
   private ApplicationDetailsRpcService.ApplicationEditContext applicationEditContext(
       Long applicationNumber, boolean hasCompletePermit) {
     return new ApplicationDetailsRpcService.ApplicationEditContext(
-        applicationNumber, "NEW", "P", 1L, null, false, false, hasCompletePermit, null, false);
+        applicationNumber,
+        "NEW",
+        "P",
+        "H",
+        1L,
+        null,
+        false,
+        false,
+        hasCompletePermit,
+        null,
+        false);
   }
 
   private PermitDetailDto permit(
