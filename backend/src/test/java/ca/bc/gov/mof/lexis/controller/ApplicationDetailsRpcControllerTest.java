@@ -21,6 +21,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.federal.FederalApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.permit.OracleAggregateRowLockService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
@@ -51,6 +52,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -74,6 +76,7 @@ class ApplicationDetailsRpcControllerTest {
   @Mock private ApplicationEditLockService editLockService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private ApplicationEditPolicyService applicationEditPolicyService;
+  @Mock private FederalApplicationEditPolicyService federalApplicationEditPolicyService;
 
   private ApplicationDetailsRpcController controller;
   private ApplicationPermitOperationCoordinator operationCoordinator;
@@ -92,6 +95,7 @@ class ApplicationDetailsRpcControllerTest {
             editLockService,
             provincialAuthorizationService,
             applicationEditPolicyService,
+            federalApplicationEditPolicyService,
             operationCoordinator);
     lenient()
         .when(editLockService.requireEditable(any(), any(), any()))
@@ -117,6 +121,22 @@ class ApplicationDetailsRpcControllerTest {
     lenient()
         .when(service.findApplicationNumberForRemark(any()))
         .thenReturn(Optional.of(1000456L));
+    lenient()
+        .when(service.getApplicationEditContext(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.ApplicationEditContext(
+                    1000456L,
+                    "NEW",
+                    "P",
+                    "H",
+                    12L,
+                    LocalDate.of(2026, 7, 10),
+                    false,
+                    false,
+                    false,
+                    null,
+                    false)));
   }
 
   @Test
@@ -536,6 +556,41 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void persistRemarkShouldApplyFederalCompletedApplicationPolicyBeforeLocking() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    LocalDate listingDate = LocalDate.of(2026, 2, 26);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationEditContext(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.ApplicationEditContext(
+                    1000456L,
+                    "APP",
+                    "F",
+                    "H",
+                    12L,
+                    listingDate,
+                    false,
+                    false,
+                    false,
+                    null,
+                    false)));
+    doThrow(new AccessDeniedException("completed application is read-only"))
+        .when(federalApplicationEditPolicyService)
+        .requireEdit(authentication, "APP", listingDate);
+
+    assertThatThrownBy(
+            () ->
+                controller.persistRemark(
+                    "new", "1000456", "Long remark", authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("read-only");
+
+    verify(editLockService, never()).requireEditable(any(), any(), any());
+    verify(service, never()).persistRemark(any(), any(), any(), any());
+  }
+
+  @Test
   void persistRemarkShouldRejectWithoutApplicationRemarksAction() {
     TestingAuthenticationToken authentication = unauthorized("/applicationRemarks");
 
@@ -732,6 +787,7 @@ class ApplicationDetailsRpcControllerTest {
         editLockService,
         provincialAuthorizationService,
         applicationEditPolicyService,
+        federalApplicationEditPolicyService,
         coordinator);
   }
 

@@ -16,6 +16,7 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationValidationDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
+import ca.bc.gov.mof.lexis.service.federal.FederalApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
@@ -62,6 +63,7 @@ public class FederalApplicationController {
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
   private final ApplicationEditLockService editLockService;
+  private final FederalApplicationEditPolicyService editPolicyService;
   private final ApplicationPermitOperationCoordinator operationCoordinator;
   private LexisPrincipalService principalService;
   private ProvincialAuthorizationService provincialAuthorizationService;
@@ -71,11 +73,13 @@ public class FederalApplicationController {
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService,
       ApplicationEditLockService editLockService,
+      FederalApplicationEditPolicyService editPolicyService,
       ApplicationPermitOperationCoordinator operationCoordinator) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
     this.editLockService = editLockService;
+    this.editPolicyService = editPolicyService;
     this.operationCoordinator = operationCoordinator;
   }
 
@@ -205,7 +209,10 @@ public class FederalApplicationController {
             ignored ->
                 provincialAuthorizationService.canAccessFederalApplication(
                     authentication, applicationNumber))
-        .map(detail -> ResponseEntity.ok(withEditLock(detail, authentication)))
+        .map(
+            detail ->
+                ResponseEntity.ok(
+                    withEditLock(withEditPolicy(detail, authentication), authentication)))
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
@@ -261,6 +268,7 @@ public class FederalApplicationController {
             () -> {
               provincialAuthorizationService.requireFederalApplication(
                   authentication, applicationNumber);
+              requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
                   userId,
@@ -290,6 +298,7 @@ public class FederalApplicationController {
             () -> {
               provincialAuthorizationService.requireFederalApplication(
                   authentication, applicationNumber);
+              requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
                   userId,
@@ -318,6 +327,7 @@ public class FederalApplicationController {
             () -> {
               provincialAuthorizationService.requireFederalApplication(
                   authentication, applicationNumber);
+              requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
                   userId,
@@ -344,6 +354,7 @@ public class FederalApplicationController {
             () -> {
               provincialAuthorizationService.requireFederalApplication(
                   authentication, applicationNumber);
+              requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
                   userId,
@@ -370,6 +381,7 @@ public class FederalApplicationController {
             () -> {
               provincialAuthorizationService.requireFederalApplication(
                   authentication, applicationNumber);
+              requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
                   userId,
@@ -440,9 +452,24 @@ public class FederalApplicationController {
         sessionService.parseRolesFromPrincipal(authentication), "manageFederalApplication");
   }
 
+  private FederalApplicationDetailDto withEditPolicy(
+      FederalApplicationDetailDto detail, Authentication authentication) {
+    return detail.withReadOnly(
+        !editPolicyService.canEdit(authentication, detail.statusCode(), detail.listingDate()));
+  }
+
+  private void requireApplicationEdit(
+      FederalApplicationService service,
+      Long applicationNumber,
+      Authentication authentication) {
+    FederalApplicationService.FederalApplicationEditContext context =
+        service.findEditContext(applicationNumber).orElse(null);
+    editPolicyService.requireEdit(authentication, context);
+  }
+
   private FederalApplicationDetailDto withEditLock(
       FederalApplicationDetailDto detail, Authentication authentication) {
-    boolean canManage = canManageFederalApplication(authentication);
+    boolean canManage = !detail.readOnly() && canManageFederalApplication(authentication);
     try {
       String userId = principal(authentication);
       ApplicationEditLockDto lock =

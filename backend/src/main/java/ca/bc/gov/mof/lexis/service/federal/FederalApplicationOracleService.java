@@ -178,6 +178,19 @@ public class FederalApplicationOracleService implements FederalApplicationServic
             });
   }
 
+  @Override
+  public Optional<FederalApplicationEditContext> findEditContext(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return repository
+        .findMutationContextRequired(applicationNumber)
+        .map(
+            context ->
+                new FederalApplicationEditContext(
+                    context.statusCode(), context.listingDate()));
+  }
+
   private FederalApplicationClientContextDto resolveClientContext(
       String clientNumber, String clientLocationCode) {
     if (trimToNull(clientNumber) == null || trimToNull(clientLocationCode) == null) {

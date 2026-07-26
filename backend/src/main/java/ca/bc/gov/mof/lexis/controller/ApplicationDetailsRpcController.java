@@ -21,6 +21,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.federal.FederalApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
@@ -137,6 +138,7 @@ public class ApplicationDetailsRpcController {
   private final ApplicationEditLockService editLockService;
   private final ProvincialAuthorizationService provincialAuthorizationService;
   private final ApplicationEditPolicyService applicationEditPolicyService;
+  private final FederalApplicationEditPolicyService federalApplicationEditPolicyService;
   private final ApplicationPermitOperationCoordinator operationCoordinator;
   private LexisPrincipalService principalService;
 
@@ -149,6 +151,7 @@ public class ApplicationDetailsRpcController {
       ApplicationEditLockService editLockService,
       ProvincialAuthorizationService provincialAuthorizationService,
       ApplicationEditPolicyService applicationEditPolicyService,
+      FederalApplicationEditPolicyService federalApplicationEditPolicyService,
       ApplicationPermitOperationCoordinator operationCoordinator) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
@@ -158,6 +161,7 @@ public class ApplicationDetailsRpcController {
     this.editLockService = editLockService;
     this.provincialAuthorizationService = provincialAuthorizationService;
     this.applicationEditPolicyService = applicationEditPolicyService;
+    this.federalApplicationEditPolicyService = federalApplicationEditPolicyService;
     this.operationCoordinator = operationCoordinator;
   }
 
@@ -366,6 +370,8 @@ public class ApplicationDetailsRpcController {
 
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     requireApplicationAccess(parsedApplicationNumber, authentication);
+    requireFederalRemarkEditIfApplicable(
+        service, parsedApplicationNumber, authentication);
     Long parsedRemarkId = parsePositiveLong(remarkId);
     if (parsedRemarkId != null) {
       requireRemarkAccess(service, parsedRemarkId, parsedApplicationNumber, authentication);
@@ -383,6 +389,8 @@ public class ApplicationDetailsRpcController {
         parsedApplicationNumber,
         () -> {
           requireApplicationAccess(parsedApplicationNumber, authentication);
+          requireFederalRemarkEditIfApplicable(
+              service, parsedApplicationNumber, authentication);
           if (parsedRemarkId != null) {
             requireRemarkAccess(
                 service, parsedRemarkId, parsedApplicationNumber, authentication);
@@ -1581,6 +1589,24 @@ public class ApplicationDetailsRpcController {
       throw new AccessDeniedException("Scale does not belong to the supplied application.");
     }
     provincialAuthorizationService.requireApplication(authentication, actualApplicationNumber);
+  }
+
+  private void requireFederalRemarkEditIfApplicable(
+      ApplicationDetailsRpcService service,
+      Long applicationNumber,
+      Authentication authentication) {
+    ApplicationDetailsRpcService.ApplicationEditContext context =
+        service
+            .getApplicationEditContext(applicationNumber)
+            .orElseThrow(
+                () ->
+                    new AccessDeniedException("Application edit state is unavailable."));
+    if ("F".equalsIgnoreCase(context.jurisdictionCode())) {
+      federalApplicationEditPolicyService.requireEdit(
+          authentication,
+          context.applicationStatusCode(),
+          context.advertisingDate());
+    }
   }
 
   private void requireRemarkAccess(

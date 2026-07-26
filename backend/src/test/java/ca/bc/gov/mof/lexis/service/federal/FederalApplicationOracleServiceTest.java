@@ -146,6 +146,26 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
+  void editContextShouldUseTheAuthoritativeFederalMutationContext() {
+    when(repository.findMutationContextRequired(1000456L))
+        .thenReturn(
+            Optional.of(
+                new FederalApplicationRepository.FederalMutationContextRow(
+                    1000456L,
+                    LocalDate.of(2026, 2, 20),
+                    1909L,
+                    "00077881",
+                    "00",
+                    "APP",
+                    LocalDate.of(2026, 2, 26))));
+
+    assertThat(service.findEditContext(1000456L))
+        .contains(
+            new FederalApplicationService.FederalApplicationEditContext(
+                "APP", LocalDate.of(2026, 2, 26)));
+  }
+
+  @Test
   void searchShouldFailClosedWhenRepositoryReturnsNoAuthoritativePage() {
     FederalApplicationSearchCriteria criteria =
         new FederalApplicationSearchCriteria(

@@ -131,6 +131,7 @@ lexis:
         - "/applicationSearch"
         - "/applicationDetails"
         - "/applicationRemarks"
+        - "/editCompletedApplications"
         - "/createExemption"
         - "/exemptionSearch"
         - "/exemptionDetails"
