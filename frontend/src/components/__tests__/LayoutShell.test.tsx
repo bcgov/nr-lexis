@@ -336,6 +336,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /^Upload$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Create\/Edit Exemption/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Create\/Edit Offer/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Application Report$/i })).not.toBeInTheDocument()
   })
 
   it('renders legacy report navigation when an auth mock omits roles', () => {
@@ -363,7 +364,10 @@ describe('Layout shell', () => {
       'href',
       '/reports/biweeklyListing',
     )
-    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^Application Report$/i })).toHaveAttribute(
+      'href',
+      '/reports/applicationReport',
+    )
     expect(screen.queryByRole('link', { name: /^Menu$/i })).not.toBeInTheDocument()
   })
 
