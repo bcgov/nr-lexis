@@ -595,7 +595,7 @@ describe('Provincial Exemption Search Actions', () => {
     ])
   })
 
-  it('debounces backend searches while text filters are typed', async () => {
+  it('waits for explicit submission while text filters are typed', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
@@ -608,6 +608,8 @@ describe('Provincial Exemption Search Actions', () => {
     }
 
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(1)

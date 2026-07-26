@@ -1,25 +1,23 @@
+import { ArrowRight, Logout } from '@carbon/icons-react'
 import { Button, Column, Grid } from '@carbon/react'
-import { Logout } from '@carbon/icons-react'
-import { useAuth } from '@/context/auth/useAuth'
-import { useTheme } from '@/context/theme/useTheme'
+import { useNavigate } from 'react-router-dom'
 import logo from '@/assets/BCID_H_rgb_pos.png'
 import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
 import landingImage from '@/assets/landing.jpg'
+import { useAuth } from '@/context/auth/useAuth'
+import { useTheme } from '@/context/theme/useTheme'
 
-const UnauthorizedPage = () => {
-  const { capabilities, logout } = useAuth()
+const ForbiddenPage = () => {
+  const navigate = useNavigate()
+  const { capabilities, defaultRoute, logout } = useAuth()
   const { theme } = useTheme()
   const logoSource = theme === 'g100' ? reverseLogo : logo
-  const signedInDescription = capabilities.principal
-    ? `You’re signed in as ${capabilities.principal}, but your account is not authorized to use LEXIS.`
-    : 'Your account is signed in, but it is not authorized to use LEXIS.'
+  const description = capabilities.principal
+    ? `${capabilities.principal}, your account does not have permission to use this part of LEXIS.`
+    : 'Your account does not have permission to use this part of LEXIS.'
 
   return (
-    <main
-      className="landing-grid-container unauthorized-landing"
-      id="main-content"
-      data-testid="unauthorized-page"
-    >
+    <div className="landing-grid-container forbidden-landing" data-testid="forbidden-page">
       <Grid fullWidth className="landing-grid">
         <Column className="landing-content-col" sm={4} md={8} lg={8}>
           <div className="landing-content-wrapper">
@@ -28,16 +26,17 @@ const UnauthorizedPage = () => {
             </div>
 
             <div className="landing-title-group">
-              <h1 className="landing-title">Access not granted</h1>
-              <p className="landing-subtitle">{signedInDescription}</p>
+              <h1 className="landing-title">You don't have access to view this page</h1>
+              <p className="landing-subtitle">{description}</p>
             </div>
 
             <div className="landing-actions">
+              <Button kind="primary" renderIcon={ArrowRight} onClick={() => navigate(defaultRoute)}>
+                Go to my landing page
+              </Button>
               <Button
-                type="button"
-                kind="secondary"
+                kind="tertiary"
                 renderIcon={Logout}
-                size="md"
                 onClick={() => {
                   void logout()
                 }}
@@ -52,8 +51,8 @@ const UnauthorizedPage = () => {
           <img src={landingImage} alt="British Columbia forest landscape" className="landing-img" />
         </Column>
       </Grid>
-    </main>
+    </div>
   )
 }
 
-export default UnauthorizedPage
+export default ForbiddenPage

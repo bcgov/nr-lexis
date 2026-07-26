@@ -2,6 +2,8 @@ import { DatePicker, DatePickerInput } from '@carbon/react'
 import type { ReactNode } from 'react'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 
+const ISO_DATE_INPUT_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`
+
 export type IsoDatePickerProps = {
   id: string
   labelText: ReactNode
@@ -41,6 +43,7 @@ export default function IsoDatePicker({
         id={id}
         labelText={labelText}
         placeholder="YYYY-MM-DD"
+        pattern={ISO_DATE_INPUT_PATTERN}
         data-1p-ignore="true"
         data-lpignore="true"
         invalid={invalid}

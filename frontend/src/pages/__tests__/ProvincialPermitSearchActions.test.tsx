@@ -118,7 +118,7 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
-  it('debounces backend searches while text filters are typed', async () => {
+  it('waits for explicit submission while text filters are typed', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
@@ -132,6 +132,8 @@ describe('Provincial Permit Search Actions', () => {
 
     expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
 
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
     await waitFor(() => {
       expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
       expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
@@ -143,7 +145,7 @@ describe('Provincial Permit Search Actions', () => {
     })
   })
 
-  it('persists the invoice number in URL-backed filters and clears it with the form', async () => {
+  it('submits the invoice number to URL-backed filters and clears it with the form', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage(
@@ -160,15 +162,23 @@ describe('Provincial Permit Search Actions', () => {
       ).toBe(true)
     })
 
+    mockedSearchProvincialPermits.mockClear()
     fireEvent.change(invoiceNumber, { target: { value: 'GBMS-4402' } })
+    let currentParams = new URLSearchParams(
+      screen.getByTestId('permit-search-location').textContent ?? '',
+    )
+    expect(currentParams.get('invoiceNumber')).toBe('SI-99881')
+    expect(currentParams.get('page')).toBe('3')
+    expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
     await waitFor(() => {
-      const currentParams = new URLSearchParams(
+      currentParams = new URLSearchParams(
         screen.getByTestId('permit-search-location').textContent ?? '',
       )
       expect(currentParams.get('invoiceNumber')).toBe('GBMS-4402')
       expect(currentParams.get('page')).toBe('1')
-    })
-    await waitFor(() => {
       expect(
         mockedSearchProvincialPermits.mock.calls.some(
           ([request]) => request.filters.invoiceNumber === 'GBMS-4402',

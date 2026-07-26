@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import ThemeProvider from '@/context/theme/ThemeProvider'
 import { getNoRoleRoutes } from '@/routes/routePaths'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
@@ -33,9 +34,14 @@ describe('No-role route behavior', () => {
       initialEntries: ['/provincial/application'],
     })
 
-    render(<RouterProvider router={router} />)
+    render(
+      <ThemeProvider>
+        <RouterProvider router={router} />
+      </ThemeProvider>,
+    )
 
-    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Access not granted' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/unauthorized')
+    expect(document.querySelector('.app-shell')).not.toBeInTheDocument()
   })
 })

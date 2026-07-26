@@ -177,7 +177,7 @@ describe('Federal Search Actions', () => {
     )
   })
 
-  it('debounces backend searches while text filters are typed', async () => {
+  it('waits for explicit submission while text filters are typed', async () => {
     renderPage()
     await screen.findByText('FED-1001')
     mockedSearchFederalApplications.mockClear()
@@ -188,6 +188,8 @@ describe('Federal Search Actions', () => {
     }
 
     expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(1)

@@ -124,7 +124,7 @@ describe('Provincial Offer Search Actions', () => {
     )
   })
 
-  it('debounces backend searches while text filters are typed', async () => {
+  it('waits for explicit submission while text filters are typed', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
@@ -136,7 +136,14 @@ describe('Provincial Offer Search Actions', () => {
       fireEvent.change(applicationNumberInput, { target: { value } })
     }
 
+    expect(applicationNumberInput).toHaveValue('46053')
     expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
+
+    const searchButton = screen.getByRole('button', { name: 'Search' })
+    expect(searchButton).toBeEnabled()
+    expect(searchButton).toHaveAttribute('type', 'submit')
+    expect(searchButton.closest('form')).toBeValid()
+    await userEvent.click(searchButton)
 
     await waitFor(() => {
       expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(1)

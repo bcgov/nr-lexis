@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Search } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -23,6 +22,7 @@ import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
+import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -63,7 +63,7 @@ import {
   parseSortDirectionParam,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedSearchFilters } from '@/pages/shared/useDebouncedValue'
+import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
@@ -261,13 +261,12 @@ const ProvincialReviewPage = () => {
       ),
     }
   }, [searchParams])
-  const filters = urlState.filters
+  const appliedFilters = urlState.filters
+  const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
-  const requestFilters = useDebouncedSearchFilters(filters, {
-    applicationNumber: filters.applicationNumber,
-  })
+  const requestFilters = appliedFilters
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setReviewActionStatus(null)
@@ -277,17 +276,10 @@ const ProvincialReviewPage = () => {
       key: K,
       value: ApplicationReviewSearchFilters[K],
     ) => {
-      const nextFilters = {
-        ...filters,
-        [key]: value,
-      }
       clearSelection()
-      setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
-        { replace: true },
-      )
+      setFilters((currentFilters) => ({ ...currentFilters, [key]: value }))
     },
-    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, setFilters],
   )
 
   const selectedRegions = useMemo(
@@ -481,14 +473,36 @@ const ProvincialReviewPage = () => {
   }, [])
 
   const onSearch = () => {
+    if (loading || hasDateValidationError) {
+      return
+    }
     clearSelection()
-    setSearchParams(
-      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    const nextSearchParams = buildSearchParams(
+      filters,
+      sortField,
+      sortDirection,
+      DEFAULT_SEARCH_PAGE,
+      pageSize,
     )
+    if (nextSearchParams.toString() === searchParams.toString()) {
+      void runSearch(
+        {
+          filters,
+          page: DEFAULT_SEARCH_PAGE - 1,
+          pageSize,
+          sortField,
+          sortDirection,
+        },
+        { force: true },
+      )
+      return
+    }
+    setSearchParams(nextSearchParams)
   }
 
   const onClearFilters = () => {
     clearSelection()
+    setFilters(INITIAL_FILTERS)
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -504,7 +518,7 @@ const ProvincialReviewPage = () => {
     const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     clearSelection()
     setSearchParams(
-      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+      buildSearchParams(appliedFilters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
     )
   }
 
@@ -817,7 +831,13 @@ const ProvincialReviewPage = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
-          <div className="provincial-review-filters-panel">
+          <form
+            className="provincial-review-filters-panel"
+            onSubmit={(event) => {
+              event.preventDefault()
+              onSearch()
+            }}
+          >
             <div className="legacy-search-grid provincial-review-search-grid">
               <TextInput
                 id="applicationNumber"
@@ -882,19 +902,12 @@ const ProvincialReviewPage = () => {
               />
             </div>
             <div className="legacy-search-actions" role="group" aria-label="Review search actions">
-              <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
+              <Button type="button" kind="tertiary" onClick={onClearFilters} disabled={loading}>
                 Clear Filters
               </Button>
-              <Button
-                kind="primary"
-                onClick={onSearch}
-                disabled={loading || hasDateValidationError}
-                renderIcon={Search}
-              >
-                Search
-              </Button>
+              <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
             </div>
-          </div>
+          </form>
         </section>
       </Column>
 
@@ -1198,7 +1211,7 @@ const ProvincialReviewPage = () => {
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(
-                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
                   )
                 }}
               />

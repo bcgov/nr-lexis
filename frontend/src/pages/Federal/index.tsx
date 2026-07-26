@@ -21,6 +21,7 @@ import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
+import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import StatusTag from '@/components/StatusTag'
@@ -55,7 +56,7 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedSearchFilters } from '@/pages/shared/useDebouncedValue'
+import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -172,13 +173,10 @@ const FederalPage = () => {
       ),
     }
   }, [searchParams])
-  const filters = urlState.filters
+  const appliedFilters = urlState.filters
+  const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const pageSize = urlState.pageSize
-  const requestFilters = useDebouncedSearchFilters(filters, {
-    applicationNumber: filters.applicationNumber,
-    packageNumber: filters.packageNumber,
-    clientNumber: filters.clientNumber,
-  })
+  const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
@@ -186,13 +184,10 @@ const FederalPage = () => {
   }, [])
   const updateFilter = useCallback(
     (key: keyof FederalApplicationSearchFilters, value: string) => {
-      const nextFilters = { ...filters, [key]: value }
       clearSelection()
-      setSearchParams(buildSearchParams(nextFilters, DEFAULT_SEARCH_PAGE, pageSize), {
-        replace: true,
-      })
+      setFilters((currentFilters) => ({ ...currentFilters, [key]: value }))
     },
-    [clearSelection, filters, pageSize, setSearchParams],
+    [clearSelection, setFilters],
   )
 
   const hasDateValidationError = useMemo(() => {
@@ -362,12 +357,28 @@ const FederalPage = () => {
   }, [])
 
   const onSearch = () => {
+    if (loading || hasDateValidationError) {
+      return
+    }
     clearSelection()
-    setSearchParams(buildSearchParams(filters, DEFAULT_SEARCH_PAGE, pageSize))
+    const nextSearchParams = buildSearchParams(filters, DEFAULT_SEARCH_PAGE, pageSize)
+    if (nextSearchParams.toString() === searchParams.toString()) {
+      void runSearch(
+        {
+          filters,
+          page: DEFAULT_SEARCH_PAGE - 1,
+          pageSize,
+        },
+        { force: true },
+      )
+      return
+    }
+    setSearchParams(nextSearchParams)
   }
 
   const onClearFilters = () => {
     clearSelection()
+    setFilters(INITIAL_FILTERS)
     setSearchParams(
       buildSearchParams(INITIAL_FILTERS, DEFAULT_SEARCH_PAGE, DEFAULT_SEARCH_PAGE_SIZE),
     )
@@ -478,106 +489,114 @@ const FederalPage = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters federal-application-search-filters">
           <Tile>
-            <div className="legacy-search-grid federal-application-search-grid">
-              <TextInput
-                id="applicationNumber"
-                labelText="Application number"
-                value={filters.applicationNumber}
-                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-              />
-              <TextInput
-                id="packageNumber"
-                labelText="Package number"
-                value={filters.packageNumber}
-                onChange={(event) => updateFilter('packageNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="applicationStatus"
-                labelText="Application status"
-                value={filters.applicationStatus}
-                placeholder="All statuses"
-                options={applicationStatusOptions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(value) => updateFilter('applicationStatus', value)}
-              />
-              {canFilterFederalByClient && (
+            <form
+              className="legacy-search-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                onSearch()
+              }}
+            >
+              <div className="legacy-search-grid federal-application-search-grid">
                 <TextInput
-                  id="clientNumber"
-                  labelText="Client number"
-                  value={filters.clientNumber}
-                  onChange={(event) => updateFilter('clientNumber', event.target.value)}
+                  id="applicationNumber"
+                  labelText="Application number"
+                  value={filters.applicationNumber}
+                  onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+                />
+                <TextInput
+                  id="packageNumber"
+                  labelText="Package number"
+                  value={filters.packageNumber}
+                  onChange={(event) => updateFilter('packageNumber', event.target.value)}
+                />
+                <SearchableSelect
+                  id="applicationStatus"
+                  labelText="Application status"
+                  value={filters.applicationStatus}
+                  placeholder="All statuses"
+                  options={applicationStatusOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('applicationStatus', value)}
+                />
+                {canFilterFederalByClient && (
+                  <TextInput
+                    id="clientNumber"
+                    labelText="Client number"
+                    value={filters.clientNumber}
+                    onChange={(event) => updateFilter('clientNumber', event.target.value)}
+                  />
+                )}
+                <IsoDatePicker
+                  id="receivedFromDate"
+                  labelText="Received from date"
+                  value={filters.receivedFromDate}
+                  invalid={!isValidIsoDate(filters.receivedFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('receivedFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="receivedToDate"
+                  labelText="Received to date"
+                  value={filters.receivedToDate}
+                  invalid={!isValidIsoDate(filters.receivedToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('receivedToDate', value)}
+                />
+                <IsoDatePicker
+                  id="listingFromDate"
+                  labelText="Listing from date"
+                  value={filters.listingFromDate}
+                  invalid={!isValidIsoDate(filters.listingFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('listingFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="listingToDate"
+                  labelText="Listing to date"
+                  value={filters.listingToDate}
+                  invalid={!isValidIsoDate(filters.listingToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('listingToDate', value)}
+                />
+              </div>
+              <div className="legacy-search-actions">
+                <Button
+                  type="button"
+                  kind="tertiary"
+                  onClick={onClearFilters}
+                  disabled={loading}
+                  size="md"
+                >
+                  Clear Filters
+                </Button>
+                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                {canCreateFederalExemption && (
+                  <DisabledButtonTooltip
+                    disabled={selectedRowsCount === 0}
+                    description="Select at least one eligible application."
+                  >
+                    <Button
+                      type="button"
+                      kind="secondary"
+                      size="md"
+                      onClick={onCreateExemptionClick}
+                      disabled={selectedRowsCount === 0}
+                    >
+                      Create exemption for Selected Applications
+                    </Button>
+                  </DisabledButtonTooltip>
+                )}
+              </div>
+              {exemptionSelectionStatus && (
+                <AppNotification
+                  className="legacy-inline-notification"
+                  kind={exemptionSelectionStatus.kind}
+                  title="Validation failed"
+                  subtitle={exemptionSelectionStatus.message}
+                  onCloseButtonClick={() => setExemptionSelectionStatus(null)}
                 />
               )}
-              <IsoDatePicker
-                id="receivedFromDate"
-                labelText="Received from date"
-                value={filters.receivedFromDate}
-                invalid={!isValidIsoDate(filters.receivedFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('receivedFromDate', value)}
-              />
-              <IsoDatePicker
-                id="receivedToDate"
-                labelText="Received to date"
-                value={filters.receivedToDate}
-                invalid={!isValidIsoDate(filters.receivedToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('receivedToDate', value)}
-              />
-              <IsoDatePicker
-                id="listingFromDate"
-                labelText="Listing from date"
-                value={filters.listingFromDate}
-                invalid={!isValidIsoDate(filters.listingFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingFromDate', value)}
-              />
-              <IsoDatePicker
-                id="listingToDate"
-                labelText="Listing to date"
-                value={filters.listingToDate}
-                invalid={!isValidIsoDate(filters.listingToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingToDate', value)}
-              />
-            </div>
-            <div className="legacy-search-actions">
-              <Button
-                kind="primary"
-                onClick={onSearch}
-                disabled={loading || hasDateValidationError}
-                size="md"
-              >
-                Search
-              </Button>
-              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-                Clear Filters
-              </Button>
-              {canCreateFederalExemption && (
-                <DisabledButtonTooltip
-                  disabled={selectedRowsCount === 0}
-                  description="Select at least one eligible application."
-                >
-                  <Button
-                    kind="secondary"
-                    size="md"
-                    onClick={onCreateExemptionClick}
-                    disabled={selectedRowsCount === 0}
-                  >
-                    Create exemption for Selected Applications
-                  </Button>
-                </DisabledButtonTooltip>
-              )}
-            </div>
-            {exemptionSelectionStatus && (
-              <AppNotification
-                className="legacy-inline-notification"
-                kind={exemptionSelectionStatus.kind}
-                title="Validation failed"
-                subtitle={exemptionSelectionStatus.message}
-                onCloseButtonClick={() => setExemptionSelectionStatus(null)}
-              />
-            )}
+            </form>
           </Tile>
         </section>
       </Column>
@@ -712,7 +731,7 @@ const FederalPage = () => {
                 totalItems={results.page.totalElements}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
-                  setSearchParams(buildSearchParams(filters, page, nextPageSize))
+                  setSearchParams(buildSearchParams(appliedFilters, page, nextPageSize))
                 }}
               />
             )}

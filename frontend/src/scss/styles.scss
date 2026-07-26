@@ -200,6 +200,7 @@ body {
   z-index: 9001;
 }
 
+:root[data-carbon-theme='g100'],
 .cds--g100 .app-shell {
   --csp-button-primary: var(--csp-brand-blue);
   --csp-interactive: var(--csp-brand-blue);
@@ -1149,16 +1150,9 @@ legend.cds--label {
   flex-wrap: wrap;
 }
 
-.unauthorized-page {
-  max-width: 56rem;
-  margin: 2rem auto;
-}
-
-.unauthorized-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: center;
+.unauthorized-landing .landing-actions,
+.forbidden-landing .landing-actions {
+  margin-top: 4rem;
 }
 
 .dashboard-title {
@@ -1342,6 +1336,13 @@ legend.cds--label {
   border: 0;
   border-radius: 4px;
   overflow: visible;
+}
+
+.legacy-search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-inline-size: 0;
 }
 
 @media (max-width: 671px) {
@@ -1859,32 +1860,17 @@ legend.cds--label {
   color: inherit;
 }
 
-.legacy-search-table-content.is-loading {
-  opacity: 0.55;
-  pointer-events: none;
-}
-
-.legacy-search-table-loader {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  display: flex;
+.legacy-search-result-loading {
   align-items: center;
-  justify-content: center;
-  pointer-events: none;
+  display: flex;
+  min-block-size: 3rem;
 }
 
-.legacy-search-table-loader .cds--inline-loading {
+.legacy-search-result-loading .cds--inline-loading {
   inline-size: auto;
-  max-inline-size: min(90%, 24rem);
-  min-height: 2.5rem;
-  padding: 0.5rem 0.875rem;
-  background: var(--cds-layer);
-  border: 1px solid var(--cds-border-subtle);
-  box-shadow: 0 2px 6px rgb(0 0 0 / 15%);
 }
 
-.legacy-search-table-loader .cds--inline-loading__text {
+.legacy-search-result-loading .cds--inline-loading__text {
   white-space: normal;
 }
 

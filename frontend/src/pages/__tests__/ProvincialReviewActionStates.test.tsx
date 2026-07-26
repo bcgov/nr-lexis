@@ -305,7 +305,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByText('1212.0')).toBeInTheDocument()
   })
 
-  it('debounces backend searches while the application number is typed', async () => {
+  it('waits for explicit submission while the application number is typed', async () => {
     renderPage()
     await screen.findByText('1000123')
     mockedSearchApplicationReviews.mockClear()
@@ -316,6 +316,8 @@ describe('Provincial Review Action State Smoke', () => {
     }
 
     expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
@@ -907,6 +909,9 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: 'TST' } })
     await userEvent.click(await screen.findByRole('option', { name: 'TST' }))
+
+    expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(

@@ -290,6 +290,39 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await installSyntheticLexisApi(page)
   })
 
+  test('keeps route-level permission denial distinct from the no-role landing', async ({
+    page,
+  }) => {
+    await page.route('**/api/lexis/session/capabilities', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...authenticatedAdminSession,
+          principal: 'UI.READONLY',
+          roles: ['READ_ONLY'],
+          welcomeTarget: '/provincial/application',
+          grantedActions: ['/applicationSearch'],
+        }),
+      })
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/admin/policies', { waitUntil: 'domcontentloaded' })
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: "You don't have access to view this page" }),
+    ).toBeVisible()
+    await expect(page.locator('.app-shell')).toBeVisible()
+    await expect(page.getByTestId('forbidden-page')).toHaveClass(/landing-grid-container/)
+    await expect(page.getByRole('button', { name: 'Go to my landing page' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    const pageWidth = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(pageWidth.scrollWidth).toBeLessThanOrEqual(pageWidth.clientWidth)
+  })
+
   test('renders the authenticated search composition and persists UI preferences', async ({
     page,
   }) => {

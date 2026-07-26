@@ -16,7 +16,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableHeader,
   TableRow,
@@ -24,6 +23,7 @@ import {
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import PageHeader from '@/components/PageHeader'
+import TableFrame from '@/components/TableFrame'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   saveRtmEmsLogAmvBatch,
@@ -647,7 +647,7 @@ const RTMEmsLogAmvPage = () => {
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-content">
         <section
           className="admin-upload-panel rtm-amv-toolbar"
-          aria-labelledby="rtm-amv-table-title"
+          aria-label="Average monthly values controls"
         >
           <div className="rtm-amv-toolbar__controls">
             <TextInput
@@ -787,75 +787,72 @@ const RTMEmsLogAmvPage = () => {
             <p>Each cell represents one species and grade for the selected effective month.</p>
           </div>
 
-          <div className="rtm-amv-table-wrap">
-            <TableContainer>
-              <Table size="lg" useZebraStyles aria-label="Average monthly value table">
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Grade</TableHeader>
-                    {RTM_AMV_SPECIES_COLUMNS.map((column) => (
-                      <TableHeader key={column.key}>{column.label}</TableHeader>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody key={loadedDate}>
-                  {availableGrades.map((grade) => (
-                    <TableRow key={grade}>
-                      <TableCell className="rtm-amv-grade-cell">{grade}</TableCell>
-                      {RTM_AMV_SPECIES_COLUMNS.map((column) => {
-                        const cell = cells.find(
-                          (candidate) =>
-                            candidate.key ===
-                            buildCellKey(RTM_AMV_DISPLAY_GROWTH, grade, column.key),
-                        )
-                        if (!cell) {
-                          return <TableCell key={column.key} />
-                        }
-
-                        const cellClassName = [
-                          'rtm-amv-value-cell',
-                          cell.dirty ? 'is-dirty' : '',
-                          cell.changeKind ? `is-${cell.changeKind}` : '',
-                          cell.warning ? 'has-warning' : '',
-                          cell.validationError ? 'has-error' : '',
-                          cell.hasMixedCurrentValues || cell.hasMixedPreviousValues
-                            ? 'has-mixed-values'
-                            : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')
-
-                        return (
-                          <TableCell key={column.key} className={cellClassName}>
-                            <label className="rtm-amv-cell-input-label">
-                              <span>{`${column.label} grade ${grade}`}</span>
-                              <input
-                                className="rtm-amv-cell-input"
-                                inputMode="decimal"
-                                aria-label={`${column.label} grade ${grade}`}
-                                aria-invalid={Boolean(cell.validationError)}
-                                aria-describedby={
-                                  cell.validationError ? 'rtm-amv-validation-summary' : undefined
-                                }
-                                placeholder={cell.hasCurrentValue ? undefined : '-'}
-                                value={cell.value}
-                                disabled={isReadOnly}
-                                onChange={(event) => updateCellValue(cell.key, event.target.value)}
-                                onBlur={() => ignoreClearedExistingCell(cell)}
-                              />
-                            </label>
-                            {cell.hasMixedCurrentValues && (
-                              <span className="rtm-amv-cell-note">Multiple values</span>
-                            )}
-                          </TableCell>
-                        )
-                      })}
-                    </TableRow>
+          <TableFrame className="rtm-amv-table-wrap" ariaLabel="Average monthly values table">
+            <Table size="lg" useZebraStyles aria-label="Average monthly value table">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Grade</TableHeader>
+                  {RTM_AMV_SPECIES_COLUMNS.map((column) => (
+                    <TableHeader key={column.key}>{column.label}</TableHeader>
                   ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </div>
+                </TableRow>
+              </TableHead>
+              <TableBody key={loadedDate}>
+                {availableGrades.map((grade) => (
+                  <TableRow key={grade}>
+                    <TableCell className="rtm-amv-grade-cell">{grade}</TableCell>
+                    {RTM_AMV_SPECIES_COLUMNS.map((column) => {
+                      const cell = cells.find(
+                        (candidate) =>
+                          candidate.key === buildCellKey(RTM_AMV_DISPLAY_GROWTH, grade, column.key),
+                      )
+                      if (!cell) {
+                        return <TableCell key={column.key} />
+                      }
+
+                      const cellClassName = [
+                        'rtm-amv-value-cell',
+                        cell.dirty ? 'is-dirty' : '',
+                        cell.changeKind ? `is-${cell.changeKind}` : '',
+                        cell.warning ? 'has-warning' : '',
+                        cell.validationError ? 'has-error' : '',
+                        cell.hasMixedCurrentValues || cell.hasMixedPreviousValues
+                          ? 'has-mixed-values'
+                          : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')
+
+                      return (
+                        <TableCell key={column.key} className={cellClassName}>
+                          <label className="rtm-amv-cell-input-label">
+                            <span>{`${column.label} grade ${grade}`}</span>
+                            <input
+                              className="rtm-amv-cell-input"
+                              inputMode="decimal"
+                              aria-label={`${column.label} grade ${grade}`}
+                              aria-invalid={Boolean(cell.validationError)}
+                              aria-describedby={
+                                cell.validationError ? 'rtm-amv-validation-summary' : undefined
+                              }
+                              placeholder={cell.hasCurrentValue ? undefined : '-'}
+                              value={cell.value}
+                              disabled={isReadOnly}
+                              onChange={(event) => updateCellValue(cell.key, event.target.value)}
+                              onBlur={() => ignoreClearedExistingCell(cell)}
+                            />
+                          </label>
+                          {cell.hasMixedCurrentValues && (
+                            <span className="rtm-amv-cell-note">Multiple values</span>
+                          )}
+                        </TableCell>
+                      )
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableFrame>
         </section>
 
         <div className="admin-upload-fspts-button-row rtm-amv-actions">

@@ -7,6 +7,7 @@ import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
+import ForbiddenPage from '@/pages/Forbidden'
 import UnauthorizedPage from '@/pages/Unauthorized'
 import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
 
@@ -490,10 +491,10 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/unauthorized',
-    id: 'Unauthorized',
+    id: 'Forbidden',
     element: (
       <Layout>
-        <UnauthorizedPage />
+        <ForbiddenPage />
       </Layout>
     ),
     isNavigation: false,
@@ -517,11 +518,7 @@ export const getNoRoleRoutes = (): RouteDescription[] => {
     {
       path: '/unauthorized',
       id: 'Unauthorized',
-      element: (
-        <Layout>
-          <UnauthorizedPage />
-        </Layout>
-      ),
+      element: <UnauthorizedPage />,
       isNavigation: false,
     },
     {

@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import ThemeProvider from '@/context/theme/ThemeProvider'
 import { getProtectedRoutes } from '@/routes/routePaths'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
@@ -27,7 +28,11 @@ const renderWithPath = (path: string) => {
   const router = createMemoryRouter(getProtectedRoutes(), {
     initialEntries: [path],
   })
-  render(<RouterProvider router={router} />)
+  render(
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>,
+  )
 }
 
 const findLazyPageHeading = (name: string) =>
@@ -54,7 +59,13 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/admin/uploads')
 
-    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('forbidden-page')).toHaveClass('landing-grid-container')
+    expect(screen.getByRole('img', { name: 'Government of British Columbia' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Go to my landing page' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible()
   })
 
   it('rejects generic data upload when only a supporting-document action is granted', async () => {
@@ -70,7 +81,9 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/admin/uploads?type=application')
 
-    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
   })
 
   it('allows generic data upload when the admin upload action is granted', async () => {
@@ -105,7 +118,9 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/admin/uploads?type=lexisXml')
 
-    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
   })
 
   it('allows application submission upload route when submission upload is granted', async () => {
@@ -164,7 +179,9 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
   })
 
   it('allows BCEID advertising-list-only users to open the reports route', async () => {
@@ -209,7 +226,9 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/admin')
 
-    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
   })
 
   it('allows the RTM protected route when PROD RTM-only mode is enabled', async () => {

@@ -311,7 +311,10 @@ describe('Admin tool access smoke', () => {
 
     expect(screen.getByRole('button', { name: 'Search IDIR' })).toBeDisabled()
     expect(screen.getByText('Loading IDIR identities...')).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Search IDIR identities' })).toBeVisible()
+    expect(screen.getByRole('table', { name: 'Loading IDIR identities...' })).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: 'Search IDIR identities' }),
+    ).not.toBeInTheDocument()
 
     resolveSearch({
       results: [],

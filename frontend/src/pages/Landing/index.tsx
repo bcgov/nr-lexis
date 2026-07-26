@@ -9,12 +9,16 @@ import {
   hasSessionExpiredLoginNotice,
 } from '@/context/auth/session-expiry'
 import { useAuth } from '@/context/auth/useAuth'
+import { useTheme } from '@/context/theme/useTheme'
 import logo from '@/assets/BCID_H_rgb_pos.png'
+import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
 import landingImage from '@/assets/landing.jpg'
 
 const LandingPage = () => {
   const navigate = useNavigate()
   const { defaultRoute, isLoading, isLoggedIn, login, usesExternalLogin } = useAuth()
+  const { theme } = useTheme()
+  const logoSource = theme === 'g100' ? reverseLogo : logo
 
   const [errorMessage, setErrorMessage] = useState('')
   const [showSessionExpiredMessage] = useState(hasSessionExpiredLoginNotice)
@@ -47,7 +51,7 @@ const LandingPage = () => {
         <Column className="landing-content-col" sm={4} md={8} lg={9}>
           <div className="landing-content-wrapper">
             <div className="landing-logo-mark">
-              <img src={logo} alt="Government of British Columbia" className="landing-logo" />
+              <img src={logoSource} alt="Government of British Columbia" className="landing-logo" />
             </div>
 
             <div className="landing-title-group">

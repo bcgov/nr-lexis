@@ -439,12 +439,19 @@ describe('Provincial Application Search Actions', () => {
       screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
     ).toBeEnabled()
 
+    mockedSearchProvincialApplications.mockClear()
     await userEvent.type(screen.getByLabelText('Application number'), '9')
 
     await waitFor(() => {
       expect(
         screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
       ).toBeDisabled()
+    })
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({
@@ -470,7 +477,7 @@ describe('Provincial Application Search Actions', () => {
     )
   })
 
-  it('auto-searches applications assigned by the export schedule link', async () => {
+  it('loads an export schedule link and explicitly submits its removal', async () => {
     renderPage('/provincial/application?exportScheduleId=1002')
     await screen.findByText('321')
 
@@ -478,8 +485,20 @@ describe('Provincial Application Search Actions', () => {
     expect(
       screen.getByText('Showing applications assigned to export schedule 1002.'),
     ).toBeInTheDocument()
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          exportScheduleId: '1002',
+        }),
+      }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
+    )
 
+    mockedSearchProvincialApplications.mockClear()
     await userEvent.click(screen.getByRole('button', { name: /close notification/i }))
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
@@ -491,18 +510,9 @@ describe('Provincial Application Search Actions', () => {
         expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
-
-    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({
-          exportScheduleId: '1002',
-        }),
-      }),
-      expect.objectContaining({ knownTotal: expect.any(Number) }),
-    )
   })
 
-  it('debounces backend searches while filters are typed', async () => {
+  it('waits for explicit submission while filters are typed', async () => {
     renderPage()
     await screen.findByText('321')
     mockedSearchProvincialApplications.mockClear()
@@ -513,6 +523,8 @@ describe('Provincial Application Search Actions', () => {
     }
 
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
@@ -527,7 +539,7 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('searches immediately when a date filter changes', async () => {
+  it('submits date filter changes explicitly', async () => {
     renderPage()
     await screen.findByText('321')
     mockedSearchProvincialApplications.mockClear()
@@ -536,13 +548,24 @@ describe('Provincial Application Search Actions', () => {
       target: { value: '2026-07-24' },
     })
 
-    expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
-    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({ receivedFromDate: '2026-07-24' }),
-      }),
-      expect.any(Object),
-    )
+    expect(screen.getByLabelText('Received from date')).toHaveValue('2026-07-24')
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+
+    const searchButton = screen.getByRole('button', { name: 'Search' })
+    expect(searchButton).toBeEnabled()
+    expect(searchButton).toHaveAttribute('type', 'submit')
+    expect(searchButton.closest('form')).toBeValid()
+    await userEvent.click(searchButton)
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ receivedFromDate: '2026-07-24' }),
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('sends selected region org unit numbers to the application search request', async () => {
@@ -597,57 +620,33 @@ describe('Provincial Application Search Actions', () => {
     ).toBeEnabled()
   })
 
-  it('ignores stale search responses that resolve after a newer search', async () => {
+  it('prevents duplicate submissions while a search is in flight', async () => {
     renderPage()
     await screen.findByText('321')
     mockedSearchProvincialApplications.mockReset()
 
-    let resolveFirstSearch: (
-      value: Awaited<ReturnType<typeof searchProvincialApplications>>,
-    ) => void
-    let resolveSecondSearch: (
-      value: Awaited<ReturnType<typeof searchProvincialApplications>>,
-    ) => void
-    mockedSearchProvincialApplications
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveFirstSearch = resolve
-        }),
-      )
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveSecondSearch = resolve
-        }),
-      )
+    let resolveSearch: (value: Awaited<ReturnType<typeof searchProvincialApplications>>) => void
+    mockedSearchProvincialApplications.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSearch = resolve
+      }),
+    )
 
     const applicationNumberInput = screen.getByLabelText('Application number')
     await userEvent.type(applicationNumberInput, '1')
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
     })
 
     await userEvent.type(applicationNumberInput, '2')
-    await waitFor(() => {
-      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(2)
-    })
+    const searchForm = screen.getByRole('button', { name: 'Searching...' }).closest('form')
+    expect(searchForm).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Searching...' })).toBeDisabled()
+    fireEvent.submit(searchForm!)
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
 
-    resolveSecondSearch!({
-      content: [
-        {
-          ...searchRowsWithMixedEligibility[0],
-          applicationNumber: '222',
-        },
-      ],
-      page: {
-        number: 0,
-        size: 10,
-        totalElements: 1,
-        totalPages: 1,
-      },
-    })
-    expect(await screen.findByText('222')).toBeInTheDocument()
-
-    resolveFirstSearch!({
+    resolveSearch!({
       content: [
         {
           ...searchRowsWithMixedEligibility[0],
@@ -661,11 +660,8 @@ describe('Provincial Application Search Actions', () => {
         totalPages: 1,
       },
     })
-
-    await waitFor(() => {
-      expect(screen.queryByText('111')).not.toBeInTheDocument()
-      expect(screen.getByText('222')).toBeInTheDocument()
-    })
+    expect(await screen.findByText('111')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
   })
 
   it('shows a request failure instead of a no-results state', async () => {

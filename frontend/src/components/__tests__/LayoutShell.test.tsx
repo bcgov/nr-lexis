@@ -1,9 +1,10 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Layout from '../Layout'
 import { useAuth } from '@/context/auth/useAuth'
+import ThemeProvider from '@/context/theme/ThemeProvider'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
@@ -40,12 +41,14 @@ const LocationProbe = () => {
 
 const renderLayout = (path: string) => {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Layout>
-        <h1>Current page content</h1>
-      </Layout>
-      <LocationProbe />
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Layout>
+          <h1>Current page content</h1>
+        </Layout>
+        <LocationProbe />
+      </MemoryRouter>
+    </ThemeProvider>,
   )
 }
 
@@ -495,6 +498,27 @@ describe('Layout shell', () => {
     expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
     expect(profilePanel).toHaveAttribute('inert')
     expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+  })
+
+  it('shows the user role and available organization context in the profile panel', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\analyst',
+          roles: ['READ_ONLY'],
+          orgUnitNo: '1903',
+          forestClientNumber: '00012345',
+        }),
+      }),
+    )
+
+    renderLayout('/admin/rtm/emslogamv')
+    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+
+    const profilePanel = screen.getByRole('dialog', { name: 'Profile' })
+    expect(within(profilePanel).getByText('idir\\analyst (Read Only)')).toBeVisible()
+    expect(within(profilePanel).getByText('Organization unit: 1903')).toBeVisible()
+    expect(within(profilePanel).getByText('Forest client: 00012345')).toBeVisible()
   })
 
   it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {

@@ -19,6 +19,7 @@ describe('IsoDatePicker', () => {
 
     expect(input).toHaveAttribute('data-1p-ignore', 'true')
     expect(input).toHaveAttribute('data-lpignore', 'true')
+    expect(input).toHaveAttribute('pattern', String.raw`\d{4}-\d{2}-\d{2}`)
   })
 
   it('renders an initial ISO date value', () => {

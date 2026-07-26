@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import SearchResultsTableFrame from '../SearchResultsTableFrame'
 
 describe('SearchResultsTableFrame', () => {
-  it('marks the table frame busy and shows centered loading copy while loading', () => {
+  it('replaces stale rows with a labelled table skeleton while loading', () => {
     const { container } = render(
       <SearchResultsTableFrame loading loadingDescription="Loading search results...">
         <table>
@@ -21,9 +21,9 @@ describe('SearchResultsTableFrame', () => {
       'aria-busy',
       'true',
     )
-    expect(screen.getByRole('region', { name: 'Search results table' })).toHaveAttribute('inert')
     expect(screen.getByText('Loading search results...')).toBeInTheDocument()
-    expect(screen.getByText('Existing rows')).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Loading search results...' })).toBeInTheDocument()
+    expect(screen.queryByText('Existing rows')).not.toBeInTheDocument()
   })
 
   it('omits the loading indicator when the table frame is not loading', () => {
