@@ -51,6 +51,10 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_END_USE_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
+  private static final String FIND_CANDIDATE_EXCOL_VALUES =
+      LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_REMARKS_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_REMARKS_BY_APP(?,?)";
   private static final String UPDATE_EXEMPTION_APPLICATION =
@@ -424,6 +428,17 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   private Map<Long, String> legacySpeciesEndUseSorts(List<ReviewSearchRow> rows) {
+    try {
+      return batchLegacySpeciesEndUseSorts(rows);
+    } catch (DataAccessException ex) {
+      logger.warn(
+          "event=lexis_application_review operation=batch_sort_enrichment outcome=procedure_fallback failureType={}",
+          exceptionType(ex));
+      return legacySpeciesEndUseSortsWithProcedures(rows);
+    }
+  }
+
+  private Map<Long, String> batchLegacySpeciesEndUseSorts(List<ReviewSearchRow> rows) {
     if (rows == null || rows.isEmpty()) {
       return Map.of();
     }
@@ -511,6 +526,44 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     return sorts;
   }
 
+  private Map<Long, String> legacySpeciesEndUseSortsWithProcedures(
+      List<ReviewSearchRow> rows) {
+    if (rows == null || rows.isEmpty()) {
+      return Map.of();
+    }
+
+    Map<Long, String> sorts = new LinkedHashMap<>();
+    for (ReviewSearchRow row : rows) {
+      if (row.applicationNumber() == null
+          || row.applicationNumber() < 1
+          || row.orgUnitNo() == null
+          || row.orgUnitNo() < 1) {
+        continue;
+      }
+
+      List<EndUseSortRow> endUses =
+          findEndUsesByApplicationNumber(row.applicationNumber());
+      if (endUses.isEmpty()) {
+        continue;
+      }
+
+      EndUseSortRow firstEndUse = endUses.get(0);
+      List<String> candidates =
+          findCandidateExcolCodes(
+              endUses.size(),
+              firstEndUse.speciesCode(),
+              firstEndUse.endUseCode(),
+              row.orgUnitNo());
+      String sort =
+          legacySpeciesEndUseSort(
+              row.productTypeCode(), endUses, firstEndUse, candidates);
+      if (sort != null) {
+        sorts.put(row.applicationNumber(), sort);
+      }
+    }
+    return sorts;
+  }
+
   protected List<EndUseSortRow> findEndUsesByApplicationNumbers(
       Collection<Long> applicationNumbers) {
     List<Long> normalized =
@@ -534,25 +587,18 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
          WHERE APPLICATION_NUMBER IN (%s)
         """
             .formatted(placeholders(normalized.size()));
-    try {
-      return jdbcTemplate.query(
-          sql,
-          ps -> {
-            for (int index = 0; index < normalized.size(); index++) {
-              ps.setLong(index + 1, normalized.get(index));
-            }
-          },
-          (rs, rowNumber) ->
-              new EndUseSortRow(
-                  getLong(rs, "APPLICATION_NUMBER"),
-                  getString(rs, "EXPORT_SPECIES_CODE"),
-                  getString(rs, "EXPORT_END_USE_CODE")));
-    } catch (DataAccessException ex) {
-      logger.warn(
-          "event=lexis_application_review operation=batch_end_use_enrichment outcome=failed failureType={}",
-          exceptionType(ex));
-      return List.of();
-    }
+    return jdbcTemplate.query(
+        sql,
+        ps -> {
+          for (int index = 0; index < normalized.size(); index++) {
+            ps.setLong(index + 1, normalized.get(index));
+          }
+        },
+        (rs, rowNumber) ->
+            new EndUseSortRow(
+                getLong(rs, "APPLICATION_NUMBER"),
+                getString(rs, "EXPORT_SPECIES_CODE"),
+                getString(rs, "EXPORT_END_USE_CODE")));
   }
 
   protected List<ExcolCandidateRow> findCandidateExcolRows(
@@ -593,33 +639,64 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 placeholders(normalizedOrgUnits.size()),
                 placeholders(normalizedSpecies.size()),
                 placeholders(normalizedEndUses.size()));
-    try {
-      return jdbcTemplate.query(
-          sql,
-          ps -> {
-            int index = 1;
-            for (Long orgUnitNumber : normalizedOrgUnits) {
-              ps.setLong(index++, orgUnitNumber);
-            }
-            for (String speciesCode : normalizedSpecies) {
-              ps.setString(index++, speciesCode);
-            }
-            for (String endUseCode : normalizedEndUses) {
-              ps.setString(index++, endUseCode);
-            }
-          },
-          (rs, rowNumber) ->
-              new ExcolCandidateRow(
-                  getLong(rs, "ORG_UNIT_NO"),
-                  getString(rs, "EXPORT_SPECIES_CODE"),
-                  getString(rs, "EXPORT_END_USE_CODE"),
-                  getString(rs, "EXCOL_TRANSLATION_VALUE")));
-    } catch (DataAccessException ex) {
-      logger.warn(
-          "event=lexis_application_review operation=batch_excol_enrichment outcome=failed failureType={}",
-          exceptionType(ex));
+    return jdbcTemplate.query(
+        sql,
+        ps -> {
+          int index = 1;
+          for (Long orgUnitNumber : normalizedOrgUnits) {
+            ps.setLong(index++, orgUnitNumber);
+          }
+          for (String speciesCode : normalizedSpecies) {
+            ps.setString(index++, speciesCode);
+          }
+          for (String endUseCode : normalizedEndUses) {
+            ps.setString(index++, endUseCode);
+          }
+        },
+        (rs, rowNumber) ->
+            new ExcolCandidateRow(
+                getLong(rs, "ORG_UNIT_NO"),
+                getString(rs, "EXPORT_SPECIES_CODE"),
+                getString(rs, "EXPORT_END_USE_CODE"),
+                getString(rs, "EXCOL_TRANSLATION_VALUE")));
+  }
+
+  protected List<EndUseSortRow> findEndUsesByApplicationNumber(
+      Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
+    return queryCursorProcedure(
+        FIND_END_USE_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new EndUseSortRow(
+                applicationNumber,
+                getString(rs, "EXPORT_SPECIES_CODE"),
+                getString(rs, "EXPORT_END_USE_CODE")));
+  }
+
+  protected List<String> findCandidateExcolCodes(
+      int speciesCount, String speciesCode, String endUseCode, Long orgUnitNo) {
+    String pattern = excolPattern(speciesCount);
+    if (pattern == null
+        || speciesCode == null
+        || endUseCode == null
+        || orgUnitNo == null
+        || orgUnitNo < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_CANDIDATE_EXCOL_VALUES,
+        cs -> {
+          cs.setString(1, pattern);
+          cs.setString(2, speciesCode);
+          cs.setString(3, endUseCode);
+          cs.setLong(4, orgUnitNo);
+        },
+        5,
+        rs -> getString(rs, "EXCOL_TRANSLATION_VALUE"));
   }
 
   private String legacySpeciesEndUseSort(
