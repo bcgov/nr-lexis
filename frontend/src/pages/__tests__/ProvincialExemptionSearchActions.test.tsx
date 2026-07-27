@@ -425,6 +425,14 @@ describe('Provincial Exemption Search Actions', () => {
     expect(
       within(notificationDialog).getByLabelText('Recipient for exemption TEST-EX-002'),
     ).toHaveValue('second@example.test')
+    const skipNotifications = within(notificationDialog).getByRole('button', {
+      name: 'Skip notifications',
+    })
+    const sendAll = within(notificationDialog).getByRole('button', { name: 'Send all' })
+    expect(skipNotifications).toHaveClass('cds--btn--secondary')
+    expect(sendAll).toHaveClass('cds--btn--primary')
+    expect(skipNotifications.parentElement).toHaveClass('lexis-confirmation-modal__actions')
+    expect(notificationDialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()
   })
 
   it('reports partial approval details, keeps failures selected, and emails only successes', async () => {

@@ -153,7 +153,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 "region", "OU.ORG_UNIT_NAME",
                 "offeringClientNumber", "PO.OFFERING_CLIENT_NUMBER"),
             "offerNumber",
-            "DESC");
+            "DESC",
+            "offerNumber");
 
     return where.build(orderBy);
   }

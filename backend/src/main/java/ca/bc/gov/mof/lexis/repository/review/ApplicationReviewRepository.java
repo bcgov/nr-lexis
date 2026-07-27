@@ -160,7 +160,8 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 "regionCode", "v.REGION_CODE",
                 "region", "v.REGION_CODE"),
             "applicationNumber",
-            "DESC");
+            "DESC",
+            "applicationNumber");
 
     return where.build(orderBy);
   }
