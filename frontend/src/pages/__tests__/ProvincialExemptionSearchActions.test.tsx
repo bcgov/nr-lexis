@@ -286,6 +286,48 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.queryByText('Approval failed')).not.toBeInTheDocument()
   })
 
+  it('reports an exemption approval failure reason and keeps the failed row selected', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedApproveExemptions.mockResolvedValueOnce({
+      success: true,
+      valid: false,
+      sendGrid: [],
+      errorMessage:
+        'Failed to approve invalid exemption EX-1001:</br>*Active ministerial exemptions require at least one application.</br>',
+      errors: [],
+      warnings: [],
+    })
+
+    renderPage()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+
+    const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    await userEvent.click(
+      within(approvalDialog).getByRole('checkbox', {
+        name: 'I certify that this exemption has been approved.',
+      }),
+    )
+    await userEvent.click(
+      within(approvalDialog).getByRole('button', { name: 'Approve exemptions' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'No selected exemptions were approved; 1 failed. Failed exemptions: EX-1001 — Failed to approve invalid exemption EX-1001: Active ministerial exemptions require at least one application.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Approval failed')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeChecked()
+    expect(
+      screen.queryByRole('dialog', { name: 'Send approval notification' }),
+    ).not.toBeInTheDocument()
+    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
+  })
+
   it('approves selected exemptions one at a time with a freshly loaded version', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
@@ -383,6 +425,103 @@ describe('Provincial Exemption Search Actions', () => {
     expect(
       within(notificationDialog).getByLabelText('Recipient for exemption TEST-EX-002'),
     ).toHaveValue('second@example.test')
+  })
+
+  it('reports partial approval details, keeps failures selected, and emails only successes', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        {
+          exemptionNumber: 'TEST-EX-001',
+          type: 'Ministerial',
+          typeCode: 'M',
+          status: 'New',
+          statusCode: 'NEW',
+          applicantClientNumber: 'TEST0001',
+          ownerClientNumber: 'TEST0002',
+          approvedVolume: 100,
+          balanceRemaining: 100,
+          listingDate: '2026-01-10',
+          expiryDate: '2026-12-31',
+          region: '11',
+          canApprove: true,
+          isLocked: false,
+          canViewExemption: true,
+        },
+        {
+          exemptionNumber: 'TEST-EX-002',
+          type: 'Ministerial',
+          typeCode: 'M',
+          status: 'New',
+          statusCode: 'NEW',
+          applicantClientNumber: '',
+          ownerClientNumber: '',
+          approvedVolume: 100,
+          balanceRemaining: 100,
+          listingDate: '2026-01-11',
+          expiryDate: '2026-12-31',
+          region: '11',
+          canApprove: true,
+          isLocked: false,
+          canViewExemption: true,
+        },
+      ]),
+    )
+    mockedApproveExemptions
+      .mockResolvedValueOnce({
+        success: true,
+        valid: true,
+        sendGrid: [['TEST-EX-001', 'first@example.test']],
+        errorMessage: '',
+        errors: [],
+        warnings: [],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        valid: false,
+        sendGrid: [],
+        errorMessage:
+          'Failed to approve invalid exemption TEST-EX-002:</br>*Active ministerial exemptions require at least one application.</br>',
+        errors: [],
+        warnings: [],
+      })
+
+    renderPage()
+    await screen.findByText('TEST-EX-001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+
+    const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    await userEvent.click(
+      within(approvalDialog).getByRole('checkbox', {
+        name: 'I certify that these exemptions have been approved.',
+      }),
+    )
+    await userEvent.click(
+      within(approvalDialog).getByRole('button', { name: 'Approve exemptions' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Approved 1 exemption. Review the applicant recipients before sending notifications. 1 selected exemption failed to approve. Failed exemptions: TEST-EX-002 — Failed to approve invalid exemption TEST-EX-002: Active ministerial exemptions require at least one application.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Approval completed with warnings')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select TEST-EX-001' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select TEST-EX-002' })).toBeChecked()
+
+    const notificationDialog = await screen.findByRole('dialog', {
+      name: 'Send approval notification',
+    })
+    expect(
+      within(notificationDialog).getByLabelText('Recipient for exemption TEST-EX-001'),
+    ).toHaveValue('first@example.test')
+    expect(
+      within(notificationDialog).queryByLabelText('Recipient for exemption TEST-EX-002'),
+    ).not.toBeInTheDocument()
+    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
   })
 
   it('displays and prevents selection of an actively locked new exemption', async () => {
