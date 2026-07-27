@@ -1958,6 +1958,10 @@ legend.cds--label {
   padding-block-end: 1rem;
 }
 
+.review-reject-modal .cds--text-area {
+  block-size: auto;
+}
+
 .review-reject-modal__grid .cds--inline-notification {
   margin-block: 0;
   max-inline-size: none;

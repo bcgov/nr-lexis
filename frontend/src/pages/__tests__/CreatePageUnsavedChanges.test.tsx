@@ -107,6 +107,7 @@ const createCases = [
     targetPath: '/provincial/application',
     heading: 'Create provincial application',
     fieldLabel: 'Location of logs',
+    saveButtonName: 'Save',
     element: <ProvincialApplicationCreatePage />,
   },
   {
@@ -115,6 +116,7 @@ const createCases = [
     targetPath: '/provincial/exemption',
     heading: 'Create exemption',
     fieldLabel: 'Other conditions',
+    saveButtonName: 'Save',
     element: <ProvincialExemptionCreatePage />,
   },
   {
@@ -123,6 +125,7 @@ const createCases = [
     targetPath: '/provincial/offers',
     heading: 'Create provincial offer',
     fieldLabel: 'Offer conditions / remarks',
+    saveButtonName: 'Save new offer',
     element: <ProvincialOfferCreatePage />,
   },
 ] as const
@@ -207,7 +210,9 @@ describe('create page unsaved changes', () => {
   it.each(createCases)('allows a clean $name Cancel without confirmation', async (testCase) => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: testCase.saveButtonName })).toBeEnabled(),
+    )
 
     const unloadEvent = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unloadEvent)
@@ -224,7 +229,9 @@ describe('create page unsaved changes', () => {
     async (testCase) => {
       const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
       await screen.findByRole('heading', { level: 1, name: testCase.heading })
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: testCase.saveButtonName })).toBeEnabled(),
+      )
       await userEvent.type(screen.getByLabelText(testCase.fieldLabel), 'Draft value')
 
       const unloadEvent = new Event('beforeunload', { cancelable: true })

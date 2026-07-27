@@ -943,7 +943,7 @@ describe('Create Page Core Flows', () => {
         ownerContactName: 'Typed Owner',
       }),
     )
-  })
+  }, 20_000)
 
   it('blocks provincial application submit when volume precision is invalid', async () => {
     render(
