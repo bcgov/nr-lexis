@@ -533,6 +533,9 @@ const ProvincialApplicationDetailsPage = () => {
   const { canPerform, capabilities } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
+  const createdApplicationNumber = (
+    location.state as ApplicationCreationNavigationState | null
+  )?.applicationCreationNotice?.applicationNumber.trim()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [industryViewableExemptionNumber, setIndustryViewableExemptionNumber] = useState<
     string | null
@@ -548,7 +551,9 @@ const ProvincialApplicationDetailsPage = () => {
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
-  const [creationSuccessMessage, setCreationSuccessMessage] = useState('')
+  const [creationSuccessMessage, setCreationSuccessMessage] = useState(() =>
+    createdApplicationNumber ? `Created application ${createdApplicationNumber}.` : '',
+  )
   const [actionWarningMessage, setActionWarningMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
@@ -681,15 +686,10 @@ const ProvincialApplicationDetailsPage = () => {
   }, [])
 
   useEffect(() => {
-    const creationNotice = (location.state as ApplicationCreationNavigationState | null)
-      ?.applicationCreationNotice
-    const createdApplicationNumber = creationNotice?.applicationNumber.trim()
-
     if (!createdApplicationNumber) {
       return
     }
 
-    setCreationSuccessMessage(`Created application ${createdApplicationNumber}.`)
     navigate(
       {
         pathname: location.pathname,
@@ -698,7 +698,14 @@ const ProvincialApplicationDetailsPage = () => {
       },
       { replace: true, state: null },
     )
-  }, [location.hash, location.pathname, location.search, location.state, navigate])
+  }, [
+    createdApplicationNumber,
+    location.hash,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+  ])
 
   const loadApplicationDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
