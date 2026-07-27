@@ -30,6 +30,7 @@ import {
 } from '@/pages/shared/application-term-utils'
 import {
   averageLogVolumeFieldError,
+  clientLocationLabel,
   isAgentApplicant,
   isSelectableClientContact,
   isSelectableClientLocation,
@@ -1583,7 +1584,7 @@ const ProvincialApplicationCreatePage = () => {
                       .filter(isSelectableClientLocation)
                       .map((location) => ({
                         value: location.locationCode,
-                        label: location.locationName,
+                        label: clientLocationLabel(location.locationCode, location.locationName),
                       }))}
                     onBlur={() => markFieldTouched('ownerClientLocationCode')}
                     onChange={(value) => {
@@ -1703,7 +1704,10 @@ const ProvincialApplicationCreatePage = () => {
                           .filter(isSelectableClientLocation)
                           .map((location) => ({
                             value: location.locationCode,
-                            label: location.locationName,
+                            label: clientLocationLabel(
+                              location.locationCode,
+                              location.locationName,
+                            ),
                           }))}
                         onBlur={() => markFieldTouched('agentClientLocationCode')}
                         onChange={(value) => {

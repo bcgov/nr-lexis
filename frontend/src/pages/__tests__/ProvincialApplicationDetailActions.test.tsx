@@ -306,7 +306,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await chooseComboBoxOption(
       ownerControls.getByRole('combobox', { name: 'Client location' }),
-      'Owner Alternate Location',
+      '02 - Owner Alternate Location',
     )
     await waitFor(() =>
       expect(
@@ -1410,7 +1410,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() => {
       expect(productLocationInput).toHaveValue('BC')
       expect(getSummaryComboBox(summaryControls, 'Owner client location')).toHaveValue(
-        'Owner Main Location',
+        '00 - Owner Main Location',
       )
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
     })
@@ -1418,7 +1418,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(productLocationInput, { target: { value: 'Changed location' } })
     await chooseComboBoxOption(
       getSummaryComboBox(summaryControls, 'Owner client location'),
-      'Owner Alternate Location',
+      '02 - Owner Alternate Location',
     )
     await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Region'), 'Interior')
     await userEvent.click(summaryControls.getByRole('button', { name: 'Reset Summary' }))
@@ -1426,7 +1426,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() => {
       expect(summaryControls.getByLabelText('Location of logs')).toHaveValue('BC')
       expect(getSummaryComboBox(summaryControls, 'Owner client location')).toHaveValue(
-        'Owner Main Location',
+        '00 - Owner Main Location',
       )
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
     })

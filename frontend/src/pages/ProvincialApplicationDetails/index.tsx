@@ -96,6 +96,7 @@ import SearchableSelect from '../../components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import {
   averageLogVolumeFieldError,
+  clientLocationLabel,
   isAgentApplicant,
   isSelectableClientContact,
   isSelectableClientLocation,
@@ -2699,9 +2700,10 @@ const ProvincialApplicationDetailsPage = () => {
   const ownerClientLocationName = ownerClientLocations.find(
     (location) => location.locationCode === ownerClientLocationCode,
   )?.locationName
-  const ownerClientLocationDisplay = ownerClientLocationName
-    ? `${ownerClientLocationCode} - ${ownerClientLocationName}`
-    : ownerClientLocationCode
+  const ownerClientLocationDisplay = clientLocationLabel(
+    ownerClientLocationCode,
+    ownerClientLocationName ?? '',
+  )
   const summaryJurisdictionCode = summaryForm?.jurisdictionCode ?? ''
   const summaryJurisdictionOption = optionsWithCurrentValue(
     JURISDICTION_OPTIONS,
@@ -3238,7 +3240,10 @@ const ProvincialApplicationDetailsPage = () => {
                                   .filter(isSelectableClientLocation)
                                   .map((clientLocation) => ({
                                     value: clientLocation.locationCode,
-                                    label: clientLocation.locationName,
+                                    label: clientLocationLabel(
+                                      clientLocation.locationCode,
+                                      clientLocation.locationName,
+                                    ),
                                   }))}
                                 onChange={(value) =>
                                   onSummaryFormChange('ownerClientLocationCode', value)
@@ -3537,7 +3542,10 @@ const ProvincialApplicationDetailsPage = () => {
                                   .filter(isSelectableClientLocation)
                                   .map((location) => ({
                                     value: location.locationCode,
-                                    label: location.locationName,
+                                    label: clientLocationLabel(
+                                      location.locationCode,
+                                      location.locationName,
+                                    ),
                                   }))}
                                 onChange={(value) =>
                                   onSummaryFormChange('ownerClientLocationCode', value)
@@ -3634,7 +3642,10 @@ const ProvincialApplicationDetailsPage = () => {
                                       .filter(isSelectableClientLocation)
                                       .map((location) => ({
                                         value: location.locationCode,
-                                        label: location.locationName,
+                                        label: clientLocationLabel(
+                                          location.locationCode,
+                                          location.locationName,
+                                        ),
                                       }))}
                                     onChange={(value) =>
                                       onSummaryFormChange('agentClientLocationCode', value)

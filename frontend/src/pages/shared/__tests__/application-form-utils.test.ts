@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   averageLogVolumeFieldError,
+  clientLocationLabel,
   codeOptionLabel,
   isAgentApplicant,
   isSelectableClientContact,
@@ -42,6 +43,18 @@ describe('application-form-utils', () => {
     expect(resolveClientContactName(contacts, 'Typed Name')).toBe('Alex Tester')
     expect(resolveClientContactName([{ ...contacts[0] }], 'Typed Name')).toBe('Typed Name')
   })
+
+  it.each([
+    ['03', 'WOODLANDS SERVICES', '03 - WOODLANDS SERVICES'],
+    ['03', '03 - WOODLANDS SERVICES', '03 - WOODLANDS SERVICES'],
+    ['00', '00', '00'],
+    ['00', '', '00'],
+  ])(
+    'formats client location %j and %j without repeating the code',
+    (locationCode, locationName, expectedLabel) => {
+      expect(clientLocationLabel(locationCode, locationName)).toBe(expectedLabel)
+    },
+  )
 
   it('maps common application option state consistently', () => {
     expect(productTypeRequiresGrowthType('H')).toBe(true)

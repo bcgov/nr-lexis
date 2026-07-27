@@ -12,6 +12,7 @@ import {
   mockApplicationDetailAuth,
   mockedApproveApplicationReview,
   mockedFetchApplicationClientData,
+  mockedFetchApplicationClientLocations,
   mockedFetchApplicationSummarySnapshot,
   mockedFetchProvincialApplicationDetail,
   mockedSaveApplicationRemark,
@@ -435,9 +436,17 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       ...applicationDetail,
       agentClientNumber: null,
     })
+    mockedFetchApplicationClientLocations.mockResolvedValueOnce([
+      {
+        locationCode: '03',
+        locationName: '03 - WOODLANDS SERVICES',
+        selected: true,
+      },
+    ])
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummarySnapshot,
       applicantTypeCode: 'O',
+      ownerClientLocationCode: '03',
       agentClientNumber: '',
       agentClientLocationCode: '',
       agentContactName: '',
@@ -477,8 +486,11 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       ?.closest('.detail-field-item')
     expect(clientLocationField).toBeTruthy()
     expect(
-      within(clientLocationField as HTMLElement).getByText('00 - Owner Main Location'),
+      within(clientLocationField as HTMLElement).getByText('03 - WOODLANDS SERVICES'),
     ).toBeInTheDocument()
+    expect(
+      within(clientLocationField as HTMLElement).queryByText('03 - 03 - WOODLANDS SERVICES'),
+    ).not.toBeInTheDocument()
   })
 
   it('uses a business label for ministerial applicant types', async () => {
