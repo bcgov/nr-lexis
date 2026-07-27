@@ -70,7 +70,8 @@ class ApplicationReviewRepositoryTest {
         .contains("v.ADVERTISING_DATE")
         .contains("v.EXPORT_APPLICATION_STATUS_CODE")
         .contains("v.ORG_UNIT_NO")
-        .contains("ORDER BY v.ORG_UNIT_CODE DESC")
+        .contains("ORDER BY v.REGION_CODE DESC")
+        .doesNotContain("v.ORG_UNIT_CODE")
         .doesNotContain("EEA.")
         .doesNotContain(" AND ORG_UNIT_NO");
     assertThat(repository.bindValues())

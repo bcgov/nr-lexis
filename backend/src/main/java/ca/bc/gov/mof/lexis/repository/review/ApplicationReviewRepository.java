@@ -157,8 +157,8 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 "volume", "v.EXEMPTION_APPLICATION_VOLUME",
                 "listingDate", "v.ADVERTISING_DATE",
                 "status", "v.EXPORT_APPLICATION_STATUS_CODE",
-                "regionCode", "v.ORG_UNIT_CODE",
-                "region", "v.ORG_UNIT_CODE"),
+                "regionCode", "v.REGION_CODE",
+                "region", "v.REGION_CODE"),
             "applicationNumber",
             "DESC");
 
