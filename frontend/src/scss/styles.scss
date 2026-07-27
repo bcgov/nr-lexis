@@ -1534,6 +1534,42 @@ legend.cds--label {
   line-height: 1.75rem;
 }
 
+.provincial-offer-section-stack {
+  --cds-field: var(--csp-background);
+  --cds-field-hover: var(--csp-layer-hover);
+
+  display: grid;
+  gap: 1rem;
+  overflow: visible;
+}
+
+.provincial-offer-section-stack > .offer-form-section {
+  padding: 1rem 1.5rem 1.5rem;
+  background-color: var(--csp-layer-01);
+  border: 1px solid var(--csp-border-subtle-01);
+  border-radius: 0.5rem;
+  box-shadow: none;
+}
+
+.provincial-offer-section-stack > .offer-form-section + .offer-form-section {
+  margin-block-start: 0;
+  padding-block-start: 1rem;
+}
+
+.provincial-offer-section-stack > .legacy-form-footer {
+  margin-top: 0;
+}
+
+@media (min-width: 672px) {
+  .provincial-offer-section-stack > .offer-form-section {
+    padding: 1.25rem 2rem 1.75rem;
+  }
+
+  .provincial-offer-section-stack > .offer-form-section + .offer-form-section {
+    padding-block-start: 1.25rem;
+  }
+}
+
 .create-form-grid {
   align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));

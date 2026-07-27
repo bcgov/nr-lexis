@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -665,7 +665,7 @@ const ProvincialOfferCreatePage = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
-        <Tile className="provincial-offer-create create-form-tile provincial-offer-sections">
+        <div className="provincial-offer-create create-form-tile provincial-offer-sections provincial-offer-section-stack">
           <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Application details</legend>
             <div className="legacy-search-grid create-form-grid">
@@ -1034,7 +1034,7 @@ const ProvincialOfferCreatePage = () => {
               </Button>
             </div>
           </div>
-        </Tile>
+        </div>
       </Column>
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}

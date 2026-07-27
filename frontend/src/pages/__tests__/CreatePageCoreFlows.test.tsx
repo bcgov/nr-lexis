@@ -1816,10 +1816,13 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('group', { name: 'Offer withdrawals' }),
       screen.getByRole('group', { name: 'Approval' }),
     ]
-    expect(offerSections[0].closest('.cds--tile')).toHaveClass('create-form-tile')
+    const offerSectionStack = offerSections[0].closest('.provincial-offer-section-stack')
+    expect(offerSectionStack).toHaveClass('create-form-tile')
+    expect(offerSectionStack).not.toHaveClass('cds--tile')
     for (const section of offerSections) {
       expect(section).toHaveClass('create-form-section')
       expect(section).toHaveClass('offer-form-section')
+      expect(section.parentElement).toBe(offerSectionStack)
       expect(section.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
     }
     expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeEnabled()
