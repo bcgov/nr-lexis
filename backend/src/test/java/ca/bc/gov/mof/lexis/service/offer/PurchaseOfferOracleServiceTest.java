@@ -452,7 +452,7 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.toEmails()).isEqualTo("client@example.com");
     assertThat(response.warnings())
         .containsExactly(
-            "Offer saved and applicant email queued, but no ministry regional recipient was configured.");
+            "Offer saved and applicant email sent, but no ministry regional recipient was configured.");
     ArgumentCaptor<WorkflowEmailEvent> eventCaptor =
         ArgumentCaptor.forClass(WorkflowEmailEvent.class);
     verify(notificationService).publish(eventCaptor.capture());
@@ -524,7 +524,7 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.success()).isTrue();
     assertThat(response.warnings())
         .containsExactly(
-            "Offer saved and applicant email queued, but no ministry regional recipient was configured.");
+            "Offer saved and applicant email sent, but no ministry regional recipient was configured.");
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.PurchaseOffer(

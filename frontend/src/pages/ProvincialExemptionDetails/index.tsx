@@ -855,14 +855,12 @@ const ProvincialExemptionDetailsPage = () => {
         const email = await sendExemptionApprovalEmails(recipients)
         setActionInfoMessage(
           email.success
-            ? `Exemption approved. ${email.message || 'Approval notification queued.'}`
-            : `Exemption approved. ${
-                email.message || 'The approval notification could not be queued.'
-              }`,
+            ? `Exemption approved. ${email.message || 'Approval email sent.'}`
+            : `Exemption approved. ${email.message || 'The approval email could not be sent.'}`,
         )
       } catch (error) {
         console.error(error)
-        setActionInfoMessage('Exemption approved. The approval notification could not be queued.')
+        setActionInfoMessage('Exemption approved. The approval email could not be sent.')
       } finally {
         setSendingApprovalEmail(false)
         setApprovalEmailRecipients([])

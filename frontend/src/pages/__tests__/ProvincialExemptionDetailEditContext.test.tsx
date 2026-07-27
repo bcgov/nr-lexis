@@ -148,7 +148,7 @@ describe('Provincial exemption edit context', () => {
     })
     mockedSendExemptionApprovalEmails.mockResolvedValue({
       success: true,
-      message: 'Approval email queued.',
+      message: 'Approval email sent.',
     })
     mockedRunReport.mockResolvedValue({
       source: 'api',

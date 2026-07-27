@@ -648,8 +648,8 @@ const ProvincialExemptionPage = () => {
       const messages = [approvedExemptionMessage(approvedCount)]
       messages.push(
         email.success
-          ? email.message || 'Approval notifications queued.'
-          : email.message || 'Approval notifications could not be queued.',
+          ? email.message || 'Approval emails sent.'
+          : email.message || 'Approval emails could not be sent.',
       )
       if (partialFailure) {
         messages.push(partialFailure)
@@ -662,7 +662,7 @@ const ProvincialExemptionPage = () => {
       console.error(error)
       const messages = [
         approvedExemptionMessage(approvedCount),
-        'Approval notifications could not be queued.',
+        'Approval emails could not be sent.',
       ]
       if (partialFailure) {
         messages.push(partialFailure)

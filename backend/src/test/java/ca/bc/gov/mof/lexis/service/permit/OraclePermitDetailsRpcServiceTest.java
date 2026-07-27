@@ -545,7 +545,7 @@ class OraclePermitDetailsRpcServiceTest {
         service.sendApprovalPermitEmail(7000123L, "edited@example.test");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.message()).contains("could not be queued");
+    assertThat(response.message()).contains("could not be sent");
     assertThat(permitAppender.list)
         .filteredOn(
             event ->

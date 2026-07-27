@@ -356,7 +356,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
               regionalGroup.label()));
       String warning =
           regionalRecipients.isEmpty()
-              ? "Offer saved and applicant email queued, but no ministry regional recipient was configured."
+              ? "Offer saved and applicant email sent, but no ministry regional recipient was configured."
               : null;
       return new EmailResult(true, true, recipient, warning);
     } catch (RuntimeException ex) {

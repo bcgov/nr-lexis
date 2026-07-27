@@ -506,12 +506,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedSendPermitReviewRequestEmail.mockResolvedValue({
       success: true,
-      message: 'Permit review request email queued successfully.',
+      message: 'Permit review request email sent.',
       permitRequestDate: '',
     })
     mockedSendPermitApprovalEmail.mockResolvedValue({
       success: true,
-      message: 'Permit approval email queued successfully.',
+      message: 'Permit approval email sent.',
       permitRequestDate: '',
     })
     mockedFetchPermitApprovalEmailDefault.mockResolvedValue('agent@example.test')
@@ -2864,7 +2864,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull()
     })
-    expect(screen.getByText('Permit approval email queued successfully.')).toBeInTheDocument()
+    expect(screen.getByText('Permit approval email sent.')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
@@ -2919,7 +2919,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
-  it('keeps the approval dialog open when notification delivery cannot be queued', async () => {
+  it('keeps the approval dialog open when notification delivery cannot be sent', async () => {
     mockedSendPermitApprovalEmail.mockResolvedValueOnce({
       success: false,
       message: 'Permit approval notification is unavailable.',
@@ -2992,7 +2992,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedSendPermitReviewRequestEmail.mockResolvedValue({
       success: true,
-      message: 'Permit review request email queued successfully.',
+      message: 'Permit review request email sent.',
       permitRequestDate: '2026-07-10',
     })
 
@@ -3016,9 +3016,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedSendPermitReviewRequestEmail).toHaveBeenCalledWith('777')
       expect(mockedSendPermitApprovalEmail).not.toHaveBeenCalled()
       expect(screen.queryByRole('dialog', { name: /Email permit .* approval/ })).toBeNull()
-      expect(
-        screen.getByText('Permit review request email queued successfully.'),
-      ).toBeInTheDocument()
+      expect(screen.getByText('Permit review request email sent.')).toBeInTheDocument()
     })
   })
 

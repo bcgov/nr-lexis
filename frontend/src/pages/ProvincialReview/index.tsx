@@ -697,8 +697,7 @@ const ProvincialReviewPage = () => {
             message:
               emailResult.message === EMAIL_NOT_CONFIGURED_MESSAGE
                 ? 'Application status updated, but status email is not configured yet.'
-                : emailResult.message ||
-                  'Application status updated, but email could not be queued.',
+                : emailResult.message || 'Application status updated, but email could not be sent.',
           })
         } else {
           setReviewActionStatus({

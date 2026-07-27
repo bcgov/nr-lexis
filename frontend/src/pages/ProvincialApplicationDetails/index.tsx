@@ -2517,7 +2517,7 @@ const ProvincialApplicationDetailsPage = () => {
               emailResult.message ===
                 'Application status email is not configured yet. No email was sent.'
                 ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
-                : emailResult.message || 'Application status updated; email could not be queued.',
+                : emailResult.message || 'Application status updated; email could not be sent.',
             )
             return false
           }

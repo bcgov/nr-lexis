@@ -124,7 +124,7 @@ describe('Provincial Exemption Search Actions', () => {
     )
     mockedSendExemptionApprovalEmails.mockResolvedValue({
       success: true,
-      message: 'Email queued successfully.',
+      message: 'Approval email sent.',
     })
   })
 
@@ -222,6 +222,9 @@ describe('Provincial Exemption Search Actions', () => {
         ['EX-1001', 'updated@example.test'],
       ]),
     )
+    expect(
+      await screen.findByText('Approved 1 exemption. Approval email sent.'),
+    ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
@@ -332,6 +335,10 @@ describe('Provincial Exemption Search Actions', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
     )
+    mockedSendExemptionApprovalEmails.mockResolvedValueOnce({
+      success: true,
+      message: 'Approval emails sent.',
+    })
     mockedSearchProvincialExemptions.mockResolvedValue(
       exemptionSearchResponse([
         {
@@ -433,6 +440,16 @@ describe('Provincial Exemption Search Actions', () => {
     expect(sendAll).toHaveClass('cds--btn--primary')
     expect(skipNotifications.parentElement).toHaveClass('lexis-confirmation-modal__actions')
     expect(notificationDialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()
+    await userEvent.click(sendAll)
+    await waitFor(() =>
+      expect(mockedSendExemptionApprovalEmails).toHaveBeenCalledWith([
+        ['TEST-EX-001', 'first@example.test'],
+        ['TEST-EX-002', 'second@example.test'],
+      ]),
+    )
+    expect(
+      await screen.findByText('Approved 2 exemptions. Approval emails sent.'),
+    ).toBeInTheDocument()
   })
 
   it('reports partial approval details, keeps failures selected, and emails only successes', async () => {

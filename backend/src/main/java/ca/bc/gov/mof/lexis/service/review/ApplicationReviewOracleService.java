@@ -541,7 +541,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     }
     return new ApplicationReviewStatusEmailResultDto(
         true,
-        "Application status email queued.");
+        "Application status email sent.");
   }
 
   private ApplicationReviewSearchCriteria normalizeCriteria(ApplicationReviewSearchCriteria input) {
