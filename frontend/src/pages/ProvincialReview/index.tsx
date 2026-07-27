@@ -92,9 +92,17 @@ import {
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
+import { firstStringField, isRecord } from '@/utils/record'
+import { sanitizeNotificationText } from '@/utils/notification-messages'
 
 type ReviewActionStatus = {
-  kind: 'success' | 'error'
+  kind: 'success' | 'warning' | 'error'
+  message: string
+}
+
+type ApplicationApprovalResult = {
+  applicationNumber: string
+  success: boolean
   message: string
 }
 
@@ -142,6 +150,30 @@ const REJECT_EMAIL_REQUIRED_MESSAGE =
   'Enter one valid client email address or deselect Send status email.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
+const APPROVAL_REQUEST_FAILED_MESSAGE = 'The approval request could not be completed.'
+
+const normalizeApprovalFailureMessage = (message: string | null | undefined): string =>
+  sanitizeNotificationText(
+    (message ?? '')
+      .replace(/<\/?br\s*\/?\s*>/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+    APPROVAL_REQUEST_FAILED_MESSAGE,
+  ) || APPROVAL_REQUEST_FAILED_MESSAGE
+
+const approvalRequestFailureMessage = (error: unknown): string => {
+  const errorRecord = isRecord(error) ? error : null
+  const response = errorRecord && isRecord(errorRecord.response) ? errorRecord.response : null
+  const responseData = response?.data
+  const responseMessage =
+    typeof responseData === 'string'
+      ? responseData
+      : isRecord(responseData)
+        ? firstStringField(responseData, ['detail', 'message', 'title'])
+        : ''
+  const errorMessage = error instanceof Error ? error.message : ''
+  return normalizeApprovalFailureMessage(responseMessage || errorMessage)
+}
 
 const formatApplicationVolume = (volume: number): string => volume.toFixed(1)
 
@@ -710,7 +742,7 @@ const ProvincialReviewPage = () => {
     setReviewActionStatus(null)
 
     try {
-      const approvalResults = []
+      const approvalResults: ApplicationApprovalResult[] = []
       for (const applicationNumber of applicationNumbers) {
         try {
           const recordVersion = await fetchCurrentApplicationRecordVersion(applicationNumber)
@@ -718,20 +750,21 @@ const ProvincialReviewPage = () => {
           approvalResults.push({
             applicationNumber,
             success: result.updated && result.valid,
-            message: result.message,
+            message: normalizeApprovalFailureMessage(result.message),
           })
         } catch (error) {
           console.warn(`Unable to approve application ${applicationNumber}.`, error)
           approvalResults.push({
             applicationNumber,
             success: false,
-            message: 'Request failed.',
+            message: approvalRequestFailureMessage(error),
           })
         }
       }
 
       const successCount = approvalResults.filter((result) => result.success).length
-      const failureCount = approvalResults.length - successCount
+      const failedResults = approvalResults.filter((result) => !result.success)
+      const failureCount = failedResults.length
 
       if (failureCount === 0) {
         setReviewActionStatus({
@@ -739,13 +772,22 @@ const ProvincialReviewPage = () => {
           message: `Approved ${successCount} application(s).`,
         })
       } else {
+        const failureDetails = failedResults
+          .map((result) => `${result.applicationNumber} — ${result.message}`)
+          .join('; ')
         setReviewActionStatus({
-          kind: 'error',
-          message: `Approved ${successCount} application(s); ${failureCount} failed.`,
+          kind: successCount > 0 ? 'warning' : 'error',
+          message: `${
+            successCount > 0
+              ? `Approved ${successCount} application(s); ${failureCount} failed.`
+              : `No selected applications were approved; ${failureCount} failed.`
+          } Failed applications: ${failureDetails}`,
         })
       }
 
-      setSelectedRowsById({})
+      setSelectedRowsById(
+        Object.fromEntries(failedResults.map((result) => [result.applicationNumber, true])),
+      )
       await runSearch(
         {
           filters: urlState.filters,
@@ -816,7 +858,13 @@ const ProvincialReviewPage = () => {
       {!!reviewActionStatus && (
         <AppNotification
           kind={reviewActionStatus.kind}
-          title={reviewActionStatus.kind === 'success' ? 'Action complete' : 'Action failed'}
+          title={
+            reviewActionStatus.kind === 'success'
+              ? 'Action complete'
+              : reviewActionStatus.kind === 'warning'
+                ? 'Approval partially completed'
+                : 'Action failed'
+          }
           subtitle={reviewActionStatus.message}
           autoDismissMs={reviewActionStatus.kind === 'success' ? 8000 : undefined}
           onCloseButtonClick={() => setReviewActionStatus(null)}

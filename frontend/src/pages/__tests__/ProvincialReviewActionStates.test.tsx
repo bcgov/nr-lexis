@@ -884,6 +884,43 @@ describe('Provincial Review Action State Smoke', () => {
     expect(await screen.findByText('Approved 2 application(s).')).toBeInTheDocument()
   })
 
+  it('reports bulk approval failures by application and keeps failed rows selected', async () => {
+    mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
+    mockedApproveApplicationReview
+      .mockResolvedValueOnce({
+        updated: true,
+        valid: true,
+        statusCode: 'APP',
+        clientEmail: '',
+        remark: '',
+        message: 'Application approved.',
+      })
+      .mockResolvedValueOnce({
+        updated: false,
+        valid: false,
+        statusCode: 'APP',
+        clientEmail: '',
+        remark: '',
+        message: 'Application owner location does not exist.',
+      })
+
+    renderPage()
+    await screen.findByText('2000001')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+
+    expect(
+      await screen.findByText(
+        'Approved 1 application(s); 1 failed. Failed applications: 2000002 — Application owner location does not exist.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Approval partially completed')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select 2000001' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select 2000002' })).toBeChecked()
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+  })
+
   it('sends selected region org unit numbers to the review search request', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
