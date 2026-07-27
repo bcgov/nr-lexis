@@ -487,9 +487,8 @@ describe('Layout shell', () => {
     expect(screen.getByRole('dialog', { name: 'Profile' })).toHaveClass('is-open')
     expect(profilePanel).not.toHaveAttribute('aria-hidden')
     expect(profilePanel).not.toHaveAttribute('inert')
-    await waitFor(() => {
-      expect(profilePanel?.querySelector('.profile-panel__close')).toHaveFocus()
-    })
+    expect(profileToggle).toHaveFocus()
+    expect(profilePanel?.querySelector('.profile-panel__close')).not.toHaveFocus()
 
     await userEvent.click(screen.getByRole('heading', { name: 'Current page content' }))
 
@@ -524,10 +523,10 @@ describe('Layout shell', () => {
   it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
-    await waitFor(() => {
-      expect(document.querySelector('#profile-panel .profile-panel__close')).toHaveFocus()
-    })
+    const profileToggle = screen.getByRole('button', { name: 'Open profile panel' })
+    await userEvent.click(profileToggle)
+    expect(profileToggle).toHaveFocus()
+    expect(document.querySelector('#profile-panel .profile-panel__close')).not.toHaveFocus()
 
     await userEvent.keyboard('{Escape}')
 

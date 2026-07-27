@@ -534,10 +534,6 @@ function Layout({ children }: LayoutProps) {
       return undefined
     }
 
-    const focusFrame = window.requestAnimationFrame(() => {
-      document.querySelector<HTMLButtonElement>('#profile-panel .profile-panel__close')?.focus()
-    })
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         closeProfile(true)
@@ -559,7 +555,6 @@ function Layout({ children }: LayoutProps) {
     document.addEventListener('keydown', handleKeyDown, true)
     document.addEventListener('pointerdown', handlePointerDown)
     return () => {
-      window.cancelAnimationFrame(focusFrame)
       document.removeEventListener('keydown', handleKeyDown, true)
       document.removeEventListener('pointerdown', handlePointerDown)
     }
