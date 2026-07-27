@@ -413,7 +413,7 @@ describe('Provincial Review Action State Smoke', () => {
       expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000123')
     })
     await waitFor(() => {
-      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
+      expect(screen.getByLabelText('Send to:')).toHaveValue('client@example.com')
     })
 
     expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Rejected')
@@ -422,19 +422,23 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.queryByText('Application review')).not.toBeInTheDocument()
     await userEvent.click(sendStatusEmailCheckbox)
     expect(sendStatusEmailCheckbox).toBeChecked()
-    expect(screen.getByLabelText('Client email address')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Send to:')).not.toHaveAttribute('readonly')
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification.",
       ),
-    ).toBeInTheDocument()
+    ).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Client email address'), {
+    fireEvent.change(screen.getByLabelText('Send to:'), {
       target: { value: 'edited.client@example.com' },
     })
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
-    expect(screen.getByLabelText('Client email address')).toHaveValue('edited.client@example.com')
-    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+    expect(screen.getByLabelText('Remarks')).toHaveAttribute('rows', '3')
+    expect(screen.getByLabelText('Send to:')).toHaveValue('edited.client@example.com')
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    expect(saveButton).toHaveClass('cds--btn--primary')
+    expect(saveButton).not.toHaveClass('cds--btn--danger')
+    await userEvent.click(saveButton)
 
     await waitFor(() => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
@@ -466,7 +470,7 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
+      expect(screen.getByLabelText('Send to:')).toHaveValue('client@example.com')
     })
   })
 
@@ -484,12 +488,12 @@ describe('Provincial Review Action State Smoke', () => {
 
     await waitFor(() => {
       expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000456')
-      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
+      expect(screen.getByLabelText('Send to:')).toHaveValue('client@example.com')
     })
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Pending application rejected')
-    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
@@ -524,9 +528,7 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000123')
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    await waitFor(() =>
-      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
-    )
+    await waitFor(() => expect(screen.getByLabelText('Send to:')).toHaveValue('client@example.com'))
 
     const statusSelect = screen.getByRole('combobox', { name: 'Application status' })
     await userEvent.click(statusSelect)
@@ -538,11 +540,11 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByRole('checkbox', { name: 'Send status email' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Send status email' })).toBeDisabled()
     expect(
-      screen.getByText('Status emails are sent only for rejected or withdrawn applications.'),
-    ).toBeInTheDocument()
+      screen.queryByText('Status emails are sent only for rejected or withdrawn applications.'),
+    ).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Remarks'), 'Expired after manual review')
-    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
@@ -602,12 +604,12 @@ describe('Provincial Review Action State Smoke', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '00')
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00054321', '02')
-      expect(screen.getByLabelText('Client email address')).toHaveValue('agent@example.com')
+      expect(screen.getByLabelText('Send to:')).toHaveValue('agent@example.com')
     })
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
-    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
@@ -669,9 +671,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
-    await waitFor(() =>
-      expect(screen.getByLabelText('Client email address')).toHaveValue('owner@example.com'),
-    )
+    await waitFor(() => expect(screen.getByLabelText('Send to:')).toHaveValue('owner@example.com'))
   })
 
   it('validates single-row disapproval before status update', async () => {
@@ -679,10 +679,8 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    await waitFor(() =>
-      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+    await waitFor(() => expect(screen.getByLabelText('Send to:')).toHaveValue('client@example.com'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.getByText('Remarks are required.')).toBeInTheDocument()
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
@@ -710,22 +708,22 @@ describe('Provincial Review Action State Smoke', () => {
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
-    await waitFor(() => expect(screen.getByLabelText('Client email address')).not.toBeDisabled())
-    expect(screen.getByLabelText('Client email address')).toHaveValue('')
+    await waitFor(() => expect(screen.getByLabelText('Send to:')).not.toBeDisabled())
+    expect(screen.getByLabelText('Send to:')).toHaveValue('')
     expect(
       screen.queryByText('Enter one valid client email address or deselect Send status email.'),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText(
+      screen.queryByText(
         'No client email was found. Enter an email address or deselect Send status email.',
       ),
-    ).toBeInTheDocument()
+    ).not.toBeInTheDocument()
 
     const sendStatusEmailCheckbox = screen.getByRole('checkbox', { name: 'Send status email' })
     expect(sendStatusEmailCheckbox).not.toBeChecked()
     await userEvent.click(sendStatusEmailCheckbox)
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
-    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
       (
@@ -743,15 +741,13 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    await waitFor(() =>
-      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
-    )
+    await waitFor(() => expect(screen.getByLabelText('Send to:')).toHaveValue('client@example.com'))
 
     expect(screen.getByRole('checkbox', { name: 'Send status email' })).not.toBeChecked()
-    expect(screen.getByLabelText('Client email address')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Send to:')).not.toHaveAttribute('readonly')
 
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected without notification')
-    await userEvent.click(screen.getByRole('button', { name: 'Update Application' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(

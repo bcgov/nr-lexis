@@ -140,12 +140,6 @@ const REJECT_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
 const REJECT_EMAIL_REQUIRED_MESSAGE =
   'Enter one valid client email address or deselect Send status email.'
-const REJECT_EMAIL_MISSING_HELPER =
-  'No client email was found. Enter an email address or deselect Send status email.'
-const REJECT_EMAIL_PREVIEW_HELPER =
-  "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
-const STATUS_EMAIL_UNAVAILABLE_HELPER =
-  'Status emails are sent only for rejected or withdrawn applications.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
 
@@ -948,6 +942,7 @@ const ProvincialReviewPage = () => {
           <TextArea
             id="reviewRejectRemark"
             labelText="Remarks"
+            rows={3}
             maxCount={250}
             value={rejectRemark}
             invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
@@ -970,16 +965,7 @@ const ProvincialReviewPage = () => {
           />
           <TextInput
             id="reviewRejectEmail"
-            labelText="Client email address"
-            helperText={
-              !rejectStatusSupportsEmail
-                ? STATUS_EMAIL_UNAVAILABLE_HELPER
-                : loadingRejectEmail
-                  ? 'Loading from client account...'
-                  : !rejectEmailAddress
-                    ? REJECT_EMAIL_MISSING_HELPER
-                    : REJECT_EMAIL_PREVIEW_HELPER
-            }
+            labelText="Send to:"
             value={rejectEmailAddress}
             disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
             invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
@@ -1006,13 +992,13 @@ const ProvincialReviewPage = () => {
             Cancel
           </Button>
           <Button
-            kind="danger"
+            kind="primary"
             disabled={
               optionsUnavailable || !rejectStatusAvailable || loadingRejectEmail || submittingReject
             }
             onClick={() => void onRejectApplicationClick()}
           >
-            {submittingReject ? 'Updating...' : 'Update Application'}
+            {submittingReject ? 'Saving...' : 'Save'}
           </Button>
         </div>
       </Modal>
