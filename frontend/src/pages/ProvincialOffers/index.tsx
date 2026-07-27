@@ -272,13 +272,7 @@ const ProvincialOffersPage = () => {
           response: ProvincialOfferSearchResponse,
           totalIsExact: boolean,
         ) => {
-          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
-            return
-          }
-          if (totalIsExact) {
-            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
-              return
-            }
+          if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-offer-search',
@@ -290,7 +284,7 @@ const ProvincialOffersPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+            if (isLatestRequest()) {
               commitResults(response)
             }
           })

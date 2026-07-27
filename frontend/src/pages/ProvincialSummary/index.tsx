@@ -339,7 +339,7 @@ const ProvincialSummaryPage = () => {
           federalApplications: federalApplications ?? 0,
         }
 
-        if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+        if (isLatestRequest()) {
           const nextMetrics = INITIAL_METRICS.map((metric) => ({
             ...metric,
             total: totalsByKey[metric.key],
@@ -351,7 +351,7 @@ const ProvincialSummaryPage = () => {
             region: item.region,
           }))
 
-          const cacheUpdated = setPageDataCache(
+          setPageDataCache(
             pageCacheKey,
             {
               metrics: nextMetrics,
@@ -359,14 +359,12 @@ const ProvincialSummaryPage = () => {
             },
             pageCacheGeneration,
           )
-          if (cacheUpdated) {
-            setMetrics(nextMetrics)
-            setReviewPreview(nextReviewPreview)
-            setHasLoadedSummary(true)
-          }
+          setMetrics(nextMetrics)
+          setReviewPreview(nextReviewPreview)
+          setHasLoadedSummary(true)
         }
       } catch (error) {
-        if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+        if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to calculate provincial summary metrics.')
           if (!hasLoadedSummary) {

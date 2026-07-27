@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import type { ApplicationReviewSearchResponse } from '@/interfaces/ApplicationReviewSearch'
 import ProvincialReviewPage from '@/pages/ProvincialReview'
+import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import {
   approveApplicationReview,
   searchApplicationReviews,
@@ -156,6 +158,7 @@ Element.prototype.scrollIntoView = vi.fn()
 describe('Provincial Review Action State Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearAllPageDataCache()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedSearchApplicationReviews.mockResolvedValue(reviewResponse)
     mockedFetchApplicationReviewOptions.mockResolvedValue({
@@ -210,6 +213,26 @@ describe('Provincial Review Action State Smoke', () => {
       email: 'client@example.com',
       notfound: '',
     })
+  })
+
+  it('renders the latest review response when the cache is invalidated in flight', async () => {
+    let resolveSearch: (response: ApplicationReviewSearchResponse) => void = () => {}
+    mockedSearchApplicationReviews.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSearch = resolve
+      }),
+    )
+
+    renderPage()
+    await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
+
+    clearAllPageDataCache()
+    await act(async () => {
+      resolveSearch(reviewResponse)
+    })
+
+    expect(await screen.findByText('1000123')).toBeInTheDocument()
+    expect(screen.queryByText('No review records found')).not.toBeInTheDocument()
   })
 
   it('uses the legacy provincial application review page title', async () => {

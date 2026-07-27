@@ -219,7 +219,7 @@ describe('Provincial Permit Search Actions', () => {
     expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
   })
 
-  it('does not render a search response invalidated while it is in flight', async () => {
+  it('renders the latest search response when the cache is invalidated in flight', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     let resolveSearch: (response: ProvincialPermitSearchResponse) => void = () => {}
     mockedSearchProvincialPermits.mockReturnValueOnce(
@@ -250,8 +250,8 @@ describe('Provincial Permit Search Actions', () => {
       )
     })
 
-    expect(await screen.findByRole('heading', { name: 'No permits found' })).toBeInTheDocument()
-    expect(screen.queryByText('7001')).not.toBeInTheDocument()
+    expect(await screen.findByText('7001')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No permits found' })).not.toBeInTheDocument()
   })
 
   it('reuses the first search total when pagination changes page', async () => {

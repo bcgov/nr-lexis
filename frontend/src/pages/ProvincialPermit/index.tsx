@@ -256,13 +256,7 @@ const ProvincialPermitPage = () => {
           response: ProvincialPermitSearchResponse,
           totalIsExact: boolean,
         ) => {
-          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
-            return
-          }
-          if (totalIsExact) {
-            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
-              return
-            }
+          if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, cacheKey, response.page.totalElements)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-permit-search',
@@ -274,7 +268,7 @@ const ProvincialPermitPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+            if (isLatestRequest()) {
               commitResults(response)
             }
           })
