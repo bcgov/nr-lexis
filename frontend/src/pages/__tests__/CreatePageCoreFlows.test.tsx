@@ -1792,21 +1792,21 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    expect(screen.getByText('Enter offer details and save a new offer.')).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const offerFormActions = screen.getByRole('group', { name: 'Offer form actions' })
     expect(
       within(offerFormActions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Cancel', 'Save'])
+    ).toEqual(['Cancel', 'Save new offer'])
     expect(within(offerFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
       'type',
       'button',
     )
-    expect(within(offerFormActions).getByRole('button', { name: 'Save' })).toHaveAttribute(
-      'type',
-      'button',
-    )
+    expect(
+      within(offerFormActions).getByRole('button', { name: 'Save new offer' }),
+    ).toHaveAttribute('type', 'button')
     expect(screen.queryByRole('group', { name: 'New offer state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /offer number/i })).not.toBeInTheDocument()
     const offerSections = [
@@ -1853,7 +1853,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
-    const saveButton = screen.getByRole('button', { name: 'Save' })
+    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
     expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
 
@@ -1929,7 +1929,7 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(await screen.findByText(eligibilityError)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
     expect(mockedFetchOfferApplicationDetails).not.toHaveBeenCalled()
     expect(mockedFetchOfferPackageList).not.toHaveBeenCalled()
     expect(mockedFetchOfferApplicationVolume).not.toHaveBeenCalled()
@@ -1970,7 +1970,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Contact name'), 'Sample Contact')
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
     await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     expect(await screen.findByText(saveError)).toBeInTheDocument()
     expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledTimes(1)
@@ -2016,7 +2016,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
     await userEvent.type(contactName, 'Buyer Contact')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -2096,7 +2096,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByDisplayValue('Forged Company')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('Forged Contact')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
     expect(await screen.findAllByText('Company name is required.')).not.toHaveLength(0)
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
@@ -2149,7 +2149,7 @@ describe('Create Page Core Flows', () => {
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -2184,7 +2184,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByDisplayValue('100.0')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(

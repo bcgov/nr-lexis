@@ -636,7 +636,7 @@ const ProvincialOfferCreatePage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Create provincial offer"
-          subtitle="Enter offer details and save a new provincial offer."
+          subtitle="Enter offer details and save a new offer."
         />
       </Column>
 
@@ -1030,7 +1030,7 @@ const ProvincialOfferCreatePage = () => {
                   !!applicationValidationError
                 }
               >
-                Save
+                Save new offer
               </Button>
             </div>
           </div>
