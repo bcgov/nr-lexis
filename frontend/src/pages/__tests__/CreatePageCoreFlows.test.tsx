@@ -935,7 +935,7 @@ describe('Create Page Core Flows', () => {
     )
 
     const ownerNameInput = await screen.findByLabelText('Owner name')
-    await userEvent.type(ownerNameInput, 'Typed Owner')
+    fireEvent.change(ownerNameInput, { target: { value: 'Typed Owner' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
@@ -943,7 +943,7 @@ describe('Create Page Core Flows', () => {
         ownerContactName: 'Typed Owner',
       }),
     )
-  }, 20_000)
+  })
 
   it('blocks provincial application submit when volume precision is invalid', async () => {
     render(
