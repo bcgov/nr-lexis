@@ -433,7 +433,7 @@ describe('Provincial Review Action State Smoke', () => {
       target: { value: 'edited.client@example.com' },
     })
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
-    expect(screen.getByLabelText('Remarks')).toHaveAttribute('rows', '3')
+    expect(screen.getByLabelText('Remarks')).toHaveAttribute('rows', '6')
     expect(screen.getByLabelText('Send to:')).toHaveValue('edited.client@example.com')
     const saveButton = screen.getByRole('button', { name: 'Save' })
     expect(saveButton).toHaveClass('cds--btn--primary')

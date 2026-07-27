@@ -942,7 +942,7 @@ const ProvincialReviewPage = () => {
           <TextArea
             id="reviewRejectRemark"
             labelText="Remarks"
-            rows={3}
+            rows={6}
             maxCount={250}
             value={rejectRemark}
             invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
