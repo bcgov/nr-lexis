@@ -25,6 +25,8 @@ public interface FederalApplicationService {
 
   Optional<FederalApplicationDetailDto> findByApplicationNumber(Long applicationNumber);
 
+  Optional<FederalApplicationEditContext> findEditContext(Long applicationNumber);
+
   Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber);
 
   Optional<List<FederalApplicationRemarkDto>> findRemarksByApplicationNumber(
@@ -63,6 +65,8 @@ public interface FederalApplicationService {
   record FederalStatusMutationRequest(String statusCode, String remark) {}
 
   record FederalRemarkMutationRequest(String remark) {}
+
+  record FederalApplicationEditContext(String statusCode, LocalDate listingDate) {}
 
   record FederalRemarkMutationResult(
       boolean success,

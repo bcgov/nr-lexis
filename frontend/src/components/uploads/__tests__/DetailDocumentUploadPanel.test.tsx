@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
@@ -11,6 +11,10 @@ vi.mock('@/service/admin-upload-service', () => ({
 
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
+
+const openUploadModal = async (label = 'Add document'): Promise<void> => {
+  await userEvent.click(screen.getByRole('button', { name: label }))
+}
 
 describe('DetailDocumentUploadPanel', () => {
   beforeEach(() => {
@@ -32,17 +36,56 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    expect(screen.getByLabelText('Document File')).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: 'Choose files for Upload documents' }),
-    ).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByText('Drag and drop files here or click to upload')).toBeInTheDocument()
-    expect(screen.getByText('Upload access is read only.')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('list', { name: 'Upload queue workflow progress' }),
-    ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add document' })).toHaveAttribute(
+      'title',
+      'Upload access is read only.',
+    )
+    expect(screen.queryByLabelText('Document File')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument()
+  })
+
+  it('uses a modal and discards staged files when cancelled', async () => {
+    const file = new File(['document upload'], 'application-document.pdf', {
+      type: 'application/pdf',
+    })
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
+    await openUploadModal()
+    expect(screen.getByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
+
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument()
+    await openUploadModal()
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Document description/)).toHaveValue('')
+  })
+
+  it('does not focus the close button when the upload modal opens', async () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+
+    await waitFor(() => {
+      expect(document.getElementById('applicationDocumentsUploadModalContent')).toHaveFocus()
+    })
+    expect(screen.getByRole('button', { name: 'Close' })).not.toHaveFocus()
   })
 
   it('shows a visible refresh error after a successful upload when refresh fails', async () => {
@@ -64,6 +107,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
+    await openUploadModal()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
@@ -117,6 +161,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
+    await openUploadModal()
     await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
@@ -133,10 +178,6 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
 
     expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
-    const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
-    expect(
-      within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
-    ).toHaveAttribute('aria-current', 'step')
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
     })
@@ -182,6 +223,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
+    await openUploadModal()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
@@ -219,6 +261,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
+    await openUploadModal()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
 
     await waitFor(() => {
@@ -272,6 +315,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
+    await openUploadModal()
     await userEvent.upload(screen.getByLabelText('Document File'), [infectedFile, validFile])
 
     await waitFor(() => {
@@ -334,6 +378,7 @@ describe('DetailDocumentUploadPanel', () => {
 
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)
     expect(onBusyChange).toHaveBeenLastCalledWith(false)
+    await openUploadModal()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
@@ -364,6 +409,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
+    await openUploadModal('Add invoice')
     const conversionRate = screen.getByLabelText('Upload invoice conversion rate')
     expect(conversionRate).toHaveValue('1.25')
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)

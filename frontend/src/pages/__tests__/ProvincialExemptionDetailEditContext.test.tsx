@@ -148,7 +148,7 @@ describe('Provincial exemption edit context', () => {
     })
     mockedSendExemptionApprovalEmails.mockResolvedValue({
       success: true,
-      message: 'Approval email queued.',
+      message: 'Approval email sent.',
     })
     mockedRunReport.mockResolvedValue({
       source: 'api',
@@ -196,6 +196,11 @@ describe('Provincial exemption edit context', () => {
       'data-status-variant',
       'positive',
     )
+    const summaryCard = (
+      await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
+    ).closest('.cds--tile')
+    expect(summaryCard).toBeTruthy()
+    expect(within(summaryCard as HTMLElement).queryByText('Status')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Fees' }))
@@ -954,7 +959,13 @@ describe('Provincial exemption edit context', () => {
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
   })
 
-  it('keeps an expired exemption fully read-only', async () => {
+  it('keeps expired exemption fields read-only while allowing document uploads', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === 'saveExemption' || action === '/fileExemptionUpload',
+      }),
+    )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...exemptionDetail,
       exemptionStatusCode: 'EXP',
@@ -985,7 +996,7 @@ describe('Provincial exemption edit context', () => {
     expect(screen.getAllByText('Expired')).not.toHaveLength(0)
     expect(screen.queryByRole('button', { name: 'Edit exemption' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Documents' }))
-    expect(screen.queryByText('Upload exemption documents')).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 

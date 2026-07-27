@@ -52,7 +52,8 @@ class PurchaseOfferRepositoryTest {
         .contains("EEA.ORG_UNIT_NO")
         .contains("PO.OFFER_WITHDRAWAL_DATE IS NULL")
         .contains("EEA.EXPORT_JURISDICTION_CODE = 'P'")
-        .contains("ORDER BY ES.ADVERTISING_DATE DESC")
+        .contains(
+            "ORDER BY ES.ADVERTISING_DATE DESC, PO.EXPORT_PURCHASE_OFFER_NUMBER DESC")
         .doesNotContain("v.");
     assertThat(repository.bindValues())
         .containsExactly(

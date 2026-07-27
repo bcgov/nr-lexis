@@ -49,6 +49,11 @@ import {
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
+const openDocumentUploadModal = async (): Promise<void> => {
+  await userEvent.click(await screen.findByRole('button', { name: 'Add document' }))
+  await screen.findByRole('dialog', { name: 'Add document' })
+}
+
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
@@ -446,13 +451,13 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Open Approved Exemption Report' })).toBeNull()
 
     await selectDetailTab('Documents')
-    expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
     ).toBeInTheDocument()
   })
 
-  it('shows inline exemption upload to a scoped Provincial Submitter', async () => {
+  it('shows the exemption document modal to a scoped Provincial Submitter', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -476,8 +481,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
 
-    expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
-    expect(screen.getByLabelText('Document description')).toBeInTheDocument()
+    await openDocumentUploadModal()
+    expect(screen.getByLabelText(/Document description/)).toBeInTheDocument()
   })
 
   it('renders semantic empty states for empty exemption detail collections', async () => {
@@ -867,7 +872,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Upload Exemption Document' })).toBeNull()
-    expect(screen.queryByText('Upload exemption documents')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -911,7 +916,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Documents')
     const documentRow = (await screen.findByText('approver-exemption-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
-    expect(screen.queryByText('Upload exemption documents')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
     await waitFor(() => {
       expect(mockedOpenExemptionDocument).toHaveBeenCalledWith(
@@ -925,7 +930,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeDisabled()
   })
 
-  it('denies exemption document delete after expiry', async () => {
+  it('allows exemption uploads but denies document delete after expiry', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,
       exemptionStatusCode: 'EXP',
@@ -955,6 +960,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     const documentRow = (await screen.findByText('expired-exemption-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(
@@ -1039,7 +1045,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('TM-1')).toBeInTheDocument()
 
     await selectDetailTab('Documents')
-    expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
     ).toBeInTheDocument()
@@ -1112,13 +1118,13 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
 
     await selectDetailTab('Remarks')
-    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
 
     await selectDetailTab('Documents')
     const documentRow = (await screen.findByText('locked-federal-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
-    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     expect(
       within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
     ).not.toBeInTheDocument()
@@ -1169,7 +1175,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       arrange: () => undefined,
       edit: async () => {
         await selectDetailTab('Remarks')
-        await userEvent.type(screen.getByLabelText('Federal application remark'), 'Remark draft')
+        await userEvent.type(screen.getByLabelText('New Remark'), 'Remark draft')
       },
     },
     {
@@ -1202,6 +1208,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     renderFederalDataRouter()
     await screen.findByRole('heading', { name: 'LEXIS application 888', level: 1 })
     await selectDetailTab('Documents')
+    await user.click(screen.getByRole('button', { name: 'Add document' }))
     await user.upload(
       screen.getByLabelText('Document File'),
       new File(['unsupported'], 'evidence.exe'),
@@ -1444,11 +1451,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(remark).toHaveValue('Not eligible')
   })
 
-  it('renders terminal federal status as read only without a mutation form', async () => {
+  it('hides the federal status action area after the approved application listing day', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
-      statusCode: 'REJ',
-      statusDescription: 'Rejected',
+      statusCode: 'APP',
+      statusDescription: 'Approved',
+      listingDate: '2020-01-01',
     })
 
     render(
@@ -1460,7 +1468,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
-    expect(await screen.findByText('No status changes are available from REJ.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Federal status' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Update federal status' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
   })
@@ -1631,8 +1640,14 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('Federal application remark'), 'New note')
-    await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
+    const newRemarkInput = screen.getByLabelText('New Remark')
+    expect(newRemarkInput.closest('.legacy-search-actions')).toHaveTextContent('Save Remark')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    expect(await screen.findByText('Remark is required.')).toBeInTheDocument()
+
+    await userEvent.type(newRemarkInput, 'New note')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
 
     await waitFor(() => {
       expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'New note', undefined)
@@ -1640,10 +1655,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    const remarkInput = screen.getByLabelText('Federal application remark')
+    const remarkInput = screen.getByLabelText('Edit Remark 44')
     await userEvent.clear(remarkInput)
     await userEvent.type(remarkInput, 'Updated note')
-    await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Update Remark' }))
 
     await waitFor(() => {
       expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'Updated note', 44)
@@ -1694,7 +1709,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
     expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
-    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
@@ -1816,7 +1831,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
-    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1861,12 +1876,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
     ).toBeDisabled()
-    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
 
     await selectDetailTab('Application')
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
     await selectDetailTab('Remarks')
-    expect(screen.queryByLabelText('Federal application remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     await selectDetailTab('Shipping Details')
     expect(screen.queryByRole('button', { name: 'Edit shipping details' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()

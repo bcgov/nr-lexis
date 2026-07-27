@@ -37,25 +37,3 @@ export const allowedFederalStatusTransitions = (
   }
   return REVIEW_OUTCOME_TRANSITIONS
 }
-
-export const federalStatusReadOnlyMessage = (
-  currentStatus: string | null | undefined,
-  listingDate: string | null | undefined,
-  businessToday: string,
-): string => {
-  const normalizedStatus = currentStatus?.trim().toUpperCase() ?? 'UNKNOWN'
-  if (normalizedStatus === 'APP') {
-    const normalizedListingDate = normalizedIsoDate(listingDate)
-    const normalizedToday = normalizedIsoDate(businessToday)
-    if (!normalizedListingDate) {
-      return 'Status changes are read only because a valid listing date is unavailable.'
-    }
-    if (!normalizedToday) {
-      return 'Status changes are read only because the Vancouver business date is unavailable.'
-    }
-    if (normalizedToday > normalizedListingDate) {
-      return 'Status changes are read only because the listing day has passed.'
-    }
-  }
-  return `No status changes are available from ${normalizedStatus}.`
-}

@@ -178,11 +178,8 @@ class OfferDetailsRpcControllerTest {
         .thenReturn(
             Optional.of(
                 application(1000456L, "APP", LocalDate.of(2026, 2, 26), true, List.of())));
-    when(applicationDetailsService.getSpeciesForApplication(1000456L))
-        .thenReturn(
-            List.of(
-                new ApplicationDetailsRpcService.SpeciesEndUseItem("FI", "LUM", "Lumber"),
-                new ApplicationDetailsRpcService.SpeciesEndUseItem("HE", "LUM", "Lumber")));
+    when(applicationDetailsService.getApplicationSpeciesEndUseSort(1000456L))
+        .thenReturn("FI/HE/LUM");
 
     ResponseEntity<OfferDetailsRpcController.OfferApplicationDetailsResponseDto> response =
         controller.getApplicationDetails("1000456");

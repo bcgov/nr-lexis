@@ -20,6 +20,7 @@ import AuthoritativeOptionsUnavailableNotification from '@/components/Authoritat
 import IsoDatePicker from '../../components/IsoDatePicker'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
+import SearchSubmitButton from '@/components/SearchSubmitButton'
 import type {
   ProvincialOfferSearchFilters,
   ProvincialOfferSearchRequest,
@@ -57,7 +58,7 @@ import {
   parseSortDirectionParam,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -175,26 +176,21 @@ const ProvincialOffersPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
-  const filters = urlState.filters
+  const appliedFilters = urlState.filters
+  const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const requestFilters = appliedFilters
+  const hasSearchQuery = searchParams.toString().length > 0
   const updateFilter = useCallback(
     <K extends keyof ProvincialOfferSearchFilters>(
       key: K,
       value: ProvincialOfferSearchFilters[K],
     ) => {
-      const nextFilters = {
-        ...filters,
-        [key]: value,
-      }
-      setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
-        { replace: true },
-      )
+      setFilters((currentFilters) => ({ ...currentFilters, [key]: value }))
     },
-    [filters, pageSize, setSearchParams, sortDirection, sortField],
+    [setFilters],
   )
 
   const selectedRegions = useMemo(
@@ -276,13 +272,7 @@ const ProvincialOffersPage = () => {
           response: ProvincialOfferSearchResponse,
           totalIsExact: boolean,
         ) => {
-          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
-            return
-          }
-          if (totalIsExact) {
-            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
-              return
-            }
+          if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-offer-search',
@@ -294,7 +284,7 @@ const ProvincialOffersPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+            if (isLatestRequest()) {
               commitResults(response)
             }
           })
@@ -327,18 +317,26 @@ const ProvincialOffersPage = () => {
   )
 
   useEffect(() => {
-    if (searchParams.toString().length === 0) {
+    if (!hasSearchQuery) {
       return
     }
 
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch, searchParams])
+  }, [
+    hasSearchQuery,
+    requestFilters,
+    runSearch,
+    urlState.page,
+    urlState.pageSize,
+    urlState.sortDirection,
+    urlState.sortField,
+  ])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -392,12 +390,34 @@ const ProvincialOffersPage = () => {
   }, [defaultListingToDate, isOptionsLoaded, searchParams, setSearchParams])
 
   const onSearch = () => {
-    setSearchParams(
-      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    if (loading || hasDateValidationError) {
+      return
+    }
+    const nextSearchParams = buildSearchParams(
+      filters,
+      sortField,
+      sortDirection,
+      DEFAULT_SEARCH_PAGE,
+      pageSize,
     )
+    if (nextSearchParams.toString() === searchParams.toString()) {
+      void runSearch(
+        {
+          filters,
+          page: DEFAULT_SEARCH_PAGE - 1,
+          pageSize,
+          sortField,
+          sortDirection,
+        },
+        { force: true },
+      )
+      return
+    }
+    setSearchParams(nextSearchParams)
   }
 
   const onClearFilters = () => {
+    setFilters(INITIAL_FILTERS)
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -412,7 +432,7 @@ const ProvincialOffersPage = () => {
   const onHeaderClick = (column: ProvincialOfferSearchSortField) => {
     const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     setSearchParams(
-      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+      buildSearchParams(appliedFilters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
     )
   }
 
@@ -432,90 +452,97 @@ const ProvincialOffersPage = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-offer-search-filters">
           <Tile>
-            <div className="legacy-search-grid provincial-offer-search-grid">
-              <TextInput
-                id="applicationNumber"
-                labelText="Application number"
-                value={filters.applicationNumber}
-                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-              />
-              <TextInput
-                id="packageNumber"
-                labelText="Package number"
-                value={filters.packageNumber}
-                onChange={(event) => updateFilter('packageNumber', event.target.value)}
-              />
-              <TextInput
-                id="clientNumber"
-                labelText="Client number"
-                value={filters.clientNumber}
-                onChange={(event) => updateFilter('clientNumber', event.target.value)}
-              />
-              <IsoDatePicker
-                id="listingFromDate"
-                labelText="Listing from date"
-                value={filters.listingFromDate}
-                invalid={!isValidIsoDate(filters.listingFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingFromDate', value)}
-              />
-              <IsoDatePicker
-                id="listingToDate"
-                labelText="Listing to date"
-                value={filters.listingToDate}
-                invalid={!isValidIsoDate(filters.listingToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingToDate', value)}
-              />
-              <RegionMultiSelect
-                id="region"
-                titleText="Region"
-                items={regionOptions}
-                placeholder="Select region(s)"
-                selectedItems={selectedRegions}
-                disabled={!isOptionsLoaded || offerOptionsUnavailable}
-                onChange={(nextSelected) => {
-                  updateFilter(
-                    'region',
-                    nextSelected.map((item) => item.id),
-                  )
-                }}
-              />
-              <IsoDatePicker
-                id="withdrawalFromDate"
-                labelText="Withdrawn from date"
-                value={filters.withdrawalFromDate}
-                invalid={!isValidIsoDate(filters.withdrawalFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('withdrawalFromDate', value)}
-              />
-              <IsoDatePicker
-                id="withdrawalToDate"
-                labelText="Withdrawn to date"
-                value={filters.withdrawalToDate}
-                invalid={!isValidIsoDate(filters.withdrawalToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('withdrawalToDate', value)}
-              />
-            </div>
-            <div className="legacy-search-actions">
-              <Button
-                kind="primary"
-                onClick={onSearch}
-                disabled={loading || hasDateValidationError}
-                size="md"
-              >
-                Search
-              </Button>
-              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-                Clear Filters
-              </Button>
-              {canCreateOffer && (
-                <Link className="cds--link" to="/provincial/offers/create">
-                  Add Offer
-                </Link>
-              )}
-            </div>
+            <form
+              className="legacy-search-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                onSearch()
+              }}
+            >
+              <div className="legacy-search-grid provincial-offer-search-grid">
+                <TextInput
+                  id="applicationNumber"
+                  labelText="Application number"
+                  value={filters.applicationNumber}
+                  onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+                />
+                <TextInput
+                  id="packageNumber"
+                  labelText="Package number"
+                  value={filters.packageNumber}
+                  onChange={(event) => updateFilter('packageNumber', event.target.value)}
+                />
+                <TextInput
+                  id="clientNumber"
+                  labelText="Client number"
+                  value={filters.clientNumber}
+                  onChange={(event) => updateFilter('clientNumber', event.target.value)}
+                />
+                <IsoDatePicker
+                  id="listingFromDate"
+                  labelText="Listing from date"
+                  value={filters.listingFromDate}
+                  invalid={!isValidIsoDate(filters.listingFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('listingFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="listingToDate"
+                  labelText="Listing to date"
+                  value={filters.listingToDate}
+                  invalid={!isValidIsoDate(filters.listingToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('listingToDate', value)}
+                />
+                <RegionMultiSelect
+                  id="region"
+                  titleText="Region"
+                  items={regionOptions}
+                  placeholder="Select region(s)"
+                  selectedItems={selectedRegions}
+                  disabled={!isOptionsLoaded || offerOptionsUnavailable}
+                  onChange={(nextSelected) => {
+                    updateFilter(
+                      'region',
+                      nextSelected.map((item) => item.id),
+                    )
+                  }}
+                />
+                <IsoDatePicker
+                  id="withdrawalFromDate"
+                  labelText="Withdrawn from date"
+                  value={filters.withdrawalFromDate}
+                  invalid={!isValidIsoDate(filters.withdrawalFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('withdrawalFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="withdrawalToDate"
+                  labelText="Withdrawn to date"
+                  value={filters.withdrawalToDate}
+                  invalid={!isValidIsoDate(filters.withdrawalToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('withdrawalToDate', value)}
+                />
+              </div>
+              <div className="legacy-search-actions">
+                <Button
+                  type="button"
+                  kind="tertiary"
+                  onClick={onClearFilters}
+                  disabled={loading}
+                  size="md"
+                >
+                  Clear Filters
+                </Button>
+                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                {canCreateOffer && (
+                  <Link className="cds--link" to="/provincial/offers/create">
+                    Add Offer
+                  </Link>
+                )}
+              </div>
+            </form>
           </Tile>
         </section>
       </Column>
@@ -552,7 +579,6 @@ const ProvincialOffersPage = () => {
                           onClick={() => onHeaderClick(column.id)}
                         >
                           {column.label}
-                          {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
                         </button>
                       </TableHeader>
                     ))}
@@ -571,9 +597,11 @@ const ProvincialOffersPage = () => {
                       </TableCell>
                       <TableCell>{row.applicationNumber}</TableCell>
                       <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
-                      <TableCell>{row.offerWithdrawalDate || '-'}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {row.offerWithdrawalDate || '-'}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -592,7 +620,7 @@ const ProvincialOffersPage = () => {
                 totalItems={results.page.totalElements}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   setSearchParams(
-                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
                   )
                 }}
               />

@@ -133,6 +133,21 @@ describe('AuthProvider logout', () => {
     expect(SESSION_IDLE_WARNING_MS).toBe(5 * 60 * 1000)
   })
 
+  it('preserves the inactivity notice while bootstrapping without Cognito tokens', async () => {
+    markSessionExpiredLoginNotice()
+    authMocks.fetchAuthSession.mockResolvedValue({ tokens: undefined })
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
+    expect(hasSessionExpiredLoginNotice()).toBe(true)
+  })
+
   it('clears local auth state after Cognito signout fails', async () => {
     authMocks.signOut.mockRejectedValue(new Error('cognito unavailable'))
     renderProbe()

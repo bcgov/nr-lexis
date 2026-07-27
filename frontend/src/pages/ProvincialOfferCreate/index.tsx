@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -16,6 +16,7 @@ import {
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useAuth } from '@/context/auth/useAuth'
 import { submitProvincialOfferCreate } from '@/service/create-submit-service'
 import {
@@ -274,6 +275,12 @@ const ProvincialOfferCreatePage = () => {
     !isLoadingApplicationContext &&
     applicationDetails !== null &&
     packageOptions.length === 0
+  const debouncedApplicationNumber = useDebouncedValue(form.applicationNumber)
+  const debouncedPackageNumber = useDebouncedValue(form.packageNumber)
+  const applicationNumberForLookup = formEdited
+    ? debouncedApplicationNumber
+    : form.applicationNumber
+  const packageNumberForLookup = formEdited ? debouncedPackageNumber : form.packageNumber
 
   useEffect(() => {
     if (createdRecordPath) {
@@ -320,7 +327,7 @@ const ProvincialOfferCreatePage = () => {
   }, [authoritativeOfferingClientNumber, isScopedProvincialSubmitter])
 
   useEffect(() => {
-    const applicationNumber = form.applicationNumber.trim()
+    const applicationNumber = applicationNumberForLookup.trim()
     if (!applicationNumber) {
       dispatchApplicationContext({ type: 'reset', packageOptions: queryPackageOptions })
       return
@@ -408,10 +415,11 @@ const ProvincialOfferCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.applicationNumber, queryPackageOptions])
+  }, [applicationNumberForLookup, queryPackageOptions])
 
   useEffect(() => {
-    const packageNumber = form.packageNumber.trim()
+    const packageNumber =
+      packageOptions.length > 0 ? form.packageNumber.trim() : packageNumberForLookup.trim()
     if (!packageNumber) {
       dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: '' })
       return
@@ -433,7 +441,7 @@ const ProvincialOfferCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.packageNumber])
+  }, [form.packageNumber, packageNumberForLookup, packageOptions.length])
 
   const contextVolume = form.packageNumber.trim() ? packageVolume : applicationVolume
 
@@ -628,7 +636,7 @@ const ProvincialOfferCreatePage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Create provincial offer"
-          subtitle="Enter offer details and save a new provincial offer."
+          subtitle="Enter offer details and save a new offer."
         />
       </Column>
 
@@ -657,8 +665,8 @@ const ProvincialOfferCreatePage = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
-        <Tile className="provincial-offer-create create-form-tile">
-          <fieldset className="legacy-form-fieldset create-form-section">
+        <div className="provincial-offer-create create-form-tile provincial-offer-sections provincial-offer-section-stack">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Application details</legend>
             <div className="legacy-search-grid create-form-grid">
               <TextInput
@@ -726,7 +734,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset create-form-section">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Offering company details</legend>
             <div className="legacy-search-grid create-form-grid">
               <TextInput
@@ -793,7 +801,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset create-form-section">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Offer details</legend>
             <div className="legacy-search-grid create-form-grid">
               {contextVolume && (
@@ -895,7 +903,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset create-form-section">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Offer withdrawals</legend>
             <div className="legacy-search-grid create-form-grid">
               <TextInput
@@ -909,7 +917,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
           </fieldset>
 
-          <fieldset className="legacy-form-fieldset create-form-section">
+          <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Approval</legend>
             {canManageOfferApproval ? (
               <div className="legacy-search-grid create-form-grid">
@@ -1022,11 +1030,11 @@ const ProvincialOfferCreatePage = () => {
                   !!applicationValidationError
                 }
               >
-                Save
+                Save new offer
               </Button>
             </div>
           </div>
-        </Tile>
+        </div>
       </Column>
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}

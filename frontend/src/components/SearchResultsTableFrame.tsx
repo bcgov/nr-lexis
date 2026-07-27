@@ -1,5 +1,6 @@
-import { InlineLoading, TableToolbar, TableToolbarContent } from '@carbon/react'
+import { DataTableSkeleton, InlineLoading, TableToolbar, TableToolbarContent } from '@carbon/react'
 import type { ReactNode } from 'react'
+import TableFrame from './TableFrame'
 
 export type SearchResultsTableFrameProps = {
   children: ReactNode
@@ -23,34 +24,40 @@ function SearchResultsTableFrame({
 }: SearchResultsTableFrameProps) {
   return (
     <div className="legacy-search-table-frame">
-      {totalItems !== undefined && (
+      {(loading || totalItems !== undefined) && (
         <div className="legacy-search-table-toolbar">
           <TableToolbar>
             <TableToolbarContent>
-              <p className="legacy-search-result-count">
-                {totalItemsLabel ?? formatSearchResultCount(totalItems)}
-              </p>
+              {loading ? (
+                <div className="legacy-search-result-loading">
+                  <InlineLoading description={loadingDescription} />
+                </div>
+              ) : (
+                <p className="legacy-search-result-count">
+                  {totalItemsLabel ?? formatSearchResultCount(totalItems!)}
+                </p>
+              )}
             </TableToolbarContent>
           </TableToolbar>
         </div>
       )}
-      <div
-        className={
-          loading ? 'legacy-search-table-content is-loading' : 'legacy-search-table-content'
-        }
-        role="region"
-        aria-label="Search results table"
-        tabIndex={0}
-        inert={loading ? true : undefined}
+      <TableFrame
+        ariaLabel="Search results table"
+        className="legacy-search-table-content"
         aria-busy={loading}
       >
-        {children}
-      </div>
-      {loading && (
-        <div className="legacy-search-table-loader">
-          <InlineLoading description={loadingDescription} />
-        </div>
-      )}
+        {loading ? (
+          <DataTableSkeleton
+            aria-label={loadingDescription}
+            columnCount={6}
+            rowCount={5}
+            showHeader={false}
+            showToolbar={false}
+          />
+        ) : (
+          children
+        )}
+      </TableFrame>
     </div>
   )
 }

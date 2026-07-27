@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -124,6 +124,38 @@ describe('Provincial Offer Search Actions', () => {
     )
   })
 
+  it('waits for explicit submission while text filters are typed', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage()
+    await screen.findByText('OFF-1001')
+    mockedSearchProvincialOffers.mockClear()
+
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    for (const value of ['4', '46', '460', '4605', '46053']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(applicationNumberInput).toHaveValue('46053')
+    expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
+
+    const searchButton = screen.getByRole('button', { name: 'Search' })
+    expect(searchButton).toBeEnabled()
+    expect(searchButton).toHaveAttribute('type', 'submit')
+    expect(searchButton.closest('form')).toBeValid()
+    await userEvent.click(searchButton)
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(1)
+      expect(mockedSearchProvincialOffers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ applicationNumber: '46053' }),
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
   it('defaults listing to date from the first list-date label and leaves blank last', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
@@ -192,7 +224,7 @@ describe('Provincial Offer Search Actions', () => {
       expect(searchButton).toBeEnabled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Listing date (ASC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Listing date' }))
 
     await waitFor(() => {
       expect(

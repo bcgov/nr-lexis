@@ -149,7 +149,7 @@ const safeUrlForLog = (rawUrl: string): string => {
 }
 
 const redirectExternalLogoutToLoginShell = async (page: Page): Promise<void> => {
-  const logoutReturnUrl = `${new URL(E2E_BASE_URL).origin}/logout`
+  const logoutReturnUrl = `${new URL(E2E_BASE_URL).origin}/`
 
   await page.route(/https:\/\/[^/]*amazoncognito\.com\/(?:logout|error).*/i, async (route) => {
     await route.fulfill({
@@ -3303,9 +3303,10 @@ test.describe('TEST IDIR admin regression', () => {
         )
       }, sessionExpiredEventName),
     )
+    await expect(page.getByText('You’ve been logged out', { exact: true })).toBeVisible()
   })
 
-  test('signs out to the login shell', async () => {
+  test('signs out to the login shell without an expired-session warning', async () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(page, '/admin', /administration/i)
@@ -3318,5 +3319,6 @@ test.describe('TEST IDIR admin regression', () => {
     const signOutButton = openProfilePanel.getByRole('button', { name: /sign out/i })
     await expect(signOutButton).toBeVisible()
     await expectLogoutRoundTrip(page, 'Logout', () => signOutButton.click())
+    await expect(page.getByText('You’ve been logged out', { exact: true })).toHaveCount(0)
   })
 })

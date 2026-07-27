@@ -7,6 +7,7 @@ import {
   clearSessionExpiredLoginNotice,
   markSessionExpiredLoginNotice,
 } from '@/context/auth/session-expiry'
+import ThemeProvider from '@/context/theme/ThemeProvider'
 import LandingPage from '@/pages/Landing'
 import {
   createLoggedOutTestAuthContext,
@@ -32,17 +33,20 @@ const mockedUseAuth = vi.mocked(useAuth)
 
 const renderPage = () => {
   render(
-    <MemoryRouter initialEntries={['/']}>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+        </Routes>
+      </MemoryRouter>
+    </ThemeProvider>,
   )
 }
 
 describe('Landing auth flow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
     clearSessionExpiredLoginNotice()
 
     mockedUseAuth.mockReturnValue(
@@ -82,6 +86,17 @@ describe('Landing auth flow smoke', () => {
     renderPage()
 
     expect(screen.queryByText('You’ve been logged out')).not.toBeInTheDocument()
+  })
+
+  it('applies the saved dark theme and uses the reverse logo before login', () => {
+    window.localStorage.setItem('lexis.ui.theme', 'g100')
+
+    renderPage()
+
+    expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'g100')
+    expect(
+      screen.getByRole('img', { name: 'Government of British Columbia' }).getAttribute('src'),
+    ).toContain('gov-bc-logo-horiz')
   })
 
   it('shows the signed-out notice after an automatic session expiry', () => {

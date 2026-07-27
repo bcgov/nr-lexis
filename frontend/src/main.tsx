@@ -5,7 +5,11 @@ import { Amplify } from 'aws-amplify'
 import '@/scss/styles.scss'
 import App from '@/App'
 import amplifyConfig, { isCognitoConfigured } from '@/config/fam/config'
+import { registerStaleChunkRecovery } from '@/config/stale-chunk-recovery'
 import { AuthProvider } from './context/auth/AuthProvider'
+import ThemeProvider from './context/theme/ThemeProvider'
+
+registerStaleChunkRecovery()
 
 if (isCognitoConfigured) {
   Amplify.configure(amplifyConfig)
@@ -14,7 +18,9 @@ if (isCognitoConfigured) {
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </AuthProvider>
   </StrictMode>,
 )

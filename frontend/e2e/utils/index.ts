@@ -70,6 +70,12 @@ export const installSyntheticCognitoSession = async (
 
   await page.addInitScript(
     ({ prefix, storageUsername, storedAccessToken, storedIdToken, storedRefreshToken }) => {
+      const initializedKey = `${prefix}.syntheticSessionInitialized`
+      // Do not restore synthetic tokens after the application deliberately clears them on logout.
+      if (window.sessionStorage.getItem(initializedKey) === 'true') {
+        return
+      }
+      window.sessionStorage.setItem(initializedKey, 'true')
       window.localStorage.setItem(`${prefix}.LastAuthUser`, storageUsername)
       window.localStorage.setItem(`${prefix}.${storageUsername}.accessToken`, storedAccessToken)
       window.localStorage.setItem(`${prefix}.${storageUsername}.idToken`, storedIdToken)

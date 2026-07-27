@@ -137,7 +137,8 @@ class PermitRepositoryTest {
         .contains("ESI.EXPORT_SALES_INVOICE_NUMBER")
         .contains("EPD.ORG_UNIT_NO")
         .contains("ESD.EXPORT_PERMIT_DETAIL_NUMBER IS NOT NULL")
-        .contains("ORDER BY EPD.EXPORT_PERMIT_ISSUE_DATE ASC")
+        .contains(
+            "ORDER BY EPD.EXPORT_PERMIT_ISSUE_DATE ASC, EPD.EXPORT_PERMIT_DETAIL_NUMBER ASC")
         .doesNotContain("v.");
     assertThat(repository.bindValues())
         .containsExactly(

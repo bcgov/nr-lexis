@@ -37,7 +37,7 @@ const TableFrame = ({ ariaLabel, children, className, ...frameProps }: TableFram
       window.removeEventListener('resize', updateScrollability)
       resizeObserver?.disconnect()
     }
-  }, [])
+  }, [children])
 
   return (
     <div

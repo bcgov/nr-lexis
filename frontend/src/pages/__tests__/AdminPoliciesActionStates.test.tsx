@@ -650,7 +650,7 @@ describe('Admin policy action states', () => {
       )
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting (ASC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting' }))
 
     await waitFor(() => {
       expect(mockedFetchExportSchedulePage).toHaveBeenLastCalledWith(
@@ -736,7 +736,7 @@ describe('Admin policy action states', () => {
         expect(fetchPage).toHaveBeenLastCalledWith(0, 100, sortField, 'asc')
       })
 
-      await userEvent.click(screen.getByRole('button', { name: `${targetHeader} (ASC)` }))
+      await userEvent.click(screen.getByRole('button', { name: targetHeader }))
       await waitFor(() => {
         expect(fetchPage).toHaveBeenLastCalledWith(0, 100, sortField, 'desc')
       })

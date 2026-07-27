@@ -18,7 +18,7 @@ class RegressionWorkflowDefaultsTest {
         .contains(
             "E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.gold.devops.gov.bc.ca")
         .contains("if: github.ref_name == github.event.repository.default_branch")
-        .contains("environment: test")
+        .contains("environment:\n      name: test\n      deployment: false")
         .contains("E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}")
         .contains("E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}")
         .contains("test environment secret is required")

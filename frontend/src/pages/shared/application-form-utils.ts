@@ -18,6 +18,18 @@ export const isSelectableClientLocation = (location: ApplicationClientLocation):
 export const isSelectableClientContact = (contact: ApplicationClientContact): boolean =>
   contact.contactId !== '0'
 
+export const clientLocationLabel = (locationCode: string, locationName: string): string => {
+  const code = locationCode.trim()
+  const name = locationName.trim()
+  if (!code) {
+    return name
+  }
+  if (!name || name === code || name.startsWith(`${code} - `)) {
+    return name || code
+  }
+  return `${code} - ${name}`
+}
+
 export const resolveClientLocationCode = (
   locations: ApplicationClientLocation[],
   currentCode: string,

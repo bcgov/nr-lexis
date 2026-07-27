@@ -69,16 +69,20 @@ class LexisDocumentUploadMutationIntegrationTest {
   }
 
   @Test
-  void directPersistedUploadsShouldRejectExpiredCanonicalTargets() throws Exception {
+  void directPersistedUploadsShouldAllowExpiredApplicationAndExemptionTargets() throws Exception {
     canonicalStatuses("EXP", "EXP", "EXP");
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("application")));
+    when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("exemption")));
 
-    performApplicationUpload().andExpect(status().isForbidden());
-    performExemptionUpload().andExpect(status().isForbidden());
+    performApplicationUpload().andExpect(status().isOk());
+    performExemptionUpload().andExpect(status().isOk());
     performPermitUpload().andExpect(status().isForbidden());
     performInvoiceUpload().andExpect(status().isForbidden());
 
-    verify(uploadService, never()).uploadApplication(any(), any(), any(), any());
-    verify(uploadService, never()).uploadExemption(any(), any(), any(), any());
+    verify(uploadService).uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any());
+    verify(uploadService).uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any());
     verify(uploadService, never()).uploadPermit(any(), any(), any(), any());
     verify(uploadService, never())
         .uploadInvoice(any(), any(), any(), any(), any(), any(), any(), any());
@@ -305,7 +309,17 @@ class LexisDocumentUploadMutationIntegrationTest {
   private ApplicationDetailsRpcService.ApplicationEditContext applicationEditContext(
       boolean hasCompletePermit) {
     return new ApplicationDetailsRpcService.ApplicationEditContext(
-        APPLICATION_NUMBER, "NEW", "P", 1L, null, false, false, hasCompletePermit, null, false);
+        APPLICATION_NUMBER,
+        "NEW",
+        "P",
+        "H",
+        1L,
+        null,
+        false,
+        false,
+        hasCompletePermit,
+        null,
+        false);
   }
 
   private ExemptionDetailDto exemption(String status) {

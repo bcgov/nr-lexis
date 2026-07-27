@@ -30,6 +30,7 @@ import {
 } from '@/pages/shared/application-term-utils'
 import {
   averageLogVolumeFieldError,
+  clientLocationLabel,
   isAgentApplicant,
   isSelectableClientContact,
   isSelectableClientLocation,
@@ -51,6 +52,7 @@ import {
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import {
   fetchProvincialApplicationOptions,
   type SearchOption,
@@ -100,6 +102,11 @@ type ProvincialApplicationCreateForm = {
 }
 
 type ProvincialApplicationCreateField = keyof ProvincialApplicationCreateForm & string
+
+type CreatedApplicationNavigation = {
+  path: string
+  applicationNumber: string
+}
 
 const APPLICATION_CREATE_TAB_INDEX = {
   summary: 0,
@@ -282,7 +289,8 @@ const ProvincialApplicationCreatePage = () => {
   )
   const draftBaselineRef = useRef(form)
   const [formEdited, setFormEdited] = useState(false)
-  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
+  const [createdApplicationNavigation, setCreatedApplicationNavigation] =
+    useState<CreatedApplicationNavigation | null>(null)
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
   const [growthTypes, setGrowthTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
@@ -321,12 +329,26 @@ const ProvincialApplicationCreatePage = () => {
   const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState<number>(
     APPLICATION_CREATE_TAB_INDEX.summary,
   )
+  const debouncedOwnerClientNumber = useDebouncedValue(form.ownerClientNumber)
+  const debouncedAgentClientNumber = useDebouncedValue(form.agentClientNumber)
+  const ownerClientNumberForLookup = formEdited
+    ? debouncedOwnerClientNumber
+    : form.ownerClientNumber
+  const agentClientNumberForLookup = formEdited
+    ? debouncedAgentClientNumber
+    : form.agentClientNumber
 
   useEffect(() => {
-    if (createdRecordPath) {
-      navigate(createdRecordPath)
+    if (createdApplicationNavigation) {
+      navigate(createdApplicationNavigation.path, {
+        state: {
+          applicationCreationNotice: {
+            applicationNumber: createdApplicationNavigation.applicationNumber,
+          },
+        },
+      })
     }
-  }, [createdRecordPath, navigate])
+  }, [createdApplicationNavigation, navigate])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -456,7 +478,7 @@ const ProvincialApplicationCreatePage = () => {
   }, [exemptionReasons])
 
   useEffect(() => {
-    const ownerClientNumber = form.ownerClientNumber.trim()
+    const ownerClientNumber = ownerClientNumberForLookup.trim()
     if (!ownerClientNumber) {
       let isActive = true
       void Promise.resolve().then(() => {
@@ -513,7 +535,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.ownerClientNumber])
+  }, [ownerClientNumberForLookup])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -542,7 +564,7 @@ const ProvincialApplicationCreatePage = () => {
       }
     }
 
-    const agentClientNumber = form.agentClientNumber.trim()
+    const agentClientNumber = agentClientNumberForLookup.trim()
     if (!agentClientNumber) {
       let isActive = true
       void Promise.resolve().then(() => {
@@ -599,10 +621,10 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.agentClientNumber, form.applicantTypeCode])
+  }, [agentClientNumberForLookup, form.applicantTypeCode])
 
   useEffect(() => {
-    const ownerClientNumber = form.ownerClientNumber.trim()
+    const ownerClientNumber = ownerClientNumberForLookup.trim()
     const ownerClientLocationCode = form.ownerClientLocationCode.trim()
     if (!ownerClientNumber || !ownerClientLocationCode) {
       let isActive = true
@@ -657,7 +679,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.ownerClientLocationCode, form.ownerClientNumber])
+  }, [form.ownerClientLocationCode, ownerClientNumberForLookup])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -676,7 +698,7 @@ const ProvincialApplicationCreatePage = () => {
       }
     }
 
-    const agentClientNumber = form.agentClientNumber.trim()
+    const agentClientNumber = agentClientNumberForLookup.trim()
     const agentClientLocationCode = form.agentClientLocationCode.trim()
     if (!agentClientNumber || !agentClientLocationCode) {
       let isActive = true
@@ -731,7 +753,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.agentClientLocationCode, form.agentClientNumber, form.applicantTypeCode])
+  }, [agentClientNumberForLookup, form.agentClientLocationCode, form.applicantTypeCode])
 
   useEffect(() => {
     const region = form.region.trim()
@@ -1156,7 +1178,10 @@ const ProvincialApplicationCreatePage = () => {
         setFormEdited(false)
         if (result.createdId) {
           if (navigateToCreatedRecord) {
-            setCreatedRecordPath(`/provincial/application/${encodeURIComponent(result.createdId)}`)
+            setCreatedApplicationNavigation({
+              path: `/provincial/application/${encodeURIComponent(result.createdId)}`,
+              applicationNumber: result.createdId,
+            })
           }
           return true
         }
@@ -1559,7 +1584,7 @@ const ProvincialApplicationCreatePage = () => {
                       .filter(isSelectableClientLocation)
                       .map((location) => ({
                         value: location.locationCode,
-                        label: location.locationName,
+                        label: clientLocationLabel(location.locationCode, location.locationName),
                       }))}
                     onBlur={() => markFieldTouched('ownerClientLocationCode')}
                     onChange={(value) => {
@@ -1679,7 +1704,10 @@ const ProvincialApplicationCreatePage = () => {
                           .filter(isSelectableClientLocation)
                           .map((location) => ({
                             value: location.locationCode,
-                            label: location.locationName,
+                            label: clientLocationLabel(
+                              location.locationCode,
+                              location.locationName,
+                            ),
                           }))}
                         onBlur={() => markFieldTouched('agentClientLocationCode')}
                         onChange={(value) => {
@@ -1738,85 +1766,87 @@ const ProvincialApplicationCreatePage = () => {
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
-              <Tile
-                className="create-form-tile application-detail-section"
-                role="region"
-                aria-labelledby="application-create-packages-heading"
-              >
-                <h2 id="application-create-packages-heading" className="detail-tile-title">
-                  Packages / Scales
-                </h2>
-                <div className="legacy-search-grid create-form-grid">
-                  <div className="legacy-field-stack">
-                    <SearchableSelect
-                      id="applicationSpeciesCandidate"
-                      labelText="Application species"
-                      value={applicationSpeciesCandidate}
-                      disabled={isApplicationSpeciesSelectDisabled}
-                      invalid={!!fieldError('speciesCodes')}
-                      invalidText={fieldError('speciesCodes')}
-                      placeholder={speciesPlaceholder}
-                      options={applicationSpeciesSelectOptions}
-                      onBlur={() => markFieldTouched('speciesCodes')}
-                      onChange={setApplicationSpeciesCandidate}
-                    />
-                    {isApplicationSpeciesSelectDisabled && !!fieldError('speciesCodes') && (
-                      <p className="legacy-search-error" role="alert">
-                        {fieldError('speciesCodes')}
-                      </p>
-                    )}
-                    <div className="application-species-actions">
-                      <Button
-                        type="button"
-                        kind="secondary"
-                        size="sm"
-                        disabled={
-                          !applicationSpeciesCandidate ||
-                          !availableApplicationSpeciesOptions.some(
-                            (option) => option.code === applicationSpeciesCandidate,
-                          )
-                        }
-                        onClick={onAddApplicationSpecies}
-                      >
-                        Add application species
-                      </Button>
-                      <ul
-                        className="application-species-list"
-                        aria-label="Selected application species"
-                      >
-                        {form.speciesCodes.map((speciesCode) => (
-                          <li key={speciesCode}>
-                            <DismissibleTag
-                              type="blue"
-                              text={speciesCode}
-                              title={`Remove ${speciesCode} from application`}
-                              dismissTooltipLabel={`Remove ${speciesCode} from application`}
-                              onClose={() => onRemoveApplicationSpecies(speciesCode)}
-                            />
-                          </li>
-                        ))}
-                      </ul>
+              <div className="application-items-grid">
+                <Tile
+                  className="create-form-tile application-detail-section"
+                  role="region"
+                  aria-labelledby="application-create-packages-heading"
+                >
+                  <h2 id="application-create-packages-heading" className="detail-tile-title">
+                    Packages / Scales
+                  </h2>
+                  <div className="legacy-search-grid create-form-grid">
+                    <div className="legacy-field-stack">
+                      <SearchableSelect
+                        id="applicationSpeciesCandidate"
+                        labelText="Application species"
+                        value={applicationSpeciesCandidate}
+                        disabled={isApplicationSpeciesSelectDisabled}
+                        invalid={!!fieldError('speciesCodes')}
+                        invalidText={fieldError('speciesCodes')}
+                        placeholder={speciesPlaceholder}
+                        options={applicationSpeciesSelectOptions}
+                        onBlur={() => markFieldTouched('speciesCodes')}
+                        onChange={setApplicationSpeciesCandidate}
+                      />
+                      {isApplicationSpeciesSelectDisabled && !!fieldError('speciesCodes') && (
+                        <p className="legacy-search-error" role="alert">
+                          {fieldError('speciesCodes')}
+                        </p>
+                      )}
+                      <div className="application-species-actions">
+                        <Button
+                          type="button"
+                          kind="secondary"
+                          size="sm"
+                          disabled={
+                            !applicationSpeciesCandidate ||
+                            !availableApplicationSpeciesOptions.some(
+                              (option) => option.code === applicationSpeciesCandidate,
+                            )
+                          }
+                          onClick={onAddApplicationSpecies}
+                        >
+                          Add application species
+                        </Button>
+                        <ul
+                          className="application-species-list"
+                          aria-label="Selected application species"
+                        >
+                          {form.speciesCodes.map((speciesCode) => (
+                            <li key={speciesCode}>
+                              <DismissibleTag
+                                type="blue"
+                                text={speciesCode}
+                                title={`Remove ${speciesCode} from application`}
+                                dismissTooltipLabel={`Remove ${speciesCode} from application`}
+                                onClose={() => onRemoveApplicationSpecies(speciesCode)}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
+                    <SearchableSelect
+                      id="applicationEndUse"
+                      labelText="Application end use"
+                      value={form.endUseCode}
+                      disabled={
+                        form.speciesCodes.length === 0 ||
+                        isLoadingApplicationEndUses ||
+                        applicationEndUseSelectOptions.length === 0
+                      }
+                      placeholder={endUsePlaceholder}
+                      options={applicationEndUseSelectOptions}
+                      onChange={(value) => {
+                        markFormEdited()
+                        setForm((current) => ({ ...current, endUseCode: value }))
+                      }}
+                    />
                   </div>
-                  <SearchableSelect
-                    id="applicationEndUse"
-                    labelText="Application end use"
-                    value={form.endUseCode}
-                    disabled={
-                      form.speciesCodes.length === 0 ||
-                      isLoadingApplicationEndUses ||
-                      applicationEndUseSelectOptions.length === 0
-                    }
-                    placeholder={endUsePlaceholder}
-                    options={applicationEndUseSelectOptions}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, endUseCode: value }))
-                    }}
-                  />
-                </div>
+                </Tile>
                 {productTypeSupportsPackages(form.productTypeCode) && (
-                  <section className="application-items-section application-items-section--package-details application-create-package-shell">
+                  <section className="application-items-card application-items-section application-items-section--package-details">
                     <div className="application-items-section-header">
                       <h3>Package Details</h3>
                       <SearchableSelect
@@ -1859,7 +1889,7 @@ const ProvincialApplicationCreatePage = () => {
                     </div>
                   </section>
                 )}
-              </Tile>
+              </div>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
               <Tile
@@ -1978,14 +2008,27 @@ const ProvincialApplicationCreatePage = () => {
       )}
       <Modal
         open={packageSavePromptOpen}
+        passiveModal
         size="xs"
         modalHeading="Application not saved"
-        primaryButtonText="OK"
+        className="application-create-package-save-modal"
         launcherButtonRef={createPackageButtonRef}
+        selectorPrimaryFocus="#applicationCreatePackageSavePromptOk"
         onRequestClose={() => setPackageSavePromptOpen(false)}
-        onRequestSubmit={() => setPackageSavePromptOpen(false)}
       >
-        <p>Please save this application before adding packages.</p>
+        <div className="application-create-package-save-prompt">
+          <p>Please save this application before adding packages.</p>
+          <div className="application-create-package-save-prompt__actions">
+            <Button
+              id="applicationCreatePackageSavePromptOk"
+              type="button"
+              kind="primary"
+              onClick={() => setPackageSavePromptOpen(false)}
+            >
+              OK
+            </Button>
+          </div>
+        </div>
       </Modal>
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}

@@ -27,7 +27,9 @@ jobs:
     if: always()
     runs-on: ubuntu-slim
     timeout-minutes: 10
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions:
       pull-requests: read
     steps:

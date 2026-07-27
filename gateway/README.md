@@ -11,6 +11,7 @@ NEXCOL -> Keycloak token -> API gateway -> OpenShift Service -> LEXIS backend
 - Keycloak owns the dedicated NEXCOL client and OAuth scope assignment.
 - The gateway exposes only the two federal `POST` endpoints.
 - The gateway validates issuer, expiry, required scope and audience when configured.
+- Bearer tokens are accepted through the `Authorization` header, not URL query parameters.
 - The gateway provides centralized routing, traffic controls, metrics and operational visibility.
 - LEXIS validates the forwarded token and applies application-level authorization and business
   validation.
@@ -41,17 +42,18 @@ the API Directory is a separate API Services Portal action.
 | Environment | Gateway base URL | Status |
 |---|---|---|
 | TEST | `https://nr-lexis-nexcol-test-api-gov-bc-ca.test.api.gov.bc.ca` | Available |
-| PROD | `https://nr-lexis-nexcol.api.gov.bc.ca` | Projected; available after production provisioning |
+| PROD | `https://nr-lexis-nexcol.api.gov.bc.ca` | Gateway provisioned; application deployment pending |
 
 The PROD hostname follows the API Services production vanity-URL convention and is listed so
 consumers can prepare environment configuration before production provisioning is complete.
 
 ## Configuration
 
-[`nr-lexis-nexcol-test.kong.yaml`](nr-lexis-nexcol-test.kong.yaml) is the non-secret declarative
-configuration for the TEST gateway. It defines:
+[`nr-lexis-nexcol-test.kong.yaml`](nr-lexis-nexcol-test.kong.yaml) and
+[`nr-lexis-nexcol-prod.kong.yaml`](nr-lexis-nexcol-prod.kong.yaml) are the non-secret declarative
+configurations for the TEST and PROD gateways. They define:
 
-- the cluster-local `nr-lexis-backend-test.da5fad-test.svc:8080` upstream;
+- the corresponding cluster-local `nr-lexis-backend-${ZONE}.da5fad-${ZONE}.svc:8080` upstream;
 - validation and submission routes;
 - the trusted Keycloak issuer;
 - the `lexis:federal-submission:submit` OAuth scope; and
@@ -64,8 +66,9 @@ admit the OpenShift ingress router, so a Route left by an earlier `oc apply` can
 The public frontend Route remains available for interactive LEXIS traffic, but Caddy returns `404`
 for the two NEXCOL-only paths instead of proxying them.
 
-DEV uses ephemeral application deployments and has no long-lived NEXCOL gateway. Add a separate
-PROD gateway configuration only when the PROD LEXIS deployment is provisioned.
+DEV uses ephemeral application deployments and has no long-lived NEXCOL gateway. The PROD gateway
+configuration is ready for the future application rollout, but the upstream cannot become healthy
+until the PROD backend Service is deployed.
 
 The integration flow and XML contract are documented in
 [`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).

@@ -2604,7 +2604,7 @@ class OracleExemptionDetailsRpcServiceTest {
             "EX-205", " Applicant <edited@example.com> ");
 
     assertThat(response.success()).isTrue();
-    assertThat(response.message()).isEqualTo("Email queued successfully.");
+    assertThat(response.message()).isEqualTo("Approval email sent.");
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.ExemptionApproval(
@@ -2659,7 +2659,7 @@ class OracleExemptionDetailsRpcServiceTest {
         service.sendExemptionApprovalEmails("EX-205:attacker@example.com,EX-404:missing@example.com");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.message()).contains("Email could not be queued for exemption(s)");
+    assertThat(response.message()).contains("Approval email could not be sent for exemption(s)");
     assertThat(response.message()).contains("EX-404");
     verify(notificationService)
         .publish(

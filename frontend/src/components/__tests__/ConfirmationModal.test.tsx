@@ -33,7 +33,9 @@ describe('ConfirmationModal', () => {
       />,
     )
 
-    expect(screen.getByRole('dialog', { name: 'Submit application?' })).toBeVisible()
+    const dialog = screen.getByRole('dialog', { name: 'Submit application?' })
+    expect(dialog).toBeVisible()
+    expect(dialog).toHaveAccessibleDescription('The application will be sent for review.')
     expect(screen.getByText('The application will be sent for review.')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }))

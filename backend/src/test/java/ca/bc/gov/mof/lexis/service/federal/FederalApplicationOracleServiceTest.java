@@ -23,6 +23,7 @@ import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.Clock;
@@ -59,6 +60,7 @@ class FederalApplicationOracleServiceTest {
   @Mock private FederalApplicationRepository repository;
   @Mock private FederalPermitDetailRepository permitRepository;
   @Mock private ApplicationDetailsRpcRepository applicationDetailsRepository;
+  @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private ApplicationReviewRepository applicationReviewRepository;
   @Mock private ClientLookupService clientLookupService;
   @Mock private ApplicationEditLockService editLockService;
@@ -141,6 +143,26 @@ class FederalApplicationOracleServiceTest {
         .extracting(FederalApplicationSearchResultDto::locked)
         .containsExactly(false, true);
     verify(editLockService).lockedApplicationNumbers(List.of(10003L, 10004L));
+  }
+
+  @Test
+  void editContextShouldUseTheAuthoritativeFederalMutationContext() {
+    when(repository.findMutationContextRequired(1000456L))
+        .thenReturn(
+            Optional.of(
+                new FederalApplicationRepository.FederalMutationContextRow(
+                    1000456L,
+                    LocalDate.of(2026, 2, 20),
+                    1909L,
+                    "00077881",
+                    "00",
+                    "APP",
+                    LocalDate.of(2026, 2, 26))));
+
+    assertThat(service.findEditContext(1000456L))
+        .contains(
+            new FederalApplicationService.FederalApplicationEditContext(
+                "APP", LocalDate.of(2026, 2, 26)));
   }
 
   @Test
@@ -231,11 +253,8 @@ class FederalApplicationOracleServiceTest {
                     "800", "Federal Buyer", LocalDate.of(2026, 2, 22))),
             null);
     when(repository.findByApplicationNumber(1000456L)).thenReturn(Optional.of(dto));
-    when(applicationDetailsRepository.findEndUsesByApplicationNumberRequired(1000456L))
-        .thenReturn(
-            List.of(
-                new ApplicationDetailsRpcRepository.EndUseRow("FI", "LUM"),
-                new ApplicationDetailsRpcRepository.EndUseRow("HE", "LUM")));
+    when(applicationDetailsService.getApplicationSpeciesEndUseSort(1000456L))
+        .thenReturn("HE/FI/LUM");
     when(applicationDetailsRepository.findProductTypeDescription(dto.productType()))
         .thenReturn(Optional.of("Harvested Timber"));
     when(applicationDetailsRepository.findGrowthTypeDescription(dto.ageClass()))
@@ -243,12 +262,12 @@ class FederalApplicationOracleServiceTest {
 
     FederalApplicationDetailDto result = service.findByApplicationNumber(1000456L).orElseThrow();
 
-    assertThat(result.endUse()).isEqualTo("FI/HE/LUM");
+    assertThat(result.endUse()).isEqualTo("HE/FI/LUM");
     assertThat(result.productType()).isEqualTo("Harvested Timber");
     assertThat(result.ageClass()).isEqualTo("Old Growth");
     assertThat(result.offers()).containsExactlyElementsOf(dto.offers());
     verify(repository).findByApplicationNumber(1000456L);
-    verify(applicationDetailsRepository).findEndUsesByApplicationNumberRequired(1000456L);
+    verify(applicationDetailsService).getApplicationSpeciesEndUseSort(1000456L);
   }
 
   @Test
@@ -373,8 +392,7 @@ class FederalApplicationOracleServiceTest {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("Species/end-use lookup unavailable");
     when(repository.findByApplicationNumber(1000456L)).thenReturn(Optional.of(dto));
-    when(applicationDetailsRepository.findEndUsesByApplicationNumberRequired(1000456L))
-        .thenThrow(failure);
+    when(applicationDetailsService.getApplicationSpeciesEndUseSort(1000456L)).thenThrow(failure);
 
     assertThatThrownBy(() -> service.findByApplicationNumber(1000456L)).isSameAs(failure);
   }
@@ -1724,6 +1742,7 @@ class FederalApplicationOracleServiceTest {
         repository,
         permitRepository,
         applicationDetailsRepository,
+        applicationDetailsService,
         applicationReviewRepository,
         clientLookupService,
         editLockService,

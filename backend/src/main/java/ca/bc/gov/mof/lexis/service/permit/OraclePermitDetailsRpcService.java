@@ -236,7 +236,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     boolean sent = permitEmailService.sendRequest(permitNumber, permit.orgUnitNo(), additionalRecipient);
     if (!sent) {
-      return new PermitEmailResult(false, "Permit review request email could not be queued.");
+      return new PermitEmailResult(false, "Permit review request email could not be sent.");
     }
 
     String requestDate = permit.receivedDate() == null ? null : permit.receivedDate().toString();
@@ -246,14 +246,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         markRollbackOnly();
         return new PermitEmailResult(
             false,
-            "Permit review request email could not be queued because the first request date could not be recorded.",
+            "Permit review request email could not be sent because the first request date could not be recorded.",
             null);
       }
       requestDate = firstRequestDate.toString();
     }
 
     return new PermitEmailResult(
-        true, "Permit review request email queued successfully.", requestDate);
+        true, "Permit review request email sent.", requestDate);
   }
 
   private boolean isReviewRequestEligible(PermitMutationRow permit) {
@@ -371,7 +371,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           "event=lexis_permit_approval_email operation=prepare outcome=not_queued permitRef={} failureType={}",
           fingerprint(permitNumber == null ? null : permitNumber.toString()),
           exceptionType(ex));
-      return new PermitEmailResult(false, "Permit approval email could not be queued.");
+      return new PermitEmailResult(false, "Permit approval email could not be sent.");
     }
     boolean sent =
         permitEmailService.sendApproval(
@@ -382,7 +382,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             senderRoute);
     return new PermitEmailResult(
         sent,
-        sent ? "Permit approval email queued successfully." : "Permit approval email could not be queued.");
+        sent ? "Permit approval email sent." : "Permit approval email could not be sent.");
   }
 
   private Optional<String> resolvePermitClientEmail(PermitMutationRow permit) {
@@ -3172,7 +3172,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
     }
 
-    return buildLegacyPackageEndUseSort(endUses);
+    return "";
   }
 
   private String buildBlanketPackageEndUseSort(String packageNumber) {

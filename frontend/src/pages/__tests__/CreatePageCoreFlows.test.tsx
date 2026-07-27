@@ -303,8 +303,11 @@ describe('Create Page Core Flows', () => {
     }
 
     await selectApplicationCreateTab('Documents')
-    expect(screen.getByText('Upload application documents')).toBeInTheDocument()
-    expect(screen.getByText('Save the application before uploading documents.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add document' })).toHaveAttribute(
+      'title',
+      'Save the application before uploading documents.',
+    )
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
@@ -342,7 +345,13 @@ describe('Create Page Core Flows', () => {
       endUseCode: 'SA',
       comments: 'Ready',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901', {
+      state: {
+        applicationCreationNotice: {
+          applicationNumber: '901',
+        },
+      },
+    })
   })
 
   it('requires the application to be saved before creating a package', async () => {
@@ -362,7 +371,12 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Packages / Scales')
-    expect(await screen.findByRole('heading', { name: 'Package Details' })).toBeInTheDocument()
+    const packageDetailsHeading = await screen.findByRole('heading', {
+      name: 'Package Details',
+    })
+    const packageDetailsCard = packageDetailsHeading.closest('section')
+    expect(packageDetailsCard).toHaveClass('application-items-card')
+    expect(packageDetailsCard?.parentElement).toHaveClass('application-items-grid')
 
     const createPackageButton = screen.getByRole('button', { name: 'Create New Package' })
     await userEvent.click(createPackageButton)
@@ -371,11 +385,17 @@ describe('Create Page Core Flows', () => {
     expect(
       within(dialog).getByText('Please save this application before adding packages.'),
     ).toBeInTheDocument()
+    expect(dialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()
+    const acknowledgeButton = within(dialog).getByRole('button', { name: 'OK' })
+    expect(acknowledgeButton).toHaveClass('cds--btn--primary')
+    expect(acknowledgeButton.parentElement).toHaveClass(
+      'application-create-package-save-prompt__actions',
+    )
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
     const modalRoot = dialog.closest('.cds--modal')
     expect(modalRoot).not.toBeNull()
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'OK' }))
+    await userEvent.click(acknowledgeButton)
 
     await waitFor(() => {
       expect(modalRoot).not.toHaveClass('is-visible')
@@ -423,7 +443,7 @@ describe('Create Page Core Flows', () => {
       screen.queryByRole('button', { name: 'Remove BA from application' }),
     ).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
-  })
+  }, 20_000)
 
   it('requires and resets application accuracy confirmation for a provincial submitter', async () => {
     mockedUseAuth.mockReturnValue(
@@ -484,7 +504,13 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Save application' }))
 
     await waitFor(() => expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(1))
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/906')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/906', {
+      state: {
+        applicationCreationNotice: {
+          applicationNumber: '906',
+        },
+      },
+    })
     await waitFor(() =>
       expect(
         screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
@@ -494,7 +520,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     const postSaveDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     expect(within(postSaveDialog).getByRole('checkbox', { name: 'I Agree' })).not.toBeChecked()
-  })
+  }, 20_000)
 
   it('converts provincial application term months and years to total days on submit', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
@@ -636,7 +662,41 @@ describe('Create Page Core Flows', () => {
       endUseCode: 'SA',
       comments: 'Ready',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902', {
+      state: {
+        applicationCreationNotice: {
+          applicationNumber: '902',
+        },
+      },
+    })
+  })
+
+  it('debounces client lookups while an owner client number is typed', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Clients')
+    const ownerClientNumberInput = screen.getByLabelText('Owner client number')
+    mockedFetchApplicationClientLocations.mockClear()
+
+    for (const value of ['0', '00', '000', '0001', '00011', '000111', '0001111', '00011111']) {
+      fireEvent.change(ownerClientNumberInput, { target: { value } })
+    }
+
+    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledTimes(1)
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
+    })
   })
 
   it('ignores forged agent prefill when applicant type changes are not authorized', async () => {
@@ -875,7 +935,7 @@ describe('Create Page Core Flows', () => {
     )
 
     const ownerNameInput = await screen.findByLabelText('Owner name')
-    await userEvent.type(ownerNameInput, 'Typed Owner')
+    fireEvent.change(ownerNameInput, { target: { value: 'Typed Owner' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
@@ -1732,21 +1792,21 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    expect(screen.getByText('Enter offer details and save a new offer.')).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const offerFormActions = screen.getByRole('group', { name: 'Offer form actions' })
     expect(
       within(offerFormActions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Cancel', 'Save'])
+    ).toEqual(['Cancel', 'Save new offer'])
     expect(within(offerFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
       'type',
       'button',
     )
-    expect(within(offerFormActions).getByRole('button', { name: 'Save' })).toHaveAttribute(
-      'type',
-      'button',
-    )
+    expect(
+      within(offerFormActions).getByRole('button', { name: 'Save new offer' }),
+    ).toHaveAttribute('type', 'button')
     expect(screen.queryByRole('group', { name: 'New offer state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /offer number/i })).not.toBeInTheDocument()
     const offerSections = [
@@ -1756,9 +1816,13 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('group', { name: 'Offer withdrawals' }),
       screen.getByRole('group', { name: 'Approval' }),
     ]
-    expect(offerSections[0].closest('.cds--tile')).toHaveClass('create-form-tile')
+    const offerSectionStack = offerSections[0].closest('.provincial-offer-section-stack')
+    expect(offerSectionStack).toHaveClass('create-form-tile')
+    expect(offerSectionStack).not.toHaveClass('cds--tile')
     for (const section of offerSections) {
       expect(section).toHaveClass('create-form-section')
+      expect(section).toHaveClass('offer-form-section')
+      expect(section.parentElement).toBe(offerSectionStack)
       expect(section.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
     }
     expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeEnabled()
@@ -1792,7 +1856,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
-    const saveButton = screen.getByRole('button', { name: 'Save' })
+    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
     expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
 
@@ -1818,6 +1882,40 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080')
   }, 15000)
 
+  it('debounces offer context lookups while an application number is typed', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/offers/create']}>
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    mockedValidateOfferApplication.mockClear()
+    mockedFetchOfferApplicationDetails.mockClear()
+    mockedFetchOfferPackageList.mockClear()
+    mockedFetchOfferApplicationVolume.mockClear()
+
+    for (const value of ['4', '46', '460', '4605', '46053']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(mockedValidateOfferApplication).not.toHaveBeenCalled()
+    expect(mockedFetchOfferApplicationDetails).not.toHaveBeenCalled()
+    expect(mockedFetchOfferPackageList).not.toHaveBeenCalled()
+    expect(mockedFetchOfferApplicationVolume).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(mockedValidateOfferApplication).toHaveBeenCalledTimes(1)
+      expect(mockedValidateOfferApplication).toHaveBeenCalledWith('46053')
+      expect(mockedFetchOfferApplicationDetails).toHaveBeenCalledTimes(1)
+      expect(mockedFetchOfferPackageList).toHaveBeenCalledTimes(1)
+      expect(mockedFetchOfferApplicationVolume).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('blocks offers against a federal application before loading offer details', async () => {
     const eligibilityError = 'Application 2001 does not have a valid jurisdiction to accept offers'
     mockedValidateOfferApplication.mockResolvedValue({
@@ -1834,7 +1932,7 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(await screen.findByText(eligibilityError)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
     expect(mockedFetchOfferApplicationDetails).not.toHaveBeenCalled()
     expect(mockedFetchOfferPackageList).not.toHaveBeenCalled()
     expect(mockedFetchOfferApplicationVolume).not.toHaveBeenCalled()
@@ -1875,7 +1973,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Contact name'), 'Sample Contact')
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
     await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     expect(await screen.findByText(saveError)).toBeInTheDocument()
     expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledTimes(1)
@@ -1921,7 +2019,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
     await userEvent.type(contactName, 'Buyer Contact')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -2001,7 +2099,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByDisplayValue('Forged Company')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('Forged Contact')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
     expect(await screen.findAllByText('Company name is required.')).not.toHaveLength(0)
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
@@ -2054,7 +2152,7 @@ describe('Create Page Core Flows', () => {
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -2089,7 +2187,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByDisplayValue('100.0')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(

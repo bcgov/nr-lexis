@@ -1200,7 +1200,7 @@ class OracleApplicationDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
-    assertThat(response.errors()).contains("The applicant type code must be O or A.");
+    assertThat(response.errors()).contains("The applicant type code must be O, M, or A.");
     verifyNoInteractions(repository);
   }
 
@@ -1466,6 +1466,39 @@ class OracleApplicationDetailsRpcServiceTest {
         .containsExactly(tuple("FIR", "LUM", "Lumber"), tuple("HEM", "LUM", "Lumber"));
     verify(repository).findEndUsesByApplicationNumberRequired(1000456L);
     verify(repository).findEndUseCode("LUM");
+  }
+
+  @Test
+  void applicationSpeciesEndUseSortShouldUseCanonicalLegacyCandidate() {
+    when(repository.findEndUsesByApplicationNumberRequired(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.EndUseRow("FI", "LUM"),
+                new ApplicationDetailsRpcRepository.EndUseRow("HE", "LUM")));
+    when(repository.findCandidateExcolCodesRequired(2, "FI", "LUM", 11L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/HE/OT"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LUM")));
+
+    String result = service.getApplicationSpeciesEndUseSort(1000456L);
+
+    assertThat(result).isEqualTo("HE/FI/LUM");
+  }
+
+  @Test
+  void applicationSpeciesEndUseSortShouldBeBlankWhenNoCandidateMatches() {
+    when(repository.findEndUsesByApplicationNumberRequired(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("FI", "LUM")));
+    when(repository.findCandidateExcolCodesRequired(1, "FI", "LUM", 11L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/OT")));
+
+    String result = service.getApplicationSpeciesEndUseSort(1000456L);
+
+    assertThat(result).isEmpty();
   }
 
   @Test
@@ -3439,6 +3472,51 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void updateApplicationSummaryShouldPersistMinisterialAndClearStaleAgentFields() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithAgent()));
+    stubPersistedApplicationEndUse(11L, true);
+    when(repository.updateApplication(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "M",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().applicantTypeCode()).isEqualTo("M");
+    assertThat(recordCaptor.getValue().agentClientNumber()).isNull();
+    assertThat(recordCaptor.getValue().agentClientLocationCode()).isNull();
+    assertThat(recordCaptor.getValue().agentContactName()).isNull();
+  }
+
+  @Test
   void updateApplicationSummaryShouldRejectVolumeBelowPersistedPackageTotal() {
     ApplicationDetailsRpcRepository.PackageMutationRow packageRow =
         new ApplicationDetailsRpcRepository.PackageMutationRow(
@@ -3875,7 +3953,7 @@ class OracleApplicationDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
-    assertThat(response.errors()).containsExactly("The applicant type code must be O or A.");
+    assertThat(response.errors()).containsExactly("The applicant type code must be O, M, or A.");
     verify(repository, never()).updateApplication(any());
   }
 
@@ -3946,6 +4024,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     1000456L,
                     "APP",
                     "P",
+                    "H",
                     12L,
                     LocalDate.of(2026, 7, 8),
                     approvalDate,
@@ -3970,6 +4049,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(context).isPresent();
     assertThat(context.get().applicationStatusCode()).isEqualTo("APP");
+    assertThat(context.get().productTypeCode()).isEqualTo("H");
     assertThat(context.get().advertisingDate()).isEqualTo(LocalDate.of(2026, 7, 8));
     assertThat(context.get().hasPackageBeforeApproval()).isTrue();
     assertThat(context.get().hasScaleBeforeApproval()).isFalse();
@@ -3985,6 +4065,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     1000456L,
                     "NEW",
                     "P",
+                    "H",
                     12L,
                     LocalDate.of(2026, 7, 8),
                     null,
@@ -4157,6 +4238,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     1000456L,
                     "PMT",
                     "P",
+                    "H",
                     12L,
                     LocalDate.of(2026, 7, 8),
                     null,

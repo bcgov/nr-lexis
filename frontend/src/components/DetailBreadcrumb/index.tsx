@@ -14,7 +14,7 @@ export type DetailBreadcrumbProps = {
  * deterministic.
  */
 const DetailBreadcrumb = ({ label, to }: DetailBreadcrumbProps) => (
-  <Breadcrumb noTrailingSlash={false} size="sm">
+  <Breadcrumb noTrailingSlash size="sm">
     <BreadcrumbItem>
       <Link to={to}>{label}</Link>
     </BreadcrumbItem>

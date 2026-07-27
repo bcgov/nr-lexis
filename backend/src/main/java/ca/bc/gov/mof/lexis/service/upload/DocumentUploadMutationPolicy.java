@@ -33,24 +33,31 @@ public class DocumentUploadMutationPolicy {
     this.permitServiceProvider = permitServiceProvider;
   }
 
-  public void requireApplicationMutable(Long applicationNumber) {
+  /**
+   * Validates an application target before attaching a document.
+   * Legacy LEXIS allows authorized users to attach documents after an application expires.
+   */
+  public void requireApplicationAttachmentTarget(Long applicationNumber) {
     LexisApplicationService service = applicationServiceProvider.getIfAvailable();
-    requireMutable(
+    requireTargetStatus(
         "Application",
-        "Expired applications are read-only.",
         service == null || applicationNumber == null || applicationNumber < 1
             ? Optional.empty()
             : service.findByApplicationNumber(applicationNumber),
         LexisApplicationDetailDto::applicationStatusCode);
   }
 
-  public void requireExemptionMutable(String exemptionNumber) {
+  /**
+   * Validates an exemption target before attaching a document.
+   *
+   * Legacy LEXIS allows authorized users to attach documents after an exemption expires.
+   */
+  public void requireExemptionAttachmentTarget(String exemptionNumber) {
     ExemptionService service = exemptionServiceProvider.getIfAvailable();
     String normalizedNumber =
         exemptionNumber == null || exemptionNumber.isBlank() ? null : exemptionNumber.trim();
-    requireMutable(
+    requireTargetStatus(
         "Exemption",
-        "Expired exemptions are read-only.",
         service == null || normalizedNumber == null
             ? Optional.empty()
             : service.findByExemptionNumber(normalizedNumber),
@@ -85,10 +92,15 @@ public class DocumentUploadMutationPolicy {
       String expiredMessage,
       Optional<T> record,
       Function<T, String> statusExtractor) {
-    String status = normalizedStatus(recordType, record, statusExtractor);
+    String status = requireTargetStatus(recordType, record, statusExtractor);
     if (EXPIRED_STATUS.equals(status)) {
       throw new AccessDeniedException(expiredMessage);
     }
+  }
+
+  private <T> String requireTargetStatus(
+      String recordType, Optional<T> record, Function<T, String> statusExtractor) {
+    return normalizedStatus(recordType, record, statusExtractor);
   }
 
   private <T> String normalizedStatus(

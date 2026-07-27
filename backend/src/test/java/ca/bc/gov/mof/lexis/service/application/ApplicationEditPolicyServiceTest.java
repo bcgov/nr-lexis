@@ -186,6 +186,26 @@ class ApplicationEditPolicyServiceTest {
   }
 
   @Test
+  void standingTimberAllowsSummaryEditsButDeniesPackageAndScaleMutations() {
+    allowRoles("LEXIS_APPLICATION_APPROVER");
+    context("NEW", TODAY.plusDays(1), false, false, false, false, "S");
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditApplicationDetails()).isTrue();
+    assertThat(policy.canEditPackages()).isFalse();
+    assertThat(policy.canAddPackages()).isFalse();
+    assertThat(policy.canAddScales()).isFalse();
+    assertThat(policy.canUpdatePackageNumber()).isFalse();
+    assertThatThrownBy(
+            () ->
+                policyService.requirePackageAddOrDelete(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+  }
+
+  @Test
   void administratorDominatesConcurrentRestrictiveAndSubmitterRoles() {
     allowRoles(
         "LEXIS_ADMIN",
@@ -257,6 +277,7 @@ class ApplicationEditPolicyServiceTest {
                     APPLICATION_NUMBER,
                     "NEW",
                     "F",
+                    "H",
                     12L,
                     TODAY.plusDays(1),
                     false,
@@ -283,6 +304,7 @@ class ApplicationEditPolicyServiceTest {
                     APPLICATION_NUMBER,
                     "NEW",
                     "P",
+                    "H",
                     12L,
                     TODAY.plusDays(1),
                     false,
@@ -332,7 +354,8 @@ class ApplicationEditPolicyServiceTest {
         hasPackageBeforeApproval,
         hasScaleBeforeApproval,
         hasCompletePermit,
-        false);
+        false,
+        "H");
   }
 
   private void context(
@@ -342,6 +365,24 @@ class ApplicationEditPolicyServiceTest {
       boolean hasScaleBeforeApproval,
       boolean hasCompletePermit,
       boolean interiorMinisterialItemOverrideEligible) {
+    context(
+        status,
+        advertisingDate,
+        hasPackageBeforeApproval,
+        hasScaleBeforeApproval,
+        hasCompletePermit,
+        interiorMinisterialItemOverrideEligible,
+        "H");
+  }
+
+  private void context(
+      String status,
+      LocalDate advertisingDate,
+      boolean hasPackageBeforeApproval,
+      boolean hasScaleBeforeApproval,
+      boolean hasCompletePermit,
+      boolean interiorMinisterialItemOverrideEligible,
+      String productTypeCode) {
     when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
         .thenReturn(
             Optional.of(
@@ -349,6 +390,7 @@ class ApplicationEditPolicyServiceTest {
                     APPLICATION_NUMBER,
                     status,
                     "P",
+                    productTypeCode,
                     12L,
                     advertisingDate,
                     hasPackageBeforeApproval,

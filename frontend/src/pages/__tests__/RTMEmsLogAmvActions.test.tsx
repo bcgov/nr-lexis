@@ -133,6 +133,12 @@ describe('RTM EMS Log AMV actions', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(24)
     expect(screen.queryByLabelText('Balsam (BA) grade W')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Balsam (BA) grade BLANK')).not.toBeInTheDocument()
+
+    const tableViewport = screen.getByRole('region', { name: 'Average monthly values table' })
+    Object.defineProperty(tableViewport, 'clientWidth', { configurable: true, value: 320 })
+    Object.defineProperty(tableViewport, 'scrollWidth', { configurable: true, value: 1472 })
+    fireEvent(window, new Event('resize'))
+    await waitFor(() => expect(tableViewport).toHaveAttribute('tabindex', '0'))
   })
 
   it('uses the displayed data as the baseline and saves a single atomic batch', async () => {

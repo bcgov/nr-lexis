@@ -55,6 +55,13 @@ import { fetchShippingReferenceOptions } from '@/service/shipping-reference-serv
 import { triggerBrowserDownload } from '@/utils/download'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
+const openDetailUploadModal = async (
+  name: 'Add document' | 'Add invoice',
+): Promise<HTMLElement> => {
+  await userEvent.click(await screen.findByRole('button', { name }))
+  return screen.findByRole('dialog', { name })
+}
+
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
@@ -499,12 +506,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedSendPermitReviewRequestEmail.mockResolvedValue({
       success: true,
-      message: 'Permit review request email queued successfully.',
+      message: 'Permit review request email sent.',
       permitRequestDate: '',
     })
     mockedSendPermitApprovalEmail.mockResolvedValue({
       success: true,
-      message: 'Permit approval email queued successfully.',
+      message: 'Permit approval email sent.',
       permitRequestDate: '',
     })
     mockedFetchPermitApprovalEmailDefault.mockResolvedValue('agent@example.test')
@@ -1205,10 +1212,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Documents')
-    expect(screen.queryByText('Upload permit documents')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Invoices')
-    expect(screen.queryByText('Upload invoices')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add invoice' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
 
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
@@ -1232,7 +1239,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       renderPermitDetails()
 
       await selectPermitDetailTab('Invoices')
-      expect(screen.queryByText('Upload invoices')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add invoice' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
       expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
     },
@@ -2825,11 +2832,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Documents')
-    expect(screen.queryByText('Upload permit documents')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Invoices')
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Upload invoices')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add invoice' })).not.toBeInTheDocument()
 
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
@@ -2857,7 +2864,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull()
     })
-    expect(screen.getByText('Permit approval email queued successfully.')).toBeInTheDocument()
+    expect(screen.getByText('Permit approval email sent.')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
@@ -2912,7 +2919,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
-  it('keeps the approval dialog open when notification delivery cannot be queued', async () => {
+  it('keeps the approval dialog open when notification delivery cannot be sent', async () => {
     mockedSendPermitApprovalEmail.mockResolvedValueOnce({
       success: false,
       message: 'Permit approval notification is unavailable.',
@@ -2985,7 +2992,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedSendPermitReviewRequestEmail.mockResolvedValue({
       success: true,
-      message: 'Permit review request email queued successfully.',
+      message: 'Permit review request email sent.',
       permitRequestDate: '2026-07-10',
     })
 
@@ -3009,9 +3016,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedSendPermitReviewRequestEmail).toHaveBeenCalledWith('777')
       expect(mockedSendPermitApprovalEmail).not.toHaveBeenCalled()
       expect(screen.queryByRole('dialog', { name: /Email permit .* approval/ })).toBeNull()
-      expect(
-        screen.getByText('Permit review request email queued successfully.'),
-      ).toBeInTheDocument()
+      expect(screen.getByText('Permit review request email sent.')).toBeInTheDocument()
     })
   })
 
@@ -3160,7 +3165,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Print permit' })).not.toBeInTheDocument()
   })
 
-  it('shows the embedded permit document upload panel on the documents tab without header actions', async () => {
+  it('shows the permit document action on the documents tab without header actions', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -3177,10 +3182,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Upload Permit Document' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open Permit Report' })).toBeNull()
-    expect(await screen.findByText('Upload permit documents')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
   })
 
-  it('shows the embedded invoice upload panel on the invoices tab without header actions', async () => {
+  it('shows the invoice document action on the invoices tab without header actions', async () => {
     configureActivePermit()
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
@@ -3197,10 +3202,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(screen.queryByRole('button', { name: 'Upload Invoice' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Upload invoice conversion rate')).toHaveValue('1.00')
+    expect(await screen.findByRole('button', { name: 'Add invoice' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Upload invoice conversion rate')).not.toBeInTheDocument()
   })
 
-  it('shows inline permit and invoice uploads to a scoped Provincial Submitter', async () => {
+  it('shows permit and invoice upload actions to a scoped Provincial Submitter', async () => {
     configureActivePermit()
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -3225,10 +3231,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
-    expect(await screen.findByText('Upload permit documents')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
 
     await selectPermitDetailTab('Invoices')
-    expect(await screen.findByText('Upload invoices')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add invoice' })).toBeInTheDocument()
   })
 
   it('uploads invoice files inline and refreshes permit document data', async () => {
@@ -3245,11 +3251,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Invoices')
-    const invoicePanel = (await screen.findByText('Upload invoices')).closest(
-      '.detail-document-upload',
-    )
-    expect(invoicePanel).toBeTruthy()
-    const invoiceControls = within(invoicePanel as HTMLElement)
+    const invoiceControls = within(await openDetailUploadModal('Add invoice'))
     const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
 
     await userEvent.type(invoiceControls.getByLabelText('Upload invoice number'), 'INV123')
@@ -3572,7 +3574,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
-    expect(screen.queryByText('Upload permit documents')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     await screen.findByText('submitter-permit-doc.pdf')
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })

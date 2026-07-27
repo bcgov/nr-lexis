@@ -38,8 +38,7 @@ services:
           algorithm: RS256
           claims_to_verify:
             - exp
-          uri_param_names:
-            - jwt
+          uri_param_names: []
           cookie_names: []
           scope:
             - lexis:federal-submission:submit

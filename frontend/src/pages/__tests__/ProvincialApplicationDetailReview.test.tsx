@@ -12,6 +12,7 @@ import {
   mockApplicationDetailAuth,
   mockedApproveApplicationReview,
   mockedFetchApplicationClientData,
+  mockedFetchApplicationClientLocations,
   mockedFetchApplicationSummarySnapshot,
   mockedFetchProvincialApplicationDetail,
   mockedSaveApplicationRemark,
@@ -24,8 +25,19 @@ import {
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 
+const reviewableApplicationDetail: ProvincialApplicationDetail = {
+  ...applicationDetail,
+  applicationStatusCode: 'NEW',
+  statusDescription: 'New',
+}
+
 describe.sequential('Provincial Application Detail Actions - review', () => {
-  beforeEach(setupApplicationDetailTests)
+  beforeEach(() => {
+    setupApplicationDetailTests()
+    mockedFetchProvincialApplicationDetail
+      .mockReset()
+      .mockResolvedValue(reviewableApplicationDetail)
+  })
 
   it('hides remarks and review tabs without legacy remarks/review access', async () => {
     mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
@@ -77,7 +89,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     const reviewTile = within(await selectApplicationReviewTile())
     const reviewStatus = reviewTile.getByRole('combobox', { name: 'Application status' })
     await chooseComboBoxOption(reviewStatus, 'Rejected')
-    const reviewRemark = reviewTile.getByLabelText('Review remark')
+    const reviewRemark = reviewTile.getByLabelText('Status change remark')
+    expect(
+      reviewTile.getByText(
+        'Saved with the status change and included in an email notification, if one is sent.',
+      ),
+    ).toBeInTheDocument()
     fireEvent.change(reviewRemark, {
       target: { value: 'Preserve review draft' },
     })
@@ -111,9 +128,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
   it('saves application remarks and refreshes detail', async () => {
     const detailAfterRemark: ProvincialApplicationDetail = {
-      ...applicationDetail,
+      ...reviewableApplicationDetail,
       remarks: [
-        ...applicationDetail.remarks,
+        ...reviewableApplicationDetail.remarks,
         {
           remarkId: 89,
           title: 'New application note',
@@ -122,7 +139,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       ],
     }
     mockedFetchProvincialApplicationDetail
-      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(reviewableApplicationDetail)
       .mockResolvedValueOnce(detailAfterRemark)
 
     render(
@@ -278,7 +295,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
   it('updates existing application remarks and refreshes detail', async () => {
     const detailAfterRemarkUpdate: ProvincialApplicationDetail = {
-      ...applicationDetail,
+      ...reviewableApplicationDetail,
       remarks: [
         {
           remarkId: 88,
@@ -288,7 +305,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       ],
     }
     mockedFetchProvincialApplicationDetail
-      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(reviewableApplicationDetail)
       .mockResolvedValueOnce(detailAfterRemarkUpdate)
 
     render(
@@ -355,12 +372,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
   it('approves an application from the detail review section and refreshes detail', async () => {
     const detailAfterApproval: ProvincialApplicationDetail = {
-      ...applicationDetail,
+      ...reviewableApplicationDetail,
       applicationStatusCode: 'APP',
       statusDescription: 'Approved',
     }
     mockedFetchProvincialApplicationDetail
-      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(reviewableApplicationDetail)
       .mockResolvedValueOnce(detailAfterApproval)
 
     render(
@@ -414,14 +431,22 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the owner client-location email without a separate notification field', async () => {
+  it('shows the owner client location and email without a separate notification field', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValueOnce({
       ...applicationDetail,
       agentClientNumber: null,
     })
+    mockedFetchApplicationClientLocations.mockResolvedValueOnce([
+      {
+        locationCode: '03',
+        locationName: '03 - WOODLANDS SERVICES',
+        selected: true,
+      },
+    ])
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummarySnapshot,
       applicantTypeCode: 'O',
+      ownerClientLocationCode: '03',
       agentClientNumber: '',
       agentClientLocationCode: '',
       agentContactName: '',
@@ -440,7 +465,65 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationDetailTab('Owner')
     expect(await screen.findByText('owner@example.test')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Owner client details', level: 2 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Owner client details', level: 3 }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('Notification email')).not.toBeInTheDocument()
+
+    const applicantTypeField = screen
+      .getAllByText('Applicant type')
+      .find((element) => element.tagName === 'DT')
+      ?.closest('.detail-field-item')
+    expect(applicantTypeField).toBeTruthy()
+    expect(within(applicantTypeField as HTMLElement).getByText('Owner')).toBeInTheDocument()
+
+    const clientLocationField = screen
+      .getAllByText('Client location')
+      .find((element) => element.tagName === 'DT')
+      ?.closest('.detail-field-item')
+    expect(clientLocationField).toBeTruthy()
+    expect(
+      within(clientLocationField as HTMLElement).getByText('03 - WOODLANDS SERVICES'),
+    ).toBeInTheDocument()
+    expect(
+      within(clientLocationField as HTMLElement).queryByText('03 - 03 - WOODLANDS SERVICES'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('uses a business label for ministerial applicant types', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValueOnce({
+      ...applicationDetail,
+      agentClientNumber: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'M',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Owner')
+    const applicantTypeField = screen
+      .getAllByText('Applicant type')
+      .find((element) => element.tagName === 'DT')
+      ?.closest('.detail-field-item')
+    expect(applicantTypeField).toBeTruthy()
+    expect(within(applicantTypeField as HTMLElement).getByText('Ministerial')).toBeInTheDocument()
   })
 
   it('defaults owner application review mail to the owner client-location email', async () => {
@@ -510,7 +593,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         'agent@example.test',
       )
     })
-    fireEvent.change(reviewControls.getByLabelText(/review remark/i), {
+    fireEvent.change(reviewControls.getByLabelText(/status change remark/i), {
       target: { value: 'Cannot approve this application' },
     })
     await userEvent.click(reviewControls.getByRole('button', { name: 'Update Review Status' }))
@@ -576,8 +659,65 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         }),
       ).toHaveValue('Expired')
     })
-    expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Expired after review')
+    expect(within(reviewTile).getByLabelText(/status change remark/i)).toHaveValue(
+      'Expired after review',
+    )
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue('')
+    expect(
+      within(reviewTile).getByRole('combobox', {
+        name: /application status/i,
+      }),
+    ).toBeDisabled()
+    expect(within(reviewTile).getByLabelText(/status change remark/i)).toBeDisabled()
+    expect(within(reviewTile).getByLabelText(/client email address/i)).toBeDisabled()
+    expect(
+      within(reviewTile).queryByRole('button', { name: 'Approve Application' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(reviewTile).queryByRole('button', { name: 'Update Review Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(reviewTile).queryByRole('button', { name: 'Update Status and Send Email' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows rejected application review details without unavailable edit actions', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'REJ',
+      statusDescription: 'Rejected',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewTile = await selectApplicationReviewTile()
+    const reviewControls = within(reviewTile)
+
+    expect(
+      reviewControls.getByRole('combobox', {
+        name: /application status/i,
+      }),
+    ).toBeDisabled()
+    expect(reviewControls.getByLabelText(/status change remark/i)).toBeDisabled()
+    expect(reviewControls.getByLabelText(/client email address/i)).toBeDisabled()
+    expect(
+      reviewControls.queryByRole('button', { name: 'Approve Application' }),
+    ).not.toBeInTheDocument()
+    expect(
+      reviewControls.queryByRole('button', { name: 'Update Review Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      reviewControls.queryByRole('button', { name: 'Update Status and Send Email' }),
+    ).not.toBeInTheDocument()
   })
 
   it('blocks status email when the authoritative client account has no valid address', async () => {
@@ -615,7 +755,10 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       reviewControls.getByRole('combobox', { name: /application status/i }),
       'Rejected',
     )
-    await userEvent.type(reviewControls.getByLabelText(/review remark/i), 'Missing recipient')
+    await userEvent.type(
+      reviewControls.getByLabelText(/status change remark/i),
+      'Missing recipient',
+    )
     await userEvent.click(
       reviewControls.getByRole('button', {
         name: 'Update Status and Send Email',
@@ -631,12 +774,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
   it('updates application review status and can send status email from detail', async () => {
     const detailAfterStatusUpdate: ProvincialApplicationDetail = {
-      ...applicationDetail,
+      ...reviewableApplicationDetail,
       applicationStatusCode: 'REJ',
       statusDescription: 'Rejected',
     }
     mockedFetchProvincialApplicationDetail
-      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(reviewableApplicationDetail)
       .mockResolvedValueOnce(detailAfterStatusUpdate)
     mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
       updated: true,
@@ -674,7 +817,10 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     fireEvent.change(within(reviewTile).getByLabelText(/client email address/i), {
       target: { value: 'edited.client@example.test' },
     })
-    await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
+    await userEvent.type(
+      within(reviewTile).getByLabelText(/status change remark/i),
+      'Needs correction',
+    )
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
       'edited.client@example.test',
     )
@@ -709,7 +855,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
       'edited.client@example.test',
     )
-    expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Needs correction')
+    expect(within(reviewTile).getByLabelText(/status change remark/i)).toHaveValue(
+      'Needs correction',
+    )
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Needs correction').length).toBeGreaterThan(0)
   })
@@ -737,7 +885,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
   })
 
   it.each(['Rejected', 'Withdrawn', 'Expired'])(
-    'requires review remark before setting application status to %s',
+    'requires a status change remark before setting application status to %s',
     async (statusLabel) => {
       render(
         <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -763,10 +911,10 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         }),
       )
 
-      expect(within(reviewTile).getByLabelText(/review remark/i)).toBeInvalid()
+      expect(within(reviewTile).getByLabelText(/status change remark/i)).toBeInvalid()
       expect(
         screen.getByText(
-          'Review remark is required when rejecting, withdrawing, or expiring an application.',
+          'Status change remark is required when rejecting, withdrawing, or expiring an application.',
         ),
       ).toBeInTheDocument()
       expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()

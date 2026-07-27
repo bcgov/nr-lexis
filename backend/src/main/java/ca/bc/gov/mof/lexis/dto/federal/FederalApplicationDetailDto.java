@@ -320,6 +320,50 @@ public record FederalApplicationDetailDto(
         lockMessage);
   }
 
+  public FederalApplicationDetailDto withReadOnly(boolean resolvedReadOnly) {
+    return new FederalApplicationDetailDto(
+        applicationNumber,
+        federalApplicationNumber,
+        statusCode,
+        statusDescription,
+        ownerClientNumber,
+        ownerClientLocationCode,
+        agentClientNumber,
+        agentClientLocationCode,
+        exemptionNumber,
+        exemptionType,
+        exemptionReason,
+        receivedDate,
+        listingDate,
+        resolvedReadOnly,
+        packages,
+        remarks,
+        offers,
+        federalPermit,
+        ownerApplicantType,
+        ownerContactName,
+        ownerCompanyName,
+        agentApplicantType,
+        agentContactName,
+        agentCompanyName,
+        region,
+        productType,
+        applicationDate,
+        termDays,
+        logLocation,
+        ageClass,
+        averageLogVolume,
+        applicationVolume,
+        endUse,
+        author,
+        ownerClientContext,
+        agentClientContext,
+        locked,
+        lockHeldByCurrentUser,
+        lockedBy,
+        lockMessage);
+  }
+
   public FederalApplicationDetailDto withEditLock(
       boolean locked,
       boolean lockHeldByCurrentUser,

@@ -164,7 +164,8 @@ public class PermitRepository extends OracleRepositorySupport {
                 "permitVolume", "EPD.PERMIT_VOLUME",
                 "exemptionNumber", "EPD.EXEMPTION_NUMBER"),
             "permitNumber",
-            "DESC");
+            "DESC",
+            "permitNumber");
 
     return where.build(orderBy);
   }

@@ -17,6 +17,7 @@ import {
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
 import PageHeader from '@/components/PageHeader'
+import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -59,7 +60,7 @@ import {
   type SearchTotalCache,
 } from '@/pages/shared/search-total-cache'
 import IsoDatePicker from '../../components/IsoDatePicker'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -178,26 +179,20 @@ const ProvincialPermitPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
-  const filters = urlState.filters
+  const appliedFilters = urlState.filters
+  const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const requestFilters = appliedFilters
   const updateFilter = useCallback(
     <K extends keyof ProvincialPermitSearchFilters>(
       key: K,
       value: ProvincialPermitSearchFilters[K],
     ) => {
-      const nextFilters = {
-        ...filters,
-        [key]: value,
-      }
-      setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
-        { replace: true },
-      )
+      setFilters((currentFilters) => ({ ...currentFilters, [key]: value }))
     },
-    [filters, pageSize, setSearchParams, sortDirection, sortField],
+    [setFilters],
   )
 
   const selectedRegions = useMemo(
@@ -261,13 +256,7 @@ const ProvincialPermitPage = () => {
           response: ProvincialPermitSearchResponse,
           totalIsExact: boolean,
         ) => {
-          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
-            return
-          }
-          if (totalIsExact) {
-            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
-              return
-            }
+          if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, cacheKey, response.page.totalElements)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-permit-search',
@@ -279,7 +268,7 @@ const ProvincialPermitPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+            if (isLatestRequest()) {
               commitResults(response)
             }
           })
@@ -313,13 +302,20 @@ const ProvincialPermitPage = () => {
 
   useEffect(() => {
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch])
+  }, [
+    requestFilters,
+    runSearch,
+    urlState.page,
+    urlState.pageSize,
+    urlState.sortDirection,
+    urlState.sortField,
+  ])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -339,12 +335,34 @@ const ProvincialPermitPage = () => {
   }, [])
 
   const onSearch = () => {
-    setSearchParams(
-      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    if (loading || hasDateValidationError) {
+      return
+    }
+    const nextSearchParams = buildSearchParams(
+      filters,
+      sortField,
+      sortDirection,
+      DEFAULT_SEARCH_PAGE,
+      pageSize,
     )
+    if (nextSearchParams.toString() === searchParams.toString()) {
+      void runSearch(
+        {
+          filters,
+          page: DEFAULT_SEARCH_PAGE - 1,
+          pageSize,
+          sortField,
+          sortDirection,
+        },
+        { force: true },
+      )
+      return
+    }
+    setSearchParams(nextSearchParams)
   }
 
   const onClearFilters = () => {
+    setFilters(INITIAL_FILTERS)
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -359,7 +377,7 @@ const ProvincialPermitPage = () => {
   const onHeaderClick = (column: ProvincialPermitSearchSortField) => {
     const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     setSearchParams(
-      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+      buildSearchParams(appliedFilters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
     )
   }
 
@@ -377,96 +395,103 @@ const ProvincialPermitPage = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-permit-search-filters">
           <Tile>
-            <div className="legacy-search-grid provincial-permit-search-grid">
-              <TextInput
-                id="applicationNumber"
-                labelText="Application number"
-                value={filters.applicationNumber}
-                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="permitStatus"
-                labelText="Permit status"
-                value={filters.permitStatus}
-                placeholder="All statuses"
-                options={permitStatusOptions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(value) => updateFilter('permitStatus', value)}
-              />
-              <TextInput
-                id="packageNumber"
-                labelText="Package number"
-                value={filters.packageNumber}
-                onChange={(event) => updateFilter('packageNumber', event.target.value)}
-              />
-              <TextInput
-                id="permitNumber"
-                labelText="Permit number"
-                value={filters.permitNumber}
-                onChange={(event) => updateFilter('permitNumber', event.target.value)}
-              />
-              <TextInput
-                id="invoiceNumber"
-                labelText="Invoice number"
-                value={filters.invoiceNumber}
-                onChange={(event) => updateFilter('invoiceNumber', event.target.value)}
-              />
-              <RegionMultiSelect
-                id="region"
-                titleText="Region"
-                items={regionOptions}
-                placeholder="Select region(s)"
-                selectedItems={selectedRegions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(nextSelected) => {
-                  updateFilter(
-                    'region',
-                    nextSelected.map((item) => item.id),
-                  )
-                }}
-              />
-              <TextInput
-                id="applicantClientNumber"
-                labelText="Applicant client number"
-                value={filters.applicantClientNumber}
-                onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-              />
-              <TextInput
-                id="ownerClientNumber"
-                labelText="Owner client number"
-                value={filters.ownerClientNumber}
-                onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-              />
-              <IsoDatePicker
-                id="issuedFromDate"
-                labelText="Issued from date"
-                value={filters.issuedFromDate}
-                invalid={!isValidIsoDate(filters.issuedFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('issuedFromDate', value)}
-              />
-              <IsoDatePicker
-                id="issuedToDate"
-                labelText="Issued to date"
-                value={filters.issuedToDate}
-                invalid={!isValidIsoDate(filters.issuedToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('issuedToDate', value)}
-              />
-            </div>
-            <div className="legacy-search-actions">
-              <Button
-                kind="primary"
-                onClick={onSearch}
-                disabled={loading || hasDateValidationError}
-                size="md"
-              >
-                Search
-              </Button>
-              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-                Clear Filters
-              </Button>
-            </div>
+            <form
+              className="legacy-search-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                onSearch()
+              }}
+            >
+              <div className="legacy-search-grid provincial-permit-search-grid">
+                <TextInput
+                  id="applicationNumber"
+                  labelText="Application number"
+                  value={filters.applicationNumber}
+                  onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+                />
+                <SearchableSelect
+                  id="permitStatus"
+                  labelText="Permit status"
+                  value={filters.permitStatus}
+                  placeholder="All statuses"
+                  options={permitStatusOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('permitStatus', value)}
+                />
+                <TextInput
+                  id="packageNumber"
+                  labelText="Package number"
+                  value={filters.packageNumber}
+                  onChange={(event) => updateFilter('packageNumber', event.target.value)}
+                />
+                <TextInput
+                  id="permitNumber"
+                  labelText="Permit number"
+                  value={filters.permitNumber}
+                  onChange={(event) => updateFilter('permitNumber', event.target.value)}
+                />
+                <TextInput
+                  id="invoiceNumber"
+                  labelText="Invoice number"
+                  value={filters.invoiceNumber}
+                  onChange={(event) => updateFilter('invoiceNumber', event.target.value)}
+                />
+                <RegionMultiSelect
+                  id="region"
+                  titleText="Region"
+                  items={regionOptions}
+                  placeholder="Select region(s)"
+                  selectedItems={selectedRegions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(nextSelected) => {
+                    updateFilter(
+                      'region',
+                      nextSelected.map((item) => item.id),
+                    )
+                  }}
+                />
+                <TextInput
+                  id="applicantClientNumber"
+                  labelText="Applicant client number"
+                  value={filters.applicantClientNumber}
+                  onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
+                />
+                <TextInput
+                  id="ownerClientNumber"
+                  labelText="Owner client number"
+                  value={filters.ownerClientNumber}
+                  onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+                />
+                <IsoDatePicker
+                  id="issuedFromDate"
+                  labelText="Issued from date"
+                  value={filters.issuedFromDate}
+                  invalid={!isValidIsoDate(filters.issuedFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('issuedFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="issuedToDate"
+                  labelText="Issued to date"
+                  value={filters.issuedToDate}
+                  invalid={!isValidIsoDate(filters.issuedToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('issuedToDate', value)}
+                />
+              </div>
+              <div className="legacy-search-actions">
+                <Button
+                  type="button"
+                  kind="tertiary"
+                  onClick={onClearFilters}
+                  disabled={loading}
+                  size="md"
+                >
+                  Clear Filters
+                </Button>
+                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+              </div>
+            </form>
           </Tile>
         </section>
       </Column>
@@ -503,7 +528,6 @@ const ProvincialPermitPage = () => {
                           onClick={() => onHeaderClick(column.id)}
                         >
                           {column.label}
-                          {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
                         </button>
                       </TableHeader>
                     ))}
@@ -526,7 +550,7 @@ const ProvincialPermitPage = () => {
                       <TableCell>{row.applicantClientNumber}</TableCell>
                       <TableCell>{row.ownerClientNumber}</TableCell>
                       <TableCell>{row.totalVolume}</TableCell>
-                      <TableCell>{row.issueDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.issueDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
                     </TableRow>
                   ))}
@@ -546,7 +570,7 @@ const ProvincialPermitPage = () => {
                 totalItems={results.page.totalElements}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   setSearchParams(
-                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
                   )
                 }}
               />

@@ -21,6 +21,7 @@ import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
+import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -63,7 +64,7 @@ import {
   parseSortDirectionParam,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -237,11 +238,12 @@ const ProvincialApplicationPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
-  const filters = urlState.filters
+  const appliedFilters = urlState.filters
+  const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const requestFilters = appliedFilters
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setExemptionStatus(null)
@@ -251,17 +253,10 @@ const ProvincialApplicationPage = () => {
       key: K,
       value: ProvincialApplicationSearchFilters[K],
     ) => {
-      const nextFilters = {
-        ...filters,
-        [key]: value,
-      }
       clearSelection()
-      setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
-        { replace: true },
-      )
+      setFilters((currentFilters) => ({ ...currentFilters, [key]: value }))
     },
-    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, setFilters],
   )
 
   const selectedRegions = useMemo(
@@ -342,13 +337,7 @@ const ProvincialApplicationPage = () => {
           response: ProvincialApplicationSearchResponse,
           totalIsExact: boolean,
         ) => {
-          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
-            return
-          }
-          if (totalIsExact) {
-            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
-              return
-            }
+          if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-application-search',
@@ -360,7 +349,7 @@ const ProvincialApplicationPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+            if (isLatestRequest()) {
               commitResults(response)
             }
           })
@@ -394,13 +383,20 @@ const ProvincialApplicationPage = () => {
 
   useEffect(() => {
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch])
+  }, [
+    requestFilters,
+    runSearch,
+    urlState.page,
+    urlState.pageSize,
+    urlState.sortDirection,
+    urlState.sortField,
+  ])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -423,14 +419,36 @@ const ProvincialApplicationPage = () => {
   }, [])
 
   const onSearch = () => {
+    if (loading || hasDateValidationError) {
+      return
+    }
     clearSelection()
-    setSearchParams(
-      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    const nextSearchParams = buildSearchParams(
+      filters,
+      sortField,
+      sortDirection,
+      DEFAULT_SEARCH_PAGE,
+      pageSize,
     )
+    if (nextSearchParams.toString() === searchParams.toString()) {
+      void runSearch(
+        {
+          filters,
+          page: DEFAULT_SEARCH_PAGE - 1,
+          pageSize,
+          sortField,
+          sortDirection,
+        },
+        { force: true },
+      )
+      return
+    }
+    setSearchParams(nextSearchParams)
   }
 
   const onClearFilters = () => {
     clearSelection()
+    setFilters(INITIAL_FILTERS)
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -446,7 +464,7 @@ const ProvincialApplicationPage = () => {
     const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     clearSelection()
     setSearchParams(
-      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+      buildSearchParams(appliedFilters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
     )
   }
 
@@ -547,168 +565,178 @@ const ProvincialApplicationPage = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-application-search-filters">
           <Tile>
-            {filters.exportScheduleId && (
-              <InlineNotification
-                kind="info"
-                lowContrast
-                title="Export schedule filter applied"
-                subtitle={`Showing applications assigned to export schedule ${filters.exportScheduleId}.`}
-                onCloseButtonClick={() => updateFilter('exportScheduleId', '')}
-              />
-            )}
-            <div className="legacy-search-grid provincial-application-search-grid">
-              <TextInput
-                id="applicationNumber"
-                labelText="Application number"
-                value={filters.applicationNumber}
-                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="applicationStatus"
-                labelText="Application status"
-                value={filters.applicationStatus}
-                placeholder="All statuses"
-                options={applicationStatusOptions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(value) => updateFilter('applicationStatus', value)}
-              />
-              <TextInput
-                id="packageNumber"
-                labelText="Package number"
-                value={filters.packageNumber}
-                onChange={(event) => updateFilter('packageNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="exemptionType"
-                labelText="Exemption type"
-                value={filters.exemptionType}
-                placeholder="All types"
-                options={exemptionTypeOptions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(value) => updateFilter('exemptionType', value)}
-              />
-              <TextInput
-                id="exemptionNumber"
-                labelText="Exemption number"
-                value={filters.exemptionNumber}
-                onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="productTypeCode"
-                labelText="Product type"
-                value={filters.productTypeCode}
-                placeholder="All product types"
-                options={productTypeOptions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(value) => updateFilter('productTypeCode', value)}
-              />
-              <RegionMultiSelect
-                id="region"
-                titleText="Region"
-                items={regionOptions}
-                placeholder="Select region(s)"
-                selectedItems={selectedRegions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(nextSelected) => {
-                  updateFilter(
-                    'region',
-                    nextSelected.map((item) => item.id),
-                  )
-                }}
-              />
-              {canCreateExemption && (
-                <>
-                  <TextInput
-                    id="applicantClientNumber"
-                    labelText="Applicant client number"
-                    value={filters.applicantClientNumber}
-                    onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-                  />
-                  <TextInput
-                    id="ownerClientNumber"
-                    labelText="Owner client number"
-                    value={filters.ownerClientNumber}
-                    onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-                  />
-                </>
+            <form
+              className="legacy-search-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                onSearch()
+              }}
+            >
+              {filters.exportScheduleId && (
+                <InlineNotification
+                  kind="info"
+                  lowContrast
+                  title="Export schedule filter applied"
+                  subtitle={`Showing applications assigned to export schedule ${filters.exportScheduleId}.`}
+                  onCloseButtonClick={() => updateFilter('exportScheduleId', '')}
+                />
               )}
-              <IsoDatePicker
-                id="receivedFromDate"
-                labelText="Received from date"
-                value={filters.receivedFromDate}
-                invalid={!isValidIsoDate(filters.receivedFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('receivedFromDate', value)}
-              />
-              <IsoDatePicker
-                id="receivedToDate"
-                labelText="Received to date"
-                value={filters.receivedToDate}
-                invalid={!isValidIsoDate(filters.receivedToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('receivedToDate', value)}
-              />
-              <IsoDatePicker
-                id="listingFromDate"
-                labelText="Listing from date"
-                value={filters.listingFromDate}
-                invalid={!isValidIsoDate(filters.listingFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingFromDate', value)}
-              />
-              <IsoDatePicker
-                id="listingToDate"
-                labelText="Listing to date"
-                value={filters.listingToDate}
-                invalid={!isValidIsoDate(filters.listingToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingToDate', value)}
-              />
-            </div>
-            <div className="legacy-search-actions">
-              <Button
-                kind="primary"
-                onClick={onSearch}
-                disabled={loading || hasDateValidationError}
-                size="md"
-              >
-                Search
-              </Button>
-              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-                Clear Filters
-              </Button>
-              {canCreateExemption && (
-                <DisabledButtonTooltip
-                  disabled={selectedRowsCount === 0}
-                  description="Select at least one eligible application."
-                >
-                  <Button
-                    kind="secondary"
-                    size="md"
-                    onClick={onCreateExemptionClick}
-                    disabled={selectedRowsCount === 0}
-                  >
-                    Create exemption for Selected Applications
-                  </Button>
-                </DisabledButtonTooltip>
-              )}
-            </div>
-            {canCreateApplication && (
-              <div className="provincial-application-create-link">
-                <Link className="cds--link" to="/provincial/application/create">
-                  Add Application
-                </Link>
+              <div className="legacy-search-grid provincial-application-search-grid">
+                <TextInput
+                  id="applicationNumber"
+                  labelText="Application number"
+                  value={filters.applicationNumber}
+                  onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+                />
+                <SearchableSelect
+                  id="applicationStatus"
+                  labelText="Application status"
+                  value={filters.applicationStatus}
+                  placeholder="All statuses"
+                  options={applicationStatusOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('applicationStatus', value)}
+                />
+                <TextInput
+                  id="packageNumber"
+                  labelText="Package number"
+                  value={filters.packageNumber}
+                  onChange={(event) => updateFilter('packageNumber', event.target.value)}
+                />
+                <SearchableSelect
+                  id="exemptionType"
+                  labelText="Exemption type"
+                  value={filters.exemptionType}
+                  placeholder="All types"
+                  options={exemptionTypeOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('exemptionType', value)}
+                />
+                <TextInput
+                  id="exemptionNumber"
+                  labelText="Exemption number"
+                  value={filters.exemptionNumber}
+                  onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
+                />
+                <SearchableSelect
+                  id="productTypeCode"
+                  labelText="Product type"
+                  value={filters.productTypeCode}
+                  placeholder="All product types"
+                  options={productTypeOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('productTypeCode', value)}
+                />
+                <RegionMultiSelect
+                  id="region"
+                  titleText="Region"
+                  items={regionOptions}
+                  placeholder="Select region(s)"
+                  selectedItems={selectedRegions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(nextSelected) => {
+                    updateFilter(
+                      'region',
+                      nextSelected.map((item) => item.id),
+                    )
+                  }}
+                />
+                {canCreateExemption && (
+                  <>
+                    <TextInput
+                      id="applicantClientNumber"
+                      labelText="Applicant client number"
+                      value={filters.applicantClientNumber}
+                      onChange={(event) =>
+                        updateFilter('applicantClientNumber', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="ownerClientNumber"
+                      labelText="Owner client number"
+                      value={filters.ownerClientNumber}
+                      onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+                    />
+                  </>
+                )}
+                <IsoDatePicker
+                  id="receivedFromDate"
+                  labelText="Received from date"
+                  value={filters.receivedFromDate}
+                  invalid={!isValidIsoDate(filters.receivedFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('receivedFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="receivedToDate"
+                  labelText="Received to date"
+                  value={filters.receivedToDate}
+                  invalid={!isValidIsoDate(filters.receivedToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('receivedToDate', value)}
+                />
+                <IsoDatePicker
+                  id="listingFromDate"
+                  labelText="Listing from date"
+                  value={filters.listingFromDate}
+                  invalid={!isValidIsoDate(filters.listingFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('listingFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="listingToDate"
+                  labelText="Listing to date"
+                  value={filters.listingToDate}
+                  invalid={!isValidIsoDate(filters.listingToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('listingToDate', value)}
+                />
               </div>
-            )}
-            {exemptionStatus && (
-              <AppNotification
-                className="legacy-inline-notification"
-                kind={exemptionStatus.kind}
-                title="Validation failed"
-                subtitle={exemptionStatus.message}
-                onCloseButtonClick={() => setExemptionStatus(null)}
-              />
-            )}
+              <div className="legacy-search-actions">
+                <Button
+                  type="button"
+                  kind="tertiary"
+                  onClick={onClearFilters}
+                  disabled={loading}
+                  size="md"
+                >
+                  Clear Filters
+                </Button>
+                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                {canCreateExemption && (
+                  <DisabledButtonTooltip
+                    disabled={selectedRowsCount === 0}
+                    description="Select at least one eligible application."
+                  >
+                    <Button
+                      type="button"
+                      kind="secondary"
+                      size="md"
+                      onClick={onCreateExemptionClick}
+                      disabled={selectedRowsCount === 0}
+                    >
+                      Create exemption for Selected Applications
+                    </Button>
+                  </DisabledButtonTooltip>
+                )}
+              </div>
+              {canCreateApplication && (
+                <div className="provincial-application-create-link">
+                  <Link className="cds--link" to="/provincial/application/create">
+                    Add Application
+                  </Link>
+                </div>
+              )}
+              {exemptionStatus && (
+                <AppNotification
+                  className="legacy-inline-notification"
+                  kind={exemptionStatus.kind}
+                  title="Validation failed"
+                  subtitle={exemptionStatus.message}
+                  onCloseButtonClick={() => setExemptionStatus(null)}
+                />
+              )}
+            </form>
           </Tile>
         </section>
       </Column>
@@ -765,9 +793,6 @@ const ProvincialApplicationPage = () => {
                             onClick={() => onHeaderClick(column.sortField!)}
                           >
                             {column.label}
-                            {sortField === column.sortField
-                              ? ` (${sortDirection.toUpperCase()})`
-                              : ''}
                           </button>
                         ) : (
                           column.label
@@ -825,7 +850,7 @@ const ProvincialApplicationPage = () => {
                           '-'
                         )}
                       </TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -845,7 +870,7 @@ const ProvincialApplicationPage = () => {
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(
-                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
                   )
                 }}
               />

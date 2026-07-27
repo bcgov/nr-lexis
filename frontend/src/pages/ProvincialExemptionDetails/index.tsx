@@ -639,8 +639,7 @@ const ProvincialExemptionDetailsPage = () => {
     regionOptions,
   ])
 
-  const canUploadExemptionDocuments =
-    canPerform('/fileExemptionUpload') && persistedStatusCode !== 'EXP' && !exemptionEditLocked
+  const canUploadExemptionDocuments = canPerform('/fileExemptionUpload') && !exemptionEditLocked
   const canDeleteExemptionDocuments =
     isApplicationApprover &&
     persistedStatusCode.length > 0 &&
@@ -856,14 +855,12 @@ const ProvincialExemptionDetailsPage = () => {
         const email = await sendExemptionApprovalEmails(recipients)
         setActionInfoMessage(
           email.success
-            ? `Exemption approved. ${email.message || 'Approval notification queued.'}`
-            : `Exemption approved. ${
-                email.message || 'The approval notification could not be queued.'
-              }`,
+            ? `Exemption approved. ${email.message || 'Approval email sent.'}`
+            : `Exemption approved. ${email.message || 'The approval email could not be sent.'}`,
         )
       } catch (error) {
         console.error(error)
-        setActionInfoMessage('Exemption approved. The approval notification could not be queued.')
+        setActionInfoMessage('Exemption approved. The approval email could not be sent.')
       } finally {
         setSendingApprovalEmail(false)
         setApprovalEmailRecipients([])
@@ -1474,19 +1471,6 @@ const ProvincialExemptionDetailsPage = () => {
                                 label: 'Type',
                                 value: displayValue(
                                   detail.exemptionTypeDescription ?? detail.exemptionTypeCode,
-                                ),
-                              },
-                              {
-                                label: 'Status',
-                                value: (
-                                  <StatusTag
-                                    status={
-                                      detail.exemptionStatusDescription ??
-                                      detail.exemptionStatusCode ??
-                                      ''
-                                    }
-                                    fallbackLabel="Not provided"
-                                  />
                                 ),
                               },
                               {

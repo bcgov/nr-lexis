@@ -35,6 +35,14 @@ export const createE2EConfig = ({ testMatch, use }: E2EConfigOptions): Playwrigh
             process.env.VITE_USER_POOLS_WEB_CLIENT_ID ?? 'local-e2e-client',
           VITE_COGNITO_DOMAIN:
             process.env.VITE_COGNITO_DOMAIN ?? 'local-e2e.auth.ca-central-1.amazoncognito.com',
+          VITE_LOGOUT_SITEMINDER_URL:
+            process.env.VITE_LOGOUT_SITEMINDER_URL ??
+            'https://local-e2e-siteminder.example.test/clp-cgi/logoff.cgi',
+          VITE_LOGOUT_KEYCLOAK_URL:
+            process.env.VITE_LOGOUT_KEYCLOAK_URL ??
+            'https://local-e2e-keycloak.example.test/protocol/openid-connect/logout',
+          VITE_LOGOUT_KEYCLOAK_CLIENT_ID:
+            process.env.VITE_LOGOUT_KEYCLOAK_CLIENT_ID ?? 'local-e2e-keycloak-client',
         },
         reuseExistingServer: !process.env.CI,
         timeout: E2E_TIMEOUT_MS,

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Accordion,
-  AccordionItem,
   Button,
+  Checkbox,
   Column,
   DismissibleTag,
   Grid,
@@ -18,11 +17,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableSelectRow,
   TextArea,
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Edit } from '@carbon/icons-react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import PageHeader from '@/components/PageHeader'
@@ -95,6 +96,7 @@ import SearchableSelect from '../../components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import {
   averageLogVolumeFieldError,
+  clientLocationLabel,
   isAgentApplicant,
   isSelectableClientContact,
   isSelectableClientLocation,
@@ -115,6 +117,7 @@ import {
   requiredMaxLengthFieldError,
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { triggerBrowserDownload } from '@/utils/download'
 import {
   isValidEmail,
@@ -129,8 +132,13 @@ const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUSES_WITH_PERSISTED_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating review status.'
 const REVIEW_REMARK_REQUIRED_MESSAGE =
-  'Review remark is required when rejecting, withdrawing, or expiring an application.'
+  'Status change remark is required when rejecting, withdrawing, or expiring an application.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
+type ApplicationCreationNavigationState = {
+  applicationCreationNotice?: {
+    applicationNumber: string
+  }
+}
 type ApplicationDetailTabKey =
   | 'owner'
   | 'agent'
@@ -157,6 +165,9 @@ const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
 const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
 const REVIEW_EMAIL_PREVIEW_HELPER =
   "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
+const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
+const productTypeSupportsPackages = (productTypeCode?: string | null): boolean =>
+  ['H', 'T'].includes((productTypeCode ?? '').trim().toUpperCase())
 const APPLICATION_STATUS_LABELS: Record<string, string> = {
   APP: 'Approved',
   EXP: 'Expired',
@@ -167,6 +178,7 @@ const APPLICATION_STATUS_LABELS: Record<string, string> = {
 }
 const APPLICANT_TYPE_OPTIONS: SearchOption[] = [
   { value: 'O', label: 'Owner' },
+  { value: 'M', label: 'Ministerial' },
   { value: 'A', label: 'Agent' },
 ]
 const JURISDICTION_OPTIONS: SearchOption[] = [
@@ -181,14 +193,34 @@ const OIC_INDICATOR_OPTIONS: SearchOption[] = [
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
 
+const applicantTypeLabel = (value: string | null | undefined): string => {
+  switch (value?.trim().toUpperCase()) {
+    case 'A':
+      return 'Agent'
+    case 'M':
+      return 'Ministerial'
+    case 'O':
+      return 'Owner'
+    default:
+      return value?.trim() ?? ''
+  }
+}
+
 export type ClientDataSummaryProps = {
   title: string
+  showTitle?: boolean
   clientData: ApplicationClientData | null
   isLoading: boolean
   detailFields?: Array<[string, string]>
 }
 
-function ClientDataSummary({ title, clientData, isLoading, detailFields }: ClientDataSummaryProps) {
+function ClientDataSummary({
+  title,
+  showTitle = true,
+  clientData,
+  isLoading,
+  detailFields,
+}: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
   const [dismissedClientLookupMessageKey, setDismissedClientLookupMessageKey] = useState<
@@ -210,7 +242,7 @@ function ClientDataSummary({ title, clientData, isLoading, detailFields }: Clien
         loading={isLoading}
         loadingDescription={`Refreshing ${title.toLowerCase()}...`}
       />
-      <h3 className="application-client-summary__title">{title}</h3>
+      {showTitle && <h3 className="application-client-summary__title">{title}</h3>}
       <dl className="detail-field-grid">
         {[
           ...(detailFields ?? []),
@@ -284,6 +316,7 @@ type ApplicationSummaryFormState = {
 }
 
 type ApplicationSummaryField = keyof ApplicationSummaryFormState & string
+type SummarySaveSource = 'summary' | 'owner'
 
 const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
   applicationDate: detail.applicationDate ?? '',
@@ -414,16 +447,13 @@ const canDeleteApplicationDocuments = (
   return industryUser && [APPLICATION_STATUS_PERMITTED, APPLICATION_STATUS_EXPIRED].includes(status)
 }
 
-const isExpiredApplication = (detail: ProvincialApplicationDetail | null): boolean => {
-  const statusCode = detail?.applicationStatusCode?.trim().toUpperCase() ?? ''
-  const statusDescription = detail?.statusDescription?.trim().toUpperCase() ?? ''
-  return statusCode === APPLICATION_STATUS_EXPIRED || statusDescription === 'EXPIRED'
-}
-
 const hasCompletePermit = (permitRows: ApplicationPermitRow[]): boolean =>
   permitRows.some((row) =>
     row.permitStatusDescription.trim().toUpperCase().includes(COMPLETE_PERMIT_STATUS_TEXT),
   )
+
+const isExpiredApplication = (detail: ProvincialApplicationDetail | null): boolean =>
+  detail?.applicationStatusCode?.trim().toUpperCase() === APPLICATION_STATUS_EXPIRED
 
 const applicationDocumentUploadUnavailableMessage = (
   detail: ProvincialApplicationDetail | null,
@@ -438,9 +468,6 @@ const applicationDocumentUploadUnavailableMessage = (
   }
   if (detail?.readOnly) {
     return 'Application document upload is unavailable for read-only applications.'
-  }
-  if (isExpiredApplication(detail)) {
-    return 'Application document upload is unavailable for expired applications.'
   }
   if (detail?.industryUser && hasCompletePermit(permitRows)) {
     return 'Application document upload is unavailable for industry users when the application has a complete permit.'
@@ -502,9 +529,13 @@ const latestPersistedReviewRemark = (
 
 const ProvincialApplicationDetailsPage = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { canPerform, capabilities } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
+  const createdApplicationNumber = (
+    location.state as ApplicationCreationNavigationState | null
+  )?.applicationCreationNotice?.applicationNumber.trim()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [industryViewableExemptionNumber, setIndustryViewableExemptionNumber] = useState<
     string | null
@@ -520,6 +551,9 @@ const ProvincialApplicationDetailsPage = () => {
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [creationSuccessMessage, setCreationSuccessMessage] = useState(() =>
+    createdApplicationNumber ? `Created application ${createdApplicationNumber}.` : '',
+  )
   const [actionWarningMessage, setActionWarningMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
@@ -537,6 +571,9 @@ const ProvincialApplicationDetailsPage = () => {
     useState<ApplicationSummaryFormState | null>(null)
   const [summaryVolumeWarningAccepted, setSummaryVolumeWarningAccepted] = useState(false)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
+  const [isEditingOwnerDetails, setIsEditingOwnerDetails] = useState(false)
+  const [pendingSummarySaveSource, setPendingSummarySaveSource] =
+    useState<SummarySaveSource>('summary')
   const [summaryAccuracyConfirmationOpen, setSummaryAccuracyConfirmationOpen] = useState(false)
   const [summaryAccuracyConfirmed, setSummaryAccuracyConfirmed] = useState(false)
   const [summaryAccuracyApplicationNumber, setSummaryAccuracyApplicationNumber] = useState<
@@ -614,6 +651,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(() =>
     requestedApplicationTab === 'items' ? 1 : 0,
   )
+  const [selectedPackageNumber, setSelectedPackageNumber] = useState('')
   const [selectedApplicationTab, setSelectedApplicationTab] = useState<ApplicationDetailTabKey>(
     () => (requestedApplicationTab === 'items' ? 'items' : 'owner'),
   )
@@ -647,11 +685,34 @@ const ProvincialApplicationDetailsPage = () => {
     setFocusedPackageRequestId((current) => current + 1)
   }, [])
 
+  useEffect(() => {
+    if (!createdApplicationNumber) {
+      return
+    }
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+      },
+      { replace: true, state: null },
+    )
+  }, [
+    createdApplicationNumber,
+    location.hash,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+  ])
+
   const loadApplicationDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
+    setPendingSummarySaveSource('summary')
     if (!applicationNumber) {
       seededReviewFieldsApplicationRef.current = null
       setErrorMessage('Application number is missing from the route.')
@@ -667,6 +728,7 @@ const ProvincialApplicationDetailsPage = () => {
       setLoading(false)
       setSummaryForm(null)
       setSummaryBaselineForm(null)
+      setIsEditingOwnerDetails(false)
       setReviewStatusCode('')
       setReviewStatusRemark('')
       setReviewStatusBaselineCode('')
@@ -685,6 +747,7 @@ const ProvincialApplicationDetailsPage = () => {
     setActionErrorMessage('')
     setActionInfoMessage('')
     if (!retainingCurrentDetail) {
+      setIsEditingOwnerDetails(false)
       setIndustryViewableExemptionNumber(null)
       setDocumentRows([])
       setPermitRows([])
@@ -912,11 +975,16 @@ const ProvincialApplicationDetailsPage = () => {
   const hasApplicationDocuments =
     documentLookupAvailability === 'available' && documentRows.length > 0
   const canViewRemarks = canPerform('/applicationRemarks')
+  const isApplicationExpired = isExpiredApplication(detail)
+  const applicationProductSupportsPackages = productTypeSupportsPackages(detail?.productTypeCode)
   const canUseApplicationMutations =
-    canPerform('createApplication') && !detail?.locked && !detail?.readOnly
-  const canEditPackages = canUseApplicationMutations && !!detail?.canEditPackages
-  const canAddPackages = canUseApplicationMutations && !!detail?.canAddPackages
-  const canAddScales = canUseApplicationMutations && !!detail?.canAddScales
+    canPerform('createApplication') && !detail?.locked && !detail?.readOnly && !isApplicationExpired
+  const canEditPackages =
+    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canEditPackages
+  const canAddPackages =
+    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canAddPackages
+  const canAddScales =
+    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canAddScales
   const canEditSummary = canUseApplicationMutations && !!detail?.canEditApplicationDetails
   const needsApplicationOptions =
     canEditSummary || canEditPackages || canAddPackages || canAddScales
@@ -934,6 +1002,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canCreateApplicationOffer = Boolean(
     detail &&
+    !isApplicationExpired &&
     canPerform('/offersSearch') &&
     canPerform('createOffer') &&
     detail.canCreateOffers &&
@@ -943,6 +1012,10 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canChangeApplicantType = canPerform('/changeApplicantType')
   const canReviewApplication = canPerform('/applicationsReview')
+  const canEditApplicationReview =
+    canReviewApplication &&
+    !isApplicationExpired &&
+    REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(detail?.applicationStatusCode ?? ''))
   const canViewReview = canViewRemarks && canReviewApplication
   const normalizedReviewStatusCode = useMemo(
     () => normalizeReviewStatus(reviewStatusCode),
@@ -973,6 +1046,20 @@ const ProvincialApplicationDetailsPage = () => {
   const summaryAgentClientNumber = isSummaryAgentApplicant
     ? (summaryForm?.agentClientNumber.trim() ?? '')
     : ''
+  const debouncedSummaryOwnerClientNumber = useDebouncedValue(summaryOwnerClientNumber)
+  const debouncedSummaryAgentClientNumber = useDebouncedValue(summaryAgentClientNumber)
+  const baselineSummaryOwnerClientNumber =
+    summaryBaselineForm?.ownerClientNumber.trim() ?? summaryOwnerClientNumber
+  const baselineSummaryAgentClientNumber =
+    summaryBaselineForm?.agentClientNumber.trim() ?? summaryAgentClientNumber
+  const summaryOwnerClientNumberForLookup =
+    summaryOwnerClientNumber === baselineSummaryOwnerClientNumber
+      ? summaryOwnerClientNumber
+      : debouncedSummaryOwnerClientNumber
+  const summaryAgentClientNumberForLookup =
+    summaryAgentClientNumber === baselineSummaryAgentClientNumber
+      ? summaryAgentClientNumber
+      : debouncedSummaryAgentClientNumber
   const summaryOwnerClientLocationCode = summaryForm?.ownerClientLocationCode.trim() ?? ''
   const summaryAgentClientLocationCode = isSummaryAgentApplicant
     ? (summaryForm?.agentClientLocationCode.trim() ?? '')
@@ -1174,9 +1261,9 @@ const ProvincialApplicationDetailsPage = () => {
       applicantTypeCode: firstValidationError(
         () => requiredFieldError(summaryForm.applicantTypeCode, 'Applicant type'),
         () =>
-          summaryForm.applicantTypeCode === 'O' || summaryForm.applicantTypeCode === 'A'
+          ['O', 'M', 'A'].includes(summaryForm.applicantTypeCode)
             ? null
-            : 'Applicant type must be Owner or Agent.',
+            : 'Applicant type must be Owner, Ministerial, or Agent.',
       ),
       productTypeCode: firstValidationError(
         () => requiredFieldError(summaryForm.productTypeCode, 'Product type'),
@@ -1295,7 +1382,7 @@ const ProvincialApplicationDetailsPage = () => {
         : 'No end uses on file'
 
   useEffect(() => {
-    if (!hasSummaryForm || !summaryOwnerClientNumber || !summaryOwnerClientLocationCode) {
+    if (!hasSummaryForm || !summaryOwnerClientNumberForLookup || !summaryOwnerClientLocationCode) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1316,7 +1403,10 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientData(summaryOwnerClientNumber, summaryOwnerClientLocationCode)
+    void fetchApplicationClientData(
+      summaryOwnerClientNumberForLookup,
+      summaryOwnerClientLocationCode,
+    )
       .then((clientData) => {
         if (isActive) {
           setOwnerClientData(clientData)
@@ -1331,10 +1421,10 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [hasSummaryForm, summaryOwnerClientLocationCode, summaryOwnerClientNumber])
+  }, [hasSummaryForm, summaryOwnerClientLocationCode, summaryOwnerClientNumberForLookup])
 
   useEffect(() => {
-    if (!hasSummaryForm || !summaryAgentClientNumber || !summaryAgentClientLocationCode) {
+    if (!hasSummaryForm || !summaryAgentClientNumberForLookup || !summaryAgentClientLocationCode) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1355,7 +1445,10 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientData(summaryAgentClientNumber, summaryAgentClientLocationCode)
+    void fetchApplicationClientData(
+      summaryAgentClientNumberForLookup,
+      summaryAgentClientLocationCode,
+    )
       .then((clientData) => {
         if (isActive) {
           setAgentClientData(clientData)
@@ -1370,7 +1463,7 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [hasSummaryForm, summaryAgentClientLocationCode, summaryAgentClientNumber])
+  }, [hasSummaryForm, summaryAgentClientLocationCode, summaryAgentClientNumberForLookup])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -1387,7 +1480,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
     }
 
-    if (!summaryOwnerClientNumber) {
+    if (!summaryOwnerClientNumberForLookup) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1411,7 +1504,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientLocations(summaryOwnerClientNumber, 'owner')
+    void fetchApplicationClientLocations(summaryOwnerClientNumberForLookup, 'owner')
       .then((locations) => {
         if (!isActive) {
           return
@@ -1419,7 +1512,7 @@ const ProvincialApplicationDetailsPage = () => {
 
         setOwnerClientLocations(locations)
         setSummaryForm((current) => {
-          if (!current || current.ownerClientNumber.trim() !== summaryOwnerClientNumber) {
+          if (!current || current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup) {
             return current
           }
 
@@ -1441,7 +1534,7 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [canEditSummary, hasSummaryForm, summaryOwnerClientNumber])
+  }, [canEditSummary, hasSummaryForm, summaryOwnerClientNumberForLookup])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -1458,7 +1551,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
     }
 
-    if (!summaryAgentClientNumber) {
+    if (!summaryAgentClientNumberForLookup) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1482,7 +1575,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientLocations(summaryAgentClientNumber, 'agent')
+    void fetchApplicationClientLocations(summaryAgentClientNumberForLookup, 'agent')
       .then((locations) => {
         if (!isActive) {
           return
@@ -1490,7 +1583,7 @@ const ProvincialApplicationDetailsPage = () => {
 
         setAgentClientLocations(locations)
         setSummaryForm((current) => {
-          if (!current || current.agentClientNumber.trim() !== summaryAgentClientNumber) {
+          if (!current || current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup) {
             return current
           }
 
@@ -1512,7 +1605,7 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [canEditSummary, hasSummaryForm, summaryAgentClientNumber])
+  }, [canEditSummary, hasSummaryForm, summaryAgentClientNumberForLookup])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -1529,7 +1622,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
     }
 
-    if (!summaryOwnerClientNumber || !summaryOwnerClientLocationCode) {
+    if (!summaryOwnerClientNumberForLookup || !summaryOwnerClientLocationCode) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1551,7 +1644,7 @@ const ProvincialApplicationDetailsPage = () => {
     })
 
     void fetchApplicationClientContacts(
-      summaryOwnerClientNumber,
+      summaryOwnerClientNumberForLookup,
       summaryOwnerClientLocationCode,
       'owner',
       applicationNumber ?? '',
@@ -1565,7 +1658,7 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryForm((current) => {
           if (
             !current ||
-            current.ownerClientNumber.trim() !== summaryOwnerClientNumber ||
+            current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup ||
             current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
           ) {
             return current
@@ -1591,7 +1684,7 @@ const ProvincialApplicationDetailsPage = () => {
     canEditSummary,
     hasSummaryForm,
     summaryOwnerClientLocationCode,
-    summaryOwnerClientNumber,
+    summaryOwnerClientNumberForLookup,
   ])
 
   useEffect(() => {
@@ -1609,7 +1702,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
     }
 
-    if (!summaryAgentClientNumber || !summaryAgentClientLocationCode) {
+    if (!summaryAgentClientNumberForLookup || !summaryAgentClientLocationCode) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1631,7 +1724,7 @@ const ProvincialApplicationDetailsPage = () => {
     })
 
     void fetchApplicationClientContacts(
-      summaryAgentClientNumber,
+      summaryAgentClientNumberForLookup,
       summaryAgentClientLocationCode,
       'agent',
       applicationNumber ?? '',
@@ -1645,7 +1738,7 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryForm((current) => {
           if (
             !current ||
-            current.agentClientNumber.trim() !== summaryAgentClientNumber ||
+            current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup ||
             current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
           ) {
             return current
@@ -1671,7 +1764,7 @@ const ProvincialApplicationDetailsPage = () => {
     canEditSummary,
     hasSummaryForm,
     summaryAgentClientLocationCode,
-    summaryAgentClientNumber,
+    summaryAgentClientNumberForLookup,
   ])
 
   useEffect(() => {
@@ -2040,6 +2133,54 @@ const ProvincialApplicationDetailsPage = () => {
     [],
   )
 
+  const onOwnerApplicantTypeChange = useCallback((applicantTypeCode: string) => {
+    setSummaryForm((current) => {
+      if (!current) {
+        return current
+      }
+
+      const next = {
+        ...current,
+        applicantTypeCode,
+        agentClientNumber:
+          applicantTypeCode === 'A'
+            ? current.agentClientNumber || current.ownerClientNumber
+            : current.agentClientNumber,
+      }
+      return normalizeSummaryAgentFields(next)
+    })
+    setSummaryVolumeWarningAccepted(false)
+    setActionWarningMessage('')
+  }, [])
+
+  const onCancelOwnerDetails = useCallback(() => {
+    setSummaryForm((current) => {
+      if (!current || !summaryBaselineForm) {
+        return current
+      }
+
+      return {
+        ...current,
+        ownerClientNumber: summaryBaselineForm.ownerClientNumber,
+        ownerClientLocationCode: summaryBaselineForm.ownerClientLocationCode,
+        ownerContactName: summaryBaselineForm.ownerContactName,
+        applicantTypeCode: summaryBaselineForm.applicantTypeCode,
+        agentClientNumber: summaryBaselineForm.agentClientNumber,
+        agentClientLocationCode: summaryBaselineForm.agentClientLocationCode,
+        agentContactName: summaryBaselineForm.agentContactName,
+      }
+    })
+    setIsEditingOwnerDetails(false)
+    setShowSummaryValidationErrors(false)
+    setSummaryVolumeWarningAccepted(false)
+    setActionErrorMessage('')
+    setActionWarningMessage('')
+    setSummaryAccuracyConfirmationOpen(false)
+    setSummaryAccuracyConfirmed(false)
+    setSummaryAccuracyApplicationNumber(null)
+    setPendingSummarySaveSource('summary')
+  }, [summaryBaselineForm])
+
   const onAddApplicationSpecies = useCallback(() => {
     const nextSpecies = applicationSpeciesCandidate.trim()
     if (!nextSpecies) {
@@ -2209,22 +2350,39 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
+    setPendingSummarySaveSource('summary')
   }, [])
 
-  const onRequestSaveSummary = useCallback(() => {
-    if (!requiresApplicationAccuracyAcknowledgement) {
-      void onSaveSummary()
-      return
-    }
-    setSummaryAccuracyConfirmed(false)
-    setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
-    setSummaryAccuracyConfirmationOpen(true)
-  }, [applicationNumber, onSaveSummary, requiresApplicationAccuracyAcknowledgement])
+  const completeSummarySave = useCallback(
+    async (source: SummarySaveSource, accuracyAcknowledged = false): Promise<boolean> => {
+      const saved = await onSaveSummary(true, accuracyAcknowledged)
+      if (saved && source === 'owner') {
+        setIsEditingOwnerDetails(false)
+        setActionInfoMessage('Owner client details saved.')
+      }
+      return saved
+    },
+    [onSaveSummary],
+  )
+
+  const onRequestSaveSummary = useCallback(
+    (source: SummarySaveSource) => {
+      if (!requiresApplicationAccuracyAcknowledgement) {
+        void completeSummarySave(source)
+        return
+      }
+      setPendingSummarySaveSource(source)
+      setSummaryAccuracyConfirmed(false)
+      setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
+      setSummaryAccuracyConfirmationOpen(true)
+    },
+    [applicationNumber, completeSummarySave, requiresApplicationAccuracyAcknowledgement],
+  )
 
   const onConfirmSummaryAccuracy = useCallback(async () => {
     if (!summaryAccuracyConfirmed || isSavingSummary) return
-    await onSaveSummary(true, true)
-  }, [isSavingSummary, onSaveSummary, summaryAccuracyConfirmed])
+    await completeSummarySave(pendingSummarySaveSource, true)
+  }, [completeSummarySave, isSavingSummary, pendingSummarySaveSource, summaryAccuracyConfirmed])
 
   const buildReviewStatusPayload = useCallback(
     (requireEmail: boolean) => {
@@ -2291,7 +2449,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
 
   const onApproveApplication = useCallback(async (): Promise<boolean> => {
-    if (!detail || !canReviewApplication || isSubmittingReviewAction) {
+    if (!detail || !canEditApplicationReview || isSubmittingReviewAction) {
       return false
     }
 
@@ -2317,7 +2475,7 @@ const ProvincialApplicationDetailsPage = () => {
     }
   }, [
     applyReviewStatusResult,
-    canReviewApplication,
+    canEditApplicationReview,
     detail,
     isSubmittingReviewAction,
     reviewStatusRemark,
@@ -2327,7 +2485,7 @@ const ProvincialApplicationDetailsPage = () => {
     async (sendEmail: boolean): Promise<boolean> => {
       if (
         !detail ||
-        !canReviewApplication ||
+        !canEditApplicationReview ||
         isSubmittingReviewAction ||
         reviewOptionsAvailability !== 'available' ||
         reviewStatusOptions.length === 0
@@ -2366,7 +2524,7 @@ const ProvincialApplicationDetailsPage = () => {
               emailResult.message ===
                 'Application status email is not configured yet. No email was sent.'
                 ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
-                : emailResult.message || 'Application status updated; email could not be queued.',
+                : emailResult.message || 'Application status updated; email could not be sent.',
             )
             return false
           }
@@ -2375,7 +2533,7 @@ const ProvincialApplicationDetailsPage = () => {
         applyReviewStatusResult(updateResult, payloadResult.payload.remark)
         setActionInfoMessage(
           sendEmail
-            ? 'Application status updated and email queued.'
+            ? 'Application status updated and email sent.'
             : updateResult.message || 'Application status updated.',
         )
         return true
@@ -2389,7 +2547,7 @@ const ProvincialApplicationDetailsPage = () => {
     [
       applyReviewStatusResult,
       buildReviewStatusPayload,
-      canReviewApplication,
+      canEditApplicationReview,
       detail,
       isSubmittingReviewAction,
       reviewOptionsAvailability,
@@ -2464,7 +2622,7 @@ const ProvincialApplicationDetailsPage = () => {
     : ''
   const remarkDirty = canManageRemarks && remarkBody !== remarkBaselineBody
   const reviewDirty =
-    canReviewApplication &&
+    canEditApplicationReview &&
     (normalizedReviewStatusCode !== normalizeReviewStatus(reviewStatusBaselineCode) ||
       reviewStatusRemark !== reviewStatusRemarkBaseline)
   const isApplicationDirty =
@@ -2512,6 +2670,7 @@ const ProvincialApplicationDetailsPage = () => {
         (detail ? normalizeSummaryAgentFields(toSummaryFormState(detail)) : null),
     )
     setSummaryVolumeWarningAccepted(false)
+    setIsEditingOwnerDetails(false)
     closeSummaryAccuracyConfirmation()
     setShowSummaryValidationErrors(false)
     setApplicationSpeciesCandidate('')
@@ -2543,13 +2702,15 @@ const ProvincialApplicationDetailsPage = () => {
     Boolean(linkedExemptionNumber) &&
     canAccessExemptionRoutes &&
     (!detail?.industryUser || industryViewableExemptionNumber === linkedExemptionNumber)
-  const ownerApplicantTypeOption = optionsWithCurrentValue(
-    APPLICANT_TYPE_OPTIONS,
-    ownerApplicantTypeCode,
-  ).find((option) => option.value === ownerApplicantTypeCode)
-  const ownerApplicantTypeLabel = ownerApplicantTypeOption
-    ? optionLabel(ownerApplicantTypeOption)
-    : ownerApplicantTypeCode
+  const ownerApplicantTypeLabel = applicantTypeLabel(ownerApplicantTypeCode)
+  const ownerClientLocationCode = summaryForm?.ownerClientLocationCode?.trim() ?? ''
+  const ownerClientLocationName = ownerClientLocations.find(
+    (location) => location.locationCode === ownerClientLocationCode,
+  )?.locationName
+  const ownerClientLocationDisplay = clientLocationLabel(
+    ownerClientLocationCode,
+    ownerClientLocationName ?? '',
+  )
   const summaryJurisdictionCode = summaryForm?.jurisdictionCode ?? ''
   const summaryJurisdictionOption = optionsWithCurrentValue(
     JURISDICTION_OPTIONS,
@@ -2561,7 +2722,7 @@ const ProvincialApplicationDetailsPage = () => {
   const ownerClientDetailFields: Array<[string, string]> = [
     ['Client number', summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? '')],
     ['Applicant type', ownerApplicantTypeLabel],
-    ['Client location', summaryForm?.ownerClientLocationCode ?? ''],
+    ['Client location', ownerClientLocationDisplay],
     ['Contact name', summaryForm?.ownerContactName ?? ''],
     ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
   ]
@@ -2569,6 +2730,7 @@ const ProvincialApplicationDetailsPage = () => {
     ownerClientData || isLoadingOwnerClientData ? (
       <ClientDataSummary
         title="Owner client details"
+        showTitle={false}
         clientData={ownerClientData}
         isLoading={isLoadingOwnerClientData}
         detailFields={ownerClientDetailFields}
@@ -2732,7 +2894,11 @@ const ProvincialApplicationDetailsPage = () => {
             value={reviewStatusCode}
             placeholder="Select status"
             options={reviewStatusOptions}
-            disabled={reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0}
+            disabled={
+              !canEditApplicationReview ||
+              reviewOptionsAvailability !== 'available' ||
+              reviewStatusOptions.length === 0
+            }
             invalid={isReviewStatusInvalid}
             invalidText={reviewValidationMessage}
             onChange={(value) => {
@@ -2745,6 +2911,7 @@ const ProvincialApplicationDetailsPage = () => {
             labelText="Client email address"
             helperText={REVIEW_EMAIL_PREVIEW_HELPER}
             value={reviewStatusEmailAddress}
+            disabled={!canEditApplicationReview}
             invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
             invalidText={reviewValidationMessage}
             onChange={(event) => {
@@ -2759,12 +2926,17 @@ const ProvincialApplicationDetailsPage = () => {
         <div className="legacy-search-grid">
           <TextArea
             id="applicationDetailReviewRemark"
-            labelText="Review remark"
+            labelText="Status change remark"
+            helperText="Saved with the status change and included in an email notification, if one is sent."
             maxCount={250}
             invalid={isReviewRemarkInvalid}
             invalidText={reviewValidationMessage}
             value={reviewStatusRemark}
-            disabled={reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0}
+            disabled={
+              !canEditApplicationReview ||
+              reviewOptionsAvailability !== 'available' ||
+              reviewStatusOptions.length === 0
+            }
             onChange={(event) => {
               setReviewStatusRemark(event.target.value.slice(0, 250))
               setReviewValidationMessage('')
@@ -2780,41 +2952,43 @@ const ProvincialApplicationDetailsPage = () => {
             onCloseButtonClick={() => setReviewValidationMessage('')}
           />
         )}
-        <div className="legacy-search-actions">
-          <Button
-            kind="primary"
-            size="sm"
-            disabled={isSubmittingReviewAction}
-            onClick={() => void onApproveApplication()}
-          >
-            Approve Application
-          </Button>
-          <Button
-            kind="secondary"
-            size="sm"
-            disabled={
-              isSubmittingReviewAction ||
-              reviewOptionsAvailability !== 'available' ||
-              reviewStatusOptions.length === 0
-            }
-            onClick={() => void onUpdateReviewStatus(false)}
-          >
-            Update Review Status
-          </Button>
-          <Button
-            kind="tertiary"
-            size="sm"
-            disabled={
-              isSubmittingReviewAction ||
-              !canSendReviewStatusEmail ||
-              reviewOptionsAvailability !== 'available' ||
-              reviewStatusOptions.length === 0
-            }
-            onClick={() => void onUpdateReviewStatus(true)}
-          >
-            Update Status and Send Email
-          </Button>
-        </div>
+        {canEditApplicationReview && (
+          <div className="legacy-search-actions">
+            <Button
+              kind="primary"
+              size="sm"
+              disabled={isSubmittingReviewAction}
+              onClick={() => void onApproveApplication()}
+            >
+              Approve Application
+            </Button>
+            <Button
+              kind="secondary"
+              size="sm"
+              disabled={
+                isSubmittingReviewAction ||
+                reviewOptionsAvailability !== 'available' ||
+                reviewStatusOptions.length === 0
+              }
+              onClick={() => void onUpdateReviewStatus(false)}
+            >
+              Update Review Status
+            </Button>
+            <Button
+              kind="tertiary"
+              size="sm"
+              disabled={
+                isSubmittingReviewAction ||
+                !canSendReviewStatusEmail ||
+                reviewOptionsAvailability !== 'available' ||
+                reviewStatusOptions.length === 0
+              }
+              onClick={() => void onUpdateReviewStatus(true)}
+            >
+              Update Status and Send Email
+            </Button>
+          </div>
+        )}
       </Tile>
     ) : (
       <Tile
@@ -2881,6 +3055,17 @@ const ProvincialApplicationDetailsPage = () => {
         />
       )}
 
+      {!!creationSuccessMessage && (
+        <AppNotification
+          kind="success"
+          title="Action complete"
+          subtitle={creationSuccessMessage}
+          lowContrast
+          autoDismissMs={8000}
+          onCloseButtonClick={() => setCreationSuccessMessage('')}
+        />
+      )}
+
       {detail && detailMatchesRoute && (
         <>
           {!!documentsErrorMessage && (
@@ -2895,14 +3080,16 @@ const ProvincialApplicationDetailsPage = () => {
           {summaryOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Application options unavailable" />
           )}
-          {selectedApplicationTab === 'application' && requiredSummaryOptionsMissing && (
-            <AppNotification
-              kind="warning"
-              title="Application summary options unavailable"
-              subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
-              lowContrast
-            />
-          )}
+          {(selectedApplicationTab === 'application' ||
+            (selectedApplicationTab === 'owner' && isEditingOwnerDetails)) &&
+            requiredSummaryOptionsMissing && (
+              <AppNotification
+                kind="warning"
+                title="Application summary options unavailable"
+                subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
+                lowContrast
+              />
+            )}
           {canReviewApplication && reviewOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Review options unavailable" />
           )}
@@ -2986,13 +3173,175 @@ const ProvincialApplicationDetailsPage = () => {
                         id="application-owner-details"
                         className="application-detail-section application-detail-clients"
                       >
-                        <h2 className="detail-tile-title">Owner</h2>
-                        {ownerClientSummaryContent ?? (
-                          <EmptyState
-                            title="Owner details unavailable"
-                            description="No owner client lookup details are available for this application."
-                            headingLevel={3}
-                          />
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Owner client details</h2>
+                          {canEditSummary && summaryForm && !isEditingOwnerDetails && (
+                            <Button
+                              kind="tertiary"
+                              size="sm"
+                              renderIcon={Edit}
+                              onClick={() => {
+                                setActionErrorMessage('')
+                                setActionWarningMessage('')
+                                setIsEditingOwnerDetails(true)
+                              }}
+                            >
+                              Edit owner client details
+                            </Button>
+                          )}
+                        </div>
+                        {isEditingOwnerDetails && summaryForm ? (
+                          <>
+                            <div className="legacy-search-grid application-client-edit-grid">
+                              <TextInput
+                                id="applicationOwnerClientNumberEdit"
+                                labelText="Client number"
+                                value={summaryForm.ownerClientNumber}
+                                invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
+                                invalidText={visibleSummaryFieldError('ownerClientNumber')}
+                                disabled={isSavingSummary}
+                                onChange={(event) =>
+                                  onSummaryFormChange('ownerClientNumber', event.target.value)
+                                }
+                              />
+                              {canChangeApplicantType ? (
+                                <SearchableSelect
+                                  id="applicationOwnerApplicantTypeEdit"
+                                  labelText="Applicant type"
+                                  value={summaryForm.applicantTypeCode}
+                                  placeholder="Select applicant type"
+                                  options={optionsWithCurrentValue(
+                                    APPLICANT_TYPE_OPTIONS,
+                                    summaryForm.applicantTypeCode,
+                                  )}
+                                  invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
+                                  invalidText={visibleSummaryFieldError('applicantTypeCode')}
+                                  disabled={isSavingSummary}
+                                  onChange={(value) =>
+                                    onOwnerApplicantTypeChange(value.toUpperCase())
+                                  }
+                                />
+                              ) : (
+                                <TextInput
+                                  id="applicationOwnerApplicantTypeEdit"
+                                  labelText="Applicant type"
+                                  value={ownerApplicantTypeLabel}
+                                  readOnly
+                                />
+                              )}
+                              <SearchableSelect
+                                id="applicationOwnerClientLocationEdit"
+                                labelText="Client location"
+                                value={summaryForm.ownerClientLocationCode}
+                                invalid={Boolean(
+                                  visibleSummaryFieldError('ownerClientLocationCode'),
+                                )}
+                                invalidText={visibleSummaryFieldError('ownerClientLocationCode')}
+                                disabled={
+                                  isSavingSummary ||
+                                  !summaryForm.ownerClientNumber.trim() ||
+                                  isLoadingOwnerClientLocations
+                                }
+                                placeholder={ownerClientLocationPlaceholder}
+                                options={ownerClientLocations
+                                  .filter(isSelectableClientLocation)
+                                  .map((clientLocation) => ({
+                                    value: clientLocation.locationCode,
+                                    label: clientLocationLabel(
+                                      clientLocation.locationCode,
+                                      clientLocation.locationName,
+                                    ),
+                                  }))}
+                                onChange={(value) =>
+                                  onSummaryFormChange('ownerClientLocationCode', value)
+                                }
+                              />
+                              {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
+                                <SearchableSelect
+                                  id="applicationOwnerContactNameEdit"
+                                  labelText="Contact name"
+                                  value={summaryForm.ownerContactName}
+                                  invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                  invalidText={visibleSummaryFieldError('ownerContactName')}
+                                  disabled={
+                                    isSavingSummary ||
+                                    !summaryForm.ownerClientLocationCode.trim() ||
+                                    isLoadingOwnerClientContacts
+                                  }
+                                  placeholder={ownerContactPlaceholder}
+                                  options={ownerClientContacts
+                                    .filter(isSelectableClientContact)
+                                    .map((contact) => ({
+                                      value: contact.contactName,
+                                      label: contact.contactName,
+                                    }))}
+                                  onChange={(value) =>
+                                    onSummaryFormChange('ownerContactName', value)
+                                  }
+                                />
+                              ) : (
+                                <TextInput
+                                  id="applicationOwnerContactNameEdit"
+                                  labelText="Contact name"
+                                  value={summaryForm.ownerContactName}
+                                  invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                  invalidText={visibleSummaryFieldError('ownerContactName')}
+                                  disabled={
+                                    isSavingSummary || !summaryForm.ownerClientLocationCode.trim()
+                                  }
+                                  placeholder="Enter contact name"
+                                  onChange={(event) =>
+                                    onSummaryFormChange('ownerContactName', event.target.value)
+                                  }
+                                />
+                              )}
+                              <Checkbox
+                                id="applicationOwnerAgentUsedEdit"
+                                labelText="I am an agent"
+                                checked={summaryForm.applicantTypeCode === 'A'}
+                                disabled={isSavingSummary || !canChangeApplicantType}
+                                onChange={(_, { checked }) =>
+                                  onOwnerApplicantTypeChange(checked ? 'A' : 'O')
+                                }
+                              />
+                            </div>
+                            <ClientDataSummary
+                              title="Owner client details"
+                              showTitle={false}
+                              clientData={ownerClientData}
+                              isLoading={isLoadingOwnerClientData}
+                            />
+                            <div className="legacy-search-actions">
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={isSavingSummary}
+                                onClick={onCancelOwnerDetails}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={
+                                  isSavingSummary ||
+                                  summaryOptionsAvailability !== 'available' ||
+                                  requiredSummaryOptionsMissing
+                                }
+                                onClick={() => onRequestSaveSummary('owner')}
+                              >
+                                {isSavingSummary ? 'Saving...' : 'Save changes'}
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          (ownerClientSummaryContent ?? (
+                            <EmptyState
+                              title="Owner details unavailable"
+                              description="No owner client lookup details are available for this application."
+                              headingLevel={3}
+                            />
+                          ))
                         )}
                       </Tile>
                     </Column>
@@ -3200,7 +3549,10 @@ const ProvincialApplicationDetailsPage = () => {
                                   .filter(isSelectableClientLocation)
                                   .map((location) => ({
                                     value: location.locationCode,
-                                    label: location.locationName,
+                                    label: clientLocationLabel(
+                                      location.locationCode,
+                                      location.locationName,
+                                    ),
                                   }))}
                                 onChange={(value) =>
                                   onSummaryFormChange('ownerClientLocationCode', value)
@@ -3251,10 +3603,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   options={optionsWithCurrentValue(
                                     APPLICANT_TYPE_OPTIONS,
                                     summaryForm.applicantTypeCode,
-                                  ).map((option) => ({
-                                    value: option.value,
-                                    label: optionLabel(option),
-                                  }))}
+                                  )}
                                   invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
                                   invalidText={visibleSummaryFieldError('applicantTypeCode')}
                                   onChange={(value) =>
@@ -3300,7 +3649,10 @@ const ProvincialApplicationDetailsPage = () => {
                                       .filter(isSelectableClientLocation)
                                       .map((location) => ({
                                         value: location.locationCode,
-                                        label: location.locationName,
+                                        label: clientLocationLabel(
+                                          location.locationCode,
+                                          location.locationName,
+                                        ),
                                       }))}
                                     onChange={(value) =>
                                       onSummaryFormChange('agentClientLocationCode', value)
@@ -3536,7 +3888,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   summaryOptionsAvailability !== 'available' ||
                                   requiredSummaryOptionsMissing
                                 }
-                                onClick={onRequestSaveSummary}
+                                onClick={() => onRequestSaveSummary('summary')}
                               >
                                 {isSavingSummary ? 'Saving...' : 'Save Summary'}
                               </Button>
@@ -3649,34 +4001,26 @@ const ProvincialApplicationDetailsPage = () => {
                               <Table useZebraStyles>
                                 <TableHead>
                                   <TableRow>
+                                    <TableHeader aria-label="Package selection" />
                                     <TableHeader>Package number</TableHeader>
                                     <TableHeader>Volume (m³)</TableHeader>
                                     <TableHeader>Pieces</TableHeader>
-                                    <TableHeader>Action</TableHeader>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
                                   {filteredPackages.map((item) => (
                                     <TableRow key={item.packageNumber}>
+                                      <TableSelectRow
+                                        radio
+                                        id={`application-package-select-${item.packageNumber}`}
+                                        name="application-package-selection"
+                                        ariaLabel={`Select package ${item.packageNumber}`}
+                                        checked={selectedPackageNumber === item.packageNumber}
+                                        onSelect={() => focusPackageInItems(item.packageNumber)}
+                                      />
                                       <TableCell>{item.packageNumber}</TableCell>
                                       <TableCell>{item.volume.toLocaleString()}</TableCell>
                                       <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
-                                      <TableCell>
-                                        <Button
-                                          kind="ghost"
-                                          size="sm"
-                                          aria-label={`${
-                                            canEditPackages || canAddPackages || canAddScales
-                                              ? 'Edit'
-                                              : 'View'
-                                          } package ${item.packageNumber} items`}
-                                          onClick={() => focusPackageInItems(item.packageNumber)}
-                                        >
-                                          {canEditPackages || canAddPackages || canAddScales
-                                            ? 'Edit Items'
-                                            : 'View Items'}
-                                        </Button>
-                                      </TableCell>
                                     </TableRow>
                                   ))}
                                   {filteredPackages.length === 0 && (
@@ -3701,12 +4045,16 @@ const ProvincialApplicationDetailsPage = () => {
                         canAddPackages={canAddPackages}
                         canAddScales={canAddScales}
                         canUpdatePackageNumber={canUpdatePackageNumber}
+                        hideMutationActions={
+                          isApplicationExpired || !applicationProductSupportsPackages
+                        }
                         authoritativeOptionsAvailability={packageReferenceOptionsAvailability}
                         productTypeOptions={packageProductTypeOptions}
                         growthTypeOptions={packageGrowthTypeOptions}
                         onDetailChanged={refreshApplicationDetailPreservingDrafts}
                         onDirtyChange={setApplicationItemsDirty}
                         onBusyChange={setApplicationItemsBusy}
+                        onSelectedPackageChange={setSelectedPackageNumber}
                         focusedPackageNumber={focusedPackageNumber}
                         focusedPackageRequestId={focusedPackageRequestId}
                         focusScalesRequestId={shouldFocusScaleSection ? focusedPackageRequestId : 0}
@@ -3722,7 +4070,20 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-documents"
                       >
                         <h2 className="detail-tile-title">Documents</h2>
-                        {!!showDocumentUploadUnavailableMessage &&
+                        {canAddApplicationDocuments && (
+                          <DetailDocumentUploadPanel
+                            key={`application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
+                            workflowType="application"
+                            targetNumber={String(detail.applicationNumber ?? '')}
+                            inputId="applicationDocumentUpload"
+                            disabled={!detail.applicationNumber}
+                            onDirtyChange={setDocumentUploadDirty}
+                            onBusyChange={setDocumentUploadBusy}
+                            onUploadComplete={refreshApplicationDocuments}
+                          />
+                        )}
+                        {selectedApplicationTab === 'documents' &&
+                          !!showDocumentUploadUnavailableMessage &&
                           canUploadApplicationDocuments && (
                             <AppNotification
                               kind="info"
@@ -3829,29 +4190,6 @@ const ProvincialApplicationDetailsPage = () => {
                               </Table>
                             </TableFrame>
                           </section>
-                        )}
-                        {canAddApplicationDocuments && (
-                          <Accordion className="application-documents-upload-accordion">
-                            <AccordionItem
-                              title="Upload new documents"
-                              open={
-                                !hasApplicationDocuments ||
-                                documentUploadDirty ||
-                                documentUploadBusy
-                              }
-                            >
-                              <DetailDocumentUploadPanel
-                                key={`application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
-                                workflowType="application"
-                                targetNumber={String(detail.applicationNumber ?? '')}
-                                inputId="applicationDocumentUpload"
-                                disabled={!detail.applicationNumber}
-                                onDirtyChange={setDocumentUploadDirty}
-                                onBusyChange={setDocumentUploadBusy}
-                                onUploadComplete={refreshApplicationDocuments}
-                              />
-                            </AccordionItem>
-                          </Accordion>
                         )}
                       </Tile>
                     </Column>
@@ -4012,8 +4350,10 @@ const ProvincialApplicationDetailsPage = () => {
             open
             confirmed={summaryAccuracyConfirmed}
             busy={isSavingSummary}
-            confirmLabel="Save summary"
-            pendingLabel="Saving summary…"
+            confirmLabel={pendingSummarySaveSource === 'owner' ? 'Save changes' : 'Save summary'}
+            pendingLabel={
+              pendingSummarySaveSource === 'owner' ? 'Saving changes…' : 'Saving summary…'
+            }
             onConfirmedChange={setSummaryAccuracyConfirmed}
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}

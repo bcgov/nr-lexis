@@ -659,6 +659,7 @@ export {
   mockedFetchApplicationPackageSpecies,
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationPermits,
+  mockedFetchApplicationRemainingSpecies,
   mockedFetchApplicationScaleDetails,
   mockedFetchApplicationSpecies,
   mockedFetchApplicationSummarySnapshot,

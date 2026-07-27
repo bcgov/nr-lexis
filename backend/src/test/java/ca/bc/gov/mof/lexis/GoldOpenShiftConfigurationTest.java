@@ -35,6 +35,17 @@ class GoldOpenShiftConfigurationTest {
   }
 
   @Test
+  void prCloseCleanupShouldNotPublishADevDeploymentRecord() throws IOException {
+    String workflow = Files.readString(resolve(".github/workflows/pr-close.yml"));
+    String cleanup = workflow.substring(workflow.indexOf("  cleanup-networkpolicies:"));
+
+    assertThat(cleanup)
+        .contains("environment:\n      name: dev\n      deployment: false")
+        .contains("oc_namespace: ${{ secrets.oc_namespace }}")
+        .contains("oc_token: ${{ secrets.oc_token }}");
+  }
+
+  @Test
   void frontendRouteAndInternalBackendShouldUseGoldTopology() throws IOException {
     String backend = Files.readString(resolve("backend/openshift.deploy.yml"));
     String frontend = Files.readString(resolve("frontend/openshift.deploy.yml"));

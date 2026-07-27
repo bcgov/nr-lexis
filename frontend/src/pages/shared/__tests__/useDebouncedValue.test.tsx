@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useDebouncedSearchFilters, useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 
 describe('useDebouncedValue', () => {
   afterEach(() => {
@@ -53,5 +53,43 @@ describe('useDebouncedValue', () => {
     })
 
     expect(result.current).toBe('abc')
+  })
+})
+
+describe('useDebouncedSearchFilters', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('debounces text filters while applying other filters immediately', () => {
+    vi.useFakeTimers()
+
+    const { result, rerender } = renderHook(
+      ({ applicationNumber, status }) => {
+        const filters = { applicationNumber, status }
+        return useDebouncedSearchFilters(
+          filters,
+          { applicationNumber: filters.applicationNumber },
+          250,
+        )
+      },
+      {
+        initialProps: {
+          applicationNumber: '',
+          status: '',
+        },
+      },
+    )
+
+    rerender({ applicationNumber: '4', status: '' })
+    expect(result.current).toEqual({ applicationNumber: '', status: '' })
+
+    rerender({ applicationNumber: '4', status: 'NEW' })
+    expect(result.current).toEqual({ applicationNumber: '', status: 'NEW' })
+
+    act(() => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(result.current).toEqual({ applicationNumber: '4', status: 'NEW' })
   })
 })

@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import SearchResultsTableFrame from '../SearchResultsTableFrame'
 
 describe('SearchResultsTableFrame', () => {
-  it('marks the table frame busy and shows centered loading copy while loading', () => {
+  it('replaces stale rows with a labelled table skeleton while loading', () => {
     const { container } = render(
       <SearchResultsTableFrame loading loadingDescription="Loading search results...">
         <table>
@@ -21,9 +21,9 @@ describe('SearchResultsTableFrame', () => {
       'aria-busy',
       'true',
     )
-    expect(screen.getByRole('region', { name: 'Search results table' })).toHaveAttribute('inert')
     expect(screen.getByText('Loading search results...')).toBeInTheDocument()
-    expect(screen.getByText('Existing rows')).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Loading search results...' })).toBeInTheDocument()
+    expect(screen.queryByText('Existing rows')).not.toBeInTheDocument()
   })
 
   it('omits the loading indicator when the table frame is not loading', () => {
@@ -47,8 +47,32 @@ describe('SearchResultsTableFrame', () => {
     expect(screen.getByRole('region', { name: 'Search results table' })).not.toHaveAttribute(
       'inert',
     )
+    expect(screen.getByRole('region', { name: 'Search results table' })).not.toHaveAttribute(
+      'tabindex',
+    )
     expect(screen.queryByText('Loading search results...')).not.toBeInTheDocument()
     expect(screen.getByText('Loaded rows')).toBeInTheDocument()
+  })
+
+  it('becomes keyboard-focusable only when the table overflows', async () => {
+    render(
+      <SearchResultsTableFrame loading={false} loadingDescription="Loading search results...">
+        <table>
+          <tbody>
+            <tr>
+              <td>Wide results</td>
+            </tr>
+          </tbody>
+        </table>
+      </SearchResultsTableFrame>,
+    )
+
+    const viewport = screen.getByRole('region', { name: 'Search results table' })
+    Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 320 })
+    Object.defineProperty(viewport, 'scrollWidth', { configurable: true, value: 640 })
+    fireEvent(window, new Event('resize'))
+
+    await waitFor(() => expect(viewport).toHaveAttribute('tabindex', '0'))
   })
 
   it('renders a result count label when total items are provided', () => {

@@ -2478,7 +2478,7 @@ const ProvincialPermitDetailsPage = () => {
             ? await sendPermitReviewRequestEmail(resolvedPermitNumber)
             : await sendPermitApprovalEmail(resolvedPermitNumber, clientEmail)
         if (result.success) {
-          setActionInfoMessage(result.message || 'Permit email queued successfully.')
+          setActionInfoMessage(result.message || 'Permit email sent.')
           if (type === 'request' && result.permitRequestDate) {
             setDetail((current) =>
               current ? { ...current, receivedDate: result.permitRequestDate } : current,
@@ -2489,12 +2489,12 @@ const ProvincialPermitDetailsPage = () => {
           }
           return true
         } else {
-          setActionErrorMessage(result.message || 'Permit email could not be queued.')
+          setActionErrorMessage(result.message || 'Permit email could not be sent.')
           return false
         }
       } catch (error) {
         console.error(error)
-        setActionErrorMessage('Unable to queue permit email.')
+        setActionErrorMessage('Unable to send permit email.')
         return false
       } finally {
         setIsSendingPermitEmail(false)
@@ -4577,7 +4577,7 @@ const ProvincialPermitDetailsPage = () => {
           onConfirm={async () => {
             const sent = await onSendPermitEmail('approval', permitApprovalEmailAddress)
             if (!sent) {
-              throw new Error('Permit approval email was not queued.')
+              throw new Error('Permit approval email was not sent.')
             }
           }}
         >

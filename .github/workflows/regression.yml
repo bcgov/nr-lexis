@@ -15,7 +15,9 @@ jobs:
   credentialed-regression:
     name: TEST Regression (${{ matrix.project }})
     if: github.ref_name == github.event.repository.default_branch
-    environment: test
+    environment:
+      name: test
+      deployment: false
     defaults:
       run:
         working-directory: frontend

@@ -4,46 +4,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 public interface ApplicationDetailsRpcService {
-
-  static String toSpeciesEndUseSort(List<SpeciesEndUseItem> items) {
-    if (items == null || items.isEmpty()) {
-      return "";
-    }
-
-    List<String> speciesCodes = new ArrayList<>();
-    String endUseCode = null;
-    for (SpeciesEndUseItem item : items) {
-      if (item == null) {
-        continue;
-      }
-      String speciesCode = trimToNull(item.species());
-      if (speciesCode != null && !speciesCodes.contains(speciesCode)) {
-        speciesCodes.add(speciesCode);
-      }
-      if (endUseCode == null) {
-        endUseCode = trimToNull(item.endUse());
-      }
-    }
-
-    if (speciesCodes.isEmpty()) {
-      return endUseCode == null ? "" : endUseCode;
-    }
-    String speciesSort = String.join("/", speciesCodes);
-    return endUseCode == null ? speciesSort : speciesSort + "/" + endUseCode;
-  }
-
-  private static String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
 
   List<DocumentItem> getDocumentDetails(Long applicationNumber);
 
@@ -137,6 +101,11 @@ public interface ApplicationDetailsRpcService {
   Optional<String> getSelectedEndUse(Long applicationNumber);
 
   Optional<String> getPackageSelectedEndUse(String packageNumber);
+
+  /** Returns the canonical legacy EXCOL species/end-use sort for an application. */
+  default String getApplicationSpeciesEndUseSort(Long applicationNumber) {
+    return "";
+  }
 
   List<SpeciesEndUseItem> getSpeciesForApplication(Long applicationNumber);
 
@@ -393,6 +362,7 @@ public interface ApplicationDetailsRpcService {
       Long applicationNumber,
       String applicationStatusCode,
       String jurisdictionCode,
+      String productTypeCode,
       Long exportScheduleId,
       LocalDate advertisingDate,
       boolean hasPackageBeforeApproval,

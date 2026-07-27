@@ -118,7 +118,34 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
-  it('persists the invoice number in URL-backed filters and clears it with the form', async () => {
+  it('waits for explicit submission while text filters are typed', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage()
+    await screen.findByText('7001')
+    mockedSearchProvincialPermits.mockClear()
+
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    for (const value of ['4', '46', '460', '4605', '46053']) {
+      fireEvent.change(applicationNumberInput, { target: { value } })
+    }
+
+    expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
+      expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ applicationNumber: '46053' }),
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('submits the invoice number to URL-backed filters and clears it with the form', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage(
@@ -135,15 +162,23 @@ describe('Provincial Permit Search Actions', () => {
       ).toBe(true)
     })
 
+    mockedSearchProvincialPermits.mockClear()
     fireEvent.change(invoiceNumber, { target: { value: 'GBMS-4402' } })
+    let currentParams = new URLSearchParams(
+      screen.getByTestId('permit-search-location').textContent ?? '',
+    )
+    expect(currentParams.get('invoiceNumber')).toBe('SI-99881')
+    expect(currentParams.get('page')).toBe('3')
+    expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
     await waitFor(() => {
-      const currentParams = new URLSearchParams(
+      currentParams = new URLSearchParams(
         screen.getByTestId('permit-search-location').textContent ?? '',
       )
       expect(currentParams.get('invoiceNumber')).toBe('GBMS-4402')
       expect(currentParams.get('page')).toBe('1')
-    })
-    await waitFor(() => {
       expect(
         mockedSearchProvincialPermits.mock.calls.some(
           ([request]) => request.filters.invoiceNumber === 'GBMS-4402',
@@ -184,7 +219,7 @@ describe('Provincial Permit Search Actions', () => {
     expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
   })
 
-  it('does not render a search response invalidated while it is in flight', async () => {
+  it('renders the latest search response when the cache is invalidated in flight', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     let resolveSearch: (response: ProvincialPermitSearchResponse) => void = () => {}
     mockedSearchProvincialPermits.mockReturnValueOnce(
@@ -215,8 +250,8 @@ describe('Provincial Permit Search Actions', () => {
       )
     })
 
-    expect(await screen.findByRole('heading', { name: 'No permits found' })).toBeInTheDocument()
-    expect(screen.queryByText('7001')).not.toBeInTheDocument()
+    expect(await screen.findByText('7001')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No permits found' })).not.toBeInTheDocument()
   })
 
   it('reuses the first search total when pagination changes page', async () => {
@@ -320,7 +355,7 @@ describe('Provincial Permit Search Actions', () => {
       expect(searchButton).toBeEnabled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Permit (DESC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Permit' }))
 
     await waitFor(() => {
       expect(

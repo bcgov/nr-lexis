@@ -863,7 +863,8 @@ public abstract class OracleRepositorySupport {
       String sortField,
       Map<String, String> allowedColumns,
       String defaultField,
-      String defaultDirection) {
+      String defaultDirection,
+      String uniqueField) {
     String fallbackColumn = allowedColumns.getOrDefault(defaultField, defaultField);
     String fallbackDirection = "DESC".equalsIgnoreCase(defaultDirection) ? "DESC" : "ASC";
 
@@ -887,7 +888,12 @@ public abstract class OracleRepositorySupport {
       direction = fallbackDirection;
     }
 
-    return " ORDER BY " + mapped + " " + direction;
+    String orderBy = " ORDER BY " + mapped + " " + direction;
+    String uniqueColumn = allowedColumns.get(uniqueField);
+    if (uniqueColumn == null || !safeIdentifier(uniqueColumn) || uniqueColumn.equals(mapped)) {
+      return orderBy;
+    }
+    return orderBy + ", " + uniqueColumn + " " + direction;
   }
 
   protected static final class SqlWhere {

@@ -22,6 +22,7 @@ import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
+import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -62,7 +63,7 @@ import {
   parseSortDirectionParam,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
@@ -91,9 +92,17 @@ import {
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
+import { firstStringField, isRecord } from '@/utils/record'
+import { sanitizeNotificationText } from '@/utils/notification-messages'
 
 type ReviewActionStatus = {
-  kind: 'success' | 'error'
+  kind: 'success' | 'warning' | 'error'
+  message: string
+}
+
+type ApplicationApprovalResult = {
+  applicationNumber: string
+  success: boolean
   message: string
 }
 
@@ -139,14 +148,35 @@ const REJECT_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
 const REJECT_EMAIL_REQUIRED_MESSAGE =
   'Enter one valid client email address or deselect Send status email.'
-const REJECT_EMAIL_MISSING_HELPER =
-  'No client email was found. Enter an email address or deselect Send status email.'
-const REJECT_EMAIL_PREVIEW_HELPER =
-  "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
-const STATUS_EMAIL_UNAVAILABLE_HELPER =
-  'Status emails are sent only for rejected or withdrawn applications.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
+const APPROVAL_REQUEST_FAILED_MESSAGE = 'The approval request could not be completed.'
+
+const normalizeApprovalFailureMessage = (message: string | null | undefined): string =>
+  sanitizeNotificationText(
+    (message ?? '')
+      .replace(/<\/?br\s*\/?\s*>/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+    APPROVAL_REQUEST_FAILED_MESSAGE,
+  ) || APPROVAL_REQUEST_FAILED_MESSAGE
+
+const approvalRequestFailureMessage = (error: unknown): string => {
+  const errorRecord = isRecord(error) ? error : null
+  const response = errorRecord && isRecord(errorRecord.response) ? errorRecord.response : null
+  const responseData = response?.data
+  const responseMessage =
+    typeof responseData === 'string'
+      ? responseData
+      : isRecord(responseData)
+        ? firstStringField(responseData, ['detail', 'message', 'title'])
+        : ''
+  const errorMessage = error instanceof Error ? error.message : ''
+  return normalizeApprovalFailureMessage(responseMessage || errorMessage)
+}
+
+const formatApplicationVolume = (volume: number): string => volume.toFixed(1)
+
 const isReviewableSourceStatus = (status: string | null | undefined): boolean =>
   REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(status ?? ''))
 
@@ -257,11 +287,12 @@ const ProvincialReviewPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
-  const filters = urlState.filters
+  const appliedFilters = urlState.filters
+  const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const requestFilters = appliedFilters
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setReviewActionStatus(null)
@@ -271,17 +302,10 @@ const ProvincialReviewPage = () => {
       key: K,
       value: ApplicationReviewSearchFilters[K],
     ) => {
-      const nextFilters = {
-        ...filters,
-        [key]: value,
-      }
       clearSelection()
-      setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
-        { replace: true },
-      )
+      setFilters((currentFilters) => ({ ...currentFilters, [key]: value }))
     },
-    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, setFilters],
   )
 
   const selectedRegions = useMemo(
@@ -388,13 +412,7 @@ const ProvincialReviewPage = () => {
           response: ApplicationReviewSearchResponse,
           totalIsExact: boolean,
         ) => {
-          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
-            return
-          }
-          if (totalIsExact) {
-            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
-              return
-            }
+          if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-review-search',
@@ -406,7 +424,7 @@ const ProvincialReviewPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+            if (isLatestRequest()) {
               commitResults(response)
             }
           })
@@ -440,13 +458,20 @@ const ProvincialReviewPage = () => {
 
   useEffect(() => {
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch])
+  }, [
+    requestFilters,
+    runSearch,
+    urlState.page,
+    urlState.pageSize,
+    urlState.sortDirection,
+    urlState.sortField,
+  ])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -468,14 +493,36 @@ const ProvincialReviewPage = () => {
   }, [])
 
   const onSearch = () => {
+    if (loading || hasDateValidationError) {
+      return
+    }
     clearSelection()
-    setSearchParams(
-      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    const nextSearchParams = buildSearchParams(
+      filters,
+      sortField,
+      sortDirection,
+      DEFAULT_SEARCH_PAGE,
+      pageSize,
     )
+    if (nextSearchParams.toString() === searchParams.toString()) {
+      void runSearch(
+        {
+          filters,
+          page: DEFAULT_SEARCH_PAGE - 1,
+          pageSize,
+          sortField,
+          sortDirection,
+        },
+        { force: true },
+      )
+      return
+    }
+    setSearchParams(nextSearchParams)
   }
 
   const onClearFilters = () => {
     clearSelection()
+    setFilters(INITIAL_FILTERS)
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -491,7 +538,7 @@ const ProvincialReviewPage = () => {
     const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     clearSelection()
     setSearchParams(
-      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+      buildSearchParams(appliedFilters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
     )
   }
 
@@ -528,7 +575,7 @@ const ProvincialReviewPage = () => {
     setRejectStatusCode(REJECT_STATUS_CODE)
     setRejectEmailAddress('')
     setRejectRemark('')
-    setSendRejectEmail(true)
+    setSendRejectEmail(false)
     setRejectValidationMessage('')
     setLoadingRejectEmail(false)
   }, [])
@@ -538,7 +585,7 @@ const ProvincialReviewPage = () => {
       if (!canApproveApplications) {
         setReviewActionStatus({
           kind: 'error',
-          message: 'Your account is not authorized to reject applications.',
+          message: 'Your account is not authorized to disapprove applications.',
         })
         return
       }
@@ -555,7 +602,7 @@ const ProvincialReviewPage = () => {
       setRejectStatusCode(REJECT_STATUS_CODE)
       setRejectEmailAddress('')
       setRejectRemark('')
-      setSendRejectEmail(true)
+      setSendRejectEmail(false)
       setRejectValidationMessage('')
       setLoadingRejectEmail(true)
 
@@ -650,13 +697,12 @@ const ProvincialReviewPage = () => {
             message:
               emailResult.message === EMAIL_NOT_CONFIGURED_MESSAGE
                 ? 'Application status updated, but status email is not configured yet.'
-                : emailResult.message ||
-                  'Application status updated, but email could not be queued.',
+                : emailResult.message || 'Application status updated, but email could not be sent.',
           })
         } else {
           setReviewActionStatus({
             kind: 'success',
-            message: `Updated application ${rejectApplicationNumber} and queued email.`,
+            message: `Updated application ${rejectApplicationNumber} and email sent.`,
           })
         }
       }
@@ -684,6 +730,72 @@ const ProvincialReviewPage = () => {
     }
   }
 
+  const approveApplications = async (applicationNumbers: string[]) => {
+    setSubmittingApproval(true)
+    setReviewActionStatus(null)
+
+    try {
+      const approvalResults: ApplicationApprovalResult[] = []
+      for (const applicationNumber of applicationNumbers) {
+        try {
+          const recordVersion = await fetchCurrentApplicationRecordVersion(applicationNumber)
+          const result = await approveApplicationReview(applicationNumber, recordVersion)
+          approvalResults.push({
+            applicationNumber,
+            success: result.updated && result.valid,
+            message: normalizeApprovalFailureMessage(result.message),
+          })
+        } catch (error) {
+          console.warn(`Unable to approve application ${applicationNumber}.`, error)
+          approvalResults.push({
+            applicationNumber,
+            success: false,
+            message: approvalRequestFailureMessage(error),
+          })
+        }
+      }
+
+      const successCount = approvalResults.filter((result) => result.success).length
+      const failedResults = approvalResults.filter((result) => !result.success)
+      const failureCount = failedResults.length
+
+      if (failureCount === 0) {
+        setReviewActionStatus({
+          kind: 'success',
+          message: `Approved ${successCount} application(s).`,
+        })
+      } else {
+        const failureDetails = failedResults
+          .map((result) => `${result.applicationNumber} — ${result.message}`)
+          .join('; ')
+        setReviewActionStatus({
+          kind: successCount > 0 ? 'warning' : 'error',
+          message: `${
+            successCount > 0
+              ? `Approved ${successCount} application(s); ${failureCount} failed.`
+              : `No selected applications were approved; ${failureCount} failed.`
+          } Failed applications: ${failureDetails}`,
+        })
+      }
+
+      setSelectedRowsById(
+        Object.fromEntries(failedResults.map((result) => [result.applicationNumber, true])),
+      )
+      await runSearch(
+        {
+          filters: urlState.filters,
+          page: urlState.page - 1,
+          pageSize: urlState.pageSize,
+          sortField: urlState.sortField,
+          sortDirection: urlState.sortDirection,
+        },
+        { force: true },
+      )
+    } finally {
+      setSubmittingApproval(false)
+    }
+  }
+
   const onApproveSelectedClick = async () => {
     if (!canApproveApplications) {
       setReviewActionStatus({
@@ -702,66 +814,34 @@ const ProvincialReviewPage = () => {
       return
     }
 
-    setSubmittingApproval(true)
-    setReviewActionStatus(null)
+    await approveApplications(selectedNumbers)
+  }
 
-    try {
-      const approvalResults = []
-      for (const applicationNumber of selectedNumbers) {
-        try {
-          const recordVersion = await fetchCurrentApplicationRecordVersion(applicationNumber)
-          const result = await approveApplicationReview(applicationNumber, recordVersion)
-          approvalResults.push({
-            applicationNumber,
-            success: result.updated && result.valid,
-            message: result.message,
-          })
-        } catch (error) {
-          console.warn(`Unable to approve application ${applicationNumber}.`, error)
-          approvalResults.push({
-            applicationNumber,
-            success: false,
-            message: 'Request failed.',
-          })
-        }
-      }
-
-      const successCount = approvalResults.filter((result) => result.success).length
-      const failureCount = approvalResults.length - successCount
-
-      if (failureCount === 0) {
-        setReviewActionStatus({
-          kind: 'success',
-          message: `Approved ${successCount} application(s).`,
-        })
-      } else {
-        setReviewActionStatus({
-          kind: 'error',
-          message: `Approved ${successCount} application(s); ${failureCount} failed.`,
-        })
-      }
-
-      setSelectedRowsById({})
-      await runSearch(
-        {
-          filters: urlState.filters,
-          page: urlState.page - 1,
-          pageSize: urlState.pageSize,
-          sortField: urlState.sortField,
-          sortDirection: urlState.sortDirection,
-        },
-        { force: true },
-      )
-    } finally {
-      setSubmittingApproval(false)
+  const onApproveApplicationClick = async (applicationNumber: string, sourceStatus: string) => {
+    if (!canApproveApplications) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to approve applications.',
+      })
+      return
     }
+
+    if (!isReviewableSourceStatus(sourceStatus)) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Only NEW or PND applications can be approved.',
+      })
+      return
+    }
+
+    await approveApplications([applicationNumber])
   }
 
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
-          title="Provincial review"
+          title="Provincial application review"
           subtitle="Review and action provincial applications awaiting a decision."
         />
       </Column>
@@ -771,7 +851,13 @@ const ProvincialReviewPage = () => {
       {!!reviewActionStatus && (
         <AppNotification
           kind={reviewActionStatus.kind}
-          title={reviewActionStatus.kind === 'success' ? 'Action complete' : 'Action failed'}
+          title={
+            reviewActionStatus.kind === 'success'
+              ? 'Action complete'
+              : reviewActionStatus.kind === 'warning'
+                ? 'Approval partially completed'
+                : 'Action failed'
+          }
           subtitle={reviewActionStatus.message}
           autoDismissMs={reviewActionStatus.kind === 'success' ? 8000 : undefined}
           onCloseButtonClick={() => setReviewActionStatus(null)}
@@ -780,7 +866,13 @@ const ProvincialReviewPage = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
-          <div className="provincial-review-filters-panel">
+          <form
+            className="provincial-review-filters-panel"
+            onSubmit={(event) => {
+              event.preventDefault()
+              onSearch()
+            }}
+          >
             <div className="legacy-search-grid provincial-review-search-grid">
               <TextInput
                 id="applicationNumber"
@@ -844,19 +936,13 @@ const ProvincialReviewPage = () => {
                 onChange={(value) => updateFilter('listingToDate', value)}
               />
             </div>
-            <div className="legacy-search-actions">
-              <Button
-                kind="primary"
-                onClick={onSearch}
-                disabled={loading || hasDateValidationError}
-              >
-                Search
-              </Button>
-              <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
+            <div className="legacy-search-actions" role="group" aria-label="Review search actions">
+              <Button type="button" kind="tertiary" onClick={onClearFilters} disabled={loading}>
                 Clear Filters
               </Button>
+              <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
             </div>
-          </div>
+          </form>
         </section>
       </Column>
 
@@ -864,9 +950,8 @@ const ProvincialReviewPage = () => {
         open={Boolean(rejectApplicationNumber)}
         passiveModal
         size="md"
-        modalLabel="Application review"
         modalHeading={`Update application ${rejectApplicationNumber}`}
-        aria-label="Application review"
+        aria-label={`Update application ${rejectApplicationNumber}`}
         className="review-reject-modal"
         preventCloseOnClickOutside
         selectorPrimaryFocus="#reviewRejectStatus"
@@ -889,13 +974,16 @@ const ProvincialReviewPage = () => {
             onChange={(value) => {
               const statusCode = value.toUpperCase()
               setRejectStatusCode(statusCode)
-              setSendRejectEmail(EMAIL_STATUS_CODES.has(statusCode))
+              if (!EMAIL_STATUS_CODES.has(statusCode)) {
+                setSendRejectEmail(false)
+              }
               setRejectValidationMessage('')
             }}
           />
           <TextArea
             id="reviewRejectRemark"
             labelText="Remarks"
+            rows={6}
             maxCount={250}
             value={rejectRemark}
             invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
@@ -918,16 +1006,7 @@ const ProvincialReviewPage = () => {
           />
           <TextInput
             id="reviewRejectEmail"
-            labelText="Client email address"
-            helperText={
-              !rejectStatusSupportsEmail
-                ? STATUS_EMAIL_UNAVAILABLE_HELPER
-                : loadingRejectEmail
-                  ? 'Loading from client account...'
-                  : !rejectEmailAddress
-                    ? REJECT_EMAIL_MISSING_HELPER
-                    : REJECT_EMAIL_PREVIEW_HELPER
-            }
+            labelText="Send to:"
             value={rejectEmailAddress}
             disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
             invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
@@ -954,13 +1033,13 @@ const ProvincialReviewPage = () => {
             Cancel
           </Button>
           <Button
-            kind="danger"
+            kind="primary"
             disabled={
               optionsUnavailable || !rejectStatusAvailable || loadingRejectEmail || submittingReject
             }
             onClick={() => void onRejectApplicationClick()}
           >
-            {submittingReject ? 'Updating...' : 'Update Application'}
+            {submittingReject ? 'Saving...' : 'Save'}
           </Button>
         </div>
       </Modal>
@@ -1052,16 +1131,13 @@ const ProvincialReviewPage = () => {
                             onClick={() => onHeaderClick(column.sortField!)}
                           >
                             {column.label}
-                            {sortField === column.sortField
-                              ? ` (${sortDirection.toUpperCase()})`
-                              : ''}
                           </button>
                         ) : (
                           column.label
                         )}
                       </TableHeader>
                     ))}
-                    <TableHeader>Action</TableHeader>
+                    <TableHeader>Actions</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1105,25 +1181,43 @@ const ProvincialReviewPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{row.volume}</TableCell>
+                      <TableCell>{formatApplicationVolume(row.volume)}</TableCell>
                       <TableCell>{row.speciesEndUse}</TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
                       <TableCell>{row.region}</TableCell>
                       <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          disabled={
-                            !canApproveApplications ||
-                            !isReviewableSourceStatus(row.status) ||
-                            optionsUnavailable ||
-                            !rejectStatusAvailable ||
-                            submittingReject
-                          }
-                          onClick={() => void onOpenRejectPanel(row.applicationNumber)}
-                        >
-                          Reject
-                        </Button>
+                        <div className="provincial-review-row-actions">
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            disabled={
+                              !canApproveApplications ||
+                              !isReviewableSourceStatus(row.status) ||
+                              submittingApproval ||
+                              submittingReject
+                            }
+                            onClick={() =>
+                              void onApproveApplicationClick(row.applicationNumber, row.status)
+                            }
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            disabled={
+                              !canApproveApplications ||
+                              !isReviewableSourceStatus(row.status) ||
+                              optionsUnavailable ||
+                              !rejectStatusAvailable ||
+                              submittingApproval ||
+                              submittingReject
+                            }
+                            onClick={() => void onOpenRejectPanel(row.applicationNumber)}
+                          >
+                            Disapprove
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1144,7 +1238,7 @@ const ProvincialReviewPage = () => {
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(
-                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
                   )
                 }}
               />

@@ -81,6 +81,33 @@ class TestDeploymentTopologyConfigTest {
   }
 
   @Test
+  void reusableDeploymentShouldPublishOneAggregateEnvironmentResult() throws IOException {
+    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+    String backendJob = workflowJob(workflow, "backend", "frontend");
+    String frontendJob = workflowJob(workflow, "frontend", "deployment-result");
+    String deploymentResult =
+        workflow.substring(workflow.indexOf("  deployment-result:"));
+    String untrackedEnvironment =
+        "environment:\n"
+            + "      name: ${{ inputs.environment }}\n"
+            + "      deployment: false";
+
+    assertThat(backendJob).contains(untrackedEnvironment);
+    assertThat(frontendJob).contains(untrackedEnvironment);
+    assertThat(occurrences(workflow, untrackedEnvironment)).isEqualTo(2);
+    assertThat(deploymentResult)
+        .contains("name: Record deployment result")
+        .contains("needs: [backend, frontend]")
+        .contains("if: ${{ always() }}")
+        .contains("environment: ${{ inputs.environment }}")
+        .contains("permissions: {}")
+        .contains(
+            "if: ${{ needs.backend.result != 'success'"
+                + " || needs.frontend.result != 'success' }}")
+        .doesNotContain("deployment: false", "secrets.", "actions/checkout");
+  }
+
+  @Test
   void federalSubmissionCreateShouldNotBeFeatureGated() throws IOException {
     String deploymentConfiguration =
         Files.readString(resolve(".github/workflows/reusable-deploy.yml"))
@@ -499,14 +526,26 @@ class TestDeploymentTopologyConfigTest {
     String caddyfile = Files.readString(resolve("frontend/Caddyfile"));
 
     assertThat(caddyfile)
-        .contains("@immutable_assets path /assets/*")
+        .contains("@immutable_assets {\n\t\tpath /assets/*\n\t\tfile\n\t}")
         .contains(
             "header @immutable_assets Cache-Control \"public, max-age=31536000, immutable\"")
+        .contains("@missing_assets {\n\t\tpath /assets/*\n\t\tnot file\n\t}")
+        .contains("header @missing_assets Cache-Control \"no-store\"")
         .contains("@dynamic_responses {\n\t\tnot path /assets/*\n\t}")
         .contains(
             "header @dynamic_responses Cache-Control"
                 + " \"no-store, no-cache, must-revalidate, proxy-revalidate\"");
-    assertThat(occurrences(caddyfile, "Cache-Control")).isEqualTo(2);
+    assertThat(occurrences(caddyfile, "Cache-Control")).isEqualTo(3);
+  }
+
+  @Test
+  void frontendShouldNotRewriteMissingFingerprintAssetsToTheSpaShell() throws IOException {
+    String caddyfile = Files.readString(resolve("frontend/Caddyfile"));
+
+    assertThat(caddyfile)
+        .contains("@spa_router {\n\t\tnot path /api* /assets/*")
+        .contains("file {\n\t\t\ttry_files {path} /index.html\n\t\t}")
+        .contains("rewrite @spa_router {http.matchers.file.relative}");
   }
 
   private static String workflowJob(String workflow, String jobName, String nextJobName) {

@@ -569,7 +569,7 @@ class ApplicationReviewOracleServiceTest {
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
     assertThat(result.success()).isTrue();
-    assertThat(result.message()).isEqualTo("Application status email queued.");
+    assertThat(result.message()).isEqualTo("Application status email sent.");
     verify(repository).sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs");
     verify(emailSender)
         .sendStatusEmail(1000456L, "REJ", "edited@example.test", "Missing docs", 1835L);

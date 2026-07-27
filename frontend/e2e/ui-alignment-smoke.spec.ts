@@ -149,6 +149,16 @@ const federalApplicationDetail = {
   federalPermit: null,
 }
 
+const federalApplicationDocumentRows = [
+  {
+    id: 'federal-document-1',
+    name: 'inspection-file.pdf',
+    description: 'Synthetic document',
+    type: 'Inspection Files',
+    deletable: true,
+  },
+]
+
 const shippingReferenceOptions = {
   countries: [{ code: 'US', name: 'United States' }],
   transportTypes: [{ code: 'T', name: 'Truck' }],
@@ -239,8 +249,10 @@ const installSyntheticLexisApi = async (page: Page) => {
         body = federalApplicationDetail
         break
       case '/api/lexis/federal/applications/888/remarks':
-      case '/api/lexis/rpc/application-details/document-details':
         body = []
+        break
+      case '/api/lexis/rpc/application-details/document-details':
+        body = federalApplicationDocumentRows
         break
       case '/api/lexis/shipping-reference-options':
         body = shippingReferenceOptions
@@ -278,6 +290,39 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await installSyntheticLexisApi(page)
   })
 
+  test('keeps route-level permission denial distinct from the no-role landing', async ({
+    page,
+  }) => {
+    await page.route('**/api/lexis/session/capabilities', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...authenticatedAdminSession,
+          principal: 'UI.READONLY',
+          roles: ['READ_ONLY'],
+          welcomeTarget: '/provincial/application',
+          grantedActions: ['/applicationSearch'],
+        }),
+      })
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/admin/policies', { waitUntil: 'domcontentloaded' })
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: "You don't have access to view this page" }),
+    ).toBeVisible()
+    await expect(page.locator('.app-shell')).toBeVisible()
+    await expect(page.getByTestId('forbidden-page')).toHaveClass(/landing-grid-container/)
+    await expect(page.getByRole('button', { name: 'Go to my landing page' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    const pageWidth = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(pageWidth.scrollWidth).toBeLessThanOrEqual(pageWidth.clientWidth)
+  })
+
   test('renders the authenticated search composition and persists UI preferences', async ({
     page,
   }) => {
@@ -293,6 +338,21 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
     await expect(page.getByText('2 results found', { exact: true })).toBeVisible()
+    const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
+    await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
+    await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
+    await expect(page.locator('a.csp-side-nav__link[data-label="Applications"]')).toHaveCSS(
+      'font-weight',
+      '400',
+    )
+    await expect(page.locator('a.csp-side-nav__link[data-label="Exemptions"]')).toHaveCSS(
+      'font-weight',
+      '400',
+    )
+    await expect(
+      page.locator('a.csp-side-nav__link[data-label="Applications Report"]'),
+    ).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
       const rootStyle = getComputedStyle(document.documentElement)
@@ -354,31 +414,56 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.app-shell')).toHaveClass(/is-side-nav-collapsed/)
   })
 
-  test('applies FSPTS row striping and blue hover to rendered data tables in both themes', async ({
-    page,
-  }) => {
+  test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
 
-    const table = page.getByRole('region', { name: 'Search results table' }).getByRole('table')
+    const resultsRegion = page.getByRole('region', { name: 'Search results table' })
+    const table = resultsRegion.getByRole('table')
     const rows = table.locator('tbody tr')
     const firstRowCell = rows.nth(0).locator('td').first()
     const secondRowCell = rows.nth(1).locator('td').first()
 
     await expect(rows).toHaveCount(2)
+    await expect(table.getByRole('columnheader', { name: 'Application', exact: true })).toHaveCSS(
+      'white-space',
+      'nowrap',
+    )
+    await expect(table.locator('.legacy-search-table-date').first()).toHaveCSS(
+      'white-space',
+      'nowrap',
+    )
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(243, 243, 245)')
 
     await rows.nth(0).hover()
-    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(223, 234, 248)')
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
 
     await page.getByRole('switch', { name: 'Toggle dark mode' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
+    await expect(page.getByRole('link', { name: 'Add Application' })).toHaveCSS(
+      'color',
+      'rgb(120, 169, 255)',
+    )
+    await expect(page.getByRole('button', { name: 'Clear Filters' })).toHaveCSS(
+      'color',
+      'rgb(255, 255, 255)',
+    )
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCSS(
+      'background-color',
+      'rgb(0, 115, 230)',
+    )
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(57, 57, 57)')
 
     await rows.nth(0).hover()
-    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(31, 61, 90)')
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
+
+    await page.goto('/provincial/application/create', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('tab', { name: 'Packages / Scales' }).click()
+    const applicationItemsCard = page.locator('.application-items-card').first()
+    await expect(applicationItemsCard).toBeVisible()
+    await expect(applicationItemsCard).toHaveCSS('border-color', 'rgb(82, 82, 82)')
   })
 
   test('shows one striped RTM AMV table without growth controls or a blank grade row', async ({
@@ -399,7 +484,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const firstRowCell = table.locator('tbody tr').first().locator('td').first()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await table.locator('tbody tr').first().hover()
-    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(223, 234, 248)')
+    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
   })
 
   test('keeps the search shell within a mobile viewport', async ({ page }) => {
@@ -419,6 +504,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Search' })).toBeVisible()
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
+    await expect(page.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
+      'tabindex',
+      '0',
+    )
 
     await openNavigation.click()
 
@@ -483,6 +572,27 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(afterScroll.scrollLeft).toBeGreaterThan(0)
     expect(afterScroll.columnLeft).toBeGreaterThanOrEqual(afterScroll.viewportLeft - 1)
     expect(afterScroll.columnRight).toBeLessThanOrEqual(afterScroll.viewportRight + 1)
+  })
+
+  test('keeps long exemption actions within a narrow mobile viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 })
+
+    for (const route of ['/provincial/application', '/federal']) {
+      await page.goto(route, { waitUntil: 'domcontentloaded' })
+      const exemptionAction = page.getByRole('button', {
+        name: 'Create exemption for Selected Applications',
+      })
+      await expect(exemptionAction).toBeVisible()
+
+      const bounds = await exemptionAction.evaluate((button) => {
+        const rect = button.getBoundingClientRect()
+        return { left: rect.left, right: rect.right, scrollWidth: button.scrollWidth }
+      })
+
+      expect(bounds.left).toBeGreaterThanOrEqual(0)
+      expect(bounds.right).toBeLessThanOrEqual(320)
+      expect(bounds.scrollWidth).toBeLessThanOrEqual(Math.ceil(bounds.right - bounds.left))
+    }
   })
 
   test('uses FSPTS object-page chrome without mobile overflow', async ({ page }) => {
@@ -561,6 +671,18 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe('visible')
   })
 
+  test('left-aligns table row actions with their actions heading', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/federal/application/888', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('tab', { name: 'Documents' }).click()
+
+    const documentsTable = page.getByRole('region', { name: 'Federal application documents' })
+    const rowActions = documentsTable.locator('.legacy-search-actions')
+
+    await expect(documentsTable).toBeVisible()
+    await expect(rowActions).toHaveCSS('justify-content', 'flex-start')
+  })
+
   test('gives long create forms FSPTS section rhythm without mobile overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/provincial/offers/create', { waitUntil: 'domcontentloaded' })
@@ -627,14 +749,35 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const resultsRegion = page.getByRole('region', { name: 'Search results table' })
     await expect(resultsRegion.getByText('JSMITH')).toBeVisible()
     await expect(workspace.locator('.cds--pagination')).toBeVisible()
+    await expect(resultsRegion).not.toHaveAttribute('tabindex')
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(resultsRegion).toBeVisible()
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      ),
-    ).toBe(false)
+    const resultWidths = await resultsRegion.evaluate((region) => ({
+      clientWidth: region.clientWidth,
+      scrollWidth: region.scrollWidth,
+    }))
+    expect(resultWidths.scrollWidth).toBeLessThanOrEqual(resultWidths.clientWidth + 1)
+    await expect(resultsRegion).not.toHaveAttribute('tabindex')
+    const mobileBounds = await page.evaluate(() => {
+      const workspace = document.querySelector('.admin-identity-workspace')
+      const manageLink = Array.from(document.querySelectorAll('a')).find(
+        (link) => link.textContent?.trim() === 'Manage in FAM',
+      )
+      if (!(workspace instanceof HTMLElement) || !(manageLink instanceof HTMLElement)) {
+        throw new Error('Admin identity workspace controls not found')
+      }
+
+      return {
+        viewportWidth: document.documentElement.clientWidth,
+        pageScrollWidth: document.documentElement.scrollWidth,
+        workspaceRight: workspace.getBoundingClientRect().right,
+        manageLinkRight: manageLink.getBoundingClientRect().right,
+      }
+    })
+    expect(mobileBounds.pageScrollWidth).toBe(mobileBounds.viewportWidth)
+    expect(mobileBounds.workspaceRight).toBeLessThanOrEqual(mobileBounds.viewportWidth)
+    expect(mobileBounds.manageLinkRight).toBeLessThanOrEqual(mobileBounds.viewportWidth)
   })
 
   test('contains the provincial workflow table on mobile', async ({ page }) => {
@@ -698,8 +841,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const overflow = await resultsRegion.evaluate((region) => ({
       clientWidth: region.clientWidth,
       scrollWidth: region.scrollWidth,
+      headerHeight: region.querySelector('thead tr')?.getBoundingClientRect().height,
     }))
     expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth)
+    expect(overflow.headerHeight).toBeLessThanOrEqual(80)
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

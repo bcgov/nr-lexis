@@ -24,6 +24,7 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationValidationDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
+import ca.bc.gov.mof.lexis.service.federal.FederalApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
@@ -45,6 +46,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 
 @ExtendWith(MockitoExtension.class)
@@ -56,6 +58,7 @@ class FederalApplicationControllerTest {
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
   @Mock private ApplicationEditLockService editLockService;
+  @Mock private FederalApplicationEditPolicyService editPolicyService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private Authentication authentication;
 
@@ -70,6 +73,7 @@ class FederalApplicationControllerTest {
             sessionService,
             authorizationService,
             editLockService,
+            editPolicyService,
             new ApplicationPermitOperationCoordinator(operationMutex));
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     lenient()
@@ -78,6 +82,7 @@ class FederalApplicationControllerTest {
     lenient()
         .when(editLockService.requireEditable(any(), any(), any()))
         .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient().when(editPolicyService.canEdit(any(), any(), any())).thenReturn(true);
     lenient()
         .when(
             provincialAuthorizationService.constrainOrgUnits(
@@ -351,6 +356,26 @@ class FederalApplicationControllerTest {
   }
 
   @Test
+  void detailShouldBeReadOnlyAndAvoidAcquiringALockWhenEditPolicyDeniesMutation() {
+    FederalApplicationDetailDto dto = federalDetail();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findByApplicationNumber(1000456L)).thenReturn(Optional.of(dto));
+    when(provincialAuthorizationService.canAccessFederalApplication(authentication, 1000456L))
+        .thenReturn(true);
+    when(editPolicyService.canEdit(authentication, "APR", LocalDate.of(2026, 2, 26)))
+        .thenReturn(false);
+    when(authentication.getName()).thenReturn("idir\\viewer");
+
+    FederalApplicationDetailDto detail =
+        controller.getByApplicationNumber(1000456L, authentication).getBody();
+
+    assertThat(detail).isNotNull();
+    assertThat(detail.readOnly()).isTrue();
+    verify(editLockService).snapshot(1000456L, "idir\\viewer", false);
+    verify(editLockService, never()).acquire(any(), any(), any(), anyBoolean());
+  }
+
+  @Test
   void detailShouldFailClosedWhenApplicationLockStateCannotBeResolved() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.findByApplicationNumber(1000456L)).thenReturn(Optional.of(federalDetail()));
@@ -571,6 +596,33 @@ class FederalApplicationControllerTest {
 
     verify(service, never()).updateStatus(any(), any(), any());
     verify(editLockService, never()).release(1000456L, "idir\\approver");
+  }
+
+  @Test
+  void federalMutationShouldFailBeforeLockAndOracleMutationWhenEditPolicyDeniesMutation() {
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "manageFederalApplication"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    FederalApplicationService.FederalRemarkMutationRequest request =
+        new FederalApplicationService.FederalRemarkMutationRequest("New note");
+    FederalApplicationService.FederalApplicationEditContext context =
+        new FederalApplicationService.FederalApplicationEditContext(
+            "EXP", LocalDate.of(2026, 1, 1));
+    when(service.findEditContext(1000456L)).thenReturn(Optional.of(context));
+    doThrow(new AccessDeniedException("completed application is read-only"))
+        .when(editPolicyService)
+        .requireEdit(authentication, context);
+
+    assertThatThrownBy(() -> controller.addRemark(1000456L, request, authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("read-only");
+
+    verify(service, never()).addRemark(any(), any(), any());
+    verify(editLockService, never()).requireEditable(any(), any(), any());
   }
 
   @Test

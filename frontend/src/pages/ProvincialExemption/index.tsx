@@ -25,6 +25,7 @@ import ExemptionApprovalEmailModal, {
   type ExemptionApprovalRecipient,
 } from '@/components/ExemptionApprovalEmailModal'
 import PageHeader from '@/components/PageHeader'
+import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -68,7 +69,7 @@ import {
   parseSortDirectionParam,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -86,9 +87,12 @@ import IsoDatePicker from '../../components/IsoDatePicker'
 import {
   approveExemptions,
   sendExemptionApprovalEmails,
+  type ExemptionApprovalResult,
 } from '@/service/provincial-exemption-detail-service'
 import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-service'
 import { formatLocalIsoDate } from '@/utils/date'
+import { sanitizeNotificationText } from '@/utils/notification-messages'
+import { firstStringField, isRecord } from '@/utils/record'
 
 type ApprovalStatus = {
   kind: 'error' | 'success' | 'warning'
@@ -100,11 +104,44 @@ type ApprovalEmailContext = {
   partialFailure: string
 }
 
+type ExemptionApprovalFailure = {
+  exemptionNumber: string
+  message: string
+}
+
+const APPROVAL_REQUEST_FAILED_MESSAGE = 'The approval request could not be completed.'
+
 const normalizeApprovalMessage = (message: string): string =>
   message
     .replace(/<\/?br\s*\/?\s*>/gi, ' ')
+    .replace(/(?:^|\s)\*\s*/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+const normalizeApprovalFailureMessage = (message: string | null | undefined): string =>
+  sanitizeNotificationText(
+    normalizeApprovalMessage(message ?? ''),
+    APPROVAL_REQUEST_FAILED_MESSAGE,
+  ) || APPROVAL_REQUEST_FAILED_MESSAGE
+
+const approvalResponseFailureMessage = (approval: ExemptionApprovalResult): string =>
+  normalizeApprovalFailureMessage(
+    [approval.errorMessage, ...approval.errors, ...approval.warnings].filter(Boolean).join(' '),
+  )
+
+const approvalRequestFailureMessage = (error: unknown): string => {
+  const errorRecord = isRecord(error) ? error : null
+  const response = errorRecord && isRecord(errorRecord.response) ? errorRecord.response : null
+  const responseData = response?.data
+  const responseMessage =
+    typeof responseData === 'string'
+      ? responseData
+      : isRecord(responseData)
+        ? firstStringField(responseData, ['detail', 'message', 'title'])
+        : ''
+  const errorMessage = error instanceof Error ? error.message : ''
+  return normalizeApprovalFailureMessage(responseMessage || errorMessage)
+}
 
 const approvedExemptionMessage = (count: number): string =>
   `Approved ${count} ${count === 1 ? 'exemption' : 'exemptions'}.`
@@ -260,11 +297,14 @@ const ProvincialExemptionPage = () => {
       ),
     }
   }, [searchParams])
-  const debouncedUrlState = useDebouncedValue(urlState)
-  const filters = urlState.filters
+  const appliedFilters = urlState.filters
+  const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const requestFilters = appliedFilters
+  const awaitingDefaultApprovalFilters =
+    shouldDefaultApprovalFilters && searchParams.toString().length === 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setApprovalStatus(null)
@@ -274,17 +314,10 @@ const ProvincialExemptionPage = () => {
       key: K,
       value: ProvincialExemptionSearchFilters[K],
     ) => {
-      const nextFilters = {
-        ...filters,
-        [key]: value,
-      }
       clearSelection()
-      setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
-        { replace: true },
-      )
+      setFilters((currentFilters) => ({ ...currentFilters, [key]: value }))
     },
-    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, setFilters],
   )
 
   const selectedRegions = useMemo(
@@ -361,13 +394,7 @@ const ProvincialExemptionPage = () => {
           response: ProvincialExemptionSearchResponse,
           totalIsExact: boolean,
         ) => {
-          if (pageCacheGeneration !== getPageDataCacheGeneration()) {
-            return
-          }
-          if (totalIsExact) {
-            if (!setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
-              return
-            }
+          if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             prefetchAdjacentSearchPages({
               pageId: 'provincial-exemption-search',
@@ -379,7 +406,7 @@ const ProvincialExemptionPage = () => {
             })
           }
           queueMicrotask(() => {
-            if (isLatestRequest() && pageCacheGeneration === getPageDataCacheGeneration()) {
+            if (isLatestRequest()) {
               commitResults(response)
             }
           })
@@ -412,18 +439,26 @@ const ProvincialExemptionPage = () => {
   )
 
   useEffect(() => {
-    if (searchParams.toString().length === 0 && shouldDefaultApprovalFilters) {
+    if (awaitingDefaultApprovalFilters) {
       return
     }
 
     void runSearch({
-      filters: debouncedUrlState.filters,
-      page: debouncedUrlState.page - 1,
-      pageSize: debouncedUrlState.pageSize,
-      sortField: debouncedUrlState.sortField,
-      sortDirection: debouncedUrlState.sortDirection,
+      filters: requestFilters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch, searchParams, shouldDefaultApprovalFilters])
+  }, [
+    awaitingDefaultApprovalFilters,
+    requestFilters,
+    runSearch,
+    urlState.page,
+    urlState.pageSize,
+    urlState.sortDirection,
+    urlState.sortField,
+  ])
 
   useEffect(() => {
     const hasSearchQuery = searchParams.toString().length > 0
@@ -465,14 +500,36 @@ const ProvincialExemptionPage = () => {
   }, [])
 
   const onSearch = () => {
+    if (loading || hasDateValidationError) {
+      return
+    }
     clearSelection()
-    setSearchParams(
-      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    const nextSearchParams = buildSearchParams(
+      filters,
+      sortField,
+      sortDirection,
+      DEFAULT_SEARCH_PAGE,
+      pageSize,
     )
+    if (nextSearchParams.toString() === searchParams.toString()) {
+      void runSearch(
+        {
+          filters,
+          page: DEFAULT_SEARCH_PAGE - 1,
+          pageSize,
+          sortField,
+          sortDirection,
+        },
+        { force: true },
+      )
+      return
+    }
+    setSearchParams(nextSearchParams)
   }
 
   const onClearFilters = () => {
     clearSelection()
+    setFilters(INITIAL_FILTERS)
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -488,7 +545,7 @@ const ProvincialExemptionPage = () => {
     const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     clearSelection()
     setSearchParams(
-      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+      buildSearchParams(appliedFilters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
     )
   }
 
@@ -591,8 +648,8 @@ const ProvincialExemptionPage = () => {
       const messages = [approvedExemptionMessage(approvedCount)]
       messages.push(
         email.success
-          ? email.message || 'Approval notifications queued.'
-          : email.message || 'Approval notifications could not be queued.',
+          ? email.message || 'Approval emails sent.'
+          : email.message || 'Approval emails could not be sent.',
       )
       if (partialFailure) {
         messages.push(partialFailure)
@@ -605,7 +662,7 @@ const ProvincialExemptionPage = () => {
       console.error(error)
       const messages = [
         approvedExemptionMessage(approvedCount),
-        'Approval notifications could not be queued.',
+        'Approval emails could not be sent.',
       ]
       if (partialFailure) {
         messages.push(partialFailure)
@@ -619,7 +676,8 @@ const ProvincialExemptionPage = () => {
   }
 
   const onConfirmApproval = async () => {
-    const selectedNumbers = Object.keys(selectedRowsById)
+    const selectedRows = { ...selectedRowsById }
+    const selectedNumbers = Object.keys(selectedRows)
     if (approving || !approvalCertified) {
       return
     }
@@ -633,8 +691,8 @@ const ProvincialExemptionPage = () => {
     setApproving(true)
     setApprovalStatus(null)
     try {
-      const approvals = []
-      let failureCount = 0
+      const approvals: ExemptionApprovalResult[] = []
+      const failures: ExemptionApprovalFailure[] = []
       for (const exemptionNumber of selectedNumbers) {
         try {
           const recordVersion = await fetchCurrentExemptionRecordVersion(exemptionNumber)
@@ -642,16 +700,37 @@ const ProvincialExemptionPage = () => {
           if (approval.success && approval.valid) {
             approvals.push(approval)
           } else {
-            failureCount += 1
+            failures.push({
+              exemptionNumber,
+              message: approvalResponseFailureMessage(approval),
+            })
           }
         } catch (error) {
           console.warn(`Unable to approve exemption ${exemptionNumber}.`, error)
-          failureCount += 1
+          failures.push({
+            exemptionNumber,
+            message: approvalRequestFailureMessage(error),
+          })
         }
       }
 
+      const failureCount = failures.length
+      const failureDetails = failures
+        .map(({ exemptionNumber, message }) => `${exemptionNumber} — ${message}`)
+        .join('; ')
+      const failedRowsById = Object.fromEntries(
+        failures.flatMap(({ exemptionNumber }) => {
+          const row = selectedRows[exemptionNumber]
+          return row ? ([[exemptionNumber, row]] as const) : []
+        }),
+      )
+      setSelectedRowsById(failedRowsById)
+
       if (approvals.length === 0) {
-        setApprovalStatus({ kind: 'error', message: 'No selected exemptions could be approved.' })
+        setApprovalStatus({
+          kind: 'error',
+          message: `No selected exemptions were approved; ${failureCount} failed. Failed exemptions: ${failureDetails}`,
+        })
         return
       }
 
@@ -660,7 +739,7 @@ const ProvincialExemptionPage = () => {
         .filter(Boolean)
       if (failureCount > 0) {
         partialMessages.push(
-          `${failureCount} selected ${failureCount === 1 ? 'exemption' : 'exemptions'} failed to approve.`,
+          `${failureCount} selected ${failureCount === 1 ? 'exemption' : 'exemptions'} failed to approve. Failed exemptions: ${failureDetails}`,
         )
       }
       const partialFailure = [...new Set(partialMessages)].join(' ')
@@ -685,7 +764,6 @@ const ProvincialExemptionPage = () => {
       setApprovalConfirmationOpen(false)
       setApprovalEmailContext(recipients.length > 0 ? { approvedCount, partialFailure } : null)
       setApprovalEmailRecipients(recipients)
-      setSelectedRowsById({})
       try {
         await runSearch(
           {
@@ -732,155 +810,163 @@ const ProvincialExemptionPage = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters provincial-exemption-search-filters">
           <Tile>
-            <div className="legacy-search-grid provincial-exemption-search-grid">
-              <TextInput
-                id="applicationNumber"
-                labelText="Application number"
-                value={filters.applicationNumber}
-                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="exemptionStatusCode"
-                labelText="Exemption status"
-                value={filters.exemptionStatusCode}
-                placeholder="All statuses"
-                options={exemptionStatusOptions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(value) => updateFilter('exemptionStatusCode', value)}
-              />
-              <TextInput
-                id="packageNumber"
-                labelText="Package number"
-                value={filters.packageNumber}
-                onChange={(event) => updateFilter('packageNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="exemptionTypeCode"
-                labelText="Exemption type"
-                value={filters.exemptionTypeCode}
-                placeholder="All types"
-                options={exemptionTypeOptions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(value) => updateFilter('exemptionTypeCode', value)}
-              />
-              <TextInput
-                id="exemptionNumber"
-                labelText="Exemption number"
-                value={filters.exemptionNumber}
-                onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
-              />
-              <RegionMultiSelect
-                id="region"
-                titleText="Region"
-                items={regionOptions}
-                placeholder="Select region(s)"
-                selectedItems={selectedRegions}
-                disabled={optionsLoading || optionsUnavailable}
-                onChange={(nextSelected) => {
-                  updateFilter(
-                    'region',
-                    nextSelected.map((item) => item.id),
-                  )
-                }}
-              />
-              <TextInput
-                id="applicantClientNumber"
-                labelText="Applicant client number"
-                value={filters.applicantClientNumber}
-                onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-              />
-              <TextInput
-                id="ownerClientNumber"
-                labelText="Owner client number"
-                value={filters.ownerClientNumber}
-                onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-              />
-              <IsoDatePicker
-                id="approvalFromDate"
-                labelText="Approval from date"
-                value={filters.approvalFromDate}
-                invalid={!isValidIsoDate(filters.approvalFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('approvalFromDate', value)}
-              />
-              <IsoDatePicker
-                id="approvalToDate"
-                labelText="Approval to date"
-                value={filters.approvalToDate}
-                invalid={!isValidIsoDate(filters.approvalToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('approvalToDate', value)}
-              />
-              <IsoDatePicker
-                id="listFromDate"
-                labelText="Listing from date"
-                value={filters.listFromDate}
-                invalid={!isValidIsoDate(filters.listFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listFromDate', value)}
-              />
-              <IsoDatePicker
-                id="listToDate"
-                labelText="Listing to date"
-                value={filters.listToDate}
-                invalid={!isValidIsoDate(filters.listToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listToDate', value)}
-              />
-            </div>
-            <div className="legacy-search-actions">
-              <Button
-                kind="primary"
-                onClick={onSearch}
-                disabled={loading || hasDateValidationError}
-                size="md"
-              >
-                Search
-              </Button>
-              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-                Clear Filters
-              </Button>
-              {canApproveExemption && (
-                <DisabledButtonTooltip
-                  disabled={selectedRowsCount === 0 || approving}
-                  description={
-                    approving
-                      ? 'Wait for the approval request to finish.'
-                      : 'Select at least one exemption to approve.'
-                  }
+            <form
+              className="legacy-search-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                onSearch()
+              }}
+            >
+              <div className="legacy-search-grid provincial-exemption-search-grid">
+                <TextInput
+                  id="applicationNumber"
+                  labelText="Application number"
+                  value={filters.applicationNumber}
+                  onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+                />
+                <SearchableSelect
+                  id="exemptionStatusCode"
+                  labelText="Exemption status"
+                  value={filters.exemptionStatusCode}
+                  placeholder="All statuses"
+                  options={exemptionStatusOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('exemptionStatusCode', value)}
+                />
+                <TextInput
+                  id="packageNumber"
+                  labelText="Package number"
+                  value={filters.packageNumber}
+                  onChange={(event) => updateFilter('packageNumber', event.target.value)}
+                />
+                <SearchableSelect
+                  id="exemptionTypeCode"
+                  labelText="Exemption type"
+                  value={filters.exemptionTypeCode}
+                  placeholder="All types"
+                  options={exemptionTypeOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('exemptionTypeCode', value)}
+                />
+                <TextInput
+                  id="exemptionNumber"
+                  labelText="Exemption number"
+                  value={filters.exemptionNumber}
+                  onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
+                />
+                <RegionMultiSelect
+                  id="region"
+                  titleText="Region"
+                  items={regionOptions}
+                  placeholder="Select region(s)"
+                  selectedItems={selectedRegions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(nextSelected) => {
+                    updateFilter(
+                      'region',
+                      nextSelected.map((item) => item.id),
+                    )
+                  }}
+                />
+                <TextInput
+                  id="applicantClientNumber"
+                  labelText="Applicant client number"
+                  value={filters.applicantClientNumber}
+                  onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
+                />
+                <TextInput
+                  id="ownerClientNumber"
+                  labelText="Owner client number"
+                  value={filters.ownerClientNumber}
+                  onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+                />
+                <IsoDatePicker
+                  id="approvalFromDate"
+                  labelText="Approval from date"
+                  value={filters.approvalFromDate}
+                  invalid={!isValidIsoDate(filters.approvalFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('approvalFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="approvalToDate"
+                  labelText="Approval to date"
+                  value={filters.approvalToDate}
+                  invalid={!isValidIsoDate(filters.approvalToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('approvalToDate', value)}
+                />
+                <IsoDatePicker
+                  id="listFromDate"
+                  labelText="Listing from date"
+                  value={filters.listFromDate}
+                  invalid={!isValidIsoDate(filters.listFromDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('listFromDate', value)}
+                />
+                <IsoDatePicker
+                  id="listToDate"
+                  labelText="Listing to date"
+                  value={filters.listToDate}
+                  invalid={!isValidIsoDate(filters.listToDate)}
+                  invalidText="Date must be YYYY-MM-DD"
+                  onChange={(value) => updateFilter('listToDate', value)}
+                />
+              </div>
+              <div className="legacy-search-actions">
+                <Button
+                  type="button"
+                  kind="tertiary"
+                  onClick={onClearFilters}
+                  disabled={loading}
+                  size="md"
                 >
-                  <Button
-                    kind="secondary"
-                    size="md"
-                    onClick={onApproveSelectedClick}
+                  Clear Filters
+                </Button>
+                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                {canApproveExemption && (
+                  <DisabledButtonTooltip
                     disabled={selectedRowsCount === 0 || approving}
+                    description={
+                      approving
+                        ? 'Wait for the approval request to finish.'
+                        : 'Select at least one exemption to approve.'
+                    }
                   >
-                    {approving ? 'Approving...' : 'Approve Selected Exemption'}
-                  </Button>
-                </DisabledButtonTooltip>
+                    <Button
+                      type="button"
+                      kind="secondary"
+                      size="md"
+                      onClick={onApproveSelectedClick}
+                      disabled={selectedRowsCount === 0 || approving}
+                    >
+                      {approving ? 'Approving...' : 'Approve Selected Exemption'}
+                    </Button>
+                  </DisabledButtonTooltip>
+                )}
+                {canCreateExemption && (
+                  <Link className="cds--link" to="/provincial/exemption/create">
+                    Add Exemption
+                  </Link>
+                )}
+              </div>
+              {approvalStatus && (
+                <AppNotification
+                  className="legacy-inline-notification"
+                  kind={approvalStatus.kind}
+                  title={
+                    approvalStatus.kind === 'error'
+                      ? 'Approval failed'
+                      : approvalStatus.kind === 'warning'
+                        ? 'Approval completed with warnings'
+                        : 'Approval completed'
+                  }
+                  subtitle={approvalStatus.message}
+                  autoDismissMs={approvalStatus.kind === 'success' ? 8000 : undefined}
+                  onCloseButtonClick={() => setApprovalStatus(null)}
+                />
               )}
-              {canCreateExemption && (
-                <Link className="cds--link" to="/provincial/exemption/create">
-                  Add Exemption
-                </Link>
-              )}
-            </div>
-            {approvalStatus && (
-              <AppNotification
-                className="legacy-inline-notification"
-                kind={approvalStatus.kind}
-                title={
-                  approvalStatus.kind === 'error'
-                    ? 'Approval failed'
-                    : approvalStatus.kind === 'warning'
-                      ? 'Approval completed with warnings'
-                      : 'Approval completed'
-                }
-                subtitle={approvalStatus.message}
-                autoDismissMs={approvalStatus.kind === 'success' ? 8000 : undefined}
-                onCloseButtonClick={() => setApprovalStatus(null)}
-              />
-            )}
+            </form>
           </Tile>
         </section>
       </Column>
@@ -936,7 +1022,6 @@ const ProvincialExemptionPage = () => {
                           onClick={() => onHeaderClick(column.id)}
                         >
                           {column.label}
-                          {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
                         </button>
                       </TableHeader>
                     ))}
@@ -995,8 +1080,10 @@ const ProvincialExemptionPage = () => {
                         <TableCell>{row.ownerClientNumber}</TableCell>
                         <TableCell>{row.approvedVolume}</TableCell>
                         <TableCell>{row.balanceRemaining}</TableCell>
-                        <TableCell>{row.listingDate}</TableCell>
-                        <TableCell>{row.expiryDate}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {row.listingDate}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">{row.expiryDate}</TableCell>
                         <TableCell>{row.region}</TableCell>
                       </TableRow>
                     )
@@ -1018,7 +1105,7 @@ const ProvincialExemptionPage = () => {
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(
-                    buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
                   )
                 }}
               />

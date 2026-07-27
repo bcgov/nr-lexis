@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Calendar,
   ChevronDown,
@@ -20,17 +20,17 @@ import {
   UserAvatar,
   type CarbonIconType,
 } from '@carbon/icons-react'
-import { HeaderMenuButton, IconButton, SkipToContent, Theme } from '@carbon/react'
+import { HeaderMenuButton, IconButton, SkipToContent } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   hasFederalSubmitterRole,
   hasProvincialSubmitterRole,
   hasRole,
 } from '@/context/auth/role-utils'
-import { syncAppNotificationRegionTheme } from '@/components/AppNotification'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
+import { useTheme } from '@/context/theme/useTheme'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
 
 export type LayoutProps = {
@@ -51,13 +51,30 @@ type NavigationSection = {
   links: NavigationLink[]
 }
 
-type UiTheme = 'white' | 'g100'
-
 const UI_PREFERENCE_KEYS = {
-  theme: 'lexis.ui.theme',
   sideNavCollapsed: 'lexis.ui.sideNavCollapsed',
   collapsedSections: 'lexis.ui.collapsedSections',
 } as const
+
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrator',
+  APPLICATION_APPROVER: 'Application Approver',
+  EXEMPTION_APPROVER: 'Exemption Approver',
+  DELEGATED_ADMIN: 'Delegated Administrator',
+  READ_ONLY: 'Read Only',
+  PROVINCIAL_SUBMITTER: 'Provincial Submitter',
+  FEDERAL_SUBMITTER: 'Federal Submitter',
+}
+
+const ROLE_DISPLAY_PRIORITY = [
+  'ADMIN',
+  'APPLICATION_APPROVER',
+  'EXEMPTION_APPROVER',
+  'DELEGATED_ADMIN',
+  'READ_ONLY',
+  'PROVINCIAL_SUBMITTER',
+  'FEDERAL_SUBMITTER',
+] as const
 
 const MOBILE_NAVIGATION_MEDIA_QUERY = '(max-width: 671px)'
 
@@ -149,7 +166,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/reports/applicationReport',
-        label: 'Applications Report',
+        label: 'Application Report',
         icon: Report,
         requiredActions: ['/applicationReport'],
       },
@@ -270,10 +287,6 @@ const writeUiPreference = (key: string, value: string): void => {
   }
 }
 
-const readThemePreference = (): UiTheme => {
-  return readUiPreference(UI_PREFERENCE_KEYS.theme) === 'g100' ? 'g100' : 'white'
-}
-
 const readSideNavCollapsedPreference = (): boolean => {
   const storedValue = readUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed)
   return storedValue === 'true'
@@ -319,6 +332,21 @@ const getProfileInitials = (principal: string | null): string => {
   return (initials || principal.slice(0, 2)).toUpperCase()
 }
 
+const getPrimaryRoleLabel = (roles: string[] | null | undefined): string | null => {
+  const normalizedRoles = (roles ?? []).map((role) => role.trim().toUpperCase())
+  const exactRole = ROLE_DISPLAY_PRIORITY.find((role) => normalizedRoles.includes(role))
+  if (exactRole) {
+    return ROLE_LABELS[exactRole]
+  }
+  if (normalizedRoles.some((role) => role.startsWith('PROVINCIAL_SUBMITTER_'))) {
+    return ROLE_LABELS.PROVINCIAL_SUBMITTER
+  }
+  if (normalizedRoles.some((role) => role.startsWith('FEDERAL_SUBMITTER_'))) {
+    return ROLE_LABELS.FEDERAL_SUBMITTER
+  }
+  return normalizedRoles[0]?.replaceAll('_', ' ') ?? null
+}
+
 const getSectionListId = (sectionLabel: string): string => {
   return `side-navigation-section-${sectionLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
 }
@@ -349,7 +377,7 @@ function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { capabilities, canPerform, defaultRoute, logout } = useAuth()
-  const [theme, setTheme] = useState<UiTheme>(readThemePreference)
+  const { theme, toggleTheme } = useTheme()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(readSideNavCollapsedPreference)
   const [isMobileViewport, setIsMobileViewport] = useState(isMobileNavigationViewport)
@@ -363,6 +391,10 @@ function Layout({ children }: LayoutProps) {
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
     [capabilities.principal],
+  )
+  const profileRoleLabel = useMemo(
+    () => getPrimaryRoleLabel(capabilities.roles),
+    [capabilities.roles],
   )
 
   const visibleNavigationSections = useMemo(() => {
@@ -420,6 +452,22 @@ function Layout({ children }: LayoutProps) {
       focusMobileNavigationToggle()
     }
   }
+
+  const focusProfileToggle = useCallback((): void => {
+    window.requestAnimationFrame(() => {
+      document.getElementById('profile-panel-toggle')?.focus()
+    })
+  }, [])
+
+  const closeProfile = useCallback(
+    (returnFocus = false): void => {
+      setIsProfileOpen(false)
+      if (returnFocus) {
+        focusProfileToggle()
+      }
+    },
+    [focusProfileToggle],
+  )
 
   const toggleMobileNavigation = (): void => {
     setIsProfileOpen(false)
@@ -488,7 +536,7 @@ function Layout({ children }: LayoutProps) {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsProfileOpen(false)
+        closeProfile(true)
       }
     }
 
@@ -500,35 +548,17 @@ function Layout({ children }: LayoutProps) {
       const profilePanel = document.getElementById('profile-panel')
       const profileToggle = document.getElementById('profile-panel-toggle')
       if (!profilePanel?.contains(event.target) && !profileToggle?.contains(event.target)) {
-        setIsProfileOpen(false)
+        closeProfile()
       }
     }
 
-    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown, true)
     document.addEventListener('pointerdown', handlePointerDown)
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keydown', handleKeyDown, true)
       document.removeEventListener('pointerdown', handlePointerDown)
     }
-  }, [isProfileOpen])
-
-  useEffect(() => {
-    writeUiPreference(UI_PREFERENCE_KEYS.theme, theme)
-
-    const root = document.documentElement
-    const previousTheme = root.getAttribute('data-carbon-theme')
-    root.setAttribute('data-carbon-theme', theme)
-    syncAppNotificationRegionTheme(isDarkTheme)
-
-    return () => {
-      if (previousTheme === null) {
-        root.removeAttribute('data-carbon-theme')
-      } else {
-        root.setAttribute('data-carbon-theme', previousTheme)
-      }
-      syncAppNotificationRegionTheme(previousTheme === 'g90' || previousTheme === 'g100')
-    }
-  }, [isDarkTheme, theme])
+  }, [closeProfile, isProfileOpen])
 
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsed))
@@ -539,7 +569,7 @@ function Layout({ children }: LayoutProps) {
   }, [collapsedSections])
 
   return (
-    <Theme theme={isDarkTheme ? 'g100' : 'white'}>
+    <>
       <OptimisticConflictModal />
       <div
         className={`app-shell${isDesktopSideNavCollapsed ? ' is-side-nav-collapsed' : ''}${isMobileNavOpen ? ' is-mobile-nav-open' : ''}`}
@@ -575,7 +605,7 @@ function Layout({ children }: LayoutProps) {
                 role="switch"
                 aria-checked={isDarkTheme}
                 aria-label="Toggle dark mode"
-                onClick={() => setTheme((current) => (current === 'white' ? 'g100' : 'white'))}
+                onClick={toggleTheme}
               >
                 <span className="csp-theme-switch__thumb" aria-hidden="true">
                   {isDarkTheme ? <Moon size={14} /> : <Sun size={14} />}
@@ -604,6 +634,8 @@ function Layout({ children }: LayoutProps) {
           role="dialog"
           aria-label="Profile"
           aria-modal="false"
+          aria-hidden={isProfileOpen ? undefined : true}
+          inert={isProfileOpen ? undefined : true}
         >
           <div className="profile-panel__header">
             <h2 className="profile-panel__title">Profile</h2>
@@ -612,7 +644,7 @@ function Layout({ children }: LayoutProps) {
               className="profile-panel__close"
               kind="ghost"
               label="Close profile panel"
-              onClick={() => setIsProfileOpen(false)}
+              onClick={() => closeProfile(true)}
             >
               <Close size={20} />
             </IconButton>
@@ -624,8 +656,18 @@ function Layout({ children }: LayoutProps) {
                 {profileInitials}
               </div>
               <div className="profile-panel__info">
-                <p className="profile-panel__name">{capabilities.principal ?? 'LEXIS user'}</p>
-                <p className="profile-panel__meta">Application: NR LEXIS</p>
+                <p className="profile-panel__name">
+                  {capabilities.principal ?? 'LEXIS user'}
+                  {profileRoleLabel ? ` (${profileRoleLabel})` : ''}
+                </p>
+                {capabilities.orgUnitNo && (
+                  <p className="profile-panel__meta">Organization unit: {capabilities.orgUnitNo}</p>
+                )}
+                {capabilities.forestClientNumber && (
+                  <p className="profile-panel__meta">
+                    Forest client: {capabilities.forestClientNumber}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -751,7 +793,7 @@ function Layout({ children }: LayoutProps) {
           {children}
         </main>
       </div>
-    </Theme>
+    </>
   )
 }
 

@@ -320,8 +320,7 @@ public class PurchaseOfferController {
     if (applicationDetailsService == null || applicationNumber == null || applicationNumber < 1) {
       return null;
     }
-    return ApplicationDetailsRpcService.toSpeciesEndUseSort(
-        applicationDetailsService.getSpeciesForApplication(applicationNumber));
+    return applicationDetailsService.getApplicationSpeciesEndUseSort(applicationNumber);
   }
 
   private boolean matchesScopedApplicationClient(

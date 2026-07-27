@@ -11,20 +11,35 @@ class NexcolGatewayTopologyConfigTest {
 
   private static final String NEXCOL_PATH = "/api/lexis/federal/submissions";
   private static final String TEST_SERVICE = "nr-lexis-backend-test.da5fad-test.svc";
+  private static final String PROD_SERVICE = "nr-lexis-backend-prod.da5fad-prod.svc";
 
   @Test
-  void gatewayShouldUseTheClusterLocalBackendService() throws IOException {
-    String gateway = Files.readString(resolve("gateway/nr-lexis-nexcol-test.kong.yaml"));
+  void gatewaysShouldUseTheClusterLocalBackendServices() throws IOException {
+    assertClusterLocalGateway(
+        "gateway/nr-lexis-nexcol-test.kong.yaml",
+        TEST_SERVICE,
+        "https://test.loginproxy.gov.bc.ca/auth/realms/forests");
+    assertClusterLocalGateway(
+        "gateway/nr-lexis-nexcol-prod.kong.yaml",
+        PROD_SERVICE,
+        "https://loginproxy.gov.bc.ca/auth/realms/forests");
+  }
 
-    assertThat(occurrences(gateway, "host: " + TEST_SERVICE)).isEqualTo(2);
+  private static void assertClusterLocalGateway(String path, String service, String issuer)
+      throws IOException {
+    String gateway = Files.readString(resolve(path));
+
+    assertThat(occurrences(gateway, "host: " + service)).isEqualTo(2);
     assertThat(occurrences(gateway, "port: 8080")).isEqualTo(2);
     assertThat(occurrences(gateway, "protocol: http")).isEqualTo(2);
     assertThat(gateway)
         .contains(
             "methods:\n          - POST",
             "methods:\n          - OPTIONS",
-            "scope:\n            - lexis:federal-submission:submit")
-        .doesNotContain("nr-lexis-api-test.apps.gold.devops.gov.bc.ca");
+            "allowed_iss:\n            - " + issuer,
+            "scope:\n            - lexis:federal-submission:submit",
+            "uri_param_names: []")
+        .doesNotContain(".apps.gold.devops.gov.bc.ca", "uri_param_names:\n            - jwt");
   }
 
   @Test

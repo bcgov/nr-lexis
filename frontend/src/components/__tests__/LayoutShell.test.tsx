@@ -1,9 +1,10 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Layout from '../Layout'
 import { useAuth } from '@/context/auth/useAuth'
+import ThemeProvider from '@/context/theme/ThemeProvider'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
@@ -40,12 +41,14 @@ const LocationProbe = () => {
 
 const renderLayout = (path: string) => {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Layout>
-        <h1>Current page content</h1>
-      </Layout>
-      <LocationProbe />
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Layout>
+          <h1>Current page content</h1>
+        </Layout>
+        <LocationProbe />
+      </MemoryRouter>
+    </ThemeProvider>,
   )
 }
 
@@ -108,7 +111,7 @@ describe('Layout shell', () => {
       'aria-expanded',
       'false',
     )
-    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
   })
 
   it('persists preference updates without storing auth or user data', async () => {
@@ -336,15 +339,16 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /^Upload$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Create\/Edit Exemption/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Create\/Edit Offer/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Application Report$/i })).not.toBeInTheDocument()
   })
 
-  it('renders navigation when an auth mock omits roles', () => {
+  it('renders legacy report navigation when an auth mock omits roles', () => {
     const capabilitiesWithoutRoles = {
       authenticated: true,
       principal: 'idir\\partial',
       welcomeTarget: '/reports',
       legacyPath: null,
-      grantedActions: ['/applicationReport'],
+      grantedActions: ['/applicationReport', 'mofrListing'],
       forestClientNumber: null,
     } as LexisSessionCapabilities
 
@@ -352,14 +356,18 @@ describe('Layout shell', () => {
       createTestAuthContext({
         capabilities: capabilitiesWithoutRoles,
         defaultRoute: '/reports',
-        canPerform: (action: string) => action === '/applicationReport',
+        canPerform: (action: string) => ['/applicationReport', 'mofrListing'].includes(action),
       }),
     )
 
     renderLayout('/reports')
 
     expect(screen.getByRole('navigation', { name: 'Side navigation' })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Applications Report/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toHaveAttribute(
+      'href',
+      '/reports/biweeklyListing',
+    )
+    expect(screen.getByRole('link', { name: /^Application Report$/i })).toHaveAttribute(
       'href',
       '/reports/applicationReport',
     )
@@ -414,7 +422,7 @@ describe('Layout shell', () => {
   it('supports collapsing and expanding side-nav sections', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
 
@@ -422,24 +430,24 @@ describe('Layout shell', () => {
       'aria-expanded',
       'false',
     )
-    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
 
     expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
   })
 
   it('keeps section links available as icons when the full side nav is collapsed', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
-    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
 
-    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {
@@ -467,15 +475,65 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv')
 
     const profileToggle = screen.getByRole('button', { name: 'Open profile panel' })
+    const profilePanel = document.getElementById('profile-panel')
+
+    expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
+    expect(profilePanel).toHaveAttribute('inert')
+    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+
     await userEvent.click(profileToggle)
 
     expect(profileToggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('dialog', { name: 'Profile' })).toHaveClass('is-open')
+    expect(profilePanel).not.toHaveAttribute('aria-hidden')
+    expect(profilePanel).not.toHaveAttribute('inert')
+    expect(profileToggle).toHaveFocus()
+    expect(profilePanel?.querySelector('.profile-panel__close')).not.toHaveFocus()
 
     await userEvent.click(screen.getByRole('heading', { name: 'Current page content' }))
 
     expect(profileToggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByRole('dialog', { name: 'Profile' })).not.toHaveClass('is-open')
+    expect(profilePanel).not.toHaveClass('is-open')
+    expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
+    expect(profilePanel).toHaveAttribute('inert')
+    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+  })
+
+  it('shows the user role and available organization context in the profile panel', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\analyst',
+          roles: ['READ_ONLY'],
+          orgUnitNo: '1903',
+          forestClientNumber: '00012345',
+        }),
+      }),
+    )
+
+    renderLayout('/admin/rtm/emslogamv')
+    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+
+    const profilePanel = screen.getByRole('dialog', { name: 'Profile' })
+    expect(within(profilePanel).getByText('idir\\analyst (Read Only)')).toBeVisible()
+    expect(within(profilePanel).getByText('Organization unit: 1903')).toBeVisible()
+    expect(within(profilePanel).getByText('Forest client: 00012345')).toBeVisible()
+  })
+
+  it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    const profileToggle = screen.getByRole('button', { name: 'Open profile panel' })
+    await userEvent.click(profileToggle)
+    expect(profileToggle).toHaveFocus()
+    expect(document.querySelector('#profile-panel .profile-panel__close')).not.toHaveFocus()
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Open profile panel' })).toHaveFocus()
+    })
+    expect(document.getElementById('profile-panel')).toHaveAttribute('inert')
   })
 
   it('keeps the persisted desktop preference separate from the closed mobile drawer', async () => {

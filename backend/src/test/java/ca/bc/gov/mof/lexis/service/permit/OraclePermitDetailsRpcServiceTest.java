@@ -545,7 +545,7 @@ class OraclePermitDetailsRpcServiceTest {
         service.sendApprovalPermitEmail(7000123L, "edited@example.test");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.message()).contains("could not be queued");
+    assertThat(response.message()).contains("could not be sent");
     assertThat(permitAppender.list)
         .filteredOn(
             event ->
@@ -4655,6 +4655,28 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.length()).isEqualTo("6.0");
     assertThat(response.diameter()).isEqualTo("24.0");
     assertThat(response.productType()).isEqualTo("Unmanufactured Timber");
+  }
+
+  @Test
+  void packageInfoShouldLeaveApplicationEndUseBlankWhenNoLegacyCandidateMatches() {
+    when(repository.findPackageInfoByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(new PackageInfoRow("PKG-903", 1000456L, 10.25d, 6.0d, 24.0d, "S", "H")));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(1000456L, "EX-700", 1835L, "Coast Region", "H", "S", null)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findEndUsesByApplicationNumber(1000456L))
+        .thenReturn(List.of(new EndUsePairRow("FI", "LUM")));
+    when(repository.findCandidateExcolCodes(1, "FI", "LUM", 1835L))
+        .thenReturn(List.of("HE/PL", "FI/OT"));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+    when(repository.findProductTypeDescription("H")).thenReturn(Optional.of("Harvested Timber"));
+
+    PermitPackageInfoRpcResponseDto response = service.getPackageInfo("PKG-903");
+
+    assertThat(response.enduse()).isEmpty();
   }
 
   @Test

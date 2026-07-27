@@ -749,14 +749,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       String exemptionNumber, String toEmailAddress) {
     boolean sent = sendApprovalEmail(exemptionNumber, toEmailAddress);
     return new ExemptionApprovalEmailResult(
-        sent, sent ? "Email queued successfully." : "There was a problem queuing the e-mail.");
+        sent, sent ? "Approval email sent." : "Approval email could not be sent.");
   }
 
   @Override
   public ExemptionApprovalEmailResult sendExemptionApprovalEmails(String sendGrid) {
     Map<String, String> emailByExemption = parseSendGrid(sendGrid);
     if (emailByExemption.isEmpty()) {
-      return new ExemptionApprovalEmailResult(false, "There was a problem queuing the e-mail(s).");
+      return new ExemptionApprovalEmailResult(false, "Approval emails could not be sent.");
     }
 
     List<String> successes = new ArrayList<>();
@@ -771,16 +771,17 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         });
 
     if (failures.isEmpty()) {
-      return new ExemptionApprovalEmailResult(true, "Email(s) queued successfully.");
+      return new ExemptionApprovalEmailResult(
+          true, emailByExemption.size() == 1 ? "Approval email sent." : "Approval emails sent.");
     }
     if (!successes.isEmpty()) {
       return new ExemptionApprovalEmailResult(
           false,
-          "Email could not be queued for exemption(s): "
+          "Approval email could not be sent for exemption(s): "
               + String.join(", ", failures)
               + ".");
     }
-    return new ExemptionApprovalEmailResult(false, "There was a problem queuing the e-mail(s).");
+    return new ExemptionApprovalEmailResult(false, "Approval emails could not be sent.");
   }
 
   private boolean sendApprovalEmail(String exemptionNumber, String toEmailAddress) {
