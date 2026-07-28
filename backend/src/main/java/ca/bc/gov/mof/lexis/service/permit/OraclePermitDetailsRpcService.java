@@ -2986,13 +2986,34 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     Long applicationNumber = packageRow.applicationNumber();
     if (applicationNumber == null || applicationNumber < 1) {
-      return repository.findScaleDetailsByPackageNumber(packageNumber);
+      return sortCoreScaleRows(repository.findScaleDetailsByPackageNumber(packageNumber));
     }
 
-    return lookupContext.scalesByApplication
-        .computeIfAbsent(applicationNumber, repository::findPermitScaleDetailsByApplicationNumber)
-        .stream()
-        .filter(scale -> packageNumber.equals(trimToNull(scale.packageNumber())))
+    return lookupContext.scalesByPackageByApplication
+        .computeIfAbsent(applicationNumber, this::loadCoreScaleRowsByPackage)
+        .getOrDefault(packageNumber, List.of());
+  }
+
+  private Map<String, List<PermitScaleDetailRow>> loadCoreScaleRowsByPackage(
+      Long applicationNumber) {
+    Map<String, List<PermitScaleDetailRow>> scalesByPackage = new HashMap<>();
+    for (PermitScaleDetailRow scale :
+        repository.findPermitScaleDetailsByApplicationNumber(applicationNumber)) {
+      String packageNumber = trimToNull(scale.packageNumber());
+      if (packageNumber != null) {
+        scalesByPackage
+            .computeIfAbsent(packageNumber, ignored -> new ArrayList<>())
+            .add(scale);
+      }
+    }
+    scalesByPackage.replaceAll(
+        (packageNumber, scaleRows) -> sortCoreScaleRows(scaleRows));
+    return Map.copyOf(scalesByPackage);
+  }
+
+  private List<PermitScaleDetailRow> sortCoreScaleRows(
+      List<PermitScaleDetailRow> scaleRows) {
+    return scaleRows.stream()
         .sorted(
             Comparator.comparing(
                     (PermitScaleDetailRow scale) -> trimToNull(scale.timberMark()),
@@ -3112,8 +3133,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final class PermitCoreLookupContext {
     private final ConcurrentMap<Long, Optional<ApplicationInfoRow>> applicationInfoByNumber =
         new ConcurrentHashMap<>();
-    private final ConcurrentMap<Long, List<PermitScaleDetailRow>> scalesByApplication =
-        new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, Map<String, List<PermitScaleDetailRow>>>
+        scalesByPackageByApplication = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, String> regionByApplication = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> exemptionTypeByNumber = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> productTypeDescriptionByCode =

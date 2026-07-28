@@ -2,9 +2,15 @@ package ca.bc.gov.mof.lexis.repository.exemption;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import java.sql.CallableStatement;
@@ -19,12 +25,94 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ExemptionRepository")
 class ExemptionRepositoryTest {
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void accessLookupShouldReadOnlyRootExemptionFields() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("EXEMPTION_NUMBER")).thenReturn("BO-001");
+    when(resultSet.getString("EXPORT_EXEMPTION_TYPE_CODE")).thenReturn("B");
+    when(resultSet.getString("EXPORT_EXEMPTION_STATUS_CODE")).thenReturn("ACT");
+    when(
+            jdbcTemplate.query(
+                anyString(),
+                any(RowMapper.class),
+                eq("BO-001")))
+        .thenAnswer(
+            invocation ->
+                List.of(
+                    ((RowMapper<ExemptionAccessDto>) invocation.getArgument(1))
+                        .mapRow(resultSet, 0)));
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
+
+    ExemptionAccessDto access =
+        repository.findAccessByExemptionNumber(" BO-001 ").orElseThrow();
+
+    assertThat(access.blanketOic()).isTrue();
+    assertThat(access.exemptionStatusCode()).isEqualTo("ACT");
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sql.capture(), any(RowMapper.class), eq("BO-001"));
+    assertThat(sql.getValue())
+        .contains("FROM EXPORT_EXEMPTION")
+        .contains("WHERE EXEMPTION_NUMBER = ?")
+        .doesNotContain("EXPORT_SCALE_DETAIL");
+  }
+
+  @Test
+  void linkedExemptionClientAccessShouldUseOneProvincialExistsQuery() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(
+            jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Long.class),
+                eq("EX-205"),
+                eq("00012345"),
+                eq("00012345")))
+        .thenReturn(1L);
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
+
+    assertThat(
+            repository.hasLinkedProvincialApplicationForClient(
+                " EX-205 ", " 00012345 "))
+        .isTrue();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .queryForObject(
+            sql.capture(),
+            eq(Long.class),
+            eq("EX-205"),
+            eq("00012345"),
+            eq("00012345"));
+    assertThat(sql.getValue())
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION")
+        .contains("EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("OWNER_CLIENT_NUMBER = ?")
+        .contains("AGENT_CLIENT_NUMBER = ?");
+  }
+
+  @Test
+  void lightweightAccessLookupsShouldRejectBlankInputWithoutOracle() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
+
+    assertThat(repository.findAccessByExemptionNumber(" ")).isEmpty();
+    assertThat(repository.hasLinkedProvincialApplicationForClient("EX-205", " "))
+        .isFalse();
+
+    verifyNoInteractions(jdbcTemplate);
+  }
 
   @Test
   void searchShouldUseExemptionPackageAliasesForDynamicCriteria() {

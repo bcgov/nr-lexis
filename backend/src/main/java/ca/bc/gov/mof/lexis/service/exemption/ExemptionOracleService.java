@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
@@ -66,6 +67,19 @@ public class ExemptionOracleService implements ExemptionService {
   @Override
   public Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber) {
     return repository.findByExemptionNumber(exemptionNumber);
+  }
+
+  @Override
+  public Optional<ExemptionAccessDto> findAccessByExemptionNumber(
+      String exemptionNumber) {
+    return repository.findAccessByExemptionNumber(exemptionNumber);
+  }
+
+  @Override
+  public boolean hasLinkedProvincialApplicationForClient(
+      String exemptionNumber, String clientNumber) {
+    return repository.hasLinkedProvincialApplicationForClient(
+        exemptionNumber, clientNumber);
   }
 
   @Override

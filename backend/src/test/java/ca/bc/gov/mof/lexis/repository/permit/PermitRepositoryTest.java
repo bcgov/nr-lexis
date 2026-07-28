@@ -229,13 +229,11 @@ class PermitRepositoryTest {
         .contains("EPD.AGENT_NUMBER LIKE")
         .contains("EPD.CLIENT_NUMBER =")
         .contains("EPD.AGENT_NUMBER =")
-        .contains("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ACCESS_ESD")
-        .contains("INNER JOIN EXPORT_PACKAGE ACCESS_EP")
-        .contains("INNER JOIN EXPORT_EXEMPTION_APPLICATION ACCESS_EEA")
-        .contains("ACCESS_ESD.EXPORT_PERMIT_DETAIL_NUMBER = EPD.EXPORT_PERMIT_DETAIL_NUMBER")
-        .contains("ACCESS_EEA.EXPORT_JURISDICTION_CODE = 'P'")
-        .contains("ACCESS_EEA.OWNER_CLIENT_NUMBER =")
-        .contains("ACCESS_EEA.AGENT_CLIENT_NUMBER =");
+        .contains("EP.OWNER_CLIENT_NUMBER =")
+        .contains("EP.AGENT_CLIENT_NUMBER =")
+        .contains("EP.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("EP.EXPORT_JURISDICTION_CODE IS NULL")
+        .doesNotContain("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL");
     assertThat(searchBinds)
         .containsExactly(
             "00088888",

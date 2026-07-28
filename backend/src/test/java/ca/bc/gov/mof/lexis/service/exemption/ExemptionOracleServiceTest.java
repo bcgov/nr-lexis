@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
@@ -103,6 +104,32 @@ class ExemptionOracleServiceTest {
 
     assertThat(result).contains(dto);
     verify(repository).findByExemptionNumber("EX-205");
+  }
+
+  @Test
+  void accessLookupShouldPassThroughRepository() {
+    ExemptionAccessDto access =
+        new ExemptionAccessDto("BO-001", "B", "ACT", true);
+    when(repository.findAccessByExemptionNumber("BO-001"))
+        .thenReturn(Optional.of(access));
+
+    assertThat(service.findAccessByExemptionNumber("BO-001")).contains(access);
+    verify(repository).findAccessByExemptionNumber("BO-001");
+  }
+
+  @Test
+  void linkedClientAccessShouldPassThroughRepository() {
+    when(
+            repository.hasLinkedProvincialApplicationForClient(
+                "EX-205", "00012345"))
+        .thenReturn(true);
+
+    assertThat(
+            service.hasLinkedProvincialApplicationForClient(
+                "EX-205", "00012345"))
+        .isTrue();
+    verify(repository)
+        .hasLinkedProvincialApplicationForClient("EX-205", "00012345");
   }
 
   @Test

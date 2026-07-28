@@ -81,6 +81,53 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  void linkedPermitClientAccessShouldUseOneProvincialExistsQuery() {
+    when(
+            jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Long.class),
+                eq(7000123L),
+                eq("00012345"),
+                eq("00012345")))
+        .thenReturn(1L);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(
+            repository.hasLinkedProvincialApplicationForClient(
+                7000123L, " 00012345 "))
+        .isTrue();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .queryForObject(
+            sql.capture(),
+            eq(Long.class),
+            eq(7000123L),
+            eq("00012345"),
+            eq("00012345"));
+    assertThat(sql.getValue())
+        .contains("WHEN EXISTS")
+        .contains("FROM EXPORT_SCALE_DETAIL ESD")
+        .contains("INNER JOIN EXPORT_PACKAGE P")
+        .contains("INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("EEA.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("EEA.OWNER_CLIENT_NUMBER = ?")
+        .contains("EEA.AGENT_CLIENT_NUMBER = ?");
+  }
+
+  @Test
+  void linkedPermitClientAccessShouldRejectInvalidInputWithoutQueryingOracle() {
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.hasLinkedProvincialApplicationForClient(0L, "00012345"))
+        .isFalse();
+    assertThat(repository.hasLinkedProvincialApplicationForClient(7000123L, " "))
+        .isFalse();
+
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
   void corePackageRowsShouldReuseTheCompletePermitPackageCursor() throws Exception {
     stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_PERMIT(?,?) }", 2);
     when(resultSet.next()).thenReturn(true, true, false);

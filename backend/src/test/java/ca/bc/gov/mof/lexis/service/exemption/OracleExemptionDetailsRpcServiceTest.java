@@ -724,7 +724,8 @@ class OracleExemptionDetailsRpcServiceTest {
                     "00055667")));
 
     List<ExemptionDetailsRpcService.PermitItem> response =
-        service.getPermits("EX-205", permitNumber -> permitNumber == 7000123L);
+        service.getPermits(
+            "EX-205", permit -> permit.permitNumber() == 7000123L);
 
     assertThat(response).hasSize(1);
     assertThat(response.get(0).permitVolume()).isEqualTo("12.4");
@@ -745,7 +746,8 @@ class OracleExemptionDetailsRpcServiceTest {
                     7000124L, 12.0d, 0.0d, "Complete", "COM", null, null, null)));
 
     List<ExemptionDetailsRpcService.PermitItem> response =
-        service.getPermits("EX-205", permitNumber -> permitNumber == 7000123L);
+        service.getPermits(
+            "EX-205", permit -> permit.permitNumber() == 7000123L);
 
     assertThat(response)
         .extracting(
@@ -757,20 +759,53 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void largeBlanketOicPermitListShouldUseCursorOwnershipWithoutPerPermitReloads() {
+    List<ExemptionDetailsRpcRepository.PermitSummaryRow> permitRows =
+        java.util.stream.LongStream.range(7_000_000L, 7_001_000L)
+            .mapToObj(
+                permitNumber ->
+                    new ExemptionDetailsRpcRepository.PermitSummaryRow(
+                        permitNumber,
+                        10.0d,
+                        5.0d,
+                        "Active",
+                        "ACT",
+                        null,
+                        permitNumber % 2 == 0 ? "00012345" : "00099999",
+                        "",
+                        1904L))
+            .toList();
+    when(repository.findExemptionTypeCodeByExemptionNumber("BO-LARGE"))
+        .thenReturn(Optional.of("B"));
+    when(repository.findPermitsByExemptionNumber("BO-LARGE"))
+        .thenReturn(permitRows);
+
+    List<ExemptionDetailsRpcService.PermitItem> response =
+        service.getPermits(
+            "BO-LARGE",
+            permit ->
+                permit.oicLike()
+                    && "00012345".equals(permit.ownerClientNumber()));
+
+    assertThat(response).hasSize(1_000);
+    assertThat(response.stream().filter(ExemptionDetailsRpcService.PermitItem::canViewPermit))
+        .hasSize(500);
+    verify(repository).findExemptionTypeCodeByExemptionNumber("BO-LARGE");
+    verify(repository).findPermitsByExemptionNumber("BO-LARGE");
+  }
+
+  @Test
   void getBlanketTotalsShouldSumRequestedAndCompletedVolume() {
-    when(repository.findPermitsByExemptionNumber("EX-205"))
-        .thenReturn(
-            List.of(
-                new ExemptionDetailsRpcRepository.PermitSummaryRow(
-                    1L, 20.0d, 0.0d, "Complete", "COM", null, "", ""),
-                new ExemptionDetailsRpcRepository.PermitSummaryRow(
-                    2L, 35.0d, 0.0d, "Active", "ACT", null, "", "")));
+    when(repository.findBlanketOicTotals("EX-205"))
+        .thenReturn(new ExemptionDetailsRpcRepository.BlanketOicTotalsRow(55.0d, 20.0d));
 
     ExemptionDetailsRpcService.BlanketOicTotalsResponse response =
         service.getBlanketOicTotals("EX-205");
 
     assertThat(response.requestedVolume()).isEqualTo("55.0");
     assertThat(response.completedVolume()).isEqualTo("20.0");
+    verify(repository).findBlanketOicTotals("EX-205");
+    verify(repository, never()).findPermitsByExemptionNumber("EX-205");
   }
 
   @Test

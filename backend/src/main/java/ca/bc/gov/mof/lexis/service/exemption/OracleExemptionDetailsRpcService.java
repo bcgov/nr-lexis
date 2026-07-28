@@ -52,7 +52,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
-  private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String EXEMPTION_NUMBER_ASSIGNED_MESSAGE =
       "* - this exemption number has already been assigned";
@@ -173,7 +172,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public List<PermitItem> getPermits(
-      String exemptionNumber, Predicate<Long> permitAccess) {
+      String exemptionNumber, Predicate<PermitAccessContext> permitAccess) {
     String exemptionTypeCode =
         repository.findExemptionTypeCodeByExemptionNumber(exemptionNumber).orElse("");
     boolean oicLike =
@@ -183,7 +182,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return repository.findPermitsByExemptionNumber(exemptionNumber).stream()
         .map(
             row -> {
-              boolean canViewPermit = permitAccess.test(row.permitNumber());
+              boolean canViewPermit =
+                  permitAccess.test(
+                      new PermitAccessContext(
+                          row.permitNumber(),
+                          row.agentNumber(),
+                          row.clientNumber(),
+                          row.orgUnitNumber(),
+                          oicLike));
               double displayedVolume = oicLike ? row.oicRequestVolume() : row.permitVolume();
               return new PermitItem(
                   row.permitNumber(),
@@ -197,19 +203,11 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public BlanketOicTotalsResponse getBlanketOicTotals(String exemptionNumber) {
-    double requestedVolume = 0.0d;
-    double completedVolume = 0.0d;
-
-    for (ExemptionDetailsRpcRepository.PermitSummaryRow row :
-        repository.findPermitsByExemptionNumber(exemptionNumber)) {
-      requestedVolume += row.permitVolume();
-      if (EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(row.statusCode())) {
-        completedVolume += row.permitVolume();
-      }
-    }
-
+    ExemptionDetailsRpcRepository.BlanketOicTotalsRow totals =
+        repository.findBlanketOicTotals(exemptionNumber);
     return new BlanketOicTotalsResponse(
-        formatVolume(requestedVolume), formatVolume(completedVolume));
+        formatVolume(totals.requestedVolume()),
+        formatVolume(totals.completedVolume()));
   }
 
   @Override

@@ -955,6 +955,44 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void coreTabsShouldGroupLargeApplicationScalesOnce() {
+    service.setPermitCoreTabsExecutor(Runnable::run);
+    List<PermitCorePackageRow> packageRows =
+        java.util.stream.IntStream.range(0, 250)
+            .mapToObj(index -> corePackage("PKG-" + index, 1000456L))
+            .toList();
+    List<PermitScaleDetailRow> scaleRows =
+        java.util.stream.IntStream.range(0, 250)
+            .mapToObj(
+                index ->
+                    scale(
+                        "scale-" + index,
+                        "TM-" + index,
+                        null,
+                        null,
+                        1.0d,
+                        1L,
+                        "7000123",
+                        "PKG-" + index,
+                        1000456L))
+            .toList();
+    when(repository.findCorePackageRowsByPermitNumberRequired(7000123L))
+        .thenReturn(packageRows);
+    when(repository.findPermitScaleDetailsByApplicationNumber(1000456L))
+        .thenReturn(scaleRows);
+
+    PermitCoreTabsRpcResponseDto response =
+        service.getCoreTabs(7000123L, false, ignored -> true);
+
+    assertThat(response.packageList()).hasSize(250);
+    assertThat(response.packageList())
+        .allSatisfy(packageRow -> assertThat(packageRow.scaleList()).hasSize(1));
+    verify(repository, times(1))
+        .findPermitScaleDetailsByApplicationNumber(1000456L);
+    verify(repository, never()).findScaleDetailsByPackageNumber(any());
+  }
+
+  @Test
   void coreTabsShouldReuseOicPackageAndApplicationScaleCursors() {
     service.setPermitCoreTabsExecutor(Runnable::run);
     when(repository.findCorePackageRowsByOicPermitNumber(7000123L))
