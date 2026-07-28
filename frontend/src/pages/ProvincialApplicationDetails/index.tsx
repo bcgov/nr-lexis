@@ -275,7 +275,11 @@ function ClientDataSummary({
   )
 }
 
-const optionsWithCurrentValue = (options: SearchOption[], currentValue: string): SearchOption[] => {
+const optionsWithCurrentValue = (
+  options: SearchOption[],
+  currentValue: string,
+  currentLabel?: string | null,
+): SearchOption[] => {
   const normalizedCurrentValue = currentValue.trim()
   if (
     !normalizedCurrentValue ||
@@ -284,8 +288,22 @@ const optionsWithCurrentValue = (options: SearchOption[], currentValue: string):
     return options
   }
 
-  return [{ value: normalizedCurrentValue, label: normalizedCurrentValue }, ...options]
+  return [
+    {
+      value: normalizedCurrentValue,
+      label: currentLabel?.trim() || normalizedCurrentValue,
+    },
+    ...options,
+  ]
 }
+
+const isActiveOrUnchangedOption = (
+  options: SearchOption[],
+  currentValue: string,
+  baselineValue?: string,
+): boolean =>
+  (baselineValue !== undefined && currentValue === baselineValue) ||
+  options.some((option) => option.value === currentValue)
 
 type ApplicationSummaryFormState = {
   applicationDate: string
@@ -1119,6 +1137,16 @@ const ProvincialApplicationDetailsPage = () => {
   const regionOptions = optionsWithCurrentValue(
     summaryRegionOptions,
     summaryForm?.orgUnitNumber ?? '',
+    summaryForm?.orgUnitNumber === summaryBaselineForm?.orgUnitNumber
+      ? detail?.orgUnitName
+      : undefined,
+  )
+  const scheduleOptions = optionsWithCurrentValue(
+    summaryScheduleOptions,
+    summaryForm?.exportScheduleId ?? '',
+    summaryForm?.exportScheduleId === summaryBaselineForm?.exportScheduleId
+      ? detail?.listingDate
+      : undefined,
   )
   const missingSummaryOptionLabels = [
     summaryExemptionReasonOptions.length === 0 ? 'exemption reason' : null,
@@ -1299,7 +1327,11 @@ const ProvincialApplicationDetailsPage = () => {
       orgUnitNumber: firstValidationError(
         () => requiredFieldError(summaryForm.orgUnitNumber, 'Region'),
         () =>
-          summaryRegionOptions.some((option) => option.value === summaryForm.orgUnitNumber)
+          isActiveOrUnchangedOption(
+            summaryRegionOptions,
+            summaryForm.orgUnitNumber,
+            summaryBaselineForm?.orgUnitNumber,
+          )
             ? null
             : 'Select a valid region.',
       ),
@@ -1326,7 +1358,11 @@ const ProvincialApplicationDetailsPage = () => {
       ),
       exportScheduleId:
         !summaryForm.exportScheduleId ||
-        summaryScheduleOptions.some((option) => option.value === summaryForm.exportScheduleId)
+        isActiveOrUnchangedOption(
+          summaryScheduleOptions,
+          summaryForm.exportScheduleId,
+          summaryBaselineForm?.exportScheduleId,
+        )
           ? undefined
           : 'Select a valid listing date.',
       productLocation: productTypeRequiresLogDetails(summaryForm.productTypeCode)
@@ -1362,6 +1398,7 @@ const ProvincialApplicationDetailsPage = () => {
     summaryProductTypeOptions,
     summaryRegionOptions,
     summaryScheduleOptions,
+    summaryBaselineForm,
   ])
   const hasSummaryValidationError = Object.values(summaryFieldErrors).some((error) => !!error)
   const visibleSummaryFieldError = (field: ApplicationSummaryField): string | undefined =>
@@ -3783,10 +3820,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   summaryScheduleOptions.length === 0
                                 }
                                 placeholder="Search listing date"
-                                options={optionsWithCurrentValue(
-                                  summaryScheduleOptions,
-                                  summaryForm.exportScheduleId,
-                                )}
+                                options={scheduleOptions}
                                 onChange={(value) => onSummaryFormChange('exportScheduleId', value)}
                               />
                               <SearchableSelect

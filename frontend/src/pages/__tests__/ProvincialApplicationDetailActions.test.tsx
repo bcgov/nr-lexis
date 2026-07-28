@@ -1006,6 +1006,56 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
+  it('preserves historical region and listing values during an unrelated summary edit', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      orgUnitNumber: 1834,
+      orgUnitName: 'Historic Natural Resource Region',
+      listingDate: '2011-11-25',
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      orgUnitNumber: '1834',
+      exportScheduleId: '31885',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const productLocationInput = await summaryControls.findByLabelText('Location of logs')
+
+    await waitFor(() => {
+      expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue(
+        'Historic Natural Resource Region',
+      )
+      expect(getSummaryComboBox(summaryControls, 'Listing date')).toHaveValue('2011-11-25')
+    })
+
+    fireEvent.change(productLocationInput, {
+      target: { value: 'Updated location' },
+    })
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productLocation: 'Updated location',
+          orgUnitNumber: '1834',
+          exportScheduleId: '31885',
+        }),
+      )
+    })
+  })
+
   it('removes application species through individually labelled dismiss controls', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummarySnapshot,
