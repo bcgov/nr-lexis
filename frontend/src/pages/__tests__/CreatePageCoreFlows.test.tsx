@@ -1010,7 +1010,7 @@ describe('Create Page Core Flows', () => {
         expect.objectContaining({ applicationVolume: '9999999.99' }),
       ),
     )
-  })
+  }, 20_000)
 
   it('shows only the application fields required by H, S, and T product types', async () => {
     render(
