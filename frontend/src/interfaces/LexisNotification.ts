@@ -1,16 +1,19 @@
 export type NotificationLevel = 'INFORMATION' | 'WARNING' | 'CRITICAL'
 
-export type LexisNotification = {
+export type LexisNotificationView = {
   id: number
   title: string
   contentHtml: string
   notificationLevel: NotificationLevel
   displayStartDate: string
   displayEndDate: string
+  updateTimestamp: string
+}
+
+export type LexisNotification = LexisNotificationView & {
   createUser: string
   createTimestamp: string
   updateUserId: string
-  updateTimestamp: string
   audienceRoles: string[]
 }
 

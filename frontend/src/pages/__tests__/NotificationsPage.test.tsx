@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
-import type { LexisNotification } from '@/interfaces/LexisNotification'
+import type { LexisNotification, LexisNotificationView } from '@/interfaces/LexisNotification'
 import NotificationsPage from '@/pages/Notifications'
 import {
   createNotification,
@@ -50,6 +50,16 @@ const notification: LexisNotification = {
   audienceRoles: ['LEXIS_READ_ONLY'],
 }
 
+const viewerNotification: LexisNotificationView = {
+  id: notification.id,
+  title: notification.title,
+  contentHtml: notification.contentHtml,
+  notificationLevel: notification.notificationLevel,
+  displayStartDate: notification.displayStartDate,
+  displayEndDate: notification.displayEndDate,
+  updateTimestamp: notification.updateTimestamp,
+}
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedCreateNotification = vi.mocked(createNotification)
 const mockedDeleteNotification = vi.mocked(deleteNotification)
@@ -60,7 +70,7 @@ const mockedFetchNotifications = vi.mocked(fetchNotifications)
 describe('Notifications page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedFetchNotifications.mockResolvedValue([notification])
+    mockedFetchNotifications.mockResolvedValue([viewerNotification])
     mockedFetchAdminNotifications.mockResolvedValue([notification])
     mockedFetchNotificationAudienceRoles.mockResolvedValue(['LEXIS_ADMIN', 'LEXIS_READ_ONLY'])
     mockedCreateNotification.mockResolvedValue(notification)
@@ -82,6 +92,8 @@ describe('Notifications page', () => {
     expect(screen.queryByRole('button', { name: 'New notification' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/IDIR\\ADMIN/)).not.toBeInTheDocument()
+    expect(document.querySelector('.notifications-page')?.tagName).toBe('DIV')
   })
 
   it('shows the empty state when no notification is visible to the signed-in user', async () => {

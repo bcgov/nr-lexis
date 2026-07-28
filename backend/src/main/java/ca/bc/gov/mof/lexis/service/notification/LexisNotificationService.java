@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.notification;
 
 import ca.bc.gov.mof.lexis.dto.notification.LexisNotificationDto;
+import ca.bc.gov.mof.lexis.dto.notification.LexisNotificationViewDto;
 import ca.bc.gov.mof.lexis.dto.notification.NotificationAudienceRolesDto;
 import ca.bc.gov.mof.lexis.dto.notification.NotificationUpsertRequestDto;
 import ca.bc.gov.mof.lexis.repository.notification.OracleNotificationRepository;
@@ -9,6 +10,7 @@ import ca.bc.gov.mof.lexis.repository.notification.OracleNotificationRepository.
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -27,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class LexisNotificationService {
 
   private static final int MAX_NOTIFICATION_CONTENT_LENGTH = 4_000;
+  private static final int MAX_TITLE_BYTES = 500;
+  private static final int MAX_AUDIT_USER_ID_BYTES = 100;
   private static final List<String> NOTIFICATION_AUDIENCE_ROLES =
       List.of(
           "LEXIS_ADMIN",
@@ -54,9 +58,9 @@ public class LexisNotificationService {
     this.principalService = principalService;
   }
 
-  public List<LexisNotificationDto> visibleNotifications(Principal principal) {
+  public List<LexisNotificationViewDto> visibleNotifications(Principal principal) {
     return repository.findVisible(sessionService.parseRolesFromPrincipal(toAuthentication(principal))).stream()
-        .map(this::toDto)
+        .map(this::toViewDto)
         .toList();
   }
 
@@ -106,8 +110,12 @@ public class LexisNotificationService {
     }
 
     String title =
-        normalizeRequired(
-            htmlSanitizer.sanitizePlainText(request.title()), "A notification title is required.");
+        requireMaxUtf8Bytes(
+            normalizeRequired(
+                htmlSanitizer.sanitizePlainText(request.title()),
+                "A notification title is required."),
+            MAX_TITLE_BYTES,
+            "Notification title cannot exceed 500 bytes.");
     String contentHtml = htmlSanitizer.sanitize(request.contentHtml());
     String contentText = htmlSanitizer.sanitizePlainText(contentHtml);
     if (contentText.isBlank()) {
@@ -130,8 +138,11 @@ public class LexisNotificationService {
     }
 
     String auditUserId =
-        normalizeRequired(
-            principalService.resolvePrincipalName(principal), "An audit user is required.");
+        requireMaxUtf8Bytes(
+            normalizeRequired(
+                principalService.resolvePrincipalName(principal), "An audit user is required."),
+            MAX_AUDIT_USER_ID_BYTES,
+            "Audit user cannot exceed 100 bytes.");
     return new NotificationMutation(
         title,
         contentHtml,
@@ -184,11 +195,29 @@ public class LexisNotificationService {
         row.audienceRoles().stream().sorted(Comparator.naturalOrder()).toList());
   }
 
+  private LexisNotificationViewDto toViewDto(NotificationRow row) {
+    return new LexisNotificationViewDto(
+        row.id(),
+        row.title(),
+        row.contentHtml(),
+        row.notificationLevel(),
+        row.displayStartTimestamp().toLocalDate(),
+        row.displayEndTimestamp().toLocalDate(),
+        row.updateTimestamp());
+  }
+
   private String normalizeRequired(String value, String message) {
     if (value == null || value.isBlank()) {
       throw new IllegalArgumentException(message);
     }
     return value.trim();
+  }
+
+  private String requireMaxUtf8Bytes(String value, int maxBytes, String message) {
+    if (value.getBytes(StandardCharsets.UTF_8).length > maxBytes) {
+      throw new IllegalArgumentException(message);
+    }
+    return value;
   }
 
   private org.springframework.security.core.Authentication toAuthentication(Principal principal) {

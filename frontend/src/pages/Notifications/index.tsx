@@ -17,6 +17,7 @@ import { hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import type {
   LexisNotification,
+  LexisNotificationView,
   NotificationLevel,
   NotificationUpsertRequest,
 } from '@/interfaces/LexisNotification'
@@ -103,6 +104,18 @@ const toForm = (notification: LexisNotification): NotificationForm => ({
   audienceRoles: notification.audienceRoles,
 })
 
+const isAdminNotification = (
+  notification: LexisNotificationView,
+): notification is LexisNotification =>
+  'audienceRoles' in notification &&
+  Array.isArray(notification.audienceRoles) &&
+  'createUser' in notification &&
+  typeof notification.createUser === 'string' &&
+  'createTimestamp' in notification &&
+  typeof notification.createTimestamp === 'string' &&
+  'updateUserId' in notification &&
+  typeof notification.updateUserId === 'string'
+
 const toRequest = (form: NotificationForm): NotificationUpsertRequest => ({
   title: form.title.trim(),
   contentHtml: form.contentHtml,
@@ -142,7 +155,7 @@ const roleLabel = (role: string): string =>
 const levelLabel = (level: NotificationLevel): string =>
   notificationLevels.find((entry) => entry.value === level)?.label ?? level
 
-const notificationStatus = (notification: LexisNotification): string => {
+const notificationStatus = (notification: LexisNotificationView): string => {
   const currentDate = today()
   if (notification.displayStartDate > currentDate) {
     return 'Scheduled'
@@ -150,7 +163,7 @@ const notificationStatus = (notification: LexisNotification): string => {
   return notification.displayEndDate < currentDate ? 'Past' : 'Active'
 }
 
-const hasRecentUpdate = (notification: LexisNotification): boolean => {
+const hasRecentUpdate = (notification: LexisNotificationView): boolean => {
   const updateTime = new Date(notification.updateTimestamp).getTime()
   if (Number.isNaN(updateTime)) {
     return false
@@ -167,7 +180,7 @@ const contentTextLength = (contentHtml: string): number =>
 export default function NotificationsPage() {
   const { capabilities } = useAuth()
   const isAdmin = hasRole(capabilities.roles, 'ADMIN')
-  const [notifications, setNotifications] = useState<LexisNotification[]>([])
+  const [notifications, setNotifications] = useState<LexisNotificationView[]>([])
   const [audienceRoles, setAudienceRoles] = useState<string[]>([])
   const [form, setForm] = useState<NotificationForm>(emptyForm)
   const [showEditor, setShowEditor] = useState(false)
@@ -351,7 +364,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <main className="notifications-page" id="main-content">
+    <div className="notifications-page">
       <section
         className="notifications-page__header page-banner"
         aria-labelledby="notifications-page-title"
@@ -573,88 +586,92 @@ export default function NotificationsPage() {
         )}
 
         <div className="notifications-page__list">
-          {notifications.map((notification) => (
-            <article
-              key={notification.id}
-              className={`notifications-page__notification notifications-page__notification--${notification.notificationLevel.toLowerCase()}`}
-            >
-              <Tile>
-                <div className="notifications-page__notification-heading">
-                  <div>
-                    <div className="notifications-page__notification-title-row">
-                      <h3>{notification.title}</h3>
-                      <span
-                        className={`notifications-page__level-tag notifications-page__level-tag--${notification.notificationLevel.toLowerCase()}`}
-                      >
-                        {levelLabel(notification.notificationLevel)}
-                      </span>
-                      {isAdmin && (
-                        <span className="notifications-page__status">
-                          {notificationStatus(notification)}
+          {notifications.map((notification) => {
+            const adminNotification = isAdminNotification(notification) ? notification : null
+            return (
+              <article
+                key={notification.id}
+                className={`notifications-page__notification notifications-page__notification--${notification.notificationLevel.toLowerCase()}`}
+              >
+                <Tile>
+                  <div className="notifications-page__notification-heading">
+                    <div>
+                      <div className="notifications-page__notification-title-row">
+                        <h3>{notification.title}</h3>
+                        <span
+                          className={`notifications-page__level-tag notifications-page__level-tag--${notification.notificationLevel.toLowerCase()}`}
+                        >
+                          {levelLabel(notification.notificationLevel)}
                         </span>
-                      )}
+                        {isAdmin && (
+                          <span className="notifications-page__status">
+                            {notificationStatus(notification)}
+                          </span>
+                        )}
+                      </div>
+                      <p>
+                        Posted {formatDate(notification.displayStartDate)} · Shows until{' '}
+                        {formatDate(notification.displayEndDate)}
+                      </p>
                     </div>
-                    <p>
-                      Posted {formatDate(notification.displayStartDate)} · Shows until{' '}
-                      {formatDate(notification.displayEndDate)}
-                    </p>
+                    {isAdmin && adminNotification && (
+                      <div className="notifications-page__notification-actions">
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          renderIcon={Edit}
+                          disabled={saving}
+                          onClick={() => startEdit(adminNotification)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          kind="danger--ghost"
+                          size="sm"
+                          renderIcon={TrashCan}
+                          disabled={saving}
+                          onClick={() => setNotificationPendingDeletion(adminNotification)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  {isAdmin && (
-                    <div className="notifications-page__notification-actions">
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        renderIcon={Edit}
-                        disabled={saving}
-                        onClick={() => startEdit(notification)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        kind="danger--ghost"
-                        size="sm"
-                        renderIcon={TrashCan}
-                        disabled={saving}
-                        onClick={() => setNotificationPendingDeletion(notification)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
+                  <div
+                    className="notifications-page__notification-content"
+                    // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
+                    dangerouslySetInnerHTML={{ __html: notification.contentHtml }}
+                  />
+                  {isAdmin && adminNotification && (
+                    <dl className="notifications-page__metadata">
+                      <div>
+                        <dt>Created</dt>
+                        <dd>
+                          {formatDateTime(adminNotification.createTimestamp)} by{' '}
+                          {adminNotification.createUser}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Last updated</dt>
+                        <dd>
+                          {formatDateTime(adminNotification.updateTimestamp)} by{' '}
+                          {adminNotification.updateUserId}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Audience</dt>
+                        <dd>
+                          {adminNotification.audienceRoles.length > 0
+                            ? adminNotification.audienceRoles.map(roleLabel).join(', ')
+                            : 'All authenticated LEXIS users'}
+                        </dd>
+                      </div>
+                    </dl>
                   )}
-                </div>
-                <div
-                  className="notifications-page__notification-content"
-                  // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
-                  dangerouslySetInnerHTML={{ __html: notification.contentHtml }}
-                />
-                {isAdmin && (
-                  <dl className="notifications-page__metadata">
-                    <div>
-                      <dt>Created</dt>
-                      <dd>
-                        {formatDateTime(notification.createTimestamp)} by {notification.createUser}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Last updated</dt>
-                      <dd>
-                        {formatDateTime(notification.updateTimestamp)} by{' '}
-                        {notification.updateUserId}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Audience</dt>
-                      <dd>
-                        {notification.audienceRoles.length > 0
-                          ? notification.audienceRoles.map(roleLabel).join(', ')
-                          : 'All authenticated LEXIS users'}
-                      </dd>
-                    </div>
-                  </dl>
-                )}
-              </Tile>
-            </article>
-          ))}
+                </Tile>
+              </article>
+            )
+          })}
         </div>
       </section>
 
@@ -675,6 +692,6 @@ export default function NotificationsPage() {
           onClose={() => setNotificationPendingDeletion(null)}
         />
       )}
-    </main>
+    </div>
   )
 }

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.notification.LexisNotificationViewDto;
 import ca.bc.gov.mof.lexis.dto.notification.NotificationLevel;
 import ca.bc.gov.mof.lexis.dto.notification.NotificationUpsertRequestDto;
 import ca.bc.gov.mof.lexis.repository.notification.OracleNotificationRepository;
@@ -38,6 +39,29 @@ class LexisNotificationServiceTest {
   @Mock private LexisPrincipalService principalService;
 
   private final NotificationHtmlSanitizer htmlSanitizer = new NotificationHtmlSanitizer();
+
+  @Test
+  void visibleNotificationsShouldReturnAViewerProjectionWithoutAdminMetadata() {
+    LexisNotificationService service = newService();
+    LocalDateTime displayStart = LocalDateTime.of(2026, 7, 21, 0, 0);
+    LocalDateTime displayEnd = LocalDateTime.of(2026, 7, 28, 23, 59, 59);
+    NotificationRow row =
+        notificationRow(
+            "<p>Details</p>", NotificationLevel.INFORMATION, displayStart, displayEnd);
+    when(sessionService.parseRolesFromPrincipal(null)).thenReturn(List.of("LEXIS_READ_ONLY"));
+    when(repository.findVisible(List.of("LEXIS_READ_ONLY"))).thenReturn(List.of(row));
+
+    assertThat(service.visibleNotifications(() -> "idir\\viewer"))
+        .containsExactly(
+            new LexisNotificationViewDto(
+                12L,
+                "Service update",
+                "<p>Details</p>",
+                NotificationLevel.INFORMATION,
+                displayStart.toLocalDate(),
+                displayEnd.toLocalDate(),
+                displayStart));
+  }
 
   @Test
   void createShouldSanitizeHtmlBeforeWritingToTheRepository() {
@@ -215,6 +239,25 @@ class LexisNotificationServiceTest {
     assertThatThrownBy(() -> service.create(request, principal))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("Notification content cannot exceed 4,000 characters.");
+
+    verify(repository, never()).insert(any(NotificationMutation.class));
+  }
+
+  @Test
+  void createShouldRejectATitleThatExceedsTheOracleByteLimit() {
+    LexisNotificationService service = newService();
+    NotificationUpsertRequestDto request =
+        new NotificationUpsertRequestDto(
+            "é".repeat(251),
+            "<p>Details</p>",
+            NotificationLevel.INFORMATION,
+            LocalDate.of(2026, 7, 21),
+            LocalDate.of(2026, 7, 28),
+            List.of());
+
+    assertThatThrownBy(() -> service.create(request, () -> "idir\\admin"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Notification title cannot exceed 500 bytes.");
 
     verify(repository, never()).insert(any(NotificationMutation.class));
   }

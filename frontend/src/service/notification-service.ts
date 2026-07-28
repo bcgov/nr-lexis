@@ -1,21 +1,22 @@
 import type {
   LexisNotification,
+  LexisNotificationView,
   NotificationAudienceRoles,
   NotificationUpsertRequest,
 } from '@/interfaces/LexisNotification'
 import apiService from '@/service/api-service'
 
-const notificationsFrom = (value: unknown): LexisNotification[] =>
-  Array.isArray(value) ? (value as LexisNotification[]) : []
+const notificationsFrom = <T extends LexisNotificationView>(value: unknown): T[] =>
+  Array.isArray(value) ? (value as T[]) : []
 
-export const fetchNotifications = async (): Promise<LexisNotification[]> => {
+export const fetchNotifications = async (): Promise<LexisNotificationView[]> => {
   const response = await apiService.getAxiosInstance().get<unknown>('/lexis/notifications')
-  return notificationsFrom(response.data)
+  return notificationsFrom<LexisNotificationView>(response.data)
 }
 
 export const fetchAdminNotifications = async (): Promise<LexisNotification[]> => {
   const response = await apiService.getAxiosInstance().get<unknown>('/lexis/admin/notifications')
-  return notificationsFrom(response.data)
+  return notificationsFrom<LexisNotification>(response.data)
 }
 
 export const fetchNotificationAudienceRoles = async (): Promise<string[]> => {

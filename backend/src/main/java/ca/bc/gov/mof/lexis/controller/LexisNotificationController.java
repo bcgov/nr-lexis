@@ -1,6 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
-import ca.bc.gov.mof.lexis.dto.notification.LexisNotificationDto;
+import ca.bc.gov.mof.lexis.dto.notification.LexisNotificationViewDto;
 import ca.bc.gov.mof.lexis.service.notification.LexisNotificationService;
 import java.security.Principal;
 import java.util.List;
@@ -26,7 +26,7 @@ public class LexisNotificationController {
   }
 
   @GetMapping
-  public ResponseEntity<List<LexisNotificationDto>> notifications(Principal principal) {
+  public ResponseEntity<List<LexisNotificationViewDto>> notifications(Principal principal) {
     LexisNotificationService service = notificationServiceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Notification service unavailable - returning no content for notification list");
