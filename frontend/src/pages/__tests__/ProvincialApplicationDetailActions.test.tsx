@@ -150,6 +150,41 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('preserves the active detail tab across a page refresh', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: <ProvincialApplicationDetailsPage />,
+        },
+      ],
+      {
+        initialEntries: [
+          {
+            pathname: '/provincial/application/321',
+            state: { applicationDetailTab: 'remarks' },
+          },
+        ],
+      },
+    )
+    render(<RouterProvider router={router} />)
+
+    expect(await screen.findByRole('tab', { name: 'Remarks' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+
+    await selectApplicationDetailTab('Application')
+
+    await waitFor(() => {
+      expect(router.state.location.state).toEqual({
+        applicationDetailTab: 'application',
+      })
+    })
+    expect(router.state.location.pathname).toBe('/provincial/application/321')
+    expect(router.state.location.search).toBe('')
+  })
+
   it('shows missing summary options only on the editable Application tab', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [],

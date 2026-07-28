@@ -134,11 +134,6 @@ const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Status change remark is required when rejecting, withdrawing, or expiring an application.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
-type ApplicationCreationNavigationState = {
-  applicationCreationNotice?: {
-    applicationNumber: string
-  }
-}
 type ApplicationDetailTabKey =
   | 'owner'
   | 'agent'
@@ -148,6 +143,12 @@ type ApplicationDetailTabKey =
   | 'remarks'
   | 'offers'
   | 'review'
+type ApplicationDetailNavigationState = {
+  applicationCreationNotice?: {
+    applicationNumber: string
+  }
+  applicationDetailTab?: ApplicationDetailTabKey
+}
 // Carbon indexes the conditional JSX children as well as the visible tabs.
 // Keep these slots aligned with the TabList and TabPanels declarations below.
 const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
@@ -160,6 +161,9 @@ const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
   'offers',
   'review',
 ]
+const isApplicationDetailTabKey = (value: unknown): value is ApplicationDetailTabKey =>
+  typeof value === 'string' &&
+  APPLICATION_DETAIL_TAB_SLOTS.includes(value as ApplicationDetailTabKey)
 const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
   'Status email is only supported for rejected or withdrawn applications.'
 const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
@@ -551,9 +555,9 @@ const ProvincialApplicationDetailsPage = () => {
   const { canPerform, capabilities } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const createdApplicationNumber = (
-    location.state as ApplicationCreationNavigationState | null
-  )?.applicationCreationNotice?.applicationNumber.trim()
+  const navigationState = location.state as ApplicationDetailNavigationState | null
+  const createdApplicationNumber =
+    navigationState?.applicationCreationNotice?.applicationNumber.trim()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [industryViewableExemptionNumber, setIndustryViewableExemptionNumber] = useState<
     string | null
@@ -671,7 +675,12 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const [selectedPackageNumber, setSelectedPackageNumber] = useState('')
   const [selectedApplicationTab, setSelectedApplicationTab] = useState<ApplicationDetailTabKey>(
-    () => (requestedApplicationTab === 'items' ? 'items' : 'owner'),
+    () =>
+      requestedApplicationTab === 'items'
+        ? 'items'
+        : isApplicationDetailTabKey(navigationState?.applicationDetailTab)
+          ? navigationState.applicationDetailTab
+          : 'owner',
   )
   const beginDetailRequest = useLatestRequestGuard()
   const currentApplicationNumberRef = useRef(applicationNumber)
@@ -697,11 +706,34 @@ const ProvincialApplicationDetailsPage = () => {
     },
     [searchParams, setSearchParams],
   )
-  const focusPackageInItems = useCallback((packageNumber: string) => {
-    setSelectedApplicationTab('items')
-    setFocusedPackageNumber(packageNumber)
-    setFocusedPackageRequestId((current) => current + 1)
-  }, [])
+  const selectApplicationTab = useCallback(
+    (tab: ApplicationDetailTabKey) => {
+      setSelectedApplicationTab(tab)
+      navigate(
+        {
+          pathname: location.pathname,
+          search: location.search,
+          hash: location.hash,
+        },
+        {
+          replace: true,
+          state: {
+            ...(navigationState ?? {}),
+            applicationDetailTab: tab,
+          },
+        },
+      )
+    },
+    [location.hash, location.pathname, location.search, navigate, navigationState],
+  )
+  const focusPackageInItems = useCallback(
+    (packageNumber: string) => {
+      selectApplicationTab('items')
+      setFocusedPackageNumber(packageNumber)
+      setFocusedPackageRequestId((current) => current + 1)
+    },
+    [selectApplicationTab],
+  )
 
   useEffect(() => {
     if (!createdApplicationNumber) {
@@ -714,7 +746,12 @@ const ProvincialApplicationDetailsPage = () => {
         search: location.search,
         hash: location.hash,
       },
-      { replace: true, state: null },
+      {
+        replace: true,
+        state: isApplicationDetailTabKey(navigationState?.applicationDetailTab)
+          ? { applicationDetailTab: navigationState.applicationDetailTab }
+          : null,
+      },
     )
   }, [
     createdApplicationNumber,
@@ -723,6 +760,7 @@ const ProvincialApplicationDetailsPage = () => {
     location.search,
     location.state,
     navigate,
+    navigationState,
   ])
 
   const loadApplicationDetail = useCallback(async () => {
@@ -3180,7 +3218,7 @@ const ProvincialApplicationDetailsPage = () => {
               selectedIndex={selectedApplicationTabIndex}
               onChange={({ selectedIndex }) => {
                 const selectedTab = APPLICATION_DETAIL_TAB_SLOTS[selectedIndex]
-                setSelectedApplicationTab(
+                selectApplicationTab(
                   selectedTab && applicationDetailTabs.includes(selectedTab)
                     ? selectedTab
                     : 'owner',
