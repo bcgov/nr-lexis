@@ -772,8 +772,7 @@ class OracleExemptionDetailsRpcServiceTest {
                         "ACT",
                         null,
                         permitNumber % 2 == 0 ? "00012345" : "00099999",
-                        "",
-                        1904L))
+                        ""))
             .toList();
     when(repository.findExemptionTypeCodeByExemptionNumber("BO-LARGE"))
         .thenReturn(Optional.of("B"));

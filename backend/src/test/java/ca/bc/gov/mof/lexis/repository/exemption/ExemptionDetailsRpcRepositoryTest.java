@@ -201,6 +201,38 @@ class ExemptionDetailsRpcRepositoryTest {
     verify(cursor, never()).getDouble("SCALE_VOLUME");
   }
 
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void permitSummaryLookupShouldUseOnlyColumnsAvailableFromDeployedLegacyCursor()
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn(7000123L);
+    when(cursor.getDouble("PERMIT_VOLUME")).thenReturn(80.0d);
+    when(cursor.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_PERMIT_DET_BY_EXMP(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(cursor);
+    ExemptionDetailsRpcRepository repository =
+        new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    List<ExemptionDetailsRpcRepository.PermitSummaryRow> permits =
+        repository.findPermitsByExemptionNumber("BO-001");
+
+    assertThat(permits).hasSize(1);
+    assertThat(permits.get(0).permitNumber()).isEqualTo(7000123L);
+    assertThat(permits.get(0).permitVolume()).isEqualTo(80.0d);
+    verify(cursor, never()).getLong("ORG_UNIT_NO");
+  }
+
   private static ResultSet applicationLinkCursor(long applicationNumber, double applicationVolume)
       throws SQLException {
     ResultSet cursor = mock(ResultSet.class);

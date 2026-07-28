@@ -188,7 +188,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                           row.permitNumber(),
                           row.agentNumber(),
                           row.clientNumber(),
-                          row.orgUnitNumber(),
                           oicLike));
               double displayedVolume = oicLike ? row.oicRequestVolume() : row.permitVolume();
               return new PermitItem(

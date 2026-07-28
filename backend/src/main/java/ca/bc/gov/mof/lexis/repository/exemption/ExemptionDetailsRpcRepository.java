@@ -585,8 +585,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         valueOrEmpty(getString(rs, "EXPORT_PERMIT_STATUS_CODE")),
         getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
         valueOrEmpty(getString(rs, "CLIENT_NUMBER")),
-        valueOrEmpty(getString(rs, "AGENT_NUMBER")),
-        getLong(rs, "ORG_UNIT_NO"));
+        valueOrEmpty(getString(rs, "AGENT_NUMBER")));
   }
 
   private DocumentRow mapDocumentRow(ResultSet rs) {
@@ -737,30 +736,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       String statusCode,
       LocalDate issueDate,
       String clientNumber,
-      String agentNumber,
-      Long orgUnitNumber) {
-
-    public PermitSummaryRow(
-        long permitNumber,
-        double permitVolume,
-        double oicRequestVolume,
-        String statusDescription,
-        String statusCode,
-        LocalDate issueDate,
-        String clientNumber,
-        String agentNumber) {
-      this(
-          permitNumber,
-          permitVolume,
-          oicRequestVolume,
-          statusDescription,
-          statusCode,
-          issueDate,
-          clientNumber,
-          agentNumber,
-          null);
-    }
-  }
+      String agentNumber) {}
 
   public record BlanketOicTotalsRow(double requestedVolume, double completedVolume) {}
 

@@ -242,9 +242,9 @@ class ExemptionDetailsRpcControllerTest {
     verify(service).getPermits(
         org.mockito.ArgumentMatchers.eq("EX-205"), accessCaptor.capture());
     PermitAccessDto accessiblePermit =
-        new PermitAccessDto(7000123L, "00055667", "00077881", 1904L);
+        new PermitAccessDto(7000123L, "00055667", "00077881", null);
     PermitAccessDto inaccessiblePermit =
-        new PermitAccessDto(7000124L, "00099999", "00088888", 1904L);
+        new PermitAccessDto(7000124L, "00099999", "00088888", null);
     when(
             provincialAuthorizationService.canAccessExemptionPermit(
                 authentication, accessiblePermit, false))
@@ -258,14 +258,14 @@ class ExemptionDetailsRpcControllerTest {
                 .getValue()
                 .test(
                     new ExemptionDetailsRpcService.PermitAccessContext(
-                        7000123L, "00055667", "00077881", 1904L, false)))
+                        7000123L, "00055667", "00077881", false)))
         .isTrue();
     assertThat(
             accessCaptor
                 .getValue()
                 .test(
                     new ExemptionDetailsRpcService.PermitAccessContext(
-                        7000124L, "00099999", "00088888", 1904L, false)))
+                        7000124L, "00099999", "00088888", false)))
         .isFalse();
   }
 
@@ -332,7 +332,7 @@ class ExemptionDetailsRpcControllerTest {
                 .getValue()
                 .test(
                     new ExemptionDetailsRpcService.PermitAccessContext(
-                        7000123L, "00055667", "00077881", 1904L, false)))
+                        7000123L, "00055667", "00077881", false)))
         .isFalse();
     verify(provincialAuthorizationService, never())
         .canAccessExemptionPermit(
