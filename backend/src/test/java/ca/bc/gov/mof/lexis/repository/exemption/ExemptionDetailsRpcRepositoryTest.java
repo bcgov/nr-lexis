@@ -230,6 +230,7 @@ class ExemptionDetailsRpcRepositoryTest {
     assertThat(permits).hasSize(1);
     assertThat(permits.get(0).permitNumber()).isEqualTo(7000123L);
     assertThat(permits.get(0).permitVolume()).isEqualTo(80.0d);
+    verify(cursor, never()).getLong("EXPORT_PERMIT_NUMBER");
     verify(cursor, never()).getLong("ORG_UNIT_NO");
   }
 

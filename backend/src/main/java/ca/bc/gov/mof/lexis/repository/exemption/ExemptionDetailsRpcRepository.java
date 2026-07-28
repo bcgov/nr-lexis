@@ -576,7 +576,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   private PermitSummaryRow mapPermitSummaryRow(ResultSet rs) {
     Long permitNumber =
         Optional.ofNullable(getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"))
-            .orElse(getLong(rs, "EXPORT_PERMIT_NUMBER"));
+            .orElseGet(() -> getLong(rs, "EXPORT_PERMIT_NUMBER"));
     return new PermitSummaryRow(
         coalesce(permitNumber, 0L),
         coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
