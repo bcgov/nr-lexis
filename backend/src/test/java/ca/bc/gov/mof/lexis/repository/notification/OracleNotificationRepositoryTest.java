@@ -41,7 +41,7 @@ class OracleNotificationRepositoryTest {
         .query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
     assertThat(sqlCaptor.getValue())
         .contains("audience_filter.ROLE_NAME IN (\n?")
-        .contains("AND n.DISPLAY_END_TIMESTAMP >= SYSTIMESTAMP")
+        .contains("AND n.DISPLAY_END_TIMESTAMP >= SYSDATE")
         .contains("ORDER BY CASE n.LEXIS_NOTIFICATION_LEVEL_CODE");
   }
 
@@ -63,7 +63,7 @@ class OracleNotificationRepositoryTest {
             contentHtml,
             NotificationLevel.INFORMATION,
             LocalDateTime.of(2026, 7, 21, 12, 0),
-            LocalDateTime.of(2026, 7, 28, 23, 59, 59, 999_000_000),
+            LocalDateTime.of(2026, 7, 28, 23, 59, 59),
             "IDIR\\ADMIN",
             List.of()));
 

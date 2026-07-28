@@ -137,7 +137,7 @@ public class LexisNotificationService {
         contentHtml,
         request.notificationLevel(),
         displayStartDate.atStartOfDay(),
-        request.displayEndDate().atTime(LocalTime.of(23, 59, 59, 999_000_000)),
+        request.displayEndDate().atTime(LocalTime.of(23, 59, 59)),
         auditUserId,
         normalizeAudienceRoles(request.audienceRoles()));
   }

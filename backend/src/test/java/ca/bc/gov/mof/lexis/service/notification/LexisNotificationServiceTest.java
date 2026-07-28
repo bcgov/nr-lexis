@@ -61,7 +61,7 @@ class LexisNotificationServiceTest {
                 "<p><strong>Important</strong>unsafe</p>",
                 NotificationLevel.WARNING,
                 displayStartDate.atStartOfDay(),
-                displayEndDate.atTime(LocalTime.of(23, 59, 59, 999_000_000))));
+                displayEndDate.atTime(LocalTime.of(23, 59, 59))));
 
     service.create(request, principal);
 
@@ -77,7 +77,7 @@ class LexisNotificationServiceTest {
     assertThat(mutation.notificationLevel()).isEqualTo(NotificationLevel.WARNING);
     assertThat(mutation.displayStartTimestamp()).isEqualTo(displayStartDate.atStartOfDay());
     assertThat(mutation.displayEndTimestamp())
-        .isEqualTo(displayEndDate.atTime(LocalTime.of(23, 59, 59, 999_000_000)));
+        .isEqualTo(displayEndDate.atTime(LocalTime.of(23, 59, 59)));
     assertThat(mutation.auditUserId()).isEqualTo("IDIR\\ADMIN");
   }
 
@@ -168,7 +168,7 @@ class LexisNotificationServiceTest {
                 "<p>Details</p>",
                 NotificationLevel.INFORMATION,
                 LocalDate.of(2026, 7, 21).atStartOfDay(),
-                LocalDate.of(2026, 7, 28).atTime(LocalTime.of(23, 59, 59, 999_000_000))));
+                LocalDate.of(2026, 7, 28).atTime(LocalTime.of(23, 59, 59))));
 
     service.create(request, principal);
 
@@ -229,7 +229,7 @@ class LexisNotificationServiceTest {
             "<p>Details</p>",
             NotificationLevel.INFORMATION,
             originalStart,
-            LocalDateTime.of(2026, 7, 28, 23, 59, 59, 999_000_000));
+            LocalDateTime.of(2026, 7, 28, 23, 59, 59));
     NotificationUpsertRequestDto request =
         new NotificationUpsertRequestDto(
             "Updated service update",
@@ -249,7 +249,7 @@ class LexisNotificationServiceTest {
     verify(repository).update(eq(12L), mutationCaptor.capture());
     assertThat(mutationCaptor.getValue().displayStartTimestamp()).isEqualTo(originalStart);
     assertThat(mutationCaptor.getValue().displayEndTimestamp())
-        .isEqualTo(LocalDateTime.of(2026, 7, 30, 23, 59, 59, 999_000_000));
+        .isEqualTo(LocalDateTime.of(2026, 7, 30, 23, 59, 59));
   }
 
   private LexisNotificationService newService() {

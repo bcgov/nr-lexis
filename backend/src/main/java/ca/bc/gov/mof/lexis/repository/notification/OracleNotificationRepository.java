@@ -60,8 +60,8 @@ public class OracleNotificationRepository {
       return queryNotificationRows(
           SELECT_NOTIFICATION_ROWS
               + """
-                WHERE n.PUBLISH_TIMESTAMP <= SYSTIMESTAMP
-                  AND n.DISPLAY_END_TIMESTAMP >= SYSTIMESTAMP
+                WHERE n.PUBLISH_TIMESTAMP <= SYSDATE
+                  AND n.DISPLAY_END_TIMESTAMP >= SYSDATE
                   AND NOT EXISTS (
                     SELECT 1
                       FROM THE.LEXIS_NOTIFICATION_AUDIENCE audience_filter
@@ -75,8 +75,8 @@ public class OracleNotificationRepository {
     String sql =
         SELECT_NOTIFICATION_ROWS
             + """
-              WHERE n.PUBLISH_TIMESTAMP <= SYSTIMESTAMP
-                AND n.DISPLAY_END_TIMESTAMP >= SYSTIMESTAMP
+              WHERE n.PUBLISH_TIMESTAMP <= SYSDATE
+                AND n.DISPLAY_END_TIMESTAMP >= SYSDATE
                 AND (
                   NOT EXISTS (
                     SELECT 1
