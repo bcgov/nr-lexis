@@ -96,7 +96,7 @@
   --csp-layer-hover: #e8e8e8;
   --csp-table-row-hover-bg: #dfeaf8;
   --csp-content-bg: #ffffff;
-  --csp-border-subtle-01: #e0e0e0;
+  --csp-border-subtle-01: #c6c6c6;
   --csp-border-strong-01: #8d8d8d;
   --csp-icon-primary: #161616;
   --csp-link-primary: var(--csp-brand-blue);
@@ -1525,6 +1525,7 @@ legend.cds--label {
 }
 
 .provincial-offer-sections > .offer-form-section > legend {
+  float: left;
   width: 100%;
   margin: 0 0 1rem;
   padding: 0;
@@ -1532,6 +1533,10 @@ legend.cds--label {
   font-size: 1.25rem;
   font-weight: 400;
   line-height: 1.75rem;
+}
+
+.provincial-offer-sections > .offer-form-section > legend + * {
+  clear: both;
 }
 
 .provincial-offer-section-stack {

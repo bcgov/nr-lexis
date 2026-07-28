@@ -695,6 +695,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(formCard).toBeVisible()
     await expect(sections).toHaveCount(5)
     await expect(sections.nth(1)).toHaveCSS('border-top-width', '1px')
+    await expect(sections.first()).toHaveCSS('border-color', 'rgb(198, 198, 198)')
+    const firstSectionTitleInset = await sections.first().evaluate((section) => {
+      const title = section.querySelector('legend')
+      if (!(title instanceof HTMLElement)) throw new Error('Offer section title not found')
+      return title.getBoundingClientRect().top - section.getBoundingClientRect().top
+    })
+    expect(firstSectionTitleInset).toBeGreaterThanOrEqual(16)
     await expect(page.getByRole('group', { name: 'Offer form actions' })).toBeVisible()
 
     await page.setViewportSize({ width: 390, height: 844 })
