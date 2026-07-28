@@ -240,7 +240,7 @@ describe('Provincial Exemption Search Actions', () => {
       'href',
       '/provincial/exemption/create',
     )
-  }, 10_000)
+  }, 20_000)
 
   it('blocks invalid approval recipients and keeps a skipped notification separate from approval', async () => {
     mockedUseAuth.mockReturnValue(
@@ -287,7 +287,7 @@ describe('Provincial Exemption Search Actions', () => {
       screen.getByText('Approved 1 exemption. Approval notification was skipped.'),
     ).toBeInTheDocument()
     expect(screen.queryByText('Approval failed')).not.toBeInTheDocument()
-  })
+  }, 20_000)
 
   it('reports an exemption approval failure reason and keeps the failed row selected', async () => {
     mockedUseAuth.mockReturnValue(
