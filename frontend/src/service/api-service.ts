@@ -9,6 +9,7 @@ import {
   type OptimisticConflictProblem,
   type OptimisticRecordType,
 } from '@/service/optimistic-conflict'
+import { reloadPageIgnoringUnsavedChanges } from '@/utils/page-unload'
 
 type CachedGetOptions = {
   ttlMs?: number
@@ -467,7 +468,7 @@ class APIService {
               this.clearRecordVersions()
               clearAllPageDataCache()
               reject(error)
-              window.location.reload()
+              reloadPageIgnoringUnsavedChanges()
             },
           })
 

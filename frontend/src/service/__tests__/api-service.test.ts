@@ -27,6 +27,7 @@ const {
   getRegisteredResponseResolvedInterceptor,
   getRegisteredResponseRejectedInterceptor,
   getMock,
+  reloadPageIgnoringUnsavedChangesMock,
   requestMock,
 } = vi.hoisted(() => {
   const getMock = vi.fn()
@@ -55,6 +56,7 @@ const {
     getRegisteredResponseResolvedInterceptor: () => registeredResponseResolvedInterceptor,
     getRegisteredResponseRejectedInterceptor: () => registeredResponseRejectedInterceptor,
     getMock,
+    reloadPageIgnoringUnsavedChangesMock: vi.fn(),
     requestMock,
     axiosClientMock: {
       get: getMock,
@@ -79,6 +81,10 @@ vi.mock('axios', () => ({
 
 vi.mock('aws-amplify/auth', () => ({
   fetchAuthSession: fetchAuthSessionMock,
+}))
+
+vi.mock('@/utils/page-unload', () => ({
+  reloadPageIgnoringUnsavedChanges: reloadPageIgnoringUnsavedChangesMock,
 }))
 
 const buildResponse = (data: unknown) => ({
@@ -912,7 +918,7 @@ describe('api-service cached GET support', () => {
       },
     }
 
-    void registeredResponseRejectedInterceptor()(staleError)
+    const conflictPromise = registeredResponseRejectedInterceptor()(staleError)
 
     await vi.waitFor(() => expect(receivedConflict).toBeDefined())
     expect(receivedConflict?.problem).toEqual(
@@ -924,6 +930,11 @@ describe('api-service cached GET support', () => {
     expect(receivedConflict).not.toHaveProperty('overwrite')
     expect(receivedConflict?.refresh).toBeTypeOf('function')
     expect(requestMock).not.toHaveBeenCalled()
+
+    const rejectedConflict = expect(conflictPromise).rejects.toBe(staleError)
+    receivedConflict?.refresh()
+    await rejectedConflict
+    expect(reloadPageIgnoringUnsavedChangesMock).toHaveBeenCalledTimes(1)
 
     window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
   })
