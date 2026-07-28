@@ -1017,6 +1017,7 @@ describe('api-service cached GET support', () => {
 
     expect(getMock).toHaveBeenCalledWith('/lexis/applications/999000001', {
       headers: { 'Cache-Control': 'no-cache' },
+      signal: expect.any(AbortSignal),
     })
     expect(receivedProblem).toEqual(
       expect.objectContaining({
@@ -1100,10 +1101,12 @@ describe('api-service cached GET support', () => {
 
     expect(getMock).toHaveBeenNthCalledWith(1, '/lexis/permits/777', {
       headers: { 'Cache-Control': 'no-cache' },
+      signal: expect.any(AbortSignal),
     })
     expect(getMock).toHaveBeenNthCalledWith(2, '/lexis/rpc/permit-details/edit-context', {
       params: { permitNumber: '777' },
       headers: { 'Cache-Control': 'no-cache' },
+      signal: expect.any(AbortSignal),
     })
     expect(receivedProblem?.currentVersion).toBe('primary-version-2')
     expect(receivedProblem?.changedFields).toEqual(
@@ -1115,6 +1118,75 @@ describe('api-service cached GET support', () => {
 
     window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
     window.history.replaceState({}, '', previousPath)
+  })
+
+  it('falls back to the server conflict when detail enrichment exceeds its deadline', async () => {
+    vi.useFakeTimers()
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedProblem = conflictEvent.detail.problem
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    try {
+      apiService.registerRecordVersion(
+        'application',
+        '999000001',
+        {
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+          data: { applicationNumber: '999000001', remarks: 'Original remarks' },
+        } as unknown as AxiosResponse<unknown>,
+        '/lexis/applications/999000001',
+      )
+      getMock.mockImplementationOnce(
+        (_url: string, config?: AxiosRequestConfig) =>
+          new Promise((_resolve, reject) => {
+            config?.signal?.addEventListener?.(
+              'abort',
+              () => reject(new Error('Enrichment request aborted.')),
+              { once: true },
+            )
+          }),
+      )
+
+      void registeredResponseRejectedInterceptor()({
+        config: {
+          method: 'put',
+          url: '/lexis/applications/999000001',
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        },
+        response: {
+          status: 409,
+          data: {
+            code: 'STALE_RECORD',
+            detail: 'This application was changed by another user.',
+            currentVersion: 'version-2',
+          },
+        },
+      })
+
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      expect(receivedProblem).toEqual(
+        expect.objectContaining({
+          code: 'STALE_RECORD',
+          detail: 'This application was changed by another user.',
+          currentVersion: 'version-2',
+        }),
+      )
+      expect(getMock).toHaveBeenCalledWith(
+        '/lexis/applications/999000001',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
+    } finally {
+      window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+      window.history.replaceState({}, '', previousPath)
+      vi.useRealTimers()
+    }
   })
 
   it('leaves ordinary 409 responses on the existing error path', async () => {

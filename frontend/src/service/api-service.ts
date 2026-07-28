@@ -51,6 +51,7 @@ type HeaderAccessors = {
 
 const RESPONSE_CACHE_MAX_ENTRIES = 150
 const CONFLICT_CHANGED_FIELD_LIMIT = 5
+const CONFLICT_ENRICHMENT_TIMEOUT_MS = 3_000
 const CACHE_INVALIDATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 const CONFLICT_DIFF_IGNORED_FIELDS = new Set([
   'entryTimestamp',
@@ -456,7 +457,7 @@ class APIService {
       return Promise.reject(error)
     }
 
-    return this.enrichOptimisticConflict(problem).then(
+    return this.enrichOptimisticConflictWithinTimeout(problem).then(
       (enrichedProblem) =>
         new Promise<AxiosResponse<unknown>>((_, reject) => {
           const event = createOptimisticConflictEvent({
@@ -476,6 +477,19 @@ class APIService {
           }
         }),
     )
+  }
+
+  private async enrichOptimisticConflictWithinTimeout(
+    problem: OptimisticConflictProblem,
+  ): Promise<OptimisticConflictProblem> {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), CONFLICT_ENRICHMENT_TIMEOUT_MS)
+
+    try {
+      return await this.enrichOptimisticConflict(problem, controller.signal)
+    } finally {
+      window.clearTimeout(timeoutId)
+    }
   }
 
   private registerSuccessfulMutationVersion(response: AxiosResponse<unknown>): void {
@@ -509,6 +523,7 @@ class APIService {
 
   private async enrichOptimisticConflict(
     problem: OptimisticConflictProblem,
+    signal: AbortSignal,
   ): Promise<OptimisticConflictProblem> {
     const activeRecord = this.activeRecord()
     if (!activeRecord) {
@@ -532,6 +547,7 @@ class APIService {
             ...this.toHeaderRecord(source.detailConfig?.headers),
             'Cache-Control': 'no-cache',
           },
+          signal,
         })
         latestSources.push(latestResponse.data)
         if (this.snapshotSourceKey(source) === snapshot.primarySourceKey) {
