@@ -359,9 +359,6 @@ const ProvincialApplicationPage = () => {
           cachedTotal,
           search: searchProvincialApplications,
           count: countProvincialApplications,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)

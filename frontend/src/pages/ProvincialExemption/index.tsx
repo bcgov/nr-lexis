@@ -416,9 +416,6 @@ const ProvincialExemptionPage = () => {
           cachedTotal,
           search: searchProvincialExemptions,
           count: countProvincialExemptions,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)

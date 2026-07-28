@@ -294,9 +294,6 @@ const ProvincialOffersPage = () => {
           cachedTotal,
           search: searchProvincialOffers,
           count: countProvincialOffers,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)

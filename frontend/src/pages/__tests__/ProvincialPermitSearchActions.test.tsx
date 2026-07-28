@@ -6,7 +6,10 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitSearchResponse } from '@/interfaces/ProvincialPermitSearch'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
-import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
+import {
+  countProvincialPermits,
+  searchProvincialPermits,
+} from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
@@ -24,6 +27,7 @@ vi.mock('@/service/search-options-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedCountProvincialPermits = vi.mocked(countProvincialPermits)
 const mockedSearchProvincialPermits = vi.mocked(searchProvincialPermits)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
 
@@ -116,6 +120,47 @@ describe('Provincial Permit Search Actions', () => {
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
+  })
+
+  it('keeps the table loading until the exact result count is available', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      permitNumber: String(7001 + index),
+      status: 'Issued' as const,
+      applicantClientNumber: '11111111',
+      ownerClientNumber: '22222222',
+      totalVolume: 120,
+      issueDate: '2026-01-10',
+      region: '11',
+      packageNumber: `PKG-${index + 1}`,
+      applicationNumber: String(3001 + index),
+    }))
+    mockedSearchProvincialPermits.mockResolvedValueOnce(
+      permitSearchResponse(rows, {
+        totalElements: 11,
+        totalPages: 2,
+      }),
+    )
+    let resolveCount!: (total: number) => void
+    mockedCountProvincialPermits.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCount = resolve
+      }),
+    )
+
+    renderPage()
+
+    await waitFor(() => expect(mockedCountProvincialPermits).toHaveBeenCalledOnce())
+    expect(screen.getByText('Loading permit search results...')).toBeInTheDocument()
+    expect(screen.queryByText('11 results found')).not.toBeInTheDocument()
+    expect(screen.queryByText('7001')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveCount(125)
+    })
+
+    expect(await screen.findByText('125 results found')).toBeInTheDocument()
+    expect(screen.getByText('7001')).toBeInTheDocument()
   })
 
   it('waits for explicit submission while text filters are typed', async () => {

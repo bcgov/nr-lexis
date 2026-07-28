@@ -434,9 +434,6 @@ const ProvincialReviewPage = () => {
           cachedTotal,
           search: searchApplicationReviews,
           count: countApplicationReviews,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)

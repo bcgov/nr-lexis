@@ -35,33 +35,38 @@ const responseWith = (
 })
 
 describe('loadSearchWithDeferredTotal', () => {
-  it('loads rows with an optimistic total before resolving exact count', async () => {
+  it('waits for the exact count before resolving a full page', async () => {
     const search = vi.fn().mockResolvedValue(responseWith(100, 101))
-    const count = vi.fn().mockResolvedValue(490)
-    const onExactTotal = vi.fn()
+    let resolveCount!: (total: number) => void
+    const count = vi.fn(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveCount = resolve
+        }),
+    )
 
-    const result = await loadSearchWithDeferredTotal({
+    const pendingResult = loadSearchWithDeferredTotal({
       request: { page: 0, pageSize: 100 },
       search,
       count,
-      isLatestRequest: () => true,
-      onExactTotal,
     })
-
-    expect(search).toHaveBeenCalledWith({ page: 0, pageSize: 100 }, { knownTotal: 101 })
-    expect(result.totalIsExact).toBe(false)
-    expect(result.response.page.totalElements).toBe(101)
 
     await vi.waitFor(() => {
-      expect(onExactTotal).toHaveBeenCalledWith(
-        expect.objectContaining({
-          page: expect.objectContaining({
-            totalElements: 490,
-            totalPages: 5,
-          }),
-        }),
-      )
+      expect(count).toHaveBeenCalledOnce()
     })
+
+    const onResolved = vi.fn()
+    void pendingResult.then(onResolved)
+    await Promise.resolve()
+    expect(onResolved).not.toHaveBeenCalled()
+
+    resolveCount(490)
+    const result = await pendingResult
+
+    expect(search).toHaveBeenCalledWith({ page: 0, pageSize: 100 }, { knownTotal: 101 })
+    expect(result.totalIsExact).toBe(true)
+    expect(result.response.page.totalElements).toBe(490)
+    expect(result.response.page.totalPages).toBe(5)
   })
 
   it('infers exact total without counting when the returned page is short', async () => {
@@ -72,8 +77,6 @@ describe('loadSearchWithDeferredTotal', () => {
       request: { page: 0, pageSize: 100 },
       search,
       count,
-      isLatestRequest: () => true,
-      onExactTotal: vi.fn(),
     })
 
     expect(count).not.toHaveBeenCalled()
@@ -91,14 +94,25 @@ describe('loadSearchWithDeferredTotal', () => {
       cachedTotal: 490,
       search,
       count,
-      isLatestRequest: () => true,
-      onExactTotal: vi.fn(),
     })
 
     expect(search).toHaveBeenCalledWith({ page: 0, pageSize: 100 }, { knownTotal: 490 })
     expect(count).not.toHaveBeenCalled()
     expect(result.totalIsExact).toBe(true)
     expect(result.response.page.totalElements).toBe(490)
+  })
+
+  it('rejects when the authoritative count fails', async () => {
+    const search = vi.fn().mockResolvedValue(responseWith(100, 101))
+    const count = vi.fn().mockRejectedValue(new Error('count unavailable'))
+
+    await expect(
+      loadSearchWithDeferredTotal({
+        request: { page: 0, pageSize: 100 },
+        search,
+        count,
+      }),
+    ).rejects.toThrow('count unavailable')
   })
 
   it('prefetches the next exact page into the page cache', async () => {

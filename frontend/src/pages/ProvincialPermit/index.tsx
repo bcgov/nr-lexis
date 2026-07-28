@@ -278,9 +278,6 @@ const ProvincialPermitPage = () => {
           cachedTotal,
           search: searchProvincialPermits,
           count: countProvincialPermits,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
