@@ -10,6 +10,11 @@ import {
 } from '@/pages/shared/page-data-cache'
 import apiService from '@/service/api-service'
 import {
+  clearActiveForestClientNumber,
+  FOREST_CLIENT_SELECTION_HEADER,
+  setActiveForestClientNumber,
+} from '@/service/forest-client-selection'
+import {
   OPTIMISTIC_CONFLICT_EVENT,
   RECORD_VERSION_HEADER,
   type OptimisticConflictEvent,
@@ -158,6 +163,7 @@ describe('api-service cached GET support', () => {
     apiService.clearCachedGetData()
     apiService.clearRecordVersions()
     clearAllPageDataCache()
+    clearActiveForestClientNumber()
     fetchAuthSessionMock.mockResolvedValue(buildSession())
   })
 
@@ -817,6 +823,43 @@ describe('api-service cached GET support', () => {
         Authorization: 'Bearer token',
       }),
     )
+  })
+
+  it('adds the active forest client to every API request', async () => {
+    setActiveForestClientNumber('00067890')
+
+    const result = await registeredRequestInterceptor()({
+      method: 'get',
+      headers: {},
+    })
+
+    expect(result.headers).toEqual(
+      expect.objectContaining({
+        [FOREST_CLIENT_SELECTION_HEADER]: '00067890',
+      }),
+    )
+  })
+
+  it('keeps cached GET responses separated by active forest client', async () => {
+    getMock
+      .mockResolvedValueOnce(buildResponse({ client: '00012345' }))
+      .mockResolvedValueOnce(buildResponse({ client: '00067890' }))
+
+    setActiveForestClientNumber('00012345')
+    await expect(
+      apiService.getCachedData<{ client: string }>('/lexis/example', undefined, {
+        cacheKey: 'client-scoped',
+      }),
+    ).resolves.toEqual({ client: '00012345' })
+
+    setActiveForestClientNumber('00067890')
+    await expect(
+      apiService.getCachedData<{ client: string }>('/lexis/example', undefined, {
+        cacheKey: 'client-scoped',
+      }),
+    ).resolves.toEqual({ client: '00067890' })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
   })
 
   it('emits a session-expired event when an auth token cannot be resolved', async () => {

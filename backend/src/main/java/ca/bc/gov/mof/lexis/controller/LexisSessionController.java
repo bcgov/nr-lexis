@@ -8,6 +8,7 @@ import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService.ForestClientScope;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -17,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -63,10 +65,18 @@ public class LexisSessionController {
 
     LexisSessionWelcomeDto welcome = sessionService.resolveWelcomeRoute(principalName, roles);
     List<String> grantedActions = authorizationService.resolveGrantedActions(welcome.roles());
-    String forestClientNumber =
+    ForestClientScope forestClientScope =
         principal instanceof Authentication authentication
-            ? sessionService.resolveForestClientNumber(authentication)
-            : null;
+            ? sessionService.resolveForestClientScope(authentication)
+            : sessionService.resolveForestClientScope(List.of());
+    if (forestClientScope.invalid()
+        && forestClientScope.availableClientNumbers().isEmpty()) {
+      throw new AccessDeniedException(forestClientScope.failureReason());
+    }
+    String forestClientNumber =
+        forestClientScope.invalid() ? null : forestClientScope.clientNumber();
+    boolean forestClientSelectionRequired =
+        forestClientScope.selectionRequired() || forestClientScope.invalid();
     String orgUnitNo = principalService.resolveOrgUnitNo(principal);
 
     LOGGER.debug(
@@ -88,6 +98,8 @@ public class LexisSessionController {
             welcome.legacyPath(),
             grantedActions,
             forestClientNumber,
+            forestClientScope.availableClientNumbers(),
+            forestClientSelectionRequired,
             orgUnitNo));
   }
 

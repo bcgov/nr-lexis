@@ -9,10 +9,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -36,9 +37,18 @@ public class LexisSessionService {
           ROLE_DELEGATED_ADMIN);
 
   private final Set<String> configuredIndustryRoles;
+  private final ForestClientSelectionContext forestClientSelectionContext;
 
   public LexisSessionService(@Value("${lexis.auth.industry-roles:}") String industryRolesCsv) {
+    this(industryRolesCsv, null);
+  }
+
+  @Autowired
+  public LexisSessionService(
+      @Value("${lexis.auth.industry-roles:}") String industryRolesCsv,
+      ForestClientSelectionContext forestClientSelectionContext) {
     this.configuredIndustryRoles = parseRoleCsv(industryRolesCsv);
+    this.forestClientSelectionContext = forestClientSelectionContext;
   }
 
   public LexisSessionWelcomeDto resolveWelcomeRoute(String principalName, List<String> rawRoles) {
@@ -116,18 +126,16 @@ public class LexisSessionService {
   }
 
   public String resolveForestClientNumber(Authentication authentication) {
-    if (authentication == null || authentication.getAuthorities() == null) {
-      return null;
+    ForestClientScope scope = resolveForestClientScope(authentication);
+    if (scope.invalid() || scope.selectionRequired()) {
+      throw new AccessDeniedException(scope.failureReason());
     }
-
-    List<String> authorities =
-        authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
-    return resolveForestClientNumber(authorities);
+    return scope.clientNumber();
   }
 
   public String resolveForestClientNumber(List<String> rawRoles) {
     ForestClientScope scope = resolveForestClientScope(rawRoles);
-    if (scope.invalid()) {
+    if (scope.invalid() || scope.selectionRequired()) {
       throw new AccessDeniedException(scope.failureReason());
     }
     return scope.clientNumber();
@@ -138,10 +146,18 @@ public class LexisSessionService {
       return ForestClientScope.unrestricted();
     }
     return resolveForestClientScope(
-        authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList());
+        authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList(),
+        forestClientSelectionContext == null
+            ? null
+            : forestClientSelectionContext.selectedForestClientNumber());
   }
 
   public ForestClientScope resolveForestClientScope(List<String> rawRoles) {
+    return resolveForestClientScope(rawRoles, null);
+  }
+
+  ForestClientScope resolveForestClientScope(
+      List<String> rawRoles, String selectedForestClientNumber) {
     if (rawRoles == null || rawRoles.isEmpty()) {
       return ForestClientScope.unrestricted();
     }
@@ -173,13 +189,26 @@ public class LexisSessionService {
     }
     if (clientNumbers.isEmpty()) {
       return ForestClientScope.invalid(
+          List.of(),
           "Provincial Submitter authority is missing its forest-client scope.");
     }
-    if (clientNumbers.size() > 1) {
+
+    List<String> availableClientNumbers = clientNumbers.stream().sorted().toList();
+    String selectedClientNumber = trimToNull(selectedForestClientNumber);
+    if (selectedClientNumber != null && !clientNumbers.contains(selectedClientNumber)) {
       return ForestClientScope.invalid(
-          "Provincial Submitter authorities contain multiple forest-client scopes.");
+          availableClientNumbers,
+          "Selected forest client is not assigned to the authenticated user.");
     }
-    return ForestClientScope.scoped(clientNumbers.iterator().next());
+    if (availableClientNumbers.size() == 1) {
+      return ForestClientScope.scoped(availableClientNumbers.getFirst(), availableClientNumbers);
+    }
+    if (selectedClientNumber == null) {
+      return ForestClientScope.selectionRequired(
+          availableClientNumbers,
+          "Provincial Submitter has multiple forest-client scopes; select an active forest client.");
+    }
+    return ForestClientScope.scoped(selectedClientNumber, availableClientNumbers);
   }
 
   public List<String> parseAuthorities(Collection<? extends GrantedAuthority> authorities) {
@@ -306,18 +335,32 @@ public class LexisSessionService {
     return ROLE_PROVINCIAL_SUBMITTER.equals(role);
   }
 
-  public record ForestClientScope(String clientNumber, boolean invalid, String failureReason) {
+  public record ForestClientScope(
+      String clientNumber,
+      List<String> availableClientNumbers,
+      boolean selectionRequired,
+      boolean invalid,
+      String failureReason) {
 
     static ForestClientScope unrestricted() {
-      return new ForestClientScope(null, false, null);
+      return new ForestClientScope(null, List.of(), false, false, null);
     }
 
-    static ForestClientScope scoped(String clientNumber) {
-      return new ForestClientScope(clientNumber, false, null);
+    static ForestClientScope scoped(String clientNumber, List<String> availableClientNumbers) {
+      return new ForestClientScope(
+          clientNumber, List.copyOf(availableClientNumbers), false, false, null);
     }
 
-    static ForestClientScope invalid(String failureReason) {
-      return new ForestClientScope(null, true, failureReason);
+    static ForestClientScope selectionRequired(
+        List<String> availableClientNumbers, String failureReason) {
+      return new ForestClientScope(
+          null, List.copyOf(availableClientNumbers), true, false, failureReason);
+    }
+
+    static ForestClientScope invalid(
+        List<String> availableClientNumbers, String failureReason) {
+      return new ForestClientScope(
+          null, List.copyOf(availableClientNumbers), false, true, failureReason);
     }
 
     public boolean scoped() {

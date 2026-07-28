@@ -323,7 +323,18 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldFailClosedWhenProvincialSubmitterScopesAreAmbiguous() {
+  void shouldRequireAnActiveSelectionWhenProvincialSubmitterHasMultipleScopes() {
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(
+            List.of(
+                "LEXIS_PROVINCIAL_SUBMITTER_00067890",
+                "LEXIS_PROVINCIAL_SUBMITTER_00012345"));
+
+    assertThat(scope.clientNumber()).isNull();
+    assertThat(scope.availableClientNumbers()).containsExactly("00012345", "00067890");
+    assertThat(scope.selectionRequired()).isTrue();
+    assertThat(scope.invalid()).isFalse();
+
     assertThatThrownBy(
             () ->
                 service.resolveForestClientNumber(
@@ -332,6 +343,47 @@ class LexisSessionServiceTest {
                         "LEXIS_PROVINCIAL_SUBMITTER_00067890")))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessageContaining("multiple");
+  }
+
+  @Test
+  void shouldResolveTheSelectedClientFromMultipleAssignedScopes() {
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(
+            List.of(
+                "LEXIS_PROVINCIAL_SUBMITTER_00012345",
+                "LEXIS_PROVINCIAL_SUBMITTER_00067890"),
+            "00067890");
+
+    assertThat(scope.clientNumber()).isEqualTo("00067890");
+    assertThat(scope.availableClientNumbers()).containsExactly("00012345", "00067890");
+    assertThat(scope.selectionRequired()).isFalse();
+    assertThat(scope.invalid()).isFalse();
+  }
+
+  @Test
+  void shouldRejectASelectedClientThatIsNotAssigned() {
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(
+            List.of(
+                "LEXIS_PROVINCIAL_SUBMITTER_00012345",
+                "LEXIS_PROVINCIAL_SUBMITTER_00067890"),
+            "00099999");
+
+    assertThat(scope.clientNumber()).isNull();
+    assertThat(scope.availableClientNumbers()).containsExactly("00012345", "00067890");
+    assertThat(scope.selectionRequired()).isFalse();
+    assertThat(scope.invalid()).isTrue();
+    assertThat(scope.failureReason()).contains("not assigned");
+  }
+
+  @Test
+  void shouldRejectAConflictingSelectionForASingleAssignedClient() {
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345"), "00099999");
+
+    assertThat(scope.invalid()).isTrue();
+    assertThat(scope.availableClientNumbers()).containsExactly("00012345");
   }
 
   @Test

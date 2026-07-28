@@ -7,6 +7,8 @@ export type LexisSessionCapabilities = {
   grantedActions: string[]
   orgUnitNo?: string | null
   forestClientNumber: string | null
+  availableForestClientNumbers: string[]
+  forestClientSelectionRequired: boolean
 }
 
 export type LexisSessionLogoutResponse = {

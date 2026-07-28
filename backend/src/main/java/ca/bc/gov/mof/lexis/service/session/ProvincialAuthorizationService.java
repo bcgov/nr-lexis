@@ -640,7 +640,7 @@ public class ProvincialAuthorizationService {
   private String scopedClientNumber(Authentication authentication) {
     LexisSessionService.ForestClientScope scope =
         sessionService.resolveForestClientScope(authentication);
-    if (scope.invalid()) {
+    if (scope.invalid() || scope.selectionRequired()) {
       throw new AccessDeniedException(scope.failureReason());
     }
     return scope.clientNumber();

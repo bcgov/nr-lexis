@@ -4,6 +4,10 @@ import { fetchAuthSession } from 'aws-amplify/auth'
 import { notifySessionExpired } from '@/context/auth/session-expiry'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import {
+  FOREST_CLIENT_SELECTION_HEADER,
+  getActiveForestClientNumber,
+} from '@/service/forest-client-selection'
+import {
   RECORD_VERSION_HEADER,
   createOptimisticConflictEvent,
   type OptimisticConflictProblem,
@@ -136,6 +140,18 @@ class APIService {
         } catch {
           notifySessionExpired('token-unavailable')
         }
+      }
+
+      const activeForestClientNumber = getActiveForestClientNumber()
+      if (
+        activeForestClientNumber &&
+        !this.hasHeader(requestConfig.headers, FOREST_CLIENT_SELECTION_HEADER)
+      ) {
+        this.setHeader(
+          requestConfig.headers,
+          FOREST_CLIENT_SELECTION_HEADER,
+          activeForestClientNumber,
+        )
       }
 
       const csrfCookie = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)
@@ -331,14 +347,19 @@ class APIService {
       const username = this.asCachePart(payload?.username)
       const identityProvider = this.asCachePart(payload?.identity_provider)
       const clientId = this.asCachePart(payload?.client_id)
-      const scopeParts = [subject, username, identityProvider, clientId].filter(Boolean)
+      const forestClientNumber = getActiveForestClientNumber()
+      const identityScopeParts = [subject, username, identityProvider, clientId].filter(Boolean)
+      const identityScope =
+        identityScopeParts.length > 0
+          ? identityScopeParts.join(':')
+          : accessToken
+            ? `token:${this.hashCacheScope(accessToken)}`
+            : 'anonymous'
+      const forestClientScope = forestClientNumber
+        ? `forest-client:${forestClientNumber}`
+        : 'forest-client:unselected'
       return {
-        cacheScope:
-          scopeParts.length > 0
-            ? scopeParts.join(':')
-            : accessToken
-              ? `token:${this.hashCacheScope(accessToken)}`
-              : 'anonymous',
+        cacheScope: `${identityScope}:${forestClientScope}`,
         authorizationHeader: accessToken ? `Bearer ${accessToken}` : undefined,
       }
     } catch {

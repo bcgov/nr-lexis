@@ -314,6 +314,7 @@ body {
 .csp-side-nav__section-toggle:focus-visible,
 .csp-side-nav__link:focus-visible,
 .profile-panel__close:focus-visible,
+.profile-panel__action:focus-visible,
 .profile-panel__signout:focus-visible {
   outline: 2px solid var(--csp-text-inverse);
   outline-offset: -2px;
@@ -323,6 +324,7 @@ body {
 .csp-side-nav__section-toggle:focus-visible,
 .csp-side-nav__link:focus-visible,
 .profile-panel__close:focus-visible,
+.profile-panel__action:focus-visible,
 .profile-panel__signout:focus-visible {
   outline-color: var(--csp-focus);
 }
@@ -779,6 +781,7 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   opacity: 0.6;
 }
 
+.profile-panel__action,
 .profile-panel__signout {
   align-items: center;
   display: flex;
@@ -796,11 +799,14 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   text-align: left;
 }
 
+.profile-panel__action:hover,
+.profile-panel__action:focus-visible,
 .profile-panel__signout:hover,
 .profile-panel__signout:focus-visible {
   background-color: var(--csp-layer-hover);
 }
 
+.profile-panel__action svg,
 .profile-panel__signout svg {
   color: var(--csp-interactive);
   fill: currentColor;
@@ -1142,6 +1148,103 @@ legend.cds--label {
   display: flex;
   justify-content: space-between;
   margin-bottom: 1rem;
+}
+
+.forest-client-selection {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem;
+  background-color: var(--csp-background);
+}
+
+.forest-client-selection__card {
+  width: min(100%, 40rem);
+  padding: 3rem;
+  background-color: var(--csp-layer-01);
+  border: 1px solid var(--csp-border-subtle-01);
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.12);
+}
+
+.forest-client-selection__logo {
+  display: block;
+  width: 10rem;
+  height: auto;
+}
+
+.forest-client-selection__heading {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 3rem;
+}
+
+.forest-client-selection__heading h1 {
+  margin: 0;
+  color: var(--csp-text-primary);
+  font-size: 2.625rem;
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.forest-client-selection__heading p {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--csp-text-secondary);
+  line-height: 1.5;
+}
+
+.forest-client-selection__eyebrow {
+  color: var(--csp-link-primary) !important;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.forest-client-selection__form {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+}
+
+.forest-client-selection__help {
+  margin: -0.5rem 0 0;
+  color: var(--csp-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.forest-client-selection__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.forest-client-selection__actions .cds--btn {
+  min-width: 10rem;
+}
+
+@media (max-width: 671px) {
+  .forest-client-selection {
+    align-items: start;
+    padding: 0;
+  }
+
+  .forest-client-selection__card {
+    min-height: 100vh;
+    padding: 2rem 1.5rem;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .forest-client-selection__heading h1 {
+    font-size: 2rem;
+  }
+
+  .forest-client-selection__actions .cds--btn {
+    width: 100%;
+    max-width: none;
+  }
 }
 
 .landing-role-tags {

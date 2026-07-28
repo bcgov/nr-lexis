@@ -44,10 +44,12 @@ over TCP rather than deploying a scanner workload of its own.
 ## Identity and authorization
 
 Interactive users authenticate through FAM's Cognito integration. The backend validates the JWT,
-normalizes FAM authorities, derives the authenticated forest-client scope where applicable, and
-enforces access again for every protected object, child resource, download, and mutation. The
-frontend treats its route and action guards as user experience controls rather than the security
-boundary.
+normalizes FAM authorities, and derives the authenticated forest-client scopes where applicable.
+When FAM assigns a Provincial Submitter to multiple forest clients, LEXIS requires a per-session
+active organization selection. The frontend sends that selection with each API request and the
+backend validates it against the client-scoped FAM authorities before enforcing it for every
+protected object, child resource, download, and mutation. The frontend treats its route and action
+guards as user experience controls rather than the security boundary.
 
 NEXCOL does not use an interactive FAM role. It obtains a Keycloak service-client token with the
 `lexis:federal-submission:submit` scope and reaches only the federal validation and submission
@@ -121,7 +123,7 @@ that finds an existing package receives a conflict for NEXCOL reconciliation.
 | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Application delivery | Java 8 WAR deployed to an application server                            | Separate React/Caddy and Spring Boot workloads on OpenShift, with a shared ClamAV service in its own namespace            |
 | Web architecture     | Struts actions, JSP pages, browser JavaScript, and server HTTP sessions | React SPA, typed REST contracts, stateless JWT authentication, and Spring services                                       |
-| Interactive identity | WebADE filters, roles, and organization context                         | FAM roles through Cognito JWTs, backend capability resolution, and explicit client/object checks                         |
+| Interactive identity | WebADE filters, roles, and active organization context                  | FAM roles through Cognito JWTs, per-session active client selection, backend capability resolution, and explicit client/object checks |
 | Federal ingress      | ESF queue-oriented ingestion                                            | NEXCOL through a dedicated Keycloak scope and API gateway routes                                                         |
 | Persistence          | Oracle tables and PL/SQL packages                                       | The same Oracle system of record behind Spring JDBC repositories and explicit transaction boundaries                     |
 | Attachments          | Oracle BLOB storage through application-server upload actions           | Oracle BLOB storage with bounded streaming validation and ClamAV scanning                                                |

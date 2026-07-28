@@ -25,6 +25,11 @@ import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import apiService from '@/service/api-service'
+import {
+  clearActiveForestClientNumber,
+  getActiveForestClientNumber,
+  setActiveForestClientNumber,
+} from '@/service/forest-client-selection'
 import { fetchSessionCapabilities } from '@/service/session-service'
 
 export type AuthProviderProps = {
@@ -40,6 +45,8 @@ const DEFAULT_CAPABILITIES: LexisSessionCapabilities = {
   grantedActions: [],
   orgUnitNo: null,
   forestClientNumber: null,
+  availableForestClientNumbers: [],
+  forestClientSelectionRequired: false,
 }
 
 const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
@@ -169,6 +176,14 @@ const sanitizeCapabilities = (
   payload: Partial<LexisSessionCapabilities>,
   orgUnitNo: string | null = null,
 ): LexisSessionCapabilities => {
+  const availableForestClientNumbers = Array.from(
+    new Set(
+      (payload.availableForestClientNumbers ?? [])
+        .map((clientNumber) => asNonBlankString(clientNumber))
+        .filter((clientNumber): clientNumber is string => clientNumber !== null),
+    ),
+  ).sort()
+
   return {
     authenticated: Boolean(payload.authenticated),
     principal: payload.principal ?? null,
@@ -180,6 +195,8 @@ const sanitizeCapabilities = (
     ),
     orgUnitNo: orgUnitNo ?? payload.orgUnitNo ?? null,
     forestClientNumber: asNonBlankString(payload.forestClientNumber),
+    availableForestClientNumbers,
+    forestClientSelectionRequired: Boolean(payload.forestClientSelectionRequired),
   }
 }
 
@@ -291,6 +308,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         closeSessionWarning()
         setShowSessionExtendedMessage(false)
+        clearActiveForestClientNumber()
         apiService.clearCachedGetData()
         apiService.clearRecordVersions()
         clearAllPageDataCache()
@@ -366,10 +384,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
           clearOauthCallbackParams()
         }
 
-        const data = await fetchSessionCapabilities()
+        let data = await fetchSessionCapabilities()
         if (sessionGenerationRef.current === refreshGeneration) {
           sessionExpiryInFlightRef.current = false
-          const nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+          let nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+          const persistedForestClientNumber = getActiveForestClientNumber()
+          if (
+            persistedForestClientNumber &&
+            nextCapabilities.forestClientNumber !== persistedForestClientNumber
+          ) {
+            clearActiveForestClientNumber()
+            apiService.clearCachedGetData()
+            clearAllPageDataCache()
+            data = await fetchSessionCapabilities()
+            if (sessionGenerationRef.current !== refreshGeneration) {
+              return
+            }
+            nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+          }
           authenticatedSessionRef.current = nextCapabilities.authenticated
           setCapabilities(nextCapabilities)
         }
@@ -504,6 +536,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = useCallback(
     async (provider: LoginProvider = 'idir') => {
       sessionExpiryInFlightRef.current = false
+      clearActiveForestClientNumber()
+      apiService.clearCachedGetData()
       if (isCognitoConfigured) {
         const providerName =
           provider === 'business-bceid' ? businessBceidProviderName : idirProviderName
@@ -524,6 +558,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       closeSessionWarning()
       setShowSessionExtendedMessage(false)
       clearSessionExpiredLoginNotice()
+      clearActiveForestClientNumber()
       apiService.clearCachedGetData()
       apiService.clearRecordVersions()
       clearAllPageDataCache()
@@ -544,6 +579,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
     }
   }, [closeSessionWarning])
+
+  const selectForestClient = useCallback(
+    async (forestClientNumber: string) => {
+      const normalizedClientNumber = forestClientNumber.trim()
+      if (!capabilities.availableForestClientNumbers.includes(normalizedClientNumber)) {
+        throw new Error('The selected organization is not assigned to this account.')
+      }
+
+      const selectionGeneration = sessionGenerationRef.current
+      const previousClientNumber = getActiveForestClientNumber()
+      setActiveForestClientNumber(normalizedClientNumber)
+      apiService.clearCachedGetData()
+      apiService.clearRecordVersions()
+      clearAllPageDataCache()
+
+      try {
+        const data = await fetchSessionCapabilities()
+        if (sessionGenerationRef.current !== selectionGeneration) {
+          throw new Error('The session changed while selecting an organization.')
+        }
+        const nextCapabilities = sanitizeCapabilities(data, capabilities.orgUnitNo ?? null)
+        if (
+          nextCapabilities.forestClientNumber !== normalizedClientNumber ||
+          nextCapabilities.forestClientSelectionRequired
+        ) {
+          throw new Error('LEXIS could not activate the selected organization.')
+        }
+
+        setCapabilities(nextCapabilities)
+      } catch (error) {
+        if (sessionGenerationRef.current !== selectionGeneration) {
+          clearActiveForestClientNumber()
+        } else if (previousClientNumber) {
+          setActiveForestClientNumber(previousClientNumber)
+        } else {
+          clearActiveForestClientNumber()
+        }
+        apiService.clearCachedGetData()
+        throw error
+      }
+    },
+    [capabilities.availableForestClientNumbers, capabilities.orgUnitNo],
+  )
 
   const extendSession = useCallback(async () => {
     try {
@@ -591,6 +669,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     usesExternalLogin,
     defaultRoute,
     refresh,
+    selectForestClient,
     login,
     logout,
     canPerform,

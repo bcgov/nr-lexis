@@ -1,6 +1,6 @@
 import { Loading } from '@carbon/react'
 import { lazy, Suspense, type ReactNode } from 'react'
-import { Navigate, type RouteObject } from 'react-router-dom'
+import { Navigate, useNavigate, type RouteObject } from 'react-router-dom'
 import AppLayout from '../components/Layout'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
@@ -8,6 +8,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
 import ForbiddenPage from '@/pages/Forbidden'
+import ForestClientSelectionPage from '@/pages/ForestClientSelection'
 import UnauthorizedPage from '@/pages/Unauthorized'
 import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
 
@@ -51,6 +52,17 @@ export type RouteDescription = {
 function ProtectedRootRedirect() {
   const { defaultRoute } = useAuth()
   return <Navigate to={defaultRoute} replace />
+}
+
+function ForestClientSelectionRoute() {
+  const { capabilities, defaultRoute } = useAuth()
+  const navigate = useNavigate()
+
+  if (capabilities.availableForestClientNumbers.length < 2) {
+    return <Navigate to={defaultRoute} replace />
+  }
+
+  return <ForestClientSelectionPage onSelected={() => navigate(defaultRoute, { replace: true })} />
 }
 
 export type RouteGuardProps = {
@@ -158,6 +170,12 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     path: '/',
     id: 'RedirectRoot',
     element: <ProtectedRootRedirect />,
+    isNavigation: false,
+  },
+  {
+    path: '/select-organization',
+    id: 'Select Organization',
+    element: <ForestClientSelectionRoute />,
     isNavigation: false,
   },
   {

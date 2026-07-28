@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   Sun,
+  Switcher,
   Tag,
   TaskComplete,
   Upload,
@@ -469,6 +470,11 @@ function Layout({ children }: LayoutProps) {
     [focusProfileToggle],
   )
 
+  const handleOrganizationSelection = () => {
+    closeProfile()
+    navigate('/select-organization')
+  }
+
   const toggleMobileNavigation = (): void => {
     setIsProfileOpen(false)
     setIsMobileNavOpen((current) => !current)
@@ -673,6 +679,17 @@ function Layout({ children }: LayoutProps) {
           </div>
 
           <hr className="profile-panel__divider" role="separator" />
+
+          {capabilities.availableForestClientNumbers.length > 1 && (
+            <button
+              className="profile-panel__action"
+              type="button"
+              onClick={handleOrganizationSelection}
+            >
+              <Switcher size={16} />
+              Switch organization
+            </button>
+          )}
 
           <button className="profile-panel__signout" type="button" onClick={handleLogout}>
             <Logout size={16} />
