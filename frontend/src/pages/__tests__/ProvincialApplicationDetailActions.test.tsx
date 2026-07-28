@@ -162,7 +162,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         initialEntries: [
           {
             pathname: '/provincial/application/321',
-            state: { applicationDetailTab: 'remarks' },
+            state: { lexisDetailTab: 'remarks' },
           },
         ],
       },
@@ -178,7 +178,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await waitFor(() => {
       expect(router.state.location.state).toEqual({
-        applicationDetailTab: 'application',
+        lexisDetailTab: 'application',
       })
     })
     expect(router.state.location.pathname).toBe('/provincial/application/321')

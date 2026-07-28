@@ -118,6 +118,7 @@ import {
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { triggerBrowserDownload } from '@/utils/download'
 import {
   isValidEmail,
@@ -143,11 +144,10 @@ type ApplicationDetailTabKey =
   | 'remarks'
   | 'offers'
   | 'review'
-type ApplicationDetailNavigationState = {
+type ApplicationCreationNavigationState = Record<string, unknown> & {
   applicationCreationNotice?: {
     applicationNumber: string
   }
-  applicationDetailTab?: ApplicationDetailTabKey
 }
 // Carbon indexes the conditional JSX children as well as the visible tabs.
 // Keep these slots aligned with the TabList and TabPanels declarations below.
@@ -161,9 +161,6 @@ const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
   'offers',
   'review',
 ]
-const isApplicationDetailTabKey = (value: unknown): value is ApplicationDetailTabKey =>
-  typeof value === 'string' &&
-  APPLICATION_DETAIL_TAB_SLOTS.includes(value as ApplicationDetailTabKey)
 const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
   'Status email is only supported for rejected or withdrawn applications.'
 const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
@@ -555,7 +552,7 @@ const ProvincialApplicationDetailsPage = () => {
   const { canPerform, capabilities } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigationState = location.state as ApplicationDetailNavigationState | null
+  const navigationState = location.state as ApplicationCreationNavigationState | null
   const createdApplicationNumber =
     navigationState?.applicationCreationNotice?.applicationNumber.trim()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
@@ -674,14 +671,11 @@ const ProvincialApplicationDetailsPage = () => {
     requestedApplicationTab === 'items' ? 1 : 0,
   )
   const [selectedPackageNumber, setSelectedPackageNumber] = useState('')
-  const [selectedApplicationTab, setSelectedApplicationTab] = useState<ApplicationDetailTabKey>(
-    () =>
-      requestedApplicationTab === 'items'
-        ? 'items'
-        : isApplicationDetailTabKey(navigationState?.applicationDetailTab)
-          ? navigationState.applicationDetailTab
-          : 'owner',
-  )
+  const [selectedApplicationTab, selectApplicationTab] = useReloadPreservedTab({
+    tabs: APPLICATION_DETAIL_TAB_SLOTS,
+    defaultTab: 'owner',
+    initialTab: requestedApplicationTab === 'items' ? 'items' : undefined,
+  })
   const beginDetailRequest = useLatestRequestGuard()
   const currentApplicationNumberRef = useRef(applicationNumber)
   currentApplicationNumberRef.current = applicationNumber
@@ -706,26 +700,6 @@ const ProvincialApplicationDetailsPage = () => {
     },
     [searchParams, setSearchParams],
   )
-  const selectApplicationTab = useCallback(
-    (tab: ApplicationDetailTabKey) => {
-      setSelectedApplicationTab(tab)
-      navigate(
-        {
-          pathname: location.pathname,
-          search: location.search,
-          hash: location.hash,
-        },
-        {
-          replace: true,
-          state: {
-            ...(navigationState ?? {}),
-            applicationDetailTab: tab,
-          },
-        },
-      )
-    },
-    [location.hash, location.pathname, location.search, navigate, navigationState],
-  )
   const focusPackageInItems = useCallback(
     (packageNumber: string) => {
       selectApplicationTab('items')
@@ -740,6 +714,8 @@ const ProvincialApplicationDetailsPage = () => {
       return
     }
 
+    const nextNavigationState = { ...(navigationState ?? {}) }
+    delete nextNavigationState.applicationCreationNotice
     navigate(
       {
         pathname: location.pathname,
@@ -748,9 +724,7 @@ const ProvincialApplicationDetailsPage = () => {
       },
       {
         replace: true,
-        state: isApplicationDetailTabKey(navigationState?.applicationDetailTab)
-          ? { applicationDetailTab: navigationState.applicationDetailTab }
-          : null,
+        state: Object.keys(nextNavigationState).length > 0 ? nextNavigationState : null,
       },
     )
   }, [
@@ -1095,9 +1069,12 @@ const ProvincialApplicationDetailsPage = () => {
     'offers',
     ...(canViewReview ? (['review'] as const) : []),
   ]
+  const activeApplicationTab = applicationDetailTabs.includes(selectedApplicationTab)
+    ? selectedApplicationTab
+    : 'owner'
   const selectedApplicationTabIndex = Math.max(
     0,
-    APPLICATION_DETAIL_TAB_SLOTS.indexOf(selectedApplicationTab),
+    APPLICATION_DETAIL_TAB_SLOTS.indexOf(activeApplicationTab),
   )
   const summaryAgentClientNumber = isSummaryAgentApplicant
     ? (summaryForm?.agentClientNumber.trim() ?? '')
@@ -2711,7 +2688,7 @@ const ProvincialApplicationDetailsPage = () => {
       return false
     }
     if (applicationItemsDirty) {
-      setSelectedApplicationTab('items')
+      selectApplicationTab('items')
       setActionErrorMessage(
         'Save or reset the package, species, or scale draft in the Items tab before leaving this application.',
       )
@@ -2736,6 +2713,7 @@ const ProvincialApplicationDetailsPage = () => {
     onUpdateReviewStatus,
     remarkDirty,
     reviewDirty,
+    selectApplicationTab,
     summaryDirty,
   ])
 

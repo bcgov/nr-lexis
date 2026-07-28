@@ -457,6 +457,31 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('restores the exemption tab after a conflict refresh', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/exemption/EX-777',
+            state: { lexisDetailTab: 'documents' },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Documents' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
   it('shows the exemption document modal to a scoped Provincial Submitter', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -1049,6 +1074,29 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
     ).toBeInTheDocument()
+  })
+
+  it('restores the federal application tab after a conflict refresh', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/federal/888',
+            state: { lexisDetailTab: 'remarks' },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Remarks' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(await screen.findByText('Review note')).toBeInTheDocument()
   })
 
   it('does not invent an agent party for owner-filed federal applications', async () => {

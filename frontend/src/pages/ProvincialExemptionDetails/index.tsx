@@ -46,6 +46,7 @@ import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 import {
   fetchExemptionDocuments,
@@ -86,13 +87,15 @@ import {
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { formatLocalIsoDate } from '@/utils/date'
 
-const EXEMPTION_DETAIL_TAB_INDEX = {
-  summary: 0,
-  applications: 1,
-  permits: 2,
-  fees: 3,
-  documents: 4,
-} as const
+type ExemptionDetailTabKey = 'summary' | 'applications' | 'permits' | 'fees' | 'documents'
+
+const EXEMPTION_DETAIL_TAB_SLOTS: readonly ExemptionDetailTabKey[] = [
+  'summary',
+  'applications',
+  'permits',
+  'fees',
+  'documents',
+]
 
 type ExemptionEditForm = {
   exemptionTypeCode: string
@@ -188,9 +191,10 @@ const ProvincialExemptionDetailsPage = () => {
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
-  const [selectedExemptionTabIndex, setSelectedExemptionTabIndex] = useState<number>(
-    EXEMPTION_DETAIL_TAB_INDEX.summary,
-  )
+  const [selectedExemptionTab, selectExemptionTab] = useReloadPreservedTab({
+    tabs: EXEMPTION_DETAIL_TAB_SLOTS,
+    defaultTab: 'summary',
+  })
   const beginDetailRequest = useLatestRequestGuard()
   const currentDetail = detail && String(detail.exemptionNumber) === exemptionNumber ? detail : null
   const isRefreshingDetail = loading && !!currentDetail
@@ -540,6 +544,20 @@ const ProvincialExemptionDetailsPage = () => {
     containsUnmanu === true ||
     editContext.rateOverrideEnabled
   const showFees = feeManagementAvailable || Boolean(applicationsErrorMessage)
+  const exemptionDetailTabs: ExemptionDetailTabKey[] = [
+    'summary',
+    ...(showApplications ? (['applications'] as const) : []),
+    'permits',
+    ...(showFees ? (['fees'] as const) : []),
+    'documents',
+  ]
+  const activeExemptionTab = exemptionDetailTabs.includes(selectedExemptionTab)
+    ? selectedExemptionTab
+    : 'summary'
+  const selectedExemptionTabIndex = Math.max(
+    0,
+    EXEMPTION_DETAIL_TAB_SLOTS.indexOf(activeExemptionTab),
+  )
   const canManageFeeRate = !applicationsErrorMessage && feeManagementAvailable && editContextLoaded
   const canEditFeeOverride =
     canManageFeeRate &&
@@ -821,7 +839,7 @@ const ProvincialExemptionDetailsPage = () => {
       return false
     }
     if (applicationRelationshipDraftDirty) {
-      setSelectedExemptionTabIndex(EXEMPTION_DETAIL_TAB_INDEX.applications)
+      selectExemptionTab('applications')
       setActionErrorMessage('Add the typed application number or clear it before leaving.')
       return false
     }
@@ -831,6 +849,7 @@ const ProvincialExemptionDetailsPage = () => {
     documentUploadDirty,
     isExemptionFormDirty,
     onSaveExemption,
+    selectExemptionTab,
   ])
 
   const closeApprovalConfirmation = useCallback(() => {
@@ -1150,7 +1169,7 @@ const ProvincialExemptionDetailsPage = () => {
                     kind="secondary"
                     size="sm"
                     onClick={() => {
-                      setSelectedExemptionTabIndex(EXEMPTION_DETAIL_TAB_INDEX.summary)
+                      selectExemptionTab('summary')
                       setEditing(true)
                     }}
                   >
@@ -1320,7 +1339,14 @@ const ProvincialExemptionDetailsPage = () => {
             />
             <Tabs
               selectedIndex={selectedExemptionTabIndex}
-              onChange={({ selectedIndex }) => setSelectedExemptionTabIndex(selectedIndex)}
+              onChange={({ selectedIndex }) => {
+                const selectedTab = EXEMPTION_DETAIL_TAB_SLOTS[selectedIndex]
+                selectExemptionTab(
+                  selectedTab && exemptionDetailTabs.includes(selectedTab)
+                    ? selectedTab
+                    : 'summary',
+                )
+              }}
             >
               <TabList
                 aria-label="Exemption detail sections"

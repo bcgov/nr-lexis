@@ -688,6 +688,35 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
   }, 15000)
 
+  it('restores the permit tab and loads deferred data after a conflict refresh', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/permit/777',
+            state: { lexisDetailTab: 'documents' },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Documents' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(
+      await screen.findByRole('heading', { name: 'No permit documents available', level: 3 }),
+    ).toBeInTheDocument()
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledWith('777')
+  })
+
   it('defers fee, document, and invoice data until their tabs are opened', async () => {
     let resolveFees:
       | ((value: Awaited<ReturnType<typeof fetchProvincialPermitFees>>) => void)

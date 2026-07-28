@@ -40,6 +40,7 @@ import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import {
   fetchFederalApplicationDetail,
   releaseApplicationEditLock,
@@ -84,6 +85,27 @@ import { allowedFederalStatusTransitions } from './status-transitions'
 type FederalApplicationScaleRow = ApplicationPackageScaleRow & {
   packageNumber: string
 }
+
+type FederalApplicationDetailTabKey =
+  | 'owner'
+  | 'agent'
+  | 'application'
+  | 'items'
+  | 'offers'
+  | 'remarks'
+  | 'documents'
+  | 'shipping'
+
+const FEDERAL_APPLICATION_DETAIL_TAB_SLOTS: readonly FederalApplicationDetailTabKey[] = [
+  'owner',
+  'agent',
+  'application',
+  'items',
+  'offers',
+  'remarks',
+  'documents',
+  'shipping',
+]
 
 const emptyPermitForm = (): FederalPermitMutation => ({
   permitNumber: null,
@@ -158,7 +180,10 @@ const FederalApplicationDetailsPage = () => {
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
-  const [selectedFederalApplicationTabIndex, setSelectedFederalApplicationTabIndex] = useState(0)
+  const [selectedFederalApplicationTab, selectFederalApplicationTab] = useReloadPreservedTab({
+    tabs: FEDERAL_APPLICATION_DETAIL_TAB_SLOTS,
+    defaultTab: 'owner',
+  })
   const [shippingReferences, setShippingReferences] = useState<ShippingReferenceOptions | null>(
     null,
   )
@@ -203,6 +228,25 @@ const FederalApplicationDetailsPage = () => {
     !!currentDetail?.agentClientLocationCode ||
     !!currentDetail?.agentContactName ||
     !!currentDetail?.agentCompanyName
+  const federalApplicationDetailTabs: FederalApplicationDetailTabKey[] = [
+    'owner',
+    ...(hasAgent ? (['agent'] as const) : []),
+    'application',
+    'items',
+    'offers',
+    ...(canViewFederalApplication ? (['remarks'] as const) : []),
+    'documents',
+    'shipping',
+  ]
+  const activeFederalApplicationTab = federalApplicationDetailTabs.includes(
+    selectedFederalApplicationTab,
+  )
+    ? selectedFederalApplicationTab
+    : 'owner'
+  const selectedFederalApplicationTabIndex = Math.max(
+    0,
+    FEDERAL_APPLICATION_DETAIL_TAB_SLOTS.indexOf(activeFederalApplicationTab),
+  )
 
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -834,7 +878,14 @@ const FederalApplicationDetailsPage = () => {
             />
             <Tabs
               selectedIndex={selectedFederalApplicationTabIndex}
-              onChange={({ selectedIndex }) => setSelectedFederalApplicationTabIndex(selectedIndex)}
+              onChange={({ selectedIndex }) => {
+                const selectedTab = FEDERAL_APPLICATION_DETAIL_TAB_SLOTS[selectedIndex]
+                selectFederalApplicationTab(
+                  selectedTab && federalApplicationDetailTabs.includes(selectedTab)
+                    ? selectedTab
+                    : 'owner',
+                )
+              }}
             >
               <TabList
                 aria-label="Federal application detail sections"
