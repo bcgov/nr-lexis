@@ -246,7 +246,8 @@ class LexisAuthorizationMatrixParityTest {
             "/summary",
             "/lexisAgentAdmin",
             "/lexisFILAdmin",
-            "/lexisPolicyAdmin");
+            "/lexisPolicyAdmin",
+            "/rtmEmsLogAmvAdmin");
   }
 
   @Test
@@ -294,6 +295,7 @@ class LexisAuthorizationMatrixParityTest {
             "/lexisAgentAdmin",
             "/lexisFILAdmin",
             "/lexisPolicyAdmin",
+            "/rtmEmsLogAmvAdmin",
             "approveExemption",
             "createApplication",
             "createOffer",

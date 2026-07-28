@@ -60,7 +60,7 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.grantedActions").isArray())
         .andExpect(jsonPath("$.grantedActions.length()").value(1))
-        .andExpect(jsonPath("$.grantedActions[0]").value("/lexisAgentAdmin"));
+        .andExpect(jsonPath("$.grantedActions[0]").value("/rtmEmsLogAmvAdmin"));
 
     mockMvc
         .perform(get("/api/lexis/rtm/emslogamv").with(jwt().authorities(admin)))

@@ -71,7 +71,7 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
   {
     id: 'rtmEmsLogAmv',
     label: 'Average Monthly Values',
-    requiredAction: '/lexisAgentAdmin',
+    requiredAction: '/rtmEmsLogAmvAdmin',
     description: 'Manage EMS log average monthly values.',
     reactPath: '/admin/rtm/emslogamv',
   },
@@ -146,6 +146,7 @@ const LEGACY_ACTION_CATALOG = [
   '/permitReport',
   '/permitSearch',
   '/permitsReview',
+  '/rtmEmsLogAmvAdmin',
   '/speciesGradeReport',
   '/teacReport',
   '/tenureReport',
@@ -170,6 +171,7 @@ const ROUTE_ACCESS_CHECKS = [
   { label: 'Federal application search', action: '/federalApplicationSearch' },
   { label: 'Reports', action: '/applicationReport' },
   { label: 'Admin', action: '/lexisAgentAdmin' },
+  { label: 'Average Monthly Values', action: '/rtmEmsLogAmvAdmin' },
 ]
 
 const FAM_USER_ROLE_PAGE_SIZES = [10, 25, 50, 100]

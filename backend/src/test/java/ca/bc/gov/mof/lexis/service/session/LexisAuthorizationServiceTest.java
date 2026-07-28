@@ -40,8 +40,9 @@ class LexisAuthorizationServiceTest {
 
     List<String> granted = service.resolveGrantedActions(List.of("LEXIS_ADMIN"));
 
-    assertThat(granted).containsExactly("/lexisAgentAdmin");
-    assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/lexisAgentAdmin")).isTrue();
+    assertThat(granted).containsExactly("/rtmEmsLogAmvAdmin");
+    assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/rtmEmsLogAmvAdmin")).isTrue();
+    assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/lexisAgentAdmin")).isFalse();
     assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/applicationSearch")).isFalse();
     assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/applicationSearch")).isFalse();
   }

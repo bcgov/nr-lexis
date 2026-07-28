@@ -24,6 +24,7 @@ const authenticatedAdminSession = {
     'viewFederalApplication',
     '/applicationReport',
     '/lexisAgentAdmin',
+    '/rtmEmsLogAmvAdmin',
     '/applicationDetails',
   ],
 }

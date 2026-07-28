@@ -561,7 +561,7 @@ const ReviewUploadContent = ({
 
 const LegacyRtmEmsLogAmvUploadWorkflow = () => {
   const { canPerform } = useAuth()
-  const canManage = canPerform('/lexisAgentAdmin')
+  const canManage = canPerform('/rtmEmsLogAmvAdmin')
   const validationRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const [uploadStep, setUploadStep] = useState<RtmUploadStep>('upload')

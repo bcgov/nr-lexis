@@ -411,7 +411,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/admin/rtm/emslogamv',
     id: 'Admin - Average Monthly Values',
-    requiredActions: ['/lexisAgentAdmin'],
+    requiredActions: ['/rtmEmsLogAmvAdmin'],
     element: (
       <Layout>
         <RTMEmsLogAmvPage />

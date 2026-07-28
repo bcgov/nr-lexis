@@ -22,7 +22,11 @@ const mockedUpload = vi.mocked(uploadRtmEmsLogAmv)
 describe('legacy RTM EMS Log AMV upload actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/rtmEmsLogAmvAdmin',
+      }),
+    )
   })
 
   it('rejects files above 20 MiB before requesting a server preview', async () => {

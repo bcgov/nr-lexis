@@ -89,7 +89,11 @@ describe('RTM EMS Log AMV actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.config = {}
-    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/rtmEmsLogAmvAdmin',
+      }),
+    )
     mockedSaveBatch.mockResolvedValue({
       status: 'accepted',
       message: 'Average monthly values saved.',
@@ -379,8 +383,12 @@ describe('RTM EMS Log AMV actions', () => {
     expect(pine).toHaveValue('123.45')
   })
 
-  it('keeps the matrix read-only without the admin authority', async () => {
-    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+  it('keeps the matrix read-only with only the legacy Agent permission', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
+      }),
+    )
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
