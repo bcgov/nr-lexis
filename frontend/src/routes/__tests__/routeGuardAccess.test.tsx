@@ -220,7 +220,7 @@ describe('Protected route guard access', () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
-        canPerform: (action: string) => action === '/rtmEmsLogAmvAdmin',
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
       }),
     )
 
@@ -235,7 +235,7 @@ describe('Protected route guard access', () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
-        canPerform: (action: string) => action === '/rtmEmsLogAmvAdmin',
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
       }),
     )
 

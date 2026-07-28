@@ -213,40 +213,14 @@ describe('Layout shell', () => {
     expect(adminLink).not.toHaveAttribute('aria-current')
   })
 
-  it('does not grant AMV navigation through the legacy Agent permission', () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        capabilities: createTestCapabilities({
-          grantedActions: ['/lexisAgentAdmin'],
-        }),
-        canPerform: (action: string) => action === '/lexisAgentAdmin',
-      }),
-    )
-
-    renderLayout('/admin')
-
-    expect(screen.getByRole('link', { name: /Users & Access/i })).toBeVisible()
-    expect(screen.queryByRole('link', { name: /Average Monthly Values/i })).not.toBeInTheDocument()
-  })
-
   it('renders split admin side-nav areas with distinct active routes', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
-          grantedActions: [
-            '/lexisAgentAdmin',
-            '/lexisPolicyAdmin',
-            '/lexisFILAdmin',
-            '/rtmEmsLogAmvAdmin',
-          ],
+          grantedActions: ['/lexisAgentAdmin', '/lexisPolicyAdmin', '/lexisFILAdmin'],
         }),
         canPerform: (action: string) =>
-          [
-            '/lexisAgentAdmin',
-            '/lexisPolicyAdmin',
-            '/lexisFILAdmin',
-            '/rtmEmsLogAmvAdmin',
-          ].includes(action),
+          ['/lexisAgentAdmin', '/lexisPolicyAdmin', '/lexisFILAdmin'].includes(action),
       }),
     )
 
@@ -279,7 +253,7 @@ describe('Layout shell', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         defaultRoute: '/admin/rtm/emslogamv',
-        canPerform: (action: string) => action === '/rtmEmsLogAmvAdmin',
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
       }),
     )
 

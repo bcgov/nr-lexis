@@ -19,7 +19,7 @@ public class LexisApiAuthorizationCustomizer
         Customizer<
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry> {
 
-  private static final String ACTION_RTM_EMS_LOG_AMV_ADMIN = "/rtmEmsLogAmvAdmin";
+  private static final String ACTION_LEXIS_AGENT_ADMIN = "/lexisAgentAdmin";
   private static final String[] HEALTH_PROBE_PATTERNS = {
     "/actuator/health/liveness", "/actuator/health/readiness"
   };
@@ -82,9 +82,9 @@ public class LexisApiAuthorizationCustomizer
     authorize.requestMatchers(HttpMethod.GET, HEALTH_PROBE_PATTERNS).permitAll();
     authorizeKnownRoles(authorize, PROD_RTM_ONLY_SESSION_PATTERNS);
     authorizeFixedAction(
-        authorize, HttpMethod.GET, ACTION_RTM_EMS_LOG_AMV_ADMIN, PROD_RTM_ONLY_GET_PATTERNS);
+        authorize, HttpMethod.GET, ACTION_LEXIS_AGENT_ADMIN, PROD_RTM_ONLY_GET_PATTERNS);
     authorizeFixedAction(
-        authorize, HttpMethod.POST, ACTION_RTM_EMS_LOG_AMV_ADMIN, PROD_RTM_ONLY_POST_PATTERNS);
+        authorize, HttpMethod.POST, ACTION_LEXIS_AGENT_ADMIN, PROD_RTM_ONLY_POST_PATTERNS);
     authorize.anyRequest().denyAll();
   }
 

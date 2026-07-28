@@ -154,18 +154,12 @@ describe('Auth Provider Role Matrix', () => {
       grantedActions: [],
     })
 
-    renderProbe([
-      '/lexisAgentAdmin',
-      '/rtmEmsLogAmvAdmin',
-      '/fileApplicationUpload',
-      'createApplication',
-    ])
+    renderProbe(['/lexisAgentAdmin', '/fileApplicationUpload', 'createApplication'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/rtmEmsLogAmvAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/fileApplicationUpload')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
   })
@@ -178,26 +172,15 @@ describe('Auth Provider Role Matrix', () => {
       roles: ['LEXIS_ADMIN'],
       welcomeTarget: null,
       legacyPath: null,
-      grantedActions: [
-        '/rtmEmsLogAmvAdmin',
-        '/lexisAgentAdmin',
-        '/applicationSearch',
-        'createApplication',
-      ],
+      grantedActions: ['/lexisAgentAdmin', '/applicationSearch', 'createApplication'],
     })
 
-    renderProbe([
-      '/rtmEmsLogAmvAdmin',
-      '/lexisAgentAdmin',
-      '/applicationSearch',
-      'createApplication',
-    ])
+    renderProbe(['/lexisAgentAdmin', '/applicationSearch', 'createApplication'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/admin/rtm/emslogamv')
-    expect(screen.getByTestId('action-/rtmEmsLogAmvAdmin')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
   })
@@ -213,12 +196,11 @@ describe('Auth Provider Role Matrix', () => {
       grantedActions: ['/applicationSearch'],
     })
 
-    renderProbe(['/rtmEmsLogAmvAdmin', '/lexisAgentAdmin', '/applicationSearch'])
+    renderProbe(['/lexisAgentAdmin', '/applicationSearch'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
-    expect(screen.getByTestId('action-/rtmEmsLogAmvAdmin')).toHaveTextContent('false')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })

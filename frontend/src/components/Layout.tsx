@@ -257,7 +257,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/admin/rtm/emslogamv',
         label: 'Average Monthly Values',
         icon: DataBase,
-        requiredActions: ['/rtmEmsLogAmvAdmin'],
+        requiredActions: ['/lexisAgentAdmin'],
       },
     ],
   },

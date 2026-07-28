@@ -368,7 +368,7 @@ const notificationMessage = (message: string, errors: string[]) =>
 
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
-  const canManage = canPerform('/rtmEmsLogAmvAdmin')
+  const canManage = canPerform('/lexisAgentAdmin')
   const [targetDate, setTargetDate] = useState(currentMonthDate)
   const [loadedDate, setLoadedDate] = useState('')
   const [currentRows, setCurrentRows] = useState<RtmEmsLogAmvRow[]>([])

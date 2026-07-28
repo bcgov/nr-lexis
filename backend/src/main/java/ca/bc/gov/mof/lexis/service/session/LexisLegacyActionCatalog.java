@@ -38,7 +38,6 @@ final class LexisLegacyActionCatalog {
           "/permitReport",
           "/permitSearch",
           "/permitsReview",
-          "/rtmEmsLogAmvAdmin",
           "/speciesGradeReport",
           "/summary",
           "/teacReport",

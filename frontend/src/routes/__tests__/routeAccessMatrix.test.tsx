@@ -67,11 +67,6 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
     requiredActions: ['/lexisAgentAdmin'],
     requiredActionsMatch: 'any',
   },
-  {
-    path: '/admin/rtm/emslogamv',
-    requiredActions: ['/rtmEmsLogAmvAdmin'],
-    requiredActionsMatch: 'any',
-  },
 ]
 
 describe('Protected route access matrix', () => {

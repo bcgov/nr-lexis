@@ -57,7 +57,6 @@ describe('Admin tool access smoke', () => {
         capabilities: createTestCapabilities({
           grantedActions: [
             '/lexisAgentAdmin',
-            '/rtmEmsLogAmvAdmin',
             '/fileApplicationUpload',
             '/lexisPolicyAdmin',
             'createApplication',
@@ -67,7 +66,6 @@ describe('Admin tool access smoke', () => {
         canPerform: (action: string) =>
           [
             '/lexisAgentAdmin',
-            '/rtmEmsLogAmvAdmin',
             '/fileApplicationUpload',
             '/lexisPolicyAdmin',
             'createApplication',
@@ -128,32 +126,19 @@ describe('Admin tool access smoke', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
-          grantedActions: [
-            '/lexisAgentAdmin',
-            '/lexisPolicyAdmin',
-            '/lexisFILAdmin',
-            '/rtmEmsLogAmvAdmin',
-          ],
+          grantedActions: ['/lexisAgentAdmin', '/lexisPolicyAdmin', '/lexisFILAdmin'],
         }),
         canPerform: (action: string) =>
-          [
-            '/lexisAgentAdmin',
-            '/lexisPolicyAdmin',
-            '/lexisFILAdmin',
-            '/rtmEmsLogAmvAdmin',
-          ].includes(action),
+          ['/lexisAgentAdmin', '/lexisPolicyAdmin', '/lexisFILAdmin'].includes(action),
       }),
     )
 
     renderPage()
 
-    const toolsTable = screen.getByRole('region', { name: 'Admin and upload tools table' })
     const feePolicyRow = screen.getByText('Fee policy administration').closest('tr')
     const filPolicyRow = screen.getByText('Fee in lieu percent administration').closest('tr')
     const scheduleRow = screen.getByText('Export schedule administration').closest('tr')
-    const averageMonthlyValuesRow = within(toolsTable)
-      .getByText('Average Monthly Values')
-      .closest('tr')
+    const averageMonthlyValuesRow = screen.getByText('Average Monthly Values').closest('tr')
 
     expect(feePolicyRow).not.toBeNull()
     expect(filPolicyRow).not.toBeNull()
@@ -210,36 +195,6 @@ describe('Admin tool access smoke', () => {
     )
     expect(screen.queryByText('IDIR identity lookup')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Manage in FAM' })).not.toBeInTheDocument()
-  })
-
-  it('does not grant the AMV tool through the legacy Agent permission', () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        capabilities: createTestCapabilities({
-          grantedActions: ['/lexisAgentAdmin'],
-        }),
-        canPerform: (action: string) => action === '/lexisAgentAdmin',
-      }),
-    )
-
-    renderPage()
-
-    const toolsTable = screen.getByRole('region', { name: 'Admin and upload tools table' })
-    const adminRow = screen.getByText('LEXIS administration').closest('tr')
-    const averageMonthlyValuesRow = within(toolsTable)
-      .getByText('Average Monthly Values')
-      .closest('tr')
-
-    expect(adminRow).not.toBeNull()
-    expect(averageMonthlyValuesRow).not.toBeNull()
-    expect(
-      within(adminRow as HTMLTableRowElement).getByRole('button', { name: 'Open' }),
-    ).toBeEnabled()
-    expect(
-      within(averageMonthlyValuesRow as HTMLTableRowElement).getByRole('button', {
-        name: 'Open',
-      }),
-    ).toBeDisabled()
   })
 
   it('searches IDIR identities without implying role-assignment data', async () => {

@@ -43,7 +43,6 @@ final class LexisApiAuthorizationRules {
   private static final String ACTION_PERMIT_DETAILS = "/permitDetails";
   private static final String ACTION_PERMIT_LEDGER_REPORT = "/permitLedgerReport";
   private static final String ACTION_PERMIT_REPORT = "/permitReport";
-  private static final String ACTION_RTM_EMS_LOG_AMV_ADMIN = "/rtmEmsLogAmvAdmin";
   private static final String ACTION_SAVE_EXEMPTION = "saveExemption";
   private static final String ACTION_APPROVE_EXEMPTION = "approveExemption";
   private static final String ACTION_SAVE_PERMIT = "savePermit";
@@ -441,11 +440,8 @@ final class LexisApiAuthorizationRules {
               ACTION_UPLOAD_FEDERAL_SUBMISSION,
               "/api/lexis/federal/submissions",
               "/api/lexis/federal/submissions/validation"),
-          action(HttpMethod.GET, ACTION_RTM_EMS_LOG_AMV_ADMIN, "/api/lexis/rtm/emslogamv"),
-          action(
-              HttpMethod.POST,
-              ACTION_RTM_EMS_LOG_AMV_ADMIN,
-              "/api/lexis/rtm/emslogamv/batch"),
+          action(HttpMethod.GET, ACTION_LEXIS_AGENT_ADMIN, "/api/lexis/rtm/emslogamv"),
+          action(HttpMethod.POST, ACTION_LEXIS_AGENT_ADMIN, "/api/lexis/rtm/emslogamv/batch"),
           action(
               HttpMethod.GET,
               ACTION_APPLICATION_DETAILS,
