@@ -408,6 +408,19 @@ const buildPermitDetailForm = (permitDetail: ProvincialPermitDetail): PermitDeta
   otherPortOfExport: detailValue(permitDetail.otherPortOfExport),
 })
 
+const permitMutationRequest = (
+  form: PermitDetailMutationRequest,
+  blanketOic: boolean,
+): PermitDetailMutationRequest =>
+  blanketOic
+    ? form
+    : {
+        ...form,
+        // Legacy only exposes and accepts these request limits for Blanket OIC permits.
+        oicPermitTotalPieces: '',
+        oicPermitTotalVolume: '',
+      }
+
 const hasPermitExemptionContext = (permitDetail: ProvincialPermitDetail): boolean =>
   permitDetail.blanketOic ||
   permitDetail.approvedExemptionVolume !== null ||
@@ -1657,7 +1670,7 @@ const ProvincialPermitDetailsPage = () => {
       setActionInfoMessage('')
       setIsSavingPermit(true)
       try {
-        const result = await updatePermitDetail(request)
+        const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
         if (!isLatestRequest()) {
           return false
         }
@@ -1887,7 +1900,7 @@ const ProvincialPermitDetailsPage = () => {
     setActionInfoMessage('')
     setIsSavingFeeOverride(true)
     try {
-      const result = await updatePermitDetail(request)
+      const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
       if (!isLatestRequest()) {
         return false
       }

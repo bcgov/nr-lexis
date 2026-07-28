@@ -201,8 +201,6 @@ const ProvincialOfferDetailsPage = () => {
       offerNumber: requiredFieldError(form?.offerNumber ?? '', 'Offer number') ?? undefined,
       applicationNumber:
         requiredFieldError(form?.applicationNumber ?? '', 'Application number') ?? undefined,
-      offeringClientNumber:
-        requiredFieldError(form?.offeringClientNumber ?? '', 'Offering client number') ?? undefined,
       companyName:
         offerTextStorageFieldError(
           form?.companyName ?? '',

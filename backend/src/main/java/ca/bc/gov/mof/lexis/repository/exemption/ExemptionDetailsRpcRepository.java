@@ -268,12 +268,15 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         FIND_PERMITS_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
-        rs ->
-            new ApplicationPermitRow(
-                coalesce(
-                    getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                    getLong(rs, "EXPORT_PERMIT_NUMBER")),
-                trim(getString(rs, "EXEMPTION_NUMBER"))));
+        rs -> {
+          // The deployed legacy cursor uses EXPORT_PERMIT_DETAIL_NUMBER. Keep the fallback lazy
+          // because reading a missing Oracle cursor column raises JDBC error 17006.
+          Long permitNumber =
+              Optional.ofNullable(getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"))
+                  .orElseGet(() -> getLong(rs, "EXPORT_PERMIT_NUMBER"));
+          return new ApplicationPermitRow(
+              coalesce(permitNumber, 0L), trim(getString(rs, "EXEMPTION_NUMBER")));
+        });
   }
 
   public boolean isExemptionTypeCodeValidRequired(String code) {

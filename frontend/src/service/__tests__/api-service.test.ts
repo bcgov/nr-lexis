@@ -1088,6 +1088,74 @@ describe('api-service cached GET support', () => {
     window.history.replaceState({}, '', previousPath)
   })
 
+  it('allows a slow DEV detail response to summarize a conflict before the deadline', async () => {
+    vi.useFakeTimers()
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedProblem = conflictEvent.detail.problem
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    try {
+      apiService.registerRecordVersion(
+        'application',
+        '999000001',
+        {
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+          data: { applicationNumber: '999000001', remarks: 'Original remarks' },
+        } as unknown as AxiosResponse<unknown>,
+        '/lexis/applications/999000001',
+      )
+      getMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            window.setTimeout(
+              () =>
+                resolve({
+                  ...buildResponse({
+                    applicationNumber: '999000001',
+                    remarks: 'Newer remarks',
+                  }),
+                  headers: { [RECORD_VERSION_HEADER]: 'version-2' },
+                }),
+              4_000,
+            )
+          }),
+      )
+
+      void registeredResponseRejectedInterceptor()({
+        config: {
+          method: 'put',
+          url: '/lexis/applications/999000001',
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        },
+        response: {
+          status: 409,
+          data: { code: 'STALE_RECORD', currentVersion: 'version-1.5' },
+        },
+      })
+
+      await vi.advanceTimersByTimeAsync(4_000)
+
+      expect(receivedProblem).toEqual(
+        expect.objectContaining({
+          currentVersion: 'version-2',
+          changedFields: expect.arrayContaining([
+            { field: 'remarks', currentValue: 'Newer remarks' },
+          ]),
+        }),
+      )
+    } finally {
+      window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+      window.history.replaceState({}, '', previousPath)
+      vi.useRealTimers()
+    }
+  })
+
   it('includes newer values from a supplemental edit-context snapshot', async () => {
     const previousPath = window.location.pathname
     window.history.replaceState({}, '', '/provincial/permit/777')
@@ -1223,7 +1291,7 @@ describe('api-service cached GET support', () => {
         },
       })
 
-      await vi.advanceTimersByTimeAsync(3_000)
+      await vi.advanceTimersByTimeAsync(10_000)
 
       expect(receivedProblem).toEqual(
         expect.objectContaining({

@@ -56,7 +56,7 @@ type HeaderAccessors = {
 
 const RESPONSE_CACHE_MAX_ENTRIES = 150
 const CONFLICT_CHANGED_FIELD_LIMIT = 5
-const CONFLICT_ENRICHMENT_TIMEOUT_MS = 3_000
+const CONFLICT_ENRICHMENT_TIMEOUT_MS = 10_000
 const CACHE_INVALIDATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 const CONFLICT_DIFF_IGNORED_FIELDS = new Set([
   'entryTimestamp',
@@ -562,15 +562,22 @@ class APIService {
       const latestSources: unknown[] = []
       const changedFields: unknown[] = []
       let latestVersion: unknown
-      for (const source of snapshot.sources) {
-        const latestResponse = await this.client.get<unknown>(source.detailUrl, {
-          ...source.detailConfig,
-          headers: {
-            ...this.toHeaderRecord(source.detailConfig?.headers),
-            'Cache-Control': 'no-cache',
-          },
-          signal,
-        })
+      const sourceResults = await Promise.allSettled(
+        snapshot.sources.map(async (source) => ({
+          source,
+          latestResponse: await this.client.get<unknown>(source.detailUrl, {
+            ...source.detailConfig,
+            headers: {
+              ...this.toHeaderRecord(source.detailConfig?.headers),
+              'Cache-Control': 'no-cache',
+            },
+            signal,
+          }),
+        })),
+      )
+      for (const sourceResult of sourceResults) {
+        if (sourceResult.status === 'rejected') continue
+        const { source, latestResponse } = sourceResult.value
         latestSources.push(latestResponse.data)
         if (this.snapshotSourceKey(source) === snapshot.primarySourceKey) {
           latestVersion = this.getHeader(latestResponse.headers, RECORD_VERSION_HEADER)

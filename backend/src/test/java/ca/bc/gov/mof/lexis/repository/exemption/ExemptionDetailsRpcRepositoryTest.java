@@ -29,7 +29,7 @@ class ExemptionDetailsRpcRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void blanketOicTotalsShouldUseOneAggregateQuery() throws SQLException {
+  void blanketOicTotalsShouldMatchLegacyBySummingPermitVolume() throws SQLException {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     ResultSet resultSet = mock(ResultSet.class);
     when(resultSet.getDouble("REQUESTED_VOLUME")).thenReturn(1250.5d);
@@ -88,6 +88,38 @@ class ExemptionDetailsRpcRepositoryTest {
     assertThatThrownBy(() -> repository.findPermitsByApplicationNumberRequired(1000456L))
         .isInstanceOf(DataAccessResourceFailureException.class)
         .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void applicationPermitLookupShouldUseDeployedLegacyPermitNumberColumn() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn(7000123L);
+    when(cursor.getString("EXEMPTION_NUMBER")).thenReturn("26-8757");
+    when(cursor.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_PERMIT_DET_BY_APP(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(cursor);
+    ExemptionDetailsRpcRepository repository =
+        new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPermitsByApplicationNumberRequired(1000456L))
+        .singleElement()
+        .satisfies(
+            permit -> {
+              assertThat(permit.permitNumber()).isEqualTo(7000123L);
+              assertThat(permit.exemptionNumber()).isEqualTo("26-8757");
+            });
+    verify(cursor, never()).getLong("EXPORT_PERMIT_NUMBER");
   }
 
   @Test

@@ -2229,6 +2229,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
   })
 
+  it('does not submit hidden Blanket OIC request limits for a normal permit', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      oicRequestPieces: 250,
+      oicRequestVolume: 125.75,
+      blanketOic: false,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'normal permit update')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitRemarks: 'normal permit update',
+          oicPermitTotalPieces: '',
+          oicPermitTotalVolume: '',
+        }),
+      )
+    })
+  })
+
   it('guards unload only after a permit field differs from its edit baseline', async () => {
     renderPermitDetails()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
