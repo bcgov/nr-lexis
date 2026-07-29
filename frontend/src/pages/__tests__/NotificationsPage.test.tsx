@@ -87,6 +87,19 @@ describe('Notifications page', () => {
     render(<NotificationsPage />)
 
     expect(await screen.findByText('Winter service update')).toBeVisible()
+    expect(screen.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible()
+    expect(
+      screen.getByText(
+        'Updates and bulletins from your administrators. Each notice shows until its posted end date.',
+      ),
+    ).toBeVisible()
+    expect(screen.getByText('1 active notification')).toBeVisible()
+    const notificationFeed = screen.getByRole('list', { name: 'Active notifications' })
+    const notificationRow = within(notificationFeed).getByRole('listitem')
+    expect(within(notificationRow).getByText('Warning')).toBeVisible()
+    expect(within(notificationRow).getByText('Services are available.')).toBeVisible()
+    expect(within(notificationRow).getByText(/Posted Jan 1, 2026/)).toBeVisible()
+    expect(within(notificationRow).getByText(/Shows until Jan 8, 2026/)).toBeVisible()
     expect(mockedFetchNotifications).toHaveBeenCalledOnce()
     expect(mockedFetchAdminNotifications).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'New notification' })).not.toBeInTheDocument()
