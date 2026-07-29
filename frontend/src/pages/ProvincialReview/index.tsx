@@ -212,8 +212,8 @@ const buildSearchParams = (
   sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
-): URLSearchParams =>
-  createSearchParams([
+): URLSearchParams => {
+  const params = createSearchParams([
     ['applicationNumber', filters.applicationNumber],
     ['productTypeCode', filters.productTypeCode],
     ['region', filters.region],
@@ -227,6 +227,13 @@ const buildSearchParams = (
     ['pageSize', pageSize],
   ])
 
+  if (filters.region.length === 0) {
+    params.set('region', '')
+  }
+
+  return params
+}
+
 const ProvincialReviewPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -236,7 +243,7 @@ const ProvincialReviewPage = () => {
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
@@ -287,6 +294,9 @@ const ProvincialReviewPage = () => {
       ),
     }
   }, [searchParams])
+  const filtersReady =
+    !optionsLoading &&
+    (optionsUnavailable || searchParams.has('region') || regionOptions.length === 0)
   const appliedFilters = urlState.filters
   const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const sortField = urlState.sortField
@@ -454,6 +464,10 @@ const ProvincialReviewPage = () => {
   )
 
   useEffect(() => {
+    if (!filtersReady) {
+      return
+    }
+
     void runSearch({
       filters: requestFilters,
       page: urlState.page - 1,
@@ -462,6 +476,7 @@ const ProvincialReviewPage = () => {
       sortDirection: urlState.sortDirection,
     })
   }, [
+    filtersReady,
     requestFilters,
     runSearch,
     urlState.page,
@@ -488,6 +503,31 @@ const ProvincialReviewPage = () => {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (
+      optionsLoading ||
+      optionsUnavailable ||
+      searchParams.has('region') ||
+      regionOptions.length === 0
+    ) {
+      return
+    }
+
+    setSearchParams(
+      buildSearchParams(
+        {
+          ...urlState.filters,
+          region: regionOptions.map((region) => region.id),
+        },
+        urlState.sortField,
+        urlState.sortDirection,
+        urlState.page,
+        urlState.pageSize,
+      ),
+      { replace: true },
+    )
+  }, [optionsLoading, optionsUnavailable, regionOptions, searchParams, setSearchParams, urlState])
 
   const onSearch = () => {
     if (loading || hasDateValidationError) {
@@ -519,10 +559,14 @@ const ProvincialReviewPage = () => {
 
   const onClearFilters = () => {
     clearSelection()
-    setFilters(INITIAL_FILTERS)
+    const defaultFilters = {
+      ...INITIAL_FILTERS,
+      region: regionOptions.map((region) => region.id),
+    }
+    setFilters(defaultFilters)
     setSearchParams(
       buildSearchParams(
-        INITIAL_FILTERS,
+        defaultFilters,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,
