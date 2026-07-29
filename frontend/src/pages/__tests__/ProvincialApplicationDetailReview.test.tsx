@@ -518,11 +518,13 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationDetailTab('Owner')
-    const applicantTypeField = screen
-      .getAllByText('Applicant type')
-      .find((element) => element.tagName === 'DT')
-      ?.closest('.detail-field-item')
+    const applicantTypeField = (await screen.findByText('Ministerial')).closest(
+      '.detail-field-item',
+    )
     expect(applicantTypeField).toBeTruthy()
+    expect(
+      within(applicantTypeField as HTMLElement).getByText('Applicant type'),
+    ).toBeInTheDocument()
     expect(within(applicantTypeField as HTMLElement).getByText('Ministerial')).toBeInTheDocument()
   })
 
