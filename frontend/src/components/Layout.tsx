@@ -10,6 +10,7 @@ import {
   Finance,
   Logout,
   Moon,
+  Notification,
   Report,
   Search,
   Settings,
@@ -33,6 +34,7 @@ import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
+import { fetchNotifications } from '@/service/notification-service'
 
 export type LayoutProps = {
   children: ReactNode
@@ -50,6 +52,7 @@ type NavigationLink = {
 type NavigationSection = {
   label: string
   links: NavigationLink[]
+  standalone?: boolean
 }
 
 const UI_PREFERENCE_KEYS = {
@@ -88,6 +91,17 @@ const isMobileNavigationViewport = (): boolean => {
 }
 
 const NAVIGATION_SECTIONS: NavigationSection[] = [
+  {
+    label: 'Notifications',
+    standalone: true,
+    links: [
+      {
+        to: '/notifications',
+        label: 'Notifications',
+        icon: Notification,
+      },
+    ],
+  },
   {
     label: 'Provincial',
     links: [
@@ -383,12 +397,14 @@ function Layout({ children }: LayoutProps) {
   const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(readSideNavCollapsedPreference)
   const [isMobileViewport, setIsMobileViewport] = useState(isMobileNavigationViewport)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [hasActiveNotifications, setHasActiveNotifications] = useState(false)
   const previousPathRef = useRef(location.pathname)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(
     readCollapsedSectionsPreference,
   )
   const isDarkTheme = theme === 'g100'
   const isDesktopSideNavCollapsed = isSideNavCollapsed && !isMobileViewport
+  const notificationAudienceKey = `${capabilities.principal ?? ''}:${capabilities.roles?.join('|') ?? ''}`
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
     [capabilities.principal],
@@ -567,12 +583,79 @@ function Layout({ children }: LayoutProps) {
   }, [closeProfile, isProfileOpen])
 
   useEffect(() => {
+    let isCurrent = true
+
+    const loadNotificationIndicator = async (): Promise<void> => {
+      if (!capabilities.authenticated || !capabilities.principal) {
+        if (isCurrent) {
+          setHasActiveNotifications(false)
+        }
+        return
+      }
+
+      try {
+        const notifications = await fetchNotifications()
+        if (isCurrent) {
+          setHasActiveNotifications(notifications.length > 0)
+        }
+      } catch {
+        if (isCurrent) {
+          setHasActiveNotifications(false)
+        }
+      }
+    }
+
+    void loadNotificationIndicator()
+    return () => {
+      isCurrent = false
+    }
+  }, [capabilities.authenticated, capabilities.principal, notificationAudienceKey])
+
+  useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsed))
   }, [isSideNavCollapsed])
 
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.collapsedSections, JSON.stringify(collapsedSections))
   }, [collapsedSections])
+
+  const renderNavigationLink = (link: NavigationLink, nested = true) => {
+    const LinkIcon = link.icon
+    const showNotificationIndicator = link.to === '/notifications' && hasActiveNotifications
+    const accessibleLabel = showNotificationIndicator
+      ? 'Notifications, active updates available'
+      : isDesktopSideNavCollapsed
+        ? link.label
+        : undefined
+    const nestedClassName = nested ? ' cds--side-nav__link--nested' : ''
+
+    return (
+      <li key={link.to}>
+        <NavLink
+          end
+          to={link.to}
+          className={({ isActive }) =>
+            `cds--side-nav__link${nestedClassName} csp-side-nav__link${
+              isActive ? ' cds--side-nav__link--active' : ''
+            }`
+          }
+          aria-current={location.pathname === link.to ? 'page' : undefined}
+          aria-label={accessibleLabel}
+          title={isDesktopSideNavCollapsed ? link.label : undefined}
+          data-label={link.label}
+          onClick={() => closeMobileNavigation()}
+        >
+          <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+            <LinkIcon size={20} />
+            {showNotificationIndicator && (
+              <span className="csp-side-nav__notification-indicator" aria-hidden="true" />
+            )}
+          </span>
+          <span className="cds--side-nav__link-text csp-side-nav__link-text">{link.label}</span>
+        </NavLink>
+      </li>
+    )
+  }
 
   return (
     <>
@@ -723,6 +806,19 @@ function Layout({ children }: LayoutProps) {
 
           <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => {
+              if (section.standalone) {
+                return (
+                  <li
+                    key={section.label}
+                    className="csp-side-nav__section csp-side-nav__section--standalone"
+                  >
+                    <ul className="csp-side-nav__section-list">
+                      {section.links.map((link) => renderNavigationLink(link, false))}
+                    </ul>
+                  </li>
+                )
+              }
+
               const sectionListId = getSectionListId(section.label)
               const isSectionCollapsed =
                 section.label !== activeSectionLabel &&
@@ -753,37 +849,7 @@ function Layout({ children }: LayoutProps) {
                   )}
                   {!isSectionCollapsed && (
                     <ul id={sectionListId} className="csp-side-nav__section-list">
-                      {section.links.map((link) => {
-                        const LinkIcon = link.icon
-                        return (
-                          <li key={link.to}>
-                            <NavLink
-                              end
-                              to={link.to}
-                              className={({ isActive }) =>
-                                isActive
-                                  ? 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link cds--side-nav__link--active'
-                                  : 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link'
-                              }
-                              aria-current={location.pathname === link.to ? 'page' : undefined}
-                              aria-label={isDesktopSideNavCollapsed ? link.label : undefined}
-                              title={isDesktopSideNavCollapsed ? link.label : undefined}
-                              data-label={link.label}
-                              onClick={() => closeMobileNavigation()}
-                            >
-                              <span
-                                className="cds--side-nav__icon csp-side-nav__icon"
-                                aria-hidden="true"
-                              >
-                                <LinkIcon size={20} />
-                              </span>
-                              <span className="cds--side-nav__link-text csp-side-nav__link-text">
-                                {link.label}
-                              </span>
-                            </NavLink>
-                          </li>
-                        )
-                      })}
+                      {section.links.map((link) => renderNavigationLink(link))}
                     </ul>
                   )}
                 </li>

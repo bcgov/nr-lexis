@@ -6,17 +6,37 @@ import Layout from '../Layout'
 import { useAuth } from '@/context/auth/useAuth'
 import ThemeProvider from '@/context/theme/ThemeProvider'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
+import type { LexisNotification } from '@/interfaces/LexisNotification'
+import { fetchNotifications } from '@/service/notification-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+vi.mock('@/service/notification-service', () => ({
+  fetchNotifications: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedFetchNotifications = vi.mocked(fetchNotifications)
 const THEME_PREFERENCE_KEY = 'lexis.ui.theme'
 const SIDE_NAV_PREFERENCE_KEY = 'lexis.ui.sideNavCollapsed'
 const COLLAPSED_SECTIONS_PREFERENCE_KEY = 'lexis.ui.collapsedSections'
 const NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
+const activeNotification: LexisNotification = {
+  id: 1,
+  title: 'System update',
+  contentHtml: '<p>System update</p>',
+  notificationLevel: 'INFORMATION',
+  displayStartDate: '2026-07-21',
+  displayEndDate: '2026-07-28',
+  createUser: 'IDIR\\ADMIN',
+  createTimestamp: '2026-07-21T00:00:00',
+  updateUserId: 'IDIR\\ADMIN',
+  updateTimestamp: '2026-07-21T00:00:00',
+  audienceRoles: [],
+}
 
 const mockMobileViewport = (): void => {
   vi.spyOn(window, 'matchMedia').mockImplementation(
@@ -62,6 +82,7 @@ describe('Layout shell', () => {
     document.getElementById(NOTIFICATION_REGION_ID)?.remove()
 
     mockedUseAuth.mockReturnValue(createTestAuthContext())
+    mockedFetchNotifications.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -85,6 +106,36 @@ describe('Layout shell', () => {
     expect(window.localStorage.getItem(THEME_PREFERENCE_KEY)).toBe('white')
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('false')
     expect(window.localStorage.getItem(COLLAPSED_SECTIONS_PREFERENCE_KEY)).toBe('{}')
+  })
+
+  it('shows an active-updates indicator only when the visible notifications endpoint returns data', async () => {
+    mockedFetchNotifications.mockResolvedValue([activeNotification])
+
+    renderLayout('/provincial/application')
+
+    const notificationsLink = await screen.findByRole('link', {
+      name: 'Notifications, active updates available',
+    })
+
+    expect(mockedFetchNotifications).toHaveBeenCalledOnce()
+    expect(notificationsLink).toHaveAttribute('href', '/notifications')
+    expect(
+      notificationsLink.querySelector('.csp-side-nav__notification-indicator'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not show an active-updates indicator when no visible notifications exist', async () => {
+    renderLayout('/provincial/application')
+
+    await waitFor(() => expect(mockedFetchNotifications).toHaveBeenCalledOnce())
+
+    const notificationsLink = screen.getByRole('link', { name: 'Notifications' })
+    expect(screen.getAllByText('Notifications')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Notifications' })).not.toBeInTheDocument()
+    expect(notificationsLink).not.toHaveClass('cds--side-nav__link--nested')
+    expect(
+      notificationsLink.querySelector('.csp-side-nav__notification-indicator'),
+    ).not.toBeInTheDocument()
   })
 
   it('restores persisted theme, side-nav, and collapsed sections', async () => {
@@ -594,7 +645,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: /^Review$/i })).toHaveFocus()
+      expect(screen.getByRole('link', { name: /^Notifications$/i })).toHaveFocus()
     })
 
     await userEvent.keyboard('{Escape}')

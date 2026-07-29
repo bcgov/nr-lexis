@@ -484,6 +484,10 @@ body {
   list-style: none;
 }
 
+.csp-side-nav__section--standalone {
+  margin-top: 8px;
+}
+
 .csp-side-nav__category {
   display: block;
   padding: 16px 16px 4px;
@@ -585,6 +589,7 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   height: 20px;
   justify-content: center;
   margin-right: 16px;
+  position: relative;
   width: 20px;
 }
 
@@ -593,6 +598,17 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   fill: currentcolor;
   height: 20px;
   width: 20px;
+}
+
+.csp-side-nav__notification-indicator {
+  position: absolute;
+  inset-block-start: -0.125rem;
+  inset-inline-end: -0.125rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 2px solid var(--csp-layer-01);
+  border-radius: 50%;
+  background-color: var(--csp-interactive);
 }
 
 .csp-side-nav__link-text {
@@ -4522,12 +4538,6 @@ legend.cds--label {
   background: #f3f3f5;
 }
 
-.cds--data-table tbody tr:hover td,
-.cds--data-table tbody tr:hover th {
-  border-block-start-color: transparent;
-  border-block-end-color: transparent;
-}
-
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table thead th {
   background: var(--csp-table-header-bg);
 }
@@ -4542,6 +4552,15 @@ legend.cds--label {
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) td,
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) th {
   background: var(--csp-table-row-alt-bg);
+}
+
+.cds--data-table tbody tr:hover td,
+.cds--data-table tbody tr:hover th,
+.cds--data-table tbody tr:focus-within td,
+.cds--data-table tbody tr:focus-within th {
+  background: var(--csp-table-row-hover-bg);
+  border-block-start-color: transparent;
+  border-block-end-color: transparent;
 }
 
 .rtm-amv-table-wrap .cds--data-table td.rtm-amv-value-cell.has-warning {

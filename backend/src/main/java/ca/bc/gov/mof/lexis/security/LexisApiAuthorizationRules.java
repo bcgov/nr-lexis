@@ -190,6 +190,9 @@ final class LexisApiAuthorizationRules {
           adminAuthority("/actuator/**"),
           knownRole("/error"),
           knownRole("/api/lexis/session/**"),
+          knownRole("/api/lexis/notifications"),
+          adminAuthority(
+              "/api/lexis/admin/notifications", "/api/lexis/admin/notifications/**"),
           knownRole(
               "/api/lexis/showWelcome",
               "/api/lexis/showWelcome.do",

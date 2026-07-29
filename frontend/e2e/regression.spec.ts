@@ -647,13 +647,6 @@ const antivirusTestPayloadHex =
 
 const antivirusTestPayload = (): Buffer => Buffer.from(antivirusTestPayloadHex, 'hex')
 
-const antivirusTestPdfPayload = (): Buffer =>
-  Buffer.concat([
-    Buffer.from('%PDF-1.7\n', 'ascii'),
-    antivirusTestPayload(),
-    Buffer.from('\n%%EOF\n', 'ascii'),
-  ])
-
 const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
   {
     name: 'antivirus-test-application-import.xml',
@@ -667,10 +660,10 @@ const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
   },
 ]
 
-const infectedApplicationDocumentPdf = (): RegressionUploadFile => ({
-  name: 'antivirus-test-application-upload.pdf',
-  mimeType: 'application/pdf',
-  buffer: antivirusTestPdfPayload(),
+const infectedApplicationDocument = (): RegressionUploadFile => ({
+  name: 'antivirus-test-application-upload.txt',
+  mimeType: 'text/plain',
+  buffer: antivirusTestPayload(),
 })
 
 const adminNavigationSections: Array<{
@@ -698,7 +691,7 @@ const adminNavigationSections: Array<{
   {
     section: 'Reports',
     links: [
-      'Applications Report',
+      'Application Report',
       'Advertising List',
       'Offers Report',
       'TEAC Package',
@@ -727,7 +720,7 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/admin/policies/fee', /fee policy administration/i],
   ['/admin/policies/fil', /fee in lieu percent policy administration/i],
   ['/admin/schedules', /export schedule administration/i],
-  ['/provincial/review', /provincial review/i],
+  ['/provincial/review', /provincial application review/i],
   ['/provincial/application/create', /create provincial application/i],
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
@@ -756,7 +749,7 @@ const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
 ]
 
 const regionFilterPages: Array<[path: string, heading: RegExp]> = [
-  ['/provincial/review?region=1903,1908', /provincial review/i],
+  ['/provincial/review?region=1903,1908', /provincial application review/i],
   ['/provincial/application?region=1903,1908', /provincial application search/i],
   ['/provincial/exemption?region=1903,1908', /provincial exemption search/i],
   ['/provincial/offers?region=1903,1908', /provincial offers search/i],
@@ -809,7 +802,7 @@ const searchDefaultPageSizePages: Array<{
   {
     source: 'application review search',
     pagePath: `/provincial/review?applicationNumber=${missingApplicationNumber}`,
-    heading: /provincial review/i,
+    heading: /provincial application review/i,
     searchPath: '/api/lexis/application-reviews/search',
   },
   {
@@ -1422,7 +1415,7 @@ const expectApplicationDocumentVirusScanRejection = (
 ): void => {
   expect(response.status, 'application document upload should be rejected by ClamAV').toBe(422)
   expect(response.payload.uploadType).toBe('application')
-  expect(response.payload.fileName).toBe('antivirus-test-application-upload.pdf')
+  expect(response.payload.fileName).toBe('antivirus-test-application-upload.txt')
   expect(response.payload.status).toBe('rejected')
   expect(response.payload.message ?? '').toContain(virusScanRejectionMessage)
 }
@@ -1598,23 +1591,25 @@ test.describe('TEST IDIR admin regression', () => {
     expect(apiServerErrors).toEqual([])
   })
 
-  test('lands authenticated IDIR admins on provincial review from the app root', async () => {
+  test('lands authenticated IDIR admins on provincial application review from the app root', async () => {
     const page = await authenticatedIdirPage()
 
     await page.goto(new URL('/', E2E_BASE_URL).toString(), {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { name: /provincial review/i })).toBeVisible({
-      timeout: 30_000,
-    })
+    await expect(page.getByRole('heading', { name: /provincial application review/i })).toBeVisible(
+      {
+        timeout: 30_000,
+      },
+    )
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/review')
   })
 
   test('supports collapsible sidebar sections and collapsed icon navigation', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     const reportsSection = page.locator(sideNavSection('Reports'))
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
@@ -1671,7 +1666,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('keeps upload navigation scoped to provincial application submissions', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     const provincialSection = page.locator(sideNavSection('Provincial'))
     const federalSection = page.locator(sideNavSection('Federal'))
@@ -1696,7 +1691,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
     await expect(adminSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
 
@@ -1714,7 +1709,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('opens reports from direct sidebar report links', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     for (const [linkName, path, heading] of [
       ['Offers Report', '/reports/offerReport', /offer report/i],
@@ -1788,7 +1783,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('keeps review queue bulk actions limited to approve', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     const approveSelectedButton = page.getByRole('button', {
       name: 'Approve Selected Applications',
@@ -2209,10 +2204,8 @@ test.describe('TEST IDIR admin regression', () => {
     await removeSpeciesButton.click()
     await expect(removeSpeciesButton).toHaveCount(0)
 
-    await expect(
-      packagesPanel.getByRole('heading', { name: 'Package Details', exact: true }),
-    ).toBeVisible()
-    const createPackageButton = packagesPanel.getByRole('button', {
+    await expect(page.getByRole('heading', { name: 'Package Details', exact: true })).toBeVisible()
+    const createPackageButton = page.getByRole('button', {
       name: 'Create New Package',
       exact: true,
     })
@@ -2600,7 +2593,7 @@ test.describe('TEST IDIR admin regression', () => {
     const headers = response.headers()
 
     expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/pdf')
-    expect(headers['content-disposition'] ?? '').toContain('biweeklyListing.pdf')
+    expect(headers['content-disposition'] ?? '').toContain('advertising-list.pdf')
     expect(body.length, 'advertising list PDF should not be empty').toBeGreaterThan(100)
     expect(body.toString('utf8', 0, 4)).toBe('%PDF')
   })
@@ -2805,6 +2798,104 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
+  test('creates and deletes an admin notification', async () => {
+    test.skip(
+      !isSharedTestRegressionBaseUrl(E2E_BASE_URL),
+      'Notification mutation regression runs only against shared TEST.',
+    )
+
+    const page = await authenticatedIdirPage()
+    const cleanup = new RegressionCleanupStack()
+    const notificationApiPath = '/api/lexis/admin/notifications'
+    const notificationTitle = `LEXIS E2E notification ${Date.now().toString(36).toUpperCase()}`
+    const notificationMessage = 'This is a TEST regression notification.'
+    const apiServerErrors = collectApiServerErrors(page)
+    const notificationCleanup = cleanup.defer('delete admin notification', async () => {
+      const notifications = asRecordArray(
+        await readJsonResponse<unknown>(await getWithAuth(page, notificationApiPath)),
+      )
+      const matchingNotifications = notifications.filter(
+        (notification) => String(notification.title ?? '') === notificationTitle,
+      )
+
+      for (const notification of matchingNotifications) {
+        const notificationId = Number(notification.id)
+        expect(notificationId).toBeGreaterThan(0)
+        const response = await deleteWithCsrf(page, `${notificationApiPath}/${notificationId}`)
+        expect([204, 404]).toContain(response.status())
+      }
+    })
+    let primaryError: unknown
+
+    try {
+      await expectAccessiblePage(page, '/notifications', /^Notifications$/)
+      await page.getByRole('button', { name: 'New notification' }).click()
+
+      const editor = page.getByRole('dialog', { name: 'New notification' })
+      await expect(editor).toBeVisible()
+      await editor.getByLabel('Title').fill(notificationTitle)
+      await editor.getByLabel('Notification content editor').fill(notificationMessage)
+      await editor.getByRole('radio', { name: /^Warning/ }).check()
+      await expect(
+        editor.getByRole('checkbox', { name: 'All authenticated LEXIS roles' }),
+      ).toBeChecked()
+
+      const createResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname === notificationApiPath,
+      )
+      await editor.getByRole('button', { name: 'Publish' }).click()
+      const createResponse = await createResponsePromise
+      expect(createResponse.status()).toBe(201)
+      const createdNotification = (await createResponse.json()) as Record<string, unknown>
+      const createdNotificationId = Number(createdNotification.id)
+      expect(createdNotificationId).toBeGreaterThan(0)
+
+      await expect(page.getByText('Notification published', { exact: true })).toBeVisible()
+      const notification = page
+        .getByRole('article')
+        .filter({ has: page.getByRole('heading', { name: notificationTitle, exact: true }) })
+      await expect(notification).toBeVisible()
+      await expect(notification.getByText(notificationMessage, { exact: true })).toBeVisible()
+      await expect(notification.getByText('Warning', { exact: true })).toBeVisible()
+      await expect(notification.getByText('Active', { exact: true })).toBeVisible()
+
+      const deleteResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'DELETE' &&
+          new URL(response.url()).pathname === `${notificationApiPath}/${createdNotificationId}`,
+      )
+      await notification.getByRole('button', { name: 'Delete' }).click()
+      const confirmation = page.getByRole('dialog', { name: 'Delete this notification?' })
+      await expect(confirmation).toContainText(notificationTitle)
+      await confirmation.getByRole('button', { name: 'Delete' }).click()
+      const deleteResponse = await deleteResponsePromise
+      expect(deleteResponse.status()).toBe(204)
+      notificationCleanup.complete()
+
+      await expect(page.getByText('Notification deleted', { exact: true })).toBeVisible()
+      await expect(notification).toHaveCount(0)
+      expect(apiServerErrors).toEqual([])
+    } catch (error) {
+      primaryError = error
+    }
+
+    const cleanupFailures = await cleanup.run()
+    const failures = [...cleanupFailures]
+    if (primaryError !== undefined) {
+      failures.unshift(
+        primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
+      )
+    }
+    if (failures.length === 1) {
+      throw failures[0]
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Notification regression and cleanup failed.')
+    }
+  })
+
   test('creates, edits, terminalizes, and cleans up provincial records', async () => {
     test.setTimeout(300_000)
     test.skip(
@@ -2860,7 +2951,7 @@ test.describe('TEST IDIR admin regression', () => {
           await postRegressionApplicationDocumentFile(
             page,
             lifecycleApplicationNumber,
-            infectedApplicationDocumentPdf(),
+            infectedApplicationDocument(),
           ),
         )
       })

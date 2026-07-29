@@ -59,6 +59,8 @@ const CONFLICT_CHANGED_FIELD_LIMIT = 5
 const CONFLICT_ENRICHMENT_TIMEOUT_MS = 10_000
 const CACHE_INVALIDATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 const CONFLICT_DIFF_IGNORED_FIELDS = new Set([
+  'createTimestamp',
+  'createUser',
   'entryTimestamp',
   'entryUserId',
   'entryUserid',
