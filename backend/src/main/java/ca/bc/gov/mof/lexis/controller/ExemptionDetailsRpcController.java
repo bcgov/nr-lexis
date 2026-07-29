@@ -1023,7 +1023,16 @@ public class ExemptionDetailsRpcController {
                         row.requestedVolume(),
                         row.scaleVolume(),
                         row.locked(),
-                        row.jurisdiction()))
+                        row.jurisdiction(),
+                        row.ownerClientNumber(),
+                        row.agentClientNumber(),
+                        row.ownerClientLocationCode(),
+                        row.agentClientLocationCode(),
+                        row.applicantTypeCode(),
+                        row.ownerContactName(),
+                        row.agentContactName(),
+                        row.ownerCompanyName(),
+                        row.agentCompanyName()))
             .toList();
 
     return new ExemptionApplicationsResponseDto(
@@ -1503,7 +1512,16 @@ public class ExemptionDetailsRpcController {
       String requestedVolume,
       String scaleVolume,
       boolean locked,
-      String jurisdiction) {}
+      String jurisdiction,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String ownerClientLocationCode,
+      String agentClientLocationCode,
+      String applicantTypeCode,
+      String ownerContactName,
+      String agentContactName,
+      String ownerCompanyName,
+      String agentCompanyName) {}
 
   public record PermitItemDto(
       long permitNumber,

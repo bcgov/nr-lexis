@@ -23,6 +23,11 @@ vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialExemptionDetail: vi.fn(),
 }))
 
+vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientData: vi.fn().mockResolvedValue(null),
+  fetchApplicationClientLocations: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock('@/service/provincial-exemption-documents-service', () => ({
   fetchExemptionDocuments: vi.fn().mockResolvedValue({ rows: [], source: 'api' }),
   openExemptionDocument: vi.fn(),
@@ -135,7 +140,7 @@ describe('Ministerial permit creation from an exemption', () => {
     })
   })
 
-  it.each(['LEXIS_APPLICATION_APPROVER', 'LEXIS_ADMIN'])(
+  it.each(['LEXIS_APPLICATION_APPROVER', 'LEXIS_ADMIN', 'LEXIS_PROVINCIAL_SUBMITTER_00012345'])(
     'shows the action for %s',
     async (role) => {
       mockRole([role])
@@ -145,6 +150,65 @@ describe('Ministerial permit creation from an exemption', () => {
       expect(screen.getByRole('button', { name: 'Apply for new permit' })).toBeInTheDocument()
     },
   )
+
+  it('matches legacy permit totals and marks active permits as pending', async () => {
+    vi.mocked(fetchExemptionApplications).mockResolvedValue({
+      applications: [
+        {
+          applicationNumber: '1000456',
+          requestedVolume: '307.2',
+          scaleVolume: '',
+          locked: false,
+          jurisdiction: 'P',
+          ownerClientNumber: '',
+          agentClientNumber: '',
+          ownerClientLocationCode: '',
+          agentClientLocationCode: '',
+          applicantTypeCode: '',
+          ownerContactName: '',
+          agentContactName: '',
+          ownerCompanyName: '',
+          agentCompanyName: '',
+        },
+      ],
+      containsUnmanu: false,
+      ownerNumber: '00012345',
+    })
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([
+      {
+        permitNumber: '9020934',
+        permitVolume: '0.0',
+        permitStatus: 'Active',
+        permitIssueDate: '',
+        canViewPermit: true,
+      },
+      {
+        permitNumber: '9020933',
+        permitVolume: '307.2',
+        permitStatus: 'Complete',
+        permitIssueDate: '2026-03-19',
+        canViewPermit: true,
+      },
+    ])
+    renderPage({
+      ...activeMinisterialExemption,
+      approvedVolume: 307.2,
+      usedVolume: 307.2,
+      remainingVolume: 0,
+    })
+
+    await openPermitsTab()
+
+    const totals = screen.getByLabelText('Exemption permit volume totals')
+    expect(within(totals).getByText('Requested volume (m³)')).toBeInTheDocument()
+    expect(within(totals).getByText('Approved volume (m³)')).toBeInTheDocument()
+    expect(within(totals).getByText('Sum of application scales (m³)')).toBeInTheDocument()
+    expect(within(totals).getByText('Balance remaining (m³)')).toBeInTheDocument()
+    expect(within(totals).getAllByText('307.2')).toHaveLength(3)
+    expect(within(totals).getByText('0.0')).toBeInTheDocument()
+    expect(screen.getByText('9020934 (Pending)')).toBeInTheDocument()
+    expect(screen.getByText('9020933')).toBeInTheDocument()
+  })
 
   it('confirms the shell behavior and navigates to a newly created permit', async () => {
     vi.mocked(createPermitFromExemption).mockResolvedValue({
@@ -299,12 +363,6 @@ describe('Ministerial permit creation from an exemption', () => {
   })
 
   it.each([
-    {
-      caseName: 'a Provincial Submitter',
-      roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345'],
-      detail: activeMinisterialExemption,
-      locked: false,
-    },
     {
       caseName: 'a Blanket OIC exemption',
       roles: ['LEXIS_APPLICATION_APPROVER'],

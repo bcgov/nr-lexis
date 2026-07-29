@@ -94,7 +94,8 @@ class LexisAuthorizationMatrixParityTest {
   void provincialSubmitterShouldCreateApplicationsOffersAndLegacyPermitReports() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("createApplication", "createOffer", "savePermit", "/permitReport")
+        .contains(
+            "createApplication", "createOffer", "createPermit", "savePermit", "/permitReport")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -107,7 +108,6 @@ class LexisAuthorizationMatrixParityTest {
             "/applicationRemarks",
             "/createExemption",
             "approveExemption",
-            "createPermit",
             "saveExemption",
             "uploadFederalSubmission")
         .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS)
@@ -120,7 +120,8 @@ class LexisAuthorizationMatrixParityTest {
             authorizationService.resolveGrantedActions(
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("createApplication", "createOffer", "savePermit", "/permitReport")
+        .contains(
+            "createApplication", "createOffer", "createPermit", "savePermit", "/permitReport")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -129,7 +130,6 @@ class LexisAuthorizationMatrixParityTest {
             "/filePermitUpload")
         .doesNotContain(
             "/changeApplicantType",
-            "createPermit",
             "saveExemption",
             "uploadFederalSubmission")
         .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS)
@@ -307,8 +307,9 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void createPermitShouldBeAvailableToAdminsAndApplicationApproversOnly() {
+  void createPermitShouldBeAvailableToLegacyPermitCreators() {
     assertThat(authorizationService.resolveRolesForAction("createPermit"))
-        .containsExactlyInAnyOrder("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
+        .containsExactlyInAnyOrder(
+            "LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER", "LEXIS_PROVINCIAL_SUBMITTER");
   }
 }

@@ -1263,7 +1263,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void createPermitFromExemptionShouldAllowOnlyAdminAndApplicationApprover() throws Exception {
+  void createPermitFromExemptionShouldAllowLegacyPermitCreators() throws Exception {
     String path = "/api/lexis/rpc/permit-details/create-from-exemption";
 
     mockMvc
@@ -1272,9 +1272,7 @@ class LexisRouteAuthorizationIntegrationTest {
     for (String forbiddenRole :
         List.of(
             "LEXIS_READ_ONLY",
-            "LEXIS_EXEMPTION_APPROVER",
-            "LEXIS_PROVINCIAL_SUBMITTER",
-            "LEXIS_PROVINCIAL_SUBMITTER_00077881")) {
+            "LEXIS_EXEMPTION_APPROVER")) {
       mockMvc
           .perform(
               post(path)
@@ -1283,7 +1281,12 @@ class LexisRouteAuthorizationIntegrationTest {
                   .with(jwt().authorities(new SimpleGrantedAuthority(forbiddenRole))))
           .andExpect(status().isForbidden());
     }
-    for (String allowedRole : List.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER")) {
+    for (String allowedRole :
+        List.of(
+            "LEXIS_ADMIN",
+            "LEXIS_APPLICATION_APPROVER",
+            "LEXIS_PROVINCIAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER_00077881")) {
       mockMvc
           .perform(
               post(path)

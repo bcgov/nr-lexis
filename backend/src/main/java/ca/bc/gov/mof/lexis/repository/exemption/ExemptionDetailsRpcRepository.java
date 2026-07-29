@@ -572,6 +572,14 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         // The legacy cursor does not return aggregate scale volume; legacy leaves it blank.
         Double.NaN,
         valueOrEmpty(getString(rs, "OWNER_CLIENT_NUMBER")),
+        valueOrEmpty(getString(rs, "AGENT_CLIENT_NUMBER")),
+        valueOrEmpty(getString(rs, "OWNER_CLIENT_LOCATION_CODE")),
+        valueOrEmpty(getString(rs, "AGENT_CLIENT_LOCATION_CODE")),
+        valueOrEmpty(getString(rs, "EXPORT_APPLICANT_TYPE_CODE")),
+        valueOrEmpty(getString(rs, "OWNER_CONTACT_NAME")),
+        valueOrEmpty(getString(rs, "AGENT_CONTACT_NAME")),
+        valueOrEmpty(getString(rs, "OWNER_COMPANY_NAME")),
+        valueOrEmpty(getString(rs, "AGENT_COMPANY_NAME")),
         valueOrEmpty(getString(rs, "EXPORT_JURISDICTION_CODE")),
         valueOrEmpty(getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
   }
@@ -728,8 +736,40 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       double requestedVolume,
       double scaleVolume,
       String ownerClientNumber,
+      String agentClientNumber,
+      String ownerClientLocationCode,
+      String agentClientLocationCode,
+      String applicantTypeCode,
+      String ownerContactName,
+      String agentContactName,
+      String ownerCompanyName,
+      String agentCompanyName,
       String jurisdictionCode,
-      String productTypeCode) {}
+      String productTypeCode) {
+    public ApplicationSummaryRow(
+        long applicationNumber,
+        double requestedVolume,
+        double scaleVolume,
+        String ownerClientNumber,
+        String jurisdictionCode,
+        String productTypeCode) {
+      this(
+          applicationNumber,
+          requestedVolume,
+          scaleVolume,
+          ownerClientNumber,
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          jurisdictionCode,
+          productTypeCode);
+    }
+  }
 
   public record PermitSummaryRow(
       long permitNumber,

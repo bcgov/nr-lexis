@@ -124,7 +124,16 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
               formatVolume(row.requestedVolume()),
               formatAvailableVolume(row.scaleVolume()),
               false,
-              row.jurisdictionCode()));
+              row.jurisdictionCode(),
+              row.ownerClientNumber(),
+              row.agentClientNumber(),
+              row.ownerClientLocationCode(),
+              row.agentClientLocationCode(),
+              row.applicantTypeCode(),
+              row.ownerContactName(),
+              row.agentContactName(),
+              row.ownerCompanyName(),
+              row.agentCompanyName()));
     }
 
     String ownerNumber = blanketOic ? "Blanket OIC" : Optional.ofNullable(previousOwnerClientNumber).orElse("");

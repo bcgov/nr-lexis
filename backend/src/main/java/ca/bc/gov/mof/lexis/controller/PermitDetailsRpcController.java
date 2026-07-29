@@ -1383,7 +1383,13 @@ public class PermitDetailsRpcController {
 
   private boolean isPermitCreatorRole(Authentication authentication) {
     List<String> roles = normalizedRoles(sessionService.parseRolesFromPrincipal(authentication));
-    return roles.contains(ROLE_ADMIN) || roles.contains(ROLE_APPLICATION_APPROVER);
+    return roles.stream()
+        .anyMatch(
+            role ->
+                ROLE_ADMIN.equals(role)
+                    || ROLE_APPLICATION_APPROVER.equals(role)
+                    || ROLE_PROVINCIAL_SUBMITTER.equals(role)
+                    || role.startsWith(ROLE_PROVINCIAL_SUBMITTER + "_"));
   }
 
   private boolean canRemovePermitDocument(

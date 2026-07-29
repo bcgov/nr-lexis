@@ -102,7 +102,39 @@ public interface ExemptionDetailsRpcService {
       String requestedVolume,
       String scaleVolume,
       boolean locked,
-      String jurisdiction) {}
+      String jurisdiction,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String ownerClientLocationCode,
+      String agentClientLocationCode,
+      String applicantTypeCode,
+      String ownerContactName,
+      String agentContactName,
+      String ownerCompanyName,
+      String agentCompanyName) {
+    public ApplicationItem(
+        long applicationNumber,
+        String requestedVolume,
+        String scaleVolume,
+        boolean locked,
+        String jurisdiction) {
+      this(
+          applicationNumber,
+          requestedVolume,
+          scaleVolume,
+          locked,
+          jurisdiction,
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "");
+    }
+  }
 
   record PermitItem(
       long permitNumber,

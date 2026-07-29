@@ -182,7 +182,20 @@ class ExemptionDetailsRpcControllerTest {
             new ExemptionDetailsRpcService.ExemptionApplicationsResponse(
                 List.of(
                     new ExemptionDetailsRpcService.ApplicationItem(
-                        1000456L, "95.0", "94.0", false, "P")),
+                        1000456L,
+                        "95.0",
+                        "94.0",
+                        false,
+                        "P",
+                        "00001074",
+                        "00002176",
+                        "03",
+                        "12",
+                        "A",
+                        "BOB TURMEL",
+                        "EXPORT PERSON",
+                        "NORSKE SKOG CANADA LIMITED",
+                        "INTERNATIONAL FOREST PRODUCTS")),
                 false,
                 "00077881"));
 
@@ -192,7 +205,22 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().applications()).hasSize(1);
-    assertThat(response.getBody().applications().get(0).applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.getBody().applications().get(0))
+        .satisfies(
+            application -> {
+              assertThat(application.applicationNumber()).isEqualTo(1000456L);
+              assertThat(application.ownerClientNumber()).isEqualTo("00001074");
+              assertThat(application.agentClientNumber()).isEqualTo("00002176");
+              assertThat(application.ownerClientLocationCode()).isEqualTo("03");
+              assertThat(application.agentClientLocationCode()).isEqualTo("12");
+              assertThat(application.applicantTypeCode()).isEqualTo("A");
+              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
+              assertThat(application.ownerCompanyName())
+                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+              assertThat(application.agentCompanyName())
+                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+            });
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Predicate<Long>> accessCaptor =
         ArgumentCaptor.forClass(Predicate.class);
