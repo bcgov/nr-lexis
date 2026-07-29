@@ -350,8 +350,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       '400',
     )
     await expect(
-      page.locator('a.csp-side-nav__link[data-label="Applications Report"]'),
-    ).toHaveCount(0)
+      page.locator('a.csp-side-nav__link[data-label="Application Report"]'),
+    ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
