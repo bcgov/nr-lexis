@@ -422,9 +422,8 @@ const permitMutationRequest = (
       }
 
 const hasPermitExemptionContext = (permitDetail: ProvincialPermitDetail): boolean =>
-  permitDetail.blanketOic ||
-  permitDetail.approvedExemptionVolume !== null ||
-  permitDetail.exemptionVolumeRemaining !== null ||
+  permitDetail.approvedExemptionVolume !== null &&
+  permitDetail.exemptionVolumeRemaining !== null &&
   permitDetail.exemptionTypeDescription !== null
 
 const withUpdatedPermitDetail = (

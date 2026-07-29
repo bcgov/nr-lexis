@@ -927,6 +927,27 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
+  it('loads a missing exemption type when permit volumes are already available', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: null,
+    })
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 250,
+      exemptionVolumeRemaining: 130,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+
+    renderPermitDetails()
+
+    expect(await screen.findByText('Ministerial')).toBeVisible()
+    expect(mockedFetchProvincialPermitExemptionContext).toHaveBeenCalledWith('EX-9')
+  })
+
   it('shows unavailable fee summaries when the deferred fee request fails', async () => {
     mockedFetchProvincialPermitFees.mockRejectedValue(new Error('fees unavailable'))
     renderPermitDetails()

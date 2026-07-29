@@ -144,10 +144,8 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
   }
 
   public long countFeePolicies() {
-    return queryCursorProcedureFailClosed(COUNT_FEE_POLICIES, null, 1, rs -> {
-      long value = rs.getLong(1);
-      return rs.wasNull() ? 0L : value;
-    }).stream().findFirst().orElse(0L);
+    // The legacy procedure returns the policy rows rather than a COUNT(*) projection.
+    return queryCursorProcedureFailClosed(COUNT_FEE_POLICIES, null, 1, rs -> Boolean.TRUE).size();
   }
 
   public List<FilPolicyRow> findFilPolicies(String sortOrder, int page) {
@@ -236,10 +234,8 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
   }
 
   public long countFilPolicies() {
-    return queryCursorProcedureFailClosed(COUNT_FIL_POLICIES, null, 1, rs -> {
-      long value = rs.getLong(1);
-      return rs.wasNull() ? 0L : value;
-    }).stream().findFirst().orElse(0L);
+    // The legacy procedure returns the policy rows rather than a COUNT(*) projection.
+    return queryCursorProcedureFailClosed(COUNT_FIL_POLICIES, null, 1, rs -> Boolean.TRUE).size();
   }
 
   public Optional<OrgUnitRow> findOrgUnitByNumber(Long orgUnitNo) {

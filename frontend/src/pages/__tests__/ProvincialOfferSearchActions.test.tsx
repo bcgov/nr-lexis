@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -122,6 +122,42 @@ describe('Provincial Offer Search Actions', () => {
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
+  })
+
+  it('keeps the results loading while default search filters initialize', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    let resolveApplicationOptions:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>) => void)
+      | undefined
+    mockedFetchProvincialApplicationOptions.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveApplicationOptions = resolve
+        }),
+    )
+
+    renderPage()
+
+    expect(screen.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.getByText('Loading offer search results...')).toBeVisible()
+    expect(screen.queryByText('0 results found')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveApplicationOptions?.({
+        exemptionTypes: [],
+        exemptionReasons: [],
+        applicationStatuses: [],
+        productTypes: [],
+        growthTypes: [],
+        regions: [],
+        currentSchedules: [],
+      })
+    })
+
+    expect(await screen.findByText('OFF-1001')).toBeVisible()
   })
 
   it('waits for explicit submission while text filters are typed', async () => {

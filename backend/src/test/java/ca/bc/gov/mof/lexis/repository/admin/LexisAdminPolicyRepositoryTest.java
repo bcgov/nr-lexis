@@ -110,6 +110,14 @@ class LexisAdminPolicyRepositoryTest {
     assertOracleFailure(() -> repository.findOrgUnitByNumber(1903L));
   }
 
+  @Test
+  void policyCountsShouldUseTheNumberOfRowsReturnedByLegacyProcedures() {
+    LexisAdminPolicyRepository repository = new PolicyCountLexisAdminPolicyRepository();
+
+    assertThat(repository.countFeePolicies()).isEqualTo(3L);
+    assertThat(repository.countFilPolicies()).isEqualTo(2L);
+  }
+
   private static void assertOracleFailure(Runnable mutation) {
     assertThatThrownBy(mutation::run)
         .isInstanceOf(DataAccessResourceFailureException.class)
@@ -144,6 +152,27 @@ class LexisAdminPolicyRepositoryTest {
     protected void executeProcedureRequired(
         String procedureSignature, SqlConsumer<CallableStatement> binder) {
       throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+  }
+
+  private static final class PolicyCountLexisAdminPolicyRepository
+      extends LexisAdminPolicyRepository {
+    private PolicyCountLexisAdminPolicyRepository() {
+      super(null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      List<Long> policyIds =
+          procedureSignature.contains("COUNT_FEE_POLICIES")
+              ? List.of(5L, 14L, 22L)
+              : List.of(1L, 9L);
+      return (List<T>) policyIds;
     }
   }
 
