@@ -78,6 +78,17 @@ type ScaleFormState = {
   volume: string
 }
 
+const displayScaleType = (cascadeSplitCode: string): string => {
+  switch (cascadeSplitCode.trim().toUpperCase()) {
+    case 'W':
+      return 'C'
+    case 'E':
+      return 'I'
+    default:
+      return '-'
+  }
+}
+
 type ApplicationItemField =
   | 'packageNewPackageNumber'
   | 'packageVolume'
@@ -2031,7 +2042,7 @@ function ProvincialApplicationItemsPanel({
                 {scales.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>{row.timberMark}</TableCell>
-                    <TableCell>{row.cascadeSplitCode || '-'}</TableCell>
+                    <TableCell>{displayScaleType(row.cascadeSplitCode)}</TableCell>
                     <TableCell>{row.species}</TableCell>
                     <TableCell>{row.grade}</TableCell>
                     <TableCell>{row.pieces.toLocaleString()}</TableCell>

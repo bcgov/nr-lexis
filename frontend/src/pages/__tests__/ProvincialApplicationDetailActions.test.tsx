@@ -438,6 +438,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
       applicationNumber: '321',
     })
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent', '321')
+    expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
     expect(
       within(getOwnerClientDetailsTile()).queryByRole('button', {
         name: 'Edit owner client details',
@@ -451,13 +454,18 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(field).toBeTruthy()
       expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
     }
-    expectSummaryField('Applicant type', 'Agent')
-    expectSummaryField('Owner client location', '00')
-    expectSummaryField('Owner contact name', 'Owner Contact')
-    expectSummaryField('Growth type', 'O')
-    expectSummaryField('Location of logs', 'BC')
-    expectSummaryField('Application species', 'FI')
-    expectSummaryField('Application end use', 'LU')
+    await waitFor(() => {
+      expectSummaryField('Product type', 'Harvested Timber')
+      expectSummaryField('Org Unit', 'Coast')
+      expectSummaryField('Applicant type', 'Agent')
+      expectSummaryField('Owner client location', '00 - Owner Main Location')
+      expectSummaryField('Owner contact name', 'Owner Contact')
+      expectSummaryField('Agent client location', '01 - Agent Main Location')
+      expectSummaryField('Growth type', 'Old Growth')
+      expectSummaryField('Location of logs', 'BC')
+      expectSummaryField('Application species', 'FI')
+      expectSummaryField('Application end use', 'Lumber')
+    })
     expect(within(summaryTile).queryByRole('button', { name: 'Save Summary' })).toBeNull()
   })
 
