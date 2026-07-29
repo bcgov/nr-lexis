@@ -12,6 +12,8 @@ describe('NotificationEditor', () => {
 
       await screen.findByLabelText('Notification content editor')
       expect(screen.getByRole('button', { name: 'Bold' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Strikethrough' })).toBeEnabled()
+      expect(screen.queryByRole('button', { name: 'Underline' })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Add or edit link' })).toBeEnabled()
 
       await waitFor(() => {

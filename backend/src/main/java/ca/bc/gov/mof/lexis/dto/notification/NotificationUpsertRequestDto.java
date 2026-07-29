@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record NotificationUpsertRequestDto(
-    @NotBlank @Size(max = 500) String title,
+    @NotBlank @Size(max = 80) String title,
     @NotBlank @Size(max = 100000) String contentHtml,
     @NotNull NotificationLevel notificationLevel,
     @NotNull LocalDate displayStartDate,

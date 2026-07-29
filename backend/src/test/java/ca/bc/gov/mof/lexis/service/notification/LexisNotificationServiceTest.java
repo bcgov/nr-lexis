@@ -244,11 +244,11 @@ class LexisNotificationServiceTest {
   }
 
   @Test
-  void createShouldRejectATitleThatExceedsTheOracleByteLimit() {
+  void createShouldRejectATitleLongerThanEightyCharacters() {
     LexisNotificationService service = newService();
     NotificationUpsertRequestDto request =
         new NotificationUpsertRequestDto(
-            "é".repeat(251),
+            "x".repeat(81),
             "<p>Details</p>",
             NotificationLevel.INFORMATION,
             LocalDate.of(2026, 7, 21),
@@ -257,9 +257,39 @@ class LexisNotificationServiceTest {
 
     assertThatThrownBy(() -> service.create(request, () -> "idir\\admin"))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("Notification title cannot exceed 500 bytes.");
+        .hasMessage("Notification title cannot exceed 80 characters.");
 
     verify(repository, never()).insert(any(NotificationMutation.class));
+  }
+
+  @Test
+  void createShouldPreserveUnicodeNotificationText() {
+    LexisNotificationService service = newService();
+    Principal principal = () -> "idir\\admin";
+    NotificationUpsertRequestDto request =
+        new NotificationUpsertRequestDto(
+            "Service update — today",
+            "<p>We’re testing Unicode punctuation.</p>",
+            NotificationLevel.INFORMATION,
+            LocalDate.of(2026, 7, 21),
+            LocalDate.of(2026, 7, 28),
+            List.of());
+    when(principalService.resolvePrincipalName(principal)).thenReturn("IDIR\\ADMIN");
+    when(repository.insert(any(NotificationMutation.class)))
+        .thenReturn(
+            notificationRow(
+                request.contentHtml(),
+                NotificationLevel.INFORMATION,
+                request.displayStartDate().atStartOfDay(),
+                request.displayEndDate().atTime(LocalTime.of(23, 59, 59))));
+
+    service.create(request, principal);
+
+    ArgumentCaptor<NotificationMutation> mutationCaptor =
+        ArgumentCaptor.forClass(NotificationMutation.class);
+    verify(repository).insert(mutationCaptor.capture());
+    assertThat(mutationCaptor.getValue().title()).isEqualTo(request.title());
+    assertThat(mutationCaptor.getValue().contentHtml()).isEqualTo(request.contentHtml());
   }
 
   @Test

@@ -126,10 +126,17 @@ describe('Notifications page', () => {
 
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'New notification' }))
-    await screen.findByRole('heading', { name: 'New notification' })
-    await user.type(screen.getByLabelText('Title'), 'Office closure')
-    await user.type(screen.getByLabelText('Notification content editor'), 'Office closed Friday.')
-    await user.click(screen.getByRole('button', { name: 'Publish notification' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Admin' })
+    expect(within(dialog).getByRole('heading', { name: 'New notification' })).toBeVisible()
+    expect(within(dialog).getByLabelText('Title')).toHaveAttribute('maxlength', '80')
+    expect(within(dialog).getByText('0 / 4,000 characters')).toBeVisible()
+    await user.type(within(dialog).getByLabelText('Title'), 'Office closure')
+    await user.type(
+      within(dialog).getByLabelText('Notification content editor'),
+      'Office closed Friday.',
+    )
+    expect(within(dialog).getByText('21 / 4,000 characters')).toBeVisible()
+    await user.click(within(dialog).getByRole('button', { name: 'Publish' }))
 
     await waitFor(() => {
       expect(mockedCreateNotification).toHaveBeenCalledWith(
@@ -157,9 +164,10 @@ describe('Notifications page', () => {
 
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'New notification' }))
-    await user.type(screen.getByLabelText('Title'), 'Office closure')
-    await user.type(screen.getByLabelText('Notification content editor'), '<p>&nbsp;</p>')
-    await user.click(screen.getByRole('button', { name: 'Publish notification' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Admin' })
+    await user.type(within(dialog).getByLabelText('Title'), 'Office closure')
+    await user.type(within(dialog).getByLabelText('Notification content editor'), '<p>&nbsp;</p>')
+    await user.click(within(dialog).getByRole('button', { name: 'Publish' }))
 
     expect(await screen.findByText('Complete the required fields')).toBeVisible()
     expect(mockedCreateNotification).not.toHaveBeenCalled()

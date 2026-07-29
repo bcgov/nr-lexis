@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class LexisNotificationService {
 
   private static final int MAX_NOTIFICATION_CONTENT_LENGTH = 4_000;
-  private static final int MAX_TITLE_BYTES = 500;
+  private static final int MAX_TITLE_LENGTH = 80;
   private static final int MAX_AUDIT_USER_ID_BYTES = 100;
   private static final List<String> NOTIFICATION_AUDIENCE_ROLES =
       List.of(
@@ -110,12 +110,12 @@ public class LexisNotificationService {
     }
 
     String title =
-        requireMaxUtf8Bytes(
+        requireMaxLength(
             normalizeRequired(
                 htmlSanitizer.sanitizePlainText(request.title()),
                 "A notification title is required."),
-            MAX_TITLE_BYTES,
-            "Notification title cannot exceed 500 bytes.");
+            MAX_TITLE_LENGTH,
+            "Notification title cannot exceed 80 characters.");
     String contentHtml = htmlSanitizer.sanitize(request.contentHtml());
     String contentText = htmlSanitizer.sanitizePlainText(contentHtml);
     if (contentText.isBlank()) {
@@ -215,6 +215,13 @@ public class LexisNotificationService {
 
   private String requireMaxUtf8Bytes(String value, int maxBytes, String message) {
     if (value.getBytes(StandardCharsets.UTF_8).length > maxBytes) {
+      throw new IllegalArgumentException(message);
+    }
+    return value;
+  }
+
+  private String requireMaxLength(String value, int maxLength, String message) {
+    if (value.length() > maxLength) {
       throw new IllegalArgumentException(message);
     }
     return value;

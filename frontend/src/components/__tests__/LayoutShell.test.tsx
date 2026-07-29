@@ -130,6 +130,9 @@ describe('Layout shell', () => {
     await waitFor(() => expect(mockedFetchNotifications).toHaveBeenCalledOnce())
 
     const notificationsLink = screen.getByRole('link', { name: 'Notifications' })
+    expect(screen.getAllByText('Notifications')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Notifications' })).not.toBeInTheDocument()
+    expect(notificationsLink).not.toHaveClass('cds--side-nav__link--nested')
     expect(
       notificationsLink.querySelector('.csp-side-nav__notification-indicator'),
     ).not.toBeInTheDocument()

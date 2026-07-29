@@ -52,6 +52,7 @@ type NavigationLink = {
 type NavigationSection = {
   label: string
   links: NavigationLink[]
+  standalone?: boolean
 }
 
 const UI_PREFERENCE_KEYS = {
@@ -92,6 +93,7 @@ const isMobileNavigationViewport = (): boolean => {
 const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     label: 'Notifications',
+    standalone: true,
     links: [
       {
         to: '/notifications',
@@ -617,6 +619,44 @@ function Layout({ children }: LayoutProps) {
     writeUiPreference(UI_PREFERENCE_KEYS.collapsedSections, JSON.stringify(collapsedSections))
   }, [collapsedSections])
 
+  const renderNavigationLink = (link: NavigationLink, nested = true) => {
+    const LinkIcon = link.icon
+    const showNotificationIndicator = link.to === '/notifications' && hasActiveNotifications
+    const accessibleLabel = showNotificationIndicator
+      ? 'Notifications, active updates available'
+      : isDesktopSideNavCollapsed
+        ? link.label
+        : undefined
+    const nestedClassName = nested ? ' cds--side-nav__link--nested' : ''
+
+    return (
+      <li key={link.to}>
+        <NavLink
+          end
+          to={link.to}
+          className={({ isActive }) =>
+            `cds--side-nav__link${nestedClassName} csp-side-nav__link${
+              isActive ? ' cds--side-nav__link--active' : ''
+            }`
+          }
+          aria-current={location.pathname === link.to ? 'page' : undefined}
+          aria-label={accessibleLabel}
+          title={isDesktopSideNavCollapsed ? link.label : undefined}
+          data-label={link.label}
+          onClick={() => closeMobileNavigation()}
+        >
+          <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+            <LinkIcon size={20} />
+            {showNotificationIndicator && (
+              <span className="csp-side-nav__notification-indicator" aria-hidden="true" />
+            )}
+          </span>
+          <span className="cds--side-nav__link-text csp-side-nav__link-text">{link.label}</span>
+        </NavLink>
+      </li>
+    )
+  }
+
   return (
     <>
       <OptimisticConflictModal />
@@ -766,6 +806,19 @@ function Layout({ children }: LayoutProps) {
 
           <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => {
+              if (section.standalone) {
+                return (
+                  <li
+                    key={section.label}
+                    className="csp-side-nav__section csp-side-nav__section--standalone"
+                  >
+                    <ul className="csp-side-nav__section-list">
+                      {section.links.map((link) => renderNavigationLink(link, false))}
+                    </ul>
+                  </li>
+                )
+              }
+
               const sectionListId = getSectionListId(section.label)
               const isSectionCollapsed =
                 section.label !== activeSectionLabel &&
@@ -796,50 +849,7 @@ function Layout({ children }: LayoutProps) {
                   )}
                   {!isSectionCollapsed && (
                     <ul id={sectionListId} className="csp-side-nav__section-list">
-                      {section.links.map((link) => {
-                        const LinkIcon = link.icon
-                        const showNotificationIndicator =
-                          link.to === '/notifications' && hasActiveNotifications
-                        const accessibleLabel = showNotificationIndicator
-                          ? 'Notifications, active updates available'
-                          : isDesktopSideNavCollapsed
-                            ? link.label
-                            : undefined
-                        return (
-                          <li key={link.to}>
-                            <NavLink
-                              end
-                              to={link.to}
-                              className={({ isActive }) =>
-                                isActive
-                                  ? 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link cds--side-nav__link--active'
-                                  : 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link'
-                              }
-                              aria-current={location.pathname === link.to ? 'page' : undefined}
-                              aria-label={accessibleLabel}
-                              title={isDesktopSideNavCollapsed ? link.label : undefined}
-                              data-label={link.label}
-                              onClick={() => closeMobileNavigation()}
-                            >
-                              <span
-                                className="cds--side-nav__icon csp-side-nav__icon"
-                                aria-hidden="true"
-                              >
-                                <LinkIcon size={20} />
-                                {showNotificationIndicator && (
-                                  <span
-                                    className="csp-side-nav__notification-indicator"
-                                    aria-hidden="true"
-                                  />
-                                )}
-                              </span>
-                              <span className="cds--side-nav__link-text csp-side-nav__link-text">
-                                {link.label}
-                              </span>
-                            </NavLink>
-                          </li>
-                        )
-                      })}
+                      {section.links.map((link) => renderNavigationLink(link))}
                     </ul>
                   )}
                 </li>

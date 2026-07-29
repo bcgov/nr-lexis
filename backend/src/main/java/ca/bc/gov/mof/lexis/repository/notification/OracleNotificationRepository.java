@@ -2,9 +2,11 @@ package ca.bc.gov.mof.lexis.repository.notification;
 
 import ca.bc.gov.mof.lexis.dto.notification.NotificationLevel;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +20,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 @Profile("oracle")
 public class OracleNotificationRepository {
+
+  // Keep Unicode persistence ASCII-safe for the legacy Oracle database character set.
+  private static final String UTF8_BASE64_PREFIX = "LEXIS_UTF8_B64:";
 
   private static final String SELECT_NOTIFICATION_ROWS =
       """
@@ -124,8 +129,8 @@ public class OracleNotificationRepository {
         """,
         statement -> {
           statement.setLong(1, notificationId);
-          statement.setString(2, mutation.title());
-          statement.setCharacterStream(3, new StringReader(mutation.contentHtml()));
+          statement.setString(2, encodeText(mutation.title()));
+          statement.setCharacterStream(3, new StringReader(encodeText(mutation.contentHtml())));
           statement.setString(4, mutation.notificationLevel().name());
           statement.setTimestamp(5, Timestamp.valueOf(mutation.displayStartTimestamp()));
           statement.setTimestamp(6, Timestamp.valueOf(mutation.displayEndTimestamp()));
@@ -152,8 +157,8 @@ public class OracleNotificationRepository {
              WHERE LEXIS_NOTIFICATION_ID = ?
             """,
             statement -> {
-              statement.setString(1, mutation.title());
-              statement.setCharacterStream(2, new StringReader(mutation.contentHtml()));
+              statement.setString(1, encodeText(mutation.title()));
+              statement.setCharacterStream(2, new StringReader(encodeText(mutation.contentHtml())));
               statement.setString(3, mutation.notificationLevel().name());
               statement.setTimestamp(4, Timestamp.valueOf(mutation.displayEndTimestamp()));
               statement.setString(5, mutation.auditUserId());
@@ -211,8 +216,8 @@ public class OracleNotificationRepository {
             (rs, rowNumber) ->
                 new NotificationResultRow(
                     rs.getLong("LEXIS_NOTIFICATION_ID"),
-                    rs.getString("TITLE"),
-                    rs.getString("CONTENT_HTML"),
+                    decodeText(rs.getString("TITLE")),
+                    decodeText(rs.getString("CONTENT_HTML")),
                     NotificationLevel.valueOf(rs.getString("LEXIS_NOTIFICATION_LEVEL_CODE")),
                     toLocalDateTime(rs.getTimestamp("PUBLISH_TIMESTAMP")),
                     toLocalDateTime(rs.getTimestamp("DISPLAY_END_TIMESTAMP")),
@@ -237,6 +242,28 @@ public class OracleNotificationRepository {
 
   private LocalDateTime toLocalDateTime(Timestamp timestamp) {
     return timestamp == null ? null : timestamp.toLocalDateTime();
+  }
+
+  private static String encodeText(String value) {
+    boolean isAscii = value.chars().allMatch(character -> character <= 0x7f);
+    if (isAscii && !value.startsWith(UTF8_BASE64_PREFIX)) {
+      return value;
+    }
+    return UTF8_BASE64_PREFIX
+        + Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private static String decodeText(String value) {
+    if (value == null || !value.startsWith(UTF8_BASE64_PREFIX)) {
+      return value;
+    }
+
+    try {
+      byte[] decoded = Base64.getDecoder().decode(value.substring(UTF8_BASE64_PREFIX.length()));
+      return new String(decoded, StandardCharsets.UTF_8);
+    } catch (IllegalArgumentException exception) {
+      return value;
+    }
   }
 
   public record NotificationMutation(

@@ -4,12 +4,11 @@ import {
   ListNumbered,
   TextBold,
   TextItalic,
-  TextUnderline,
+  TextStrikethrough,
   Unlink,
 } from '@carbon/icons-react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import LinkExtension from '@tiptap/extension-link'
-import Underline from '@tiptap/extension-underline'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect } from 'react'
 import './NotificationEditor.scss'
@@ -44,7 +43,6 @@ export default function NotificationEditor({
         link: false,
         underline: false,
       }),
-      Underline,
       LinkExtension.configure({
         autolink: true,
         defaultProtocol: 'https',
@@ -126,13 +124,13 @@ export default function NotificationEditor({
         <button
           type="button"
           className="notification-editor__toolbar-button"
-          aria-label="Underline"
-          aria-pressed={editor?.isActive('underline') ?? false}
-          title="Underline"
+          aria-label="Strikethrough"
+          aria-pressed={editor?.isActive('strike') ?? false}
+          title="Strikethrough"
           disabled={!editorReady || disabled}
-          onClick={() => editor?.chain().focus().toggleUnderline().run()}
+          onClick={() => editor?.chain().focus().toggleStrike().run()}
         >
-          <TextUnderline size={16} />
+          <TextStrikethrough size={16} />
         </button>
         <button
           type="button"

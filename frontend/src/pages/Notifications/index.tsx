@@ -4,12 +4,13 @@ import {
   Checkbox,
   InlineLoading,
   InlineNotification,
+  Modal,
   RadioButton,
   RadioButtonGroup,
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppNotification } from '@/components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import NotificationEditor from '@/components/NotificationEditor'
@@ -33,6 +34,7 @@ import './Notifications.scss'
 
 const RECENT_UPDATE_WINDOW_DAYS = 3
 const DEFAULT_DISPLAY_DURATION_DAYS = 7
+const MAX_NOTIFICATION_TITLE_LENGTH = 80
 const MAX_NOTIFICATION_CONTENT_LENGTH = 4_000
 
 const notificationLevels: ReadonlyArray<{
@@ -191,6 +193,7 @@ export default function NotificationsPage() {
   const [showRecentUpdateToast, setShowRecentUpdateToast] = useState(false)
   const [notificationPendingDeletion, setNotificationPendingDeletion] =
     useState<LexisNotification | null>(null)
+  const editorLauncherRef = useRef<HTMLElement>(null)
 
   const loadNotifications = useCallback(
     async (clearMessage = true) => {
@@ -237,14 +240,19 @@ export default function NotificationsPage() {
       notifications.filter((notification) => notificationStatus(notification) === 'Active').length,
     [notifications],
   )
+  const contentCharacterCount = contentTextLength(form.contentHtml)
 
   const startCreate = (): void => {
+    editorLauncherRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     setForm(emptyForm())
     setMessage(null)
     setShowEditor(true)
   }
 
   const startEdit = (notification: LexisNotification): void => {
+    editorLauncherRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     setForm(toForm(notification))
     setMessage(null)
     setShowEditor(true)
@@ -277,6 +285,14 @@ export default function NotificationsPage() {
         kind: 'error',
         title: 'Complete the required fields',
         subtitle: 'Title, content, notification level, and display dates are required.',
+      })
+      return
+    }
+    if (form.title.trim().length > MAX_NOTIFICATION_TITLE_LENGTH) {
+      setMessage({
+        kind: 'error',
+        title: 'Shorten the notification title',
+        subtitle: 'Notification titles cannot exceed 80 characters.',
       })
       return
     }
@@ -391,7 +407,7 @@ export default function NotificationsPage() {
         />
       )}
 
-      {message && (
+      {message && !showEditor && (
         <InlineNotification
           className="notifications-page__message"
           kind={message.kind}
@@ -403,156 +419,172 @@ export default function NotificationsPage() {
       )}
 
       {isAdmin && showEditor && (
-        <section
-          className="notifications-page__editor"
-          aria-labelledby="notification-editor-heading"
+        <Modal
+          open
+          className="notifications-page__editor-modal"
+          modalLabel="Admin"
+          modalHeading={editorTitle}
+          aria-label={editorTitle}
+          hasScrollingContent
+          launcherButtonRef={editorLauncherRef}
+          selectorPrimaryFocus="#notification-title"
+          primaryButtonText={isEditing ? 'Save changes' : 'Publish'}
+          secondaryButtonText="Cancel"
+          primaryButtonDisabled={saving}
+          loadingStatus={saving ? 'active' : 'inactive'}
+          loadingDescription="Saving notification…"
+          loadingIconDescription="Saving notification"
+          preventCloseOnClickOutside
+          onRequestClose={() => {
+            if (!saving) {
+              resetForm()
+            }
+          }}
+          onSecondarySubmit={resetForm}
+          onRequestSubmit={() => void save()}
         >
-          <Tile className="notifications-page__editor-tile">
-            <div className="notifications-page__section-heading">
-              <div>
-                <p className="notifications-page__section-eyebrow">Admin</p>
-                <h2 id="notification-editor-heading">{editorTitle}</h2>
-                <p>Rich text is sanitized on the server before it is saved.</p>
-              </div>
-              <Button kind="ghost" onClick={resetForm} disabled={saving}>
-                Cancel
-              </Button>
-            </div>
+          <p className="notifications-page__editor-help">
+            Rich text is sanitized on the server before it is saved.
+          </p>
 
-            <div className="notifications-page__form-section">
-              <h3>Message</h3>
+          {message && (
+            <InlineNotification
+              className="notifications-page__editor-message"
+              kind={message.kind}
+              title={message.title}
+              subtitle={message.subtitle}
+              lowContrast
+              onCloseButtonClick={() => setMessage(null)}
+            />
+          )}
+
+          <div className="notifications-page__form-section">
+            <h3>Message</h3>
+            <TextInput
+              id="notification-title"
+              labelText="Title"
+              value={form.title}
+              maxLength={MAX_NOTIFICATION_TITLE_LENGTH}
+              disabled={saving}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, title: event.target.value }))
+              }
+            />
+            <div className="notifications-page__form-field">
+              <p className="cds--label">Message</p>
+              <p className="notifications-page__field-help">
+                Explain what is happening and what, if anything, the reader should do.
+              </p>
+              <NotificationEditor
+                value={form.contentHtml}
+                disabled={saving}
+                onChange={(contentHtml) => setForm((current) => ({ ...current, contentHtml }))}
+              />
+              <p className="notifications-page__character-count" aria-live="polite">
+                {contentCharacterCount.toLocaleString('en-CA')} / 4,000 characters
+              </p>
+            </div>
+          </div>
+
+          <fieldset className="notifications-page__form-section notifications-page__level">
+            <legend>Type</legend>
+            <RadioButtonGroup
+              legendText=""
+              name="notification-level"
+              valueSelected={form.notificationLevel}
+              disabled={saving}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  notificationLevel: value as NotificationLevel,
+                }))
+              }
+            >
+              {notificationLevels.map((level) => (
+                <RadioButton
+                  key={level.value}
+                  id={`notification-level-${level.value.toLowerCase()}`}
+                  value={level.value}
+                  labelText={
+                    <span className="notifications-page__level-option">
+                      <span
+                        className={`notifications-page__level-dot notifications-page__level-dot--${level.value.toLowerCase()}`}
+                      />
+                      <span>{level.label}</span>
+                      <span>{level.description}</span>
+                    </span>
+                  }
+                />
+              ))}
+            </RadioButtonGroup>
+          </fieldset>
+
+          <fieldset className="notifications-page__form-section notifications-page__audience">
+            <legend>Audience</legend>
+            <Checkbox
+              id="notification-audience-all"
+              labelText="All authenticated LEXIS roles"
+              checked={form.audienceMode === 'ALL'}
+              disabled={saving}
+              onChange={(_, { checked }) =>
+                setForm((current) => ({
+                  ...current,
+                  audienceMode: checked ? 'ALL' : 'ROLES',
+                  audienceRoles: checked ? [] : current.audienceRoles,
+                }))
+              }
+            />
+            <p>Choose specific roles only when the notification does not apply to everyone.</p>
+            <div
+              className="notifications-page__audience-options"
+              aria-disabled={form.audienceMode === 'ALL'}
+            >
+              {audienceRoles.map((role) => (
+                <Checkbox
+                  key={role}
+                  id={`notification-audience-${role}`}
+                  labelText={roleLabel(role)}
+                  checked={form.audienceRoles.includes(role)}
+                  disabled={saving || form.audienceMode === 'ALL'}
+                  onChange={(_, { checked }) => toggleAudienceRole(role, Boolean(checked))}
+                />
+              ))}
+            </div>
+          </fieldset>
+
+          <section className="notifications-page__form-section">
+            <h3>Display period</h3>
+            <div className="notifications-page__form-grid">
               <TextInput
-                id="notification-title"
-                labelText="Title"
-                value={form.title}
-                maxLength={500}
+                id="notification-display-start-date"
+                type="date"
+                labelText="Start date"
+                value={form.displayStartDate}
                 disabled={saving}
+                readOnly={isEditing}
+                helperText={isEditing ? 'The original start date cannot be changed.' : undefined}
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, title: event.target.value }))
-                }
-              />
-              <div className="notifications-page__form-field">
-                <p className="cds--label">Message</p>
-                <p className="notifications-page__field-help">
-                  Up to 4,000 visible characters. Formatting does not count toward this limit.
-                </p>
-                <NotificationEditor
-                  value={form.contentHtml}
-                  disabled={saving}
-                  onChange={(contentHtml) => setForm((current) => ({ ...current, contentHtml }))}
-                />
-              </div>
-            </div>
-
-            <fieldset className="notifications-page__form-section notifications-page__level">
-              <legend>Notification level</legend>
-              <RadioButtonGroup
-                legendText=""
-                name="notification-level"
-                valueSelected={form.notificationLevel}
-                disabled={saving}
-                onChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    notificationLevel: value as NotificationLevel,
-                  }))
-                }
-              >
-                {notificationLevels.map((level) => (
-                  <RadioButton
-                    key={level.value}
-                    id={`notification-level-${level.value.toLowerCase()}`}
-                    value={level.value}
-                    labelText={
-                      <span className="notifications-page__level-option">
-                        <span
-                          className={`notifications-page__level-dot notifications-page__level-dot--${level.value.toLowerCase()}`}
-                        />
-                        <span>{level.label}</span>
-                        <span>{level.description}</span>
-                      </span>
-                    }
-                  />
-                ))}
-              </RadioButtonGroup>
-            </fieldset>
-
-            <fieldset className="notifications-page__form-section notifications-page__audience">
-              <legend>Audience</legend>
-              <Checkbox
-                id="notification-audience-all"
-                labelText="All authenticated LEXIS roles"
-                checked={form.audienceMode === 'ALL'}
-                disabled={saving}
-                onChange={(_, { checked }) =>
-                  setForm((current) => ({
-                    ...current,
-                    audienceMode: checked ? 'ALL' : 'ROLES',
-                    audienceRoles: checked ? [] : current.audienceRoles,
+                    displayStartDate: event.target.value,
                   }))
                 }
               />
-              <p>Choose specific roles only when the notification does not apply to everyone.</p>
-              <div
-                className="notifications-page__audience-options"
-                aria-disabled={form.audienceMode === 'ALL'}
-              >
-                {audienceRoles.map((role) => (
-                  <Checkbox
-                    key={role}
-                    id={`notification-audience-${role}`}
-                    labelText={roleLabel(role)}
-                    checked={form.audienceRoles.includes(role)}
-                    disabled={saving || form.audienceMode === 'ALL'}
-                    onChange={(_, { checked }) => toggleAudienceRole(role, Boolean(checked))}
-                  />
-                ))}
-              </div>
-            </fieldset>
-
-            <section className="notifications-page__form-section">
-              <h3>Display period</h3>
-              <div className="notifications-page__form-grid">
-                <TextInput
-                  id="notification-display-start-date"
-                  type="date"
-                  labelText="Start date"
-                  value={form.displayStartDate}
-                  disabled={saving}
-                  readOnly={isEditing}
-                  helperText={isEditing ? 'The original start date cannot be changed.' : undefined}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, displayStartDate: event.target.value }))
-                  }
-                />
-                <TextInput
-                  id="notification-display-end-date"
-                  type="date"
-                  labelText="End date"
-                  value={form.displayEndDate}
-                  min={form.displayStartDate}
-                  disabled={saving}
-                  helperText="The notification hides automatically after this date."
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, displayEndDate: event.target.value }))
-                  }
-                />
-              </div>
-            </section>
-
-            <div className="notifications-page__editor-actions">
-              <Button
-                kind="primary"
-                renderIcon={isEditing ? Edit : Add}
+              <TextInput
+                id="notification-display-end-date"
+                type="date"
+                labelText="End date"
+                value={form.displayEndDate}
+                min={form.displayStartDate}
                 disabled={saving}
-                onClick={() => void save()}
-              >
-                {isEditing ? 'Save changes' : 'Publish notification'}
-              </Button>
-              {saving && <InlineLoading description="Saving notification…" />}
+                helperText="The notification hides automatically after this date."
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, displayEndDate: event.target.value }))
+                }
+              />
             </div>
-          </Tile>
-        </section>
+          </section>
+        </Modal>
       )}
 
       <section aria-labelledby="notification-list-heading">
