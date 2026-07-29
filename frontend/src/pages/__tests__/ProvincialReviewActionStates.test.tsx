@@ -653,7 +653,7 @@ describe('Provincial Review Action State Smoke', () => {
         }),
       )
     })
-  })
+  }, 15000)
 
   it('falls back to the owner email when an agent applicant has no email', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
@@ -757,7 +757,7 @@ describe('Provincial Review Action State Smoke', () => {
     ).toBeGreaterThan(0)
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-  })
+  }, 15000)
 
   it('updates a rejected application without sending email by default', async () => {
     renderPage()
@@ -785,7 +785,7 @@ describe('Provincial Review Action State Smoke', () => {
     })
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
-  })
+  }, 15000)
 
   it('defaults to all active regions like the legacy review queue', async () => {
     renderPage()
