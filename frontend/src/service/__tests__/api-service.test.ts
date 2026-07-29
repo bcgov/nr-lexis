@@ -1131,7 +1131,10 @@ describe('api-service cached GET support', () => {
         config: {
           method: 'put',
           url: '/lexis/applications/999000001',
-          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+          headers: {
+            [RECORD_VERSION_HEADER]: 'version-1',
+            Authorization: 'Bearer existing-request-token',
+          },
         },
         response: {
           status: 409,
@@ -1149,6 +1152,13 @@ describe('api-service cached GET support', () => {
           ]),
         }),
       )
+      expect(getMock).toHaveBeenCalledWith('/lexis/applications/999000001', {
+        headers: {
+          Authorization: 'Bearer existing-request-token',
+          'Cache-Control': 'no-cache',
+        },
+        signal: expect.any(AbortSignal),
+      })
     } finally {
       window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
       window.history.replaceState({}, '', previousPath)
@@ -1265,13 +1275,10 @@ describe('api-service cached GET support', () => {
         '/lexis/applications/999000001',
       )
       getMock.mockImplementationOnce(
-        (_url: string, config?: AxiosRequestConfig) =>
-          new Promise((_resolve, reject) => {
-            config?.signal?.addEventListener?.(
-              'abort',
-              () => reject(new Error('Enrichment request aborted.')),
-              { once: true },
-            )
+        () =>
+          new Promise(() => {
+            // Simulates work that stalls before Axios can observe the AbortSignal,
+            // such as an asynchronous request interceptor.
           }),
       )
 

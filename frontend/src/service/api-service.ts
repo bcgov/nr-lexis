@@ -479,7 +479,11 @@ class APIService {
       return Promise.reject(error)
     }
 
-    return this.enrichOptimisticConflictWithinTimeout(problem).then(
+    const authorizationHeader = this.getHeader(originalConfig.headers, 'authorization')
+    return this.enrichOptimisticConflictWithinTimeout(
+      problem,
+      typeof authorizationHeader === 'string' ? authorizationHeader : undefined,
+    ).then(
       (enrichedProblem) =>
         new Promise<AxiosResponse<unknown>>((_, reject) => {
           const event = createOptimisticConflictEvent({
@@ -503,14 +507,26 @@ class APIService {
 
   private async enrichOptimisticConflictWithinTimeout(
     problem: OptimisticConflictProblem,
+    authorizationHeader?: string,
   ): Promise<OptimisticConflictProblem> {
     const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => controller.abort(), CONFLICT_ENRICHMENT_TIMEOUT_MS)
+    let timeoutId: number | undefined
+    const timeout = new Promise<OptimisticConflictProblem>((resolve) => {
+      timeoutId = window.setTimeout(() => {
+        controller.abort()
+        resolve(problem)
+      }, CONFLICT_ENRICHMENT_TIMEOUT_MS)
+    })
 
     try {
-      return await this.enrichOptimisticConflict(problem, controller.signal)
+      return await Promise.race([
+        this.enrichOptimisticConflict(problem, controller.signal, authorizationHeader),
+        timeout,
+      ])
     } finally {
-      window.clearTimeout(timeoutId)
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
     }
   }
 
@@ -546,6 +562,7 @@ class APIService {
   private async enrichOptimisticConflict(
     problem: OptimisticConflictProblem,
     signal: AbortSignal,
+    authorizationHeader?: string,
   ): Promise<OptimisticConflictProblem> {
     const activeRecord = this.activeRecord()
     if (!activeRecord) {
@@ -569,6 +586,7 @@ class APIService {
             ...source.detailConfig,
             headers: {
               ...this.toHeaderRecord(source.detailConfig?.headers),
+              ...(authorizationHeader ? { Authorization: authorizationHeader } : {}),
               'Cache-Control': 'no-cache',
             },
             signal,
