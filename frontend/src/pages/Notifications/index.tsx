@@ -11,7 +11,6 @@ import {
   Tile,
 } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppNotification } from '@/components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import NotificationEditor from '@/components/NotificationEditor'
 import { hasRole } from '@/context/auth/role-utils'
@@ -190,7 +189,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<NotificationMessage | null>(null)
-  const [showRecentUpdateToast, setShowRecentUpdateToast] = useState(false)
+  const [showRecentUpdateMessage, setShowRecentUpdateMessage] = useState(false)
   const [notificationPendingDeletion, setNotificationPendingDeletion] =
     useState<LexisNotification | null>(null)
   const editorLauncherRef = useRef<HTMLElement>(null)
@@ -208,7 +207,7 @@ export default function NotificationsPage() {
         ])
         setNotifications(loadedNotifications)
         setAudienceRoles(loadedAudienceRoles)
-        setShowRecentUpdateToast(loadedNotifications.some(hasRecentUpdate))
+        setShowRecentUpdateMessage(loadedNotifications.some(hasRecentUpdate))
       } catch {
         setMessage({
           kind: 'error',
@@ -409,12 +408,14 @@ export default function NotificationsPage() {
         )}
       </section>
 
-      {showRecentUpdateToast && !showEditor && recentUpdateCount > 0 && (
-        <AppNotification
+      {showRecentUpdateMessage && !showEditor && recentUpdateCount > 0 && (
+        <InlineNotification
+          className="notifications-page__message"
           kind="info"
           title="Recently updated notifications"
           subtitle={`${recentUpdateCount} notification${recentUpdateCount === 1 ? ' was' : 's were'} updated in the last ${RECENT_UPDATE_WINDOW_DAYS} days.`}
-          onCloseButtonClick={() => setShowRecentUpdateToast(false)}
+          lowContrast
+          onCloseButtonClick={() => setShowRecentUpdateMessage(false)}
         />
       )}
 

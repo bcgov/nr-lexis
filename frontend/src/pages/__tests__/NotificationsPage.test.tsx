@@ -193,7 +193,7 @@ describe('Notifications page', () => {
     expect(screen.getByLabelText('End date')).not.toHaveAttribute('readonly')
   })
 
-  it('hides recent-update messaging while editing and restores focus after cancelling', async () => {
+  it('keeps recent-update messaging in page flow and restores focus after cancelling', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -209,7 +209,9 @@ describe('Notifications page', () => {
 
     render(<NotificationsPage />)
 
-    expect(await screen.findByText('Recently updated notifications')).toBeVisible()
+    const recentUpdateMessage = await screen.findByText('Recently updated notifications')
+    expect(recentUpdateMessage).toBeVisible()
+    expect(document.querySelector('.notifications-page')).toContainElement(recentUpdateMessage)
     const launcher = screen.getByRole('button', { name: 'New notification' })
     await user.click(launcher)
 
