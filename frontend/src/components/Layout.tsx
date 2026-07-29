@@ -28,6 +28,7 @@ import {
   hasRole,
 } from '@/context/auth/role-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
+import UserRegionPreference from '@/components/UserRegionPreference'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
@@ -670,6 +671,7 @@ function Layout({ children }: LayoutProps) {
                 )}
               </div>
             </div>
+            <UserRegionPreference active={isProfileOpen} />
           </div>
 
           <hr className="profile-panel__divider" role="separator" />

@@ -6,13 +6,26 @@ import Layout from '../Layout'
 import { useAuth } from '@/context/auth/useAuth'
 import ThemeProvider from '@/context/theme/ThemeProvider'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
+import { fetchUserPreferences, updateUserPreferences } from '@/service/user-preference-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+vi.mock('@/service/user-preference-service', () => ({
+  DEFAULT_REGION_OPTIONS: [
+    { value: 'RCO', label: 'Coast (RCO)' },
+    { value: 'RNI', label: 'Northern Interior (RNI)' },
+    { value: 'RSI', label: 'Southern Interior (RSI)' },
+  ],
+  fetchUserPreferences: vi.fn(),
+  updateUserPreferences: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedFetchUserPreferences = vi.mocked(fetchUserPreferences)
+const mockedUpdateUserPreferences = vi.mocked(updateUserPreferences)
 const THEME_PREFERENCE_KEY = 'lexis.ui.theme'
 const SIDE_NAV_PREFERENCE_KEY = 'lexis.ui.sideNavCollapsed'
 const COLLAPSED_SECTIONS_PREFERENCE_KEY = 'lexis.ui.collapsedSections'
@@ -62,6 +75,8 @@ describe('Layout shell', () => {
     document.getElementById(NOTIFICATION_REGION_ID)?.remove()
 
     mockedUseAuth.mockReturnValue(createTestAuthContext())
+    mockedFetchUserPreferences.mockResolvedValue({ defaultRegion: null })
+    mockedUpdateUserPreferences.mockImplementation(async (defaultRegion) => ({ defaultRegion }))
   })
 
   afterEach(() => {
@@ -518,6 +533,22 @@ describe('Layout shell', () => {
     expect(within(profilePanel).getByText('idir\\analyst (Read Only)')).toBeVisible()
     expect(within(profilePanel).getByText('Organization unit: 1903')).toBeVisible()
     expect(within(profilePanel).getByText('Forest client: 00012345')).toBeVisible()
+  })
+
+  it('loads and saves the default region from the profile panel', async () => {
+    mockedFetchUserPreferences.mockResolvedValue({ defaultRegion: 'RCO' })
+    renderLayout('/admin/rtm/emslogamv')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+
+    const regionSelect = await screen.findByRole('combobox', { name: 'Default region' })
+    await waitFor(() => expect(regionSelect).toHaveValue('RCO'))
+
+    await userEvent.selectOptions(regionSelect, 'RNI')
+    await userEvent.click(screen.getByRole('button', { name: 'Save preference' }))
+
+    expect(mockedUpdateUserPreferences).toHaveBeenCalledWith('RNI')
+    expect(await screen.findByRole('status')).toHaveTextContent('Preference saved.')
   })
 
   it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {
