@@ -4037,6 +4037,8 @@ const ProvincialPermitDetailsPage = () => {
                                       )}
                                       <TableHeader>Item</TableHeader>
                                       <TableHeader>Timber mark</TableHeader>
+                                      <TableHeader>Scale type</TableHeader>
+                                      <TableHeader>Permit</TableHeader>
                                       <TableHeader>Species</TableHeader>
                                       <TableHeader>Grade</TableHeader>
                                       <TableHeader>Pieces</TableHeader>
@@ -4071,6 +4073,8 @@ const ProvincialPermitDetailsPage = () => {
                                         )}
                                         <TableCell>{row.id}</TableCell>
                                         <TableCell>{row.timberMark || '-'}</TableCell>
+                                        <TableCell>{row.scaleType || '-'}</TableCell>
+                                        <TableCell>{row.permitNumber || '-'}</TableCell>
                                         <TableCell>{row.species || '-'}</TableCell>
                                         <TableCell>{row.grade || '-'}</TableCell>
                                         <TableCell>{row.pieces.toLocaleString()}</TableCell>

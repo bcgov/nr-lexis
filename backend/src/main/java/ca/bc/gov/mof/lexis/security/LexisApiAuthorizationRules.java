@@ -54,7 +54,7 @@ final class LexisApiAuthorizationRules {
   private static final String ACTION_UPLOAD_FEDERAL_SUBMISSION = "uploadFederalSubmission";
   private static final String ACTION_MANAGE_FEDERAL_APPLICATION = "manageFederalApplication";
 
-  private static final List<String> REPORT_ACTIONS =
+  private static final List<String> REPORT_WORKSPACE_ACTIONS =
       List.of(
           ACTION_APPLICATION_REPORT,
           ACTION_APPROVED_EXEMPTION_REPORT,
@@ -63,7 +63,6 @@ final class LexisApiAuthorizationRules {
           ACTION_MOFR_LISTING,
           ACTION_OFFER_REPORT,
           ACTION_PERMIT_LEDGER_REPORT,
-          ACTION_PERMIT_REPORT,
           ACTION_SPECIES_GRADE_REPORT,
           ACTION_TEAC_REPORT,
           ACTION_TENURE_REPORT,
@@ -202,7 +201,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/accessDenied.do",
               "/api/lexis/errorPage",
               "/api/lexis/errorPage.do"),
-          anyAction(HttpMethod.GET, REPORT_ACTIONS, "/api/lexis/reports/options"),
+          anyAction(HttpMethod.GET, REPORT_WORKSPACE_ACTIONS, "/api/lexis/reports/options"),
           action(
               HttpMethod.GET,
               "/applicationSearch",

@@ -182,6 +182,7 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/permitReport"
         - "/fileApplicationUpload"
         - "/fileExemptionUpload"
         - "/filePermitUpload"

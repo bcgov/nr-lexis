@@ -81,6 +81,7 @@ describe('provincial permit detail services', () => {
                     {
                       id: 'SCALE-1',
                       timbermark: 'TM-1',
+                      cascadeSplitCode: 'W',
                       species: 'Fir',
                       grade: 'A',
                       pieces: 12,
@@ -90,6 +91,7 @@ describe('provincial permit detail services', () => {
                     {
                       id: 'SCALE-2',
                       timbermark: 'TM-2',
+                      cascadeSplitCode: 'E',
                       species: 'Cedar',
                       grade: 'B',
                       pieces: 4,
@@ -202,6 +204,7 @@ describe('provincial permit detail services', () => {
         {
           id: 'SCALE-1',
           timberMark: 'TM-1',
+          scaleType: 'C',
           species: 'Fir',
           grade: 'A',
           pieces: 12,
@@ -213,6 +216,7 @@ describe('provincial permit detail services', () => {
         {
           id: 'SCALE-2',
           timberMark: 'TM-2',
+          scaleType: 'I',
           species: 'Cedar',
           grade: 'B',
           pieces: 4,
@@ -234,7 +238,7 @@ describe('provincial permit detail services', () => {
           ministryUser: true,
           ewb: '$100.00',
           filPercent: '12%',
-          mfPercent: '1.5',
+          mfPercent: '1.5%',
           amount: 123.45,
           amountDisplay: '$123.45',
         },
@@ -468,7 +472,7 @@ describe('provincial permit detail services', () => {
                   volume: '12.5',
                   ministryUser: false,
                   fil: '10%',
-                  mf: '2.0',
+                  mf: 0,
                   fee: '$10.50',
                 },
               ],
@@ -527,6 +531,7 @@ describe('provincial permit detail services', () => {
       {
         id: 'OIC-SCALE-1',
         timberMark: 'TM-OIC',
+        scaleType: '',
         species: 'Hemlock',
         grade: 'B',
         pieces: 5,
@@ -548,7 +553,7 @@ describe('provincial permit detail services', () => {
         ministryUser: false,
         ewb: '',
         filPercent: '10%',
-        mfPercent: '2.0',
+        mfPercent: '0%',
         amount: 10.5,
         amountDisplay: '$10.50',
       },

@@ -44,6 +44,9 @@ class LexisAuthorizationMatrixParityTest {
           "/tenureReport",
           "/approvedExemptionReport");
 
+  private static final List<String> NON_PERMIT_REPORT_ACTIONS =
+      REPORT_ACTIONS.stream().filter(action -> !"/permitReport".equals(action)).toList();
+
   private static final List<String> FEDERAL_READ_ACTIONS =
       List.of(
           "/federalApplicationSearch",
@@ -88,10 +91,10 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void provincialSubmitterShouldCreateApplicationsAndOffersAndViewProvincialRecordsOnly() {
+  void provincialSubmitterShouldCreateApplicationsOffersAndLegacyPermitReports() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("createApplication", "createOffer", "savePermit")
+        .contains("createApplication", "createOffer", "savePermit", "/permitReport")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -108,7 +111,7 @@ class LexisAuthorizationMatrixParityTest {
             "saveExemption",
             "uploadFederalSubmission")
         .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS)
-        .doesNotContainAnyElementsOf(REPORT_ACTIONS);
+        .doesNotContainAnyElementsOf(NON_PERMIT_REPORT_ACTIONS);
   }
 
   @Test
@@ -117,7 +120,7 @@ class LexisAuthorizationMatrixParityTest {
             authorizationService.resolveGrantedActions(
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
-        .contains("createApplication", "createOffer", "savePermit")
+        .contains("createApplication", "createOffer", "savePermit", "/permitReport")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -129,7 +132,8 @@ class LexisAuthorizationMatrixParityTest {
             "createPermit",
             "saveExemption",
             "uploadFederalSubmission")
-        .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS);
+        .doesNotContainAnyElementsOf(FEDERAL_READ_ACTIONS)
+        .doesNotContainAnyElementsOf(NON_PERMIT_REPORT_ACTIONS);
   }
 
   @Test

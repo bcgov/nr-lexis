@@ -2400,7 +2400,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void reportOptionsShouldRejectRoleWithoutReportAction() throws Exception {
+  void reportOptionsShouldRejectRoleWithoutReportWorkspaceAction() throws Exception {
     mockMvc.perform(
             get("/api/lexis/reports/options")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
@@ -2458,6 +2458,15 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("toDate", "2026-01-31")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyPermitReportViewShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/permitReport.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
   }
 
   @Test
