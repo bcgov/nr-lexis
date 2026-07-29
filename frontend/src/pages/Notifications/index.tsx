@@ -171,11 +171,12 @@ const hasRecentUpdate = (notification: LexisNotificationView): boolean => {
   return updateTime >= Date.now() - RECENT_UPDATE_WINDOW_DAYS * 24 * 60 * 60 * 1000
 }
 
-const contentTextLength = (contentHtml: string): number =>
-  contentHtml
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .trim().length
+const contentText = (contentHtml: string): string => {
+  const parsedDocument = new DOMParser().parseFromString(contentHtml, 'text/html')
+  return (parsedDocument.body.textContent ?? '').replace(/\u00a0/g, ' ').trim()
+}
+
+const contentTextLength = (contentHtml: string): number => contentText(contentHtml).length
 
 export default function NotificationsPage() {
   const { capabilities } = useAuth()
@@ -270,7 +271,7 @@ export default function NotificationsPage() {
       !form.title.trim() ||
       !form.displayStartDate ||
       !form.displayEndDate ||
-      !form.contentHtml.replace(/<[^>]*>/g, '').trim()
+      !contentText(form.contentHtml)
     ) {
       setMessage({
         kind: 'error',

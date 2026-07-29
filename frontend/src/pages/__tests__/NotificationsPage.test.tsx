@@ -145,6 +145,26 @@ describe('Notifications page', () => {
     })
   })
 
+  it('treats formatted empty HTML as missing notification content', async () => {
+    const user = userEvent.setup()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    await screen.findByText('Winter service update')
+    await user.click(screen.getByRole('button', { name: 'New notification' }))
+    await user.type(screen.getByLabelText('Title'), 'Office closure')
+    await user.type(screen.getByLabelText('Notification content editor'), '<p>&nbsp;</p>')
+    await user.click(screen.getByRole('button', { name: 'Publish notification' }))
+
+    expect(await screen.findByText('Complete the required fields')).toBeVisible()
+    expect(mockedCreateNotification).not.toHaveBeenCalled()
+  })
+
   it('keeps the original start date read-only while an administrator edits', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(
