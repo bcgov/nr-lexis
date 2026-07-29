@@ -1315,8 +1315,13 @@ legend.cds--label {
 .admin-policy-workspace {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
   min-inline-size: 0;
+}
+
+.admin-policy-table-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .admin-policy-row-actions {
@@ -1325,6 +1330,60 @@ legend.cds--label {
   flex-wrap: nowrap;
   gap: 0.25rem;
   white-space: nowrap;
+}
+
+.admin-policy-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
+.admin-policy-modal__description {
+  margin-block-end: 1.25rem;
+  color: var(--csp-text-secondary);
+}
+
+.admin-policy-modal__notification {
+  max-inline-size: none;
+  margin-block: 0 1.25rem;
+}
+
+.admin-policy-modal__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 1.25rem;
+}
+
+.admin-policy-modal__fields--fee {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-policy-modal__fields > *,
+.admin-policy-modal__fields .cds--form-item,
+.admin-policy-modal__fields .cds--date-picker,
+.admin-policy-modal__fields .cds--date-picker-container,
+.admin-policy-modal__fields .cds--date-picker-input__wrapper,
+.admin-policy-modal__fields .cds--date-picker-input__wrapper > span,
+.admin-policy-modal__fields .cds--date-picker--single .cds--date-picker__input,
+.admin-policy-modal__fields .cds--date-picker-input__wrapper input,
+.admin-policy-modal__fields .cds--select,
+.admin-policy-modal__fields .cds--select-input__wrapper,
+.admin-policy-modal__fields .cds--select-input,
+.admin-policy-modal__fields .cds--text-input {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.admin-policy-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-block-start: 2rem;
+}
+
+.admin-policy-modal__actions .cds--btn {
+  min-inline-size: 8.5rem;
 }
 
 @media (min-width: 672px) {
@@ -1340,6 +1399,17 @@ legend.cds--label {
 @media (max-width: 671px) {
   .admin-section-heading {
     flex-direction: column;
+  }
+
+  .admin-policy-table-actions .cds--btn,
+  .admin-policy-modal__actions .cds--btn {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
+
+  .admin-policy-modal__fields,
+  .admin-policy-modal__fields--fee {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

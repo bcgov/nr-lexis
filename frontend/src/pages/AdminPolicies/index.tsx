@@ -4,6 +4,8 @@ import {
   Button,
   Column,
   Grid,
+  InlineNotification,
+  Modal,
   Pagination,
   Select,
   SelectItem,
@@ -16,6 +18,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Add } from '@carbon/icons-react'
 import { useAuth } from '@/context/auth/useAuth'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
@@ -196,6 +199,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [showFeeValidationErrors, setShowFeeValidationErrors] = useState(false)
   const [showFilValidationErrors, setShowFilValidationErrors] = useState(false)
   const [showScheduleValidationErrors, setShowScheduleValidationErrors] = useState(false)
+  const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
 
   const pageTitle =
     area === 'fee'
@@ -209,7 +213,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       : area === 'fil'
         ? 'Manage fee-in-lieu percentages and effective dates.'
         : 'Manage advertising, receipt, offer, and TEAC schedule dates.'
-  const editorTitle = area === 'schedule' ? 'Schedule details' : 'Policy details'
   const loadingDescription =
     area === 'schedule'
       ? 'Loading export schedules...'
@@ -333,6 +336,29 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setEditingFilPolicyId(null)
     setTouchedFields({})
     setShowFilValidationErrors(false)
+  }
+
+  const closePolicyEditor = (): void => {
+    if (isMutatingPolicies) {
+      return
+    }
+
+    if (area === 'fee') {
+      resetFeeForm()
+    } else {
+      resetFilForm()
+    }
+    setIsPolicyEditorOpen(false)
+  }
+
+  const openPolicyEditor = (): void => {
+    clearNotifications()
+    if (area === 'fee') {
+      resetFeeForm()
+    } else {
+      resetFilForm()
+    }
+    setIsPolicyEditorOpen(true)
   }
 
   const resetScheduleForm = (): void => {
@@ -511,6 +537,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       await loadPolicies()
       setSuccessMessage(editingFeePolicyId ? 'Fee policy updated.' : 'Fee policy added.')
       resetFeeForm()
+      setIsPolicyEditorOpen(false)
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
@@ -540,6 +567,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setEditingFeePolicyId(row.id)
     setShowFeeValidationErrors(false)
     clearNotifications()
+    setIsPolicyEditorOpen(true)
   }
 
   const deleteFeePolicy = async (rowId: string): Promise<void> => {
@@ -595,6 +623,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         editingFilPolicyId ? 'Fee in lieu policy updated.' : 'Fee in lieu policy added.',
       )
       resetFilForm()
+      setIsPolicyEditorOpen(false)
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
@@ -618,6 +647,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setEditingFilPolicyId(row.id)
     setShowFilValidationErrors(false)
     clearNotifications()
+    setIsPolicyEditorOpen(true)
   }
 
   const deleteFilPolicy = async (rowId: string): Promise<void> => {
@@ -777,7 +807,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           onCloseButtonClick={() => setSuccessMessage('')}
         />
       )}
-      {errorMessage && (
+      {errorMessage && !isPolicyEditorOpen && (
         <AppNotification
           kind="error"
           title={errorTitle}
@@ -795,86 +825,205 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         />
       )}
 
+      {area === 'fee' && isPolicyEditorOpen && (
+        <Modal
+          open={isPolicyEditorOpen}
+          passiveModal
+          size="md"
+          modalHeading={editingFeePolicyId ? 'Edit fee policy' : 'Add fee policy'}
+          aria-label={editingFeePolicyId ? 'Edit fee policy' : 'Add fee policy'}
+          className="admin-policy-modal"
+          preventCloseOnClickOutside
+          selectorPrimaryFocus="#feeEffectiveDate"
+          onRequestClose={closePolicyEditor}
+        >
+          <p className="admin-policy-modal__description">
+            {editingFeePolicyId
+              ? 'Update the fee increase for this region and effective date.'
+              : 'Set the fee increase for one region from a given effective date onward.'}
+          </p>
+          {errorMessage && (
+            <InlineNotification
+              kind="error"
+              title={errorTitle}
+              subtitle={errorMessage}
+              lowContrast
+              className="admin-policy-modal__notification"
+              onCloseButtonClick={() => setErrorMessage('')}
+            />
+          )}
+          <div className="admin-policy-modal__fields admin-policy-modal__fields--fee">
+            <IsoDatePicker
+              id="feeEffectiveDate"
+              labelText="Policy effective date"
+              value={feeEffectiveDate}
+              invalid={!!feeFieldError('feeEffectiveDate')}
+              invalidText={feeFieldError('feeEffectiveDate')}
+              disabled={isMutatingPolicies}
+              onBlur={() => markFieldTouched('feeEffectiveDate')}
+              onChange={setFeeEffectiveDate}
+            />
+            <Select
+              id="feeOrgUnitNo"
+              labelText="Region"
+              value={feeOrgUnitNo}
+              invalid={!!feeFieldError('feeOrgUnitNo')}
+              invalidText={feeFieldError('feeOrgUnitNo')}
+              onBlur={() => markFieldTouched('feeOrgUnitNo')}
+              onChange={(event) => setFeeOrgUnitNo(event.target.value)}
+              disabled={
+                isLoadingPolicies ||
+                isMutatingPolicies ||
+                isLoadingFeeRegionOptions ||
+                Boolean(feeRegionOptionsError) ||
+                !canManageFeePolicy
+              }
+            >
+              <SelectItem
+                value=""
+                text={isLoadingFeeRegionOptions ? 'Loading regions...' : 'Choose a region'}
+              />
+              {feeRegionOptions.map((option) => {
+                const knownCode = feePolicies.find(
+                  (policy) => policy.orgUnitNo === option.value,
+                )?.orgUnitCode
+                const optionText = knownCode
+                  ? `${knownCode} — ${option.label}`
+                  : `${option.label} (${option.value})`
+                return <SelectItem key={option.value} value={option.value} text={optionText} />
+              })}
+            </Select>
+            <TextInput
+              id="feePolicyPercentage"
+              labelText="Fee increase percentage"
+              helperText="0 to 100"
+              inputMode="numeric"
+              value={feePolicyPercentage}
+              invalid={!!feeFieldError('feePolicyPercentage')}
+              invalidText={feeFieldError('feePolicyPercentage')}
+              disabled={isMutatingPolicies}
+              onBlur={() => markFieldTouched('feePolicyPercentage')}
+              onChange={(event) => setFeePolicyPercentage(event.target.value)}
+            />
+          </div>
+          <div className="admin-policy-modal__actions">
+            <Button kind="secondary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              renderIcon={editingFeePolicyId ? undefined : Add}
+              disabled={
+                isLoadingPolicies ||
+                isMutatingPolicies ||
+                isLoadingFeeRegionOptions ||
+                Boolean(feeRegionOptionsError) ||
+                feeRegionOptions.length === 0 ||
+                !canManageFeePolicy
+              }
+              onClick={() => void upsertFeePolicy()}
+            >
+              {isMutatingPolicies
+                ? 'Saving...'
+                : editingFeePolicyId
+                  ? 'Update fee policy'
+                  : 'Add fee policy'}
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {area === 'fil' && isPolicyEditorOpen && (
+        <Modal
+          open={isPolicyEditorOpen}
+          passiveModal
+          size="md"
+          modalHeading={editingFilPolicyId ? 'Edit fee in lieu policy' : 'Add fee in lieu policy'}
+          aria-label={editingFilPolicyId ? 'Edit fee in lieu policy' : 'Add fee in lieu policy'}
+          className="admin-policy-modal"
+          preventCloseOnClickOutside
+          selectorPrimaryFocus="#filEffectiveDate"
+          onRequestClose={closePolicyEditor}
+        >
+          <p className="admin-policy-modal__description">
+            {editingFilPolicyId
+              ? 'Update the fee in lieu percentage and effective date.'
+              : 'Set the fee in lieu percentage from a given effective date onward.'}
+          </p>
+          {errorMessage && (
+            <InlineNotification
+              kind="error"
+              title={errorTitle}
+              subtitle={errorMessage}
+              lowContrast
+              className="admin-policy-modal__notification"
+              onCloseButtonClick={() => setErrorMessage('')}
+            />
+          )}
+          <div className="admin-policy-modal__fields">
+            <IsoDatePicker
+              id="filEffectiveDate"
+              labelText="Policy effective date"
+              value={filEffectiveDate}
+              invalid={!!filFieldError('filEffectiveDate')}
+              invalidText={filFieldError('filEffectiveDate')}
+              disabled={isMutatingPolicies}
+              onBlur={() => markFieldTouched('filEffectiveDate')}
+              onChange={setFilEffectiveDate}
+            />
+            <TextInput
+              id="filPolicyPercentage"
+              labelText="Fee in lieu percentage"
+              helperText="1 to 99"
+              inputMode="numeric"
+              value={filPolicyPercentage}
+              invalid={!!filFieldError('filPolicyPercentage')}
+              invalidText={filFieldError('filPolicyPercentage')}
+              disabled={isMutatingPolicies}
+              onBlur={() => markFieldTouched('filPolicyPercentage')}
+              onChange={(event) => setFilPolicyPercentage(event.target.value)}
+            />
+          </div>
+          <div className="admin-policy-modal__actions">
+            <Button kind="secondary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              renderIcon={editingFilPolicyId ? undefined : Add}
+              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
+              onClick={() => void upsertFilPolicy()}
+            >
+              {isMutatingPolicies
+                ? 'Saving...'
+                : editingFilPolicyId
+                  ? 'Update fee in lieu policy'
+                  : 'Add fee in lieu policy'}
+            </Button>
+          </div>
+        </Modal>
+      )}
+
       {area === 'fee' && (
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
-            <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">{editorTitle}</h2>
-              <div className="legacy-search-grid create-form-grid">
-                <IsoDatePicker
-                  id="feeEffectiveDate"
-                  labelText="Policy effective date"
-                  value={feeEffectiveDate}
-                  invalid={!!feeFieldError('feeEffectiveDate')}
-                  invalidText={feeFieldError('feeEffectiveDate')}
-                  onBlur={() => markFieldTouched('feeEffectiveDate')}
-                  onChange={setFeeEffectiveDate}
-                />
-                <Select
-                  id="feeOrgUnitNo"
-                  labelText="Region"
-                  value={feeOrgUnitNo}
-                  invalid={!!feeFieldError('feeOrgUnitNo')}
-                  invalidText={feeFieldError('feeOrgUnitNo')}
-                  onBlur={() => markFieldTouched('feeOrgUnitNo')}
-                  onChange={(event) => setFeeOrgUnitNo(event.target.value)}
-                  disabled={
-                    isLoadingPolicies ||
-                    isMutatingPolicies ||
-                    isLoadingFeeRegionOptions ||
-                    Boolean(feeRegionOptionsError) ||
-                    !canManageFeePolicy
-                  }
-                >
-                  <SelectItem
-                    value=""
-                    text={isLoadingFeeRegionOptions ? 'Loading regions...' : 'Choose a region'}
-                  />
-                  {feeRegionOptions.map((option) => {
-                    const knownCode = feePolicies.find(
-                      (policy) => policy.orgUnitNo === option.value,
-                    )?.orgUnitCode
-                    const optionText = knownCode
-                      ? `${knownCode} — ${option.label}`
-                      : `${option.label} (${option.value})`
-                    return <SelectItem key={option.value} value={option.value} text={optionText} />
-                  })}
-                </Select>
-                <TextInput
-                  id="feePolicyPercentage"
-                  labelText="Fee increase percentage"
-                  value={feePolicyPercentage}
-                  invalid={!!feeFieldError('feePolicyPercentage')}
-                  invalidText={feeFieldError('feePolicyPercentage')}
-                  onBlur={() => markFieldTouched('feePolicyPercentage')}
-                  onChange={(event) => setFeePolicyPercentage(event.target.value)}
-                />
-              </div>
-              <div className="legacy-search-actions create-form-actions">
-                <Button
-                  kind="primary"
-                  onClick={() => void upsertFeePolicy()}
-                  disabled={
-                    isLoadingPolicies ||
-                    isMutatingPolicies ||
-                    isLoadingFeeRegionOptions ||
-                    Boolean(feeRegionOptionsError) ||
-                    feeRegionOptions.length === 0 ||
-                    !canManageFeePolicy
-                  }
-                >
-                  {editingFeePolicyId ? 'Update Fee Policy' : 'Add Fee Policy'}
-                </Button>
-                <Button
-                  kind="ghost"
-                  onClick={resetFeeForm}
-                  disabled={isLoadingPolicies || isMutatingPolicies}
-                >
-                  Cancel Edit
-                </Button>
-              </div>
-            </Tile>
-
+            <div className="admin-policy-table-actions">
+              <Button
+                kind="primary"
+                renderIcon={Add}
+                onClick={openPolicyEditor}
+                disabled={
+                  isLoadingPolicies ||
+                  isMutatingPolicies ||
+                  isLoadingFeeRegionOptions ||
+                  Boolean(feeRegionOptionsError) ||
+                  feeRegionOptions.length === 0 ||
+                  !canManageFeePolicy
+                }
+              >
+                Add fee policy
+              </Button>
+            </div>
             <SearchResultsTableFrame
               loading={isLoadingPolicies}
               loadingDescription={loadingDescription}
@@ -966,46 +1115,16 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       {area === 'fil' && (
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
-            <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">{editorTitle}</h2>
-              <div className="legacy-search-grid create-form-grid">
-                <IsoDatePicker
-                  id="filEffectiveDate"
-                  labelText="Policy effective date"
-                  value={filEffectiveDate}
-                  invalid={!!filFieldError('filEffectiveDate')}
-                  invalidText={filFieldError('filEffectiveDate')}
-                  onBlur={() => markFieldTouched('filEffectiveDate')}
-                  onChange={setFilEffectiveDate}
-                />
-                <TextInput
-                  id="filPolicyPercentage"
-                  labelText="Fee in lieu percentage"
-                  value={filPolicyPercentage}
-                  invalid={!!filFieldError('filPolicyPercentage')}
-                  invalidText={filFieldError('filPolicyPercentage')}
-                  onBlur={() => markFieldTouched('filPolicyPercentage')}
-                  onChange={(event) => setFilPolicyPercentage(event.target.value)}
-                />
-              </div>
-              <div className="legacy-search-actions create-form-actions">
-                <Button
-                  kind="primary"
-                  onClick={() => void upsertFilPolicy()}
-                  disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
-                >
-                  {editingFilPolicyId ? 'Update fee in lieu policy' : 'Add fee in lieu policy'}
-                </Button>
-                <Button
-                  kind="ghost"
-                  onClick={resetFilForm}
-                  disabled={isLoadingPolicies || isMutatingPolicies}
-                >
-                  Cancel Edit
-                </Button>
-              </div>
-            </Tile>
-
+            <div className="admin-policy-table-actions">
+              <Button
+                kind="primary"
+                renderIcon={Add}
+                onClick={openPolicyEditor}
+                disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
+              >
+                Add fee in lieu policy
+              </Button>
+            </div>
             <SearchResultsTableFrame
               loading={isLoadingPolicies}
               loadingDescription={loadingDescription}
@@ -1089,7 +1208,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
             <Tile className="create-form-tile admin-policy-editor-tile">
-              <h2 className="dashboard-title">{editorTitle}</h2>
+              <h2 className="dashboard-title">Schedule details</h2>
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="scheduleAdvertisingDate"
