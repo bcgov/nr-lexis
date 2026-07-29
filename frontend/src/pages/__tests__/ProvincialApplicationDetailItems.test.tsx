@@ -478,6 +478,51 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
   })
 
+  it('displays legacy scale types for cascade split codes', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: false,
+        timberMark: 'TM-WATER',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces: 5,
+        volume: '20.0',
+        id: '55',
+        cascadeSplitCode: 'W',
+      },
+      {
+        permitted: false,
+        timberMark: 'TM-ESTIMATE',
+        species: 'Cedar',
+        grade: 'Sawlog',
+        pieces: 2,
+        volume: '8.0',
+        id: '56',
+        cascadeSplitCode: 'E',
+      },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+
+    const waterScaleRow = (await screen.findByText('TM-WATER')).closest('tr')
+    const estimatedScaleRow = screen.getByText('TM-ESTIMATE').closest('tr')
+    expect(waterScaleRow).toBeTruthy()
+    expect(estimatedScaleRow).toBeTruthy()
+    expect(within(waterScaleRow as HTMLElement).getByText('C')).toBeInTheDocument()
+    expect(within(estimatedScaleRow as HTMLElement).getByText('I')).toBeInTheDocument()
+  })
+
   it('guards package drafts and provides an explicit local reset', async () => {
     const router = createMemoryRouter(
       [
@@ -1186,7 +1231,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
-    expect(within(scaleRow as HTMLElement).getByText('S')).toBeInTheDocument()
+    expect(within(scaleRow as HTMLElement).getByText('-')).toBeInTheDocument()
     fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
     await waitFor(() => {
       expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55', '321')

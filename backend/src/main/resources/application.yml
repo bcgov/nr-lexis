@@ -182,12 +182,15 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/permitReport"
         - "/fileApplicationUpload"
         - "/fileExemptionUpload"
         - "/filePermitUpload"
         - "/fileInvoiceUpload"
         - "createApplication"
         - "createOffer"
+        - "createPermit"
+        - "savePermit"
         - "uploadApplicationSubmission"
       LEXIS_DELEGATED_ADMIN: []
   federal-submission:

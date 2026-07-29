@@ -1,4 +1,13 @@
-import { Add, Edit, Notification as NotificationIcon, TrashCan } from '@carbon/icons-react'
+import {
+  Add,
+  Edit,
+  InformationFilled,
+  Notification as NotificationIcon,
+  Time,
+  TrashCan,
+  WarningAltFilled,
+  WarningFilled,
+} from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -8,7 +17,6 @@ import {
   RadioButton,
   RadioButtonGroup,
   TextInput,
-  Tile,
 } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -156,6 +164,17 @@ const roleLabel = (role: string): string =>
 const levelLabel = (level: NotificationLevel): string =>
   notificationLevels.find((entry) => entry.value === level)?.label ?? level
 
+const notificationLevelIcon = (level: NotificationLevel) => {
+  switch (level) {
+    case 'CRITICAL':
+      return <WarningFilled size={20} aria-hidden="true" />
+    case 'WARNING':
+      return <WarningAltFilled size={20} aria-hidden="true" />
+    default:
+      return <InformationFilled size={20} aria-hidden="true" />
+  }
+}
+
 const notificationStatus = (notification: LexisNotificationView): string => {
   const currentDate = today()
   if (notification.displayStartDate > currentDate) {
@@ -227,9 +246,8 @@ export default function NotificationsPage() {
 
   const isEditing = form.id !== null
   const editorTitle = isEditing ? 'Edit notification' : 'New notification'
-  const pageDescription = isAdmin
-    ? 'Create, edit, delete, and review LEXIS notifications.'
-    : 'Updates and bulletins from LEXIS administrators. Notices hide automatically after their end date.'
+  const pageDescription =
+    'Updates and bulletins from your administrators. Each notice shows until its posted end date.'
   const recentUpdateCount = useMemo(
     () => notifications.filter(hasRecentUpdate).length,
     [notifications],
@@ -392,17 +410,13 @@ export default function NotificationsPage() {
 
   return (
     <div className="notifications-page">
-      <section
-        className="notifications-page__header page-banner"
-        aria-labelledby="notifications-page-title"
-      >
+      <section className="notifications-page__header" aria-labelledby="notifications-page-title">
         <div>
-          <p className="page-banner__eyebrow">LEXIS</p>
           <h1 id="notifications-page-title">Notifications</h1>
           <p>{pageDescription}</p>
         </div>
         {isAdmin && (
-          <Button renderIcon={Add} onClick={startCreate} disabled={saving}>
+          <Button size="md" renderIcon={Add} onClick={startCreate} disabled={saving}>
             New notification
           </Button>
         )}
@@ -600,24 +614,22 @@ export default function NotificationsPage() {
       )}
 
       <section aria-labelledby="notification-list-heading">
-        <div className="notifications-page__list-heading">
-          <div>
-            <h2 id="notification-list-heading">
-              {isAdmin ? 'Notifications' : 'Current notifications'}
-            </h2>
-            {!loading && (
-              <p>
-                {isAdmin
-                  ? `${activeNotificationCount} active notification${activeNotificationCount === 1 ? '' : 's'}`
-                  : `${notifications.length} active notification${notifications.length === 1 ? '' : 's'}`}
-              </p>
-            )}
-          </div>
+        <h2 id="notification-list-heading" className="notifications-page__visually-hidden">
+          {isAdmin ? 'Notification administration feed' : 'Active notifications'}
+        </h2>
+        <div className="notifications-page__results-bar">
+          {!loading && (
+            <p className="notifications-page__results-count">
+              {isAdmin
+                ? `${activeNotificationCount} active notification${activeNotificationCount === 1 ? '' : 's'}`
+                : `${notifications.length} active notification${notifications.length === 1 ? '' : 's'}`}
+            </p>
+          )}
           {loading && <InlineLoading description="Loading notifications…" />}
         </div>
 
         {!loading && notifications.length === 0 && (
-          <Tile className="notifications-page__empty-state">
+          <div className="notifications-page__empty-state">
             <div className="notifications-page__empty-state-icon" aria-hidden="true">
               <NotificationIcon size={32} />
             </div>
@@ -627,20 +639,28 @@ export default function NotificationsPage() {
                 ? 'Nothing is posted right now. When you publish a notification, it appears here for its audience until its end date.'
                 : 'Nothing is posted right now. New notifications will appear here until their end date.'}
             </p>
-          </Tile>
+          </div>
         )}
 
-        <div className="notifications-page__list">
-          {notifications.map((notification) => {
-            const adminNotification = isAdminNotification(notification) ? notification : null
-            return (
-              <article
-                key={notification.id}
-                className={`notifications-page__notification notifications-page__notification--${notification.notificationLevel.toLowerCase()}`}
-              >
-                <Tile>
-                  <div className="notifications-page__notification-heading">
-                    <div>
+        {notifications.length > 0 && (
+          <div
+            className="notifications-page__list"
+            role="list"
+            aria-label={isAdmin ? 'All notifications' : 'Active notifications'}
+          >
+            {notifications.map((notification) => {
+              const adminNotification = isAdminNotification(notification) ? notification : null
+              return (
+                <article
+                  key={notification.id}
+                  className={`notifications-page__notification notifications-page__notification--${notification.notificationLevel.toLowerCase()}`}
+                  role="listitem"
+                >
+                  <div className="notifications-page__notification-icon" aria-hidden="true">
+                    {notificationLevelIcon(notification.notificationLevel)}
+                  </div>
+                  <div className="notifications-page__notification-body">
+                    <div className="notifications-page__notification-heading">
                       <div className="notifications-page__notification-title-row">
                         <h3>{notification.title}</h3>
                         <span
@@ -654,70 +674,77 @@ export default function NotificationsPage() {
                           </span>
                         )}
                       </div>
-                      <p>
-                        Posted {formatDate(notification.displayStartDate)} · Shows until{' '}
-                        {formatDate(notification.displayEndDate)}
-                      </p>
+                      {isAdmin && adminNotification && (
+                        <div className="notifications-page__notification-actions">
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            renderIcon={Edit}
+                            disabled={saving}
+                            onClick={() => startEdit(adminNotification)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            kind="danger--ghost"
+                            size="sm"
+                            renderIcon={TrashCan}
+                            disabled={saving}
+                            onClick={() => setNotificationPendingDeletion(adminNotification)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div
+                      className="notifications-page__notification-content"
+                      // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
+                      dangerouslySetInnerHTML={{ __html: notification.contentHtml }}
+                    />
+                    <div className="notifications-page__notification-meta">
+                      <span>Posted {formatDate(notification.displayStartDate)}</span>
+                      <span
+                        className="notifications-page__notification-meta-dot"
+                        aria-hidden="true"
+                      />
+                      <span className="notifications-page__notification-window">
+                        <Time size={14} aria-hidden="true" />
+                        Shows until {formatDate(notification.displayEndDate)}
+                      </span>
                     </div>
                     {isAdmin && adminNotification && (
-                      <div className="notifications-page__notification-actions">
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          renderIcon={Edit}
-                          disabled={saving}
-                          onClick={() => startEdit(adminNotification)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          kind="danger--ghost"
-                          size="sm"
-                          renderIcon={TrashCan}
-                          disabled={saving}
-                          onClick={() => setNotificationPendingDeletion(adminNotification)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
+                      <dl className="notifications-page__metadata">
+                        <div>
+                          <dt>Created</dt>
+                          <dd>
+                            {formatDateTime(adminNotification.createTimestamp)} by{' '}
+                            {adminNotification.createUser}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Last updated</dt>
+                          <dd>
+                            {formatDateTime(adminNotification.updateTimestamp)} by{' '}
+                            {adminNotification.updateUserId}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Audience</dt>
+                          <dd>
+                            {adminNotification.audienceRoles.length > 0
+                              ? adminNotification.audienceRoles.map(roleLabel).join(', ')
+                              : 'All authenticated LEXIS users'}
+                          </dd>
+                        </div>
+                      </dl>
                     )}
                   </div>
-                  <div
-                    className="notifications-page__notification-content"
-                    // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
-                    dangerouslySetInnerHTML={{ __html: notification.contentHtml }}
-                  />
-                  {isAdmin && adminNotification && (
-                    <dl className="notifications-page__metadata">
-                      <div>
-                        <dt>Created</dt>
-                        <dd>
-                          {formatDateTime(adminNotification.createTimestamp)} by{' '}
-                          {adminNotification.createUser}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Last updated</dt>
-                        <dd>
-                          {formatDateTime(adminNotification.updateTimestamp)} by{' '}
-                          {adminNotification.updateUserId}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Audience</dt>
-                        <dd>
-                          {adminNotification.audienceRoles.length > 0
-                            ? adminNotification.audienceRoles.map(roleLabel).join(', ')
-                            : 'All authenticated LEXIS users'}
-                        </dd>
-                      </div>
-                    </dl>
-                  )}
-                </Tile>
-              </article>
-            )
-          })}
-        </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
       </section>
 
       {notificationPendingDeletion && (

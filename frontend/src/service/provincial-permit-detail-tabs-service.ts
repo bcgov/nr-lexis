@@ -12,6 +12,7 @@ import { isRecord, recordOrEmpty } from '@/utils/record'
 export type ProvincialPermitItemRow = {
   id: string
   timberMark: string
+  scaleType: string
   species: string
   grade: string
   pieces: number
@@ -185,6 +186,11 @@ const asNumber = (value: unknown): number => {
   return payloadValueAsNumber(value, (input) => input.replace(/[$,\s]/g, ''))
 }
 
+const asPercent = (value: unknown): string => {
+  const normalized = asString(value).trim()
+  return normalized && !normalized.endsWith('%') ? `${normalized}%` : normalized
+}
+
 const asBoolean = (value: unknown): boolean => {
   if (typeof value === 'boolean') {
     return value
@@ -201,6 +207,17 @@ const asStringArray = (value: unknown): string[] => {
   }
   const normalized = asString(value)
   return normalized ? [normalized] : []
+}
+
+const legacyScaleType = (value: unknown): string => {
+  switch (asString(value).trim().toUpperCase()) {
+    case 'W':
+      return 'C'
+    case 'E':
+      return 'I'
+    default:
+      return ''
+  }
 }
 
 const normalizePermitItemRow = (
@@ -224,6 +241,7 @@ const normalizePermitItemRow = (
     timberMark: asString(
       source.timberMark || source.timbermark || source.mark || source.timberMarkNumber,
     ),
+    scaleType: legacyScaleType(source.cascadeSplitCode || source.scaleType || source.type),
     species: asString(source.species || source.speciesCode || source.speciesDescription),
     grade: asString(source.grade || source.gradeCode || source.gradeDescription),
     pieces: asNumber(source.pieces || source.pieceCount || source.numberOfPieces),
@@ -247,8 +265,8 @@ const normalizeScaleFeeRow = (row: unknown, index: number): ProvincialPermitFeeR
     volume: asNumber(source.volume),
     ministryUser: asBoolean(source.ministryUser),
     ewb: asString(source.ewb),
-    filPercent: asString(source.fil),
-    mfPercent: asString(source.mf),
+    filPercent: asPercent(source.fil),
+    mfPercent: asPercent(source.mf),
     amount: asNumber(source.fee || source.amount || source.feeAmount || source.total),
     amountDisplay: asString(source.fee || source.amount || source.feeAmount || source.total),
   }

@@ -581,7 +581,20 @@ class OracleExemptionDetailsRpcServiceTest {
         .thenReturn(
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
-                    1000456L, 95.04d, 94.96d, "00077881", "P", "T"),
+                    1000456L,
+                    95.04d,
+                    94.96d,
+                    "00077881",
+                    "00002176",
+                    "03",
+                    "12",
+                    "A",
+                    "BOB TURMEL",
+                    "EXPORT PERSON",
+                    "NORSKE SKOG CANADA LIMITED",
+                    "INTERNATIONAL FOREST PRODUCTS",
+                    "P",
+                    "T"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, 11.0d, 11.0d, "00077881", "P", "S")));
 
@@ -590,6 +603,21 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.applications()).hasSize(2);
     assertThat(response.applications().get(0).requestedVolume()).isEqualTo("95.0");
+    assertThat(response.applications().get(0))
+        .satisfies(
+            application -> {
+              assertThat(application.ownerClientNumber()).isEqualTo("00077881");
+              assertThat(application.agentClientNumber()).isEqualTo("00002176");
+              assertThat(application.ownerClientLocationCode()).isEqualTo("03");
+              assertThat(application.agentClientLocationCode()).isEqualTo("12");
+              assertThat(application.applicantTypeCode()).isEqualTo("A");
+              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
+              assertThat(application.ownerCompanyName())
+                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+              assertThat(application.agentCompanyName())
+                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+            });
     assertThat(response.containsUnmanu()).isTrue();
     assertThat(response.ownerNumber()).isEqualTo("00077881");
   }

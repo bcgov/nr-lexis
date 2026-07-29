@@ -668,8 +668,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('agent@example.test')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'false')
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03')
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '01')
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03', {
+      permitNumber: '777',
+    })
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '01', {
+      permitNumber: '777',
+    })
     await selectPermitDetailTab('GBMS')
     expect(
       await screen.findByRole('heading', {
@@ -981,6 +985,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
           comments: '',
         },
       ],
+      items: [
+        {
+          id: 'SCALE-1',
+          timberMark: 'TM-1',
+          scaleType: 'C',
+          species: 'Fir',
+          grade: 'A',
+          pieces: 12,
+          volume: 34.5,
+          packageNumber: 'PKG-9',
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
     })
 
     render(
@@ -1005,6 +1023,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('cell', { name: 'Second growth' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '120.5' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Unmanufactured' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Scale type' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Permit' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'C' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '777' })).toBeInTheDocument()
   })
 
   it('updates normal permit scale membership from the items tab', async () => {
@@ -1020,6 +1042,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           {
             id: 'SCALE-1',
             timberMark: 'TM-1',
+            scaleType: '',
             species: 'Fir',
             grade: 'A',
             pieces: 12,
@@ -1031,6 +1054,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           {
             id: 'SCALE-2',
             timberMark: 'TM-2',
+            scaleType: '',
             species: 'Cedar',
             grade: 'B',
             pieces: 4,
@@ -1047,6 +1071,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           {
             id: 'SCALE-1',
             timberMark: 'TM-1',
+            scaleType: '',
             species: 'Fir',
             grade: 'A',
             pieces: 12,
@@ -1058,6 +1083,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           {
             id: 'SCALE-2',
             timberMark: 'TM-2',
+            scaleType: '',
             species: 'Cedar',
             grade: 'B',
             pieces: 4,
@@ -1124,6 +1150,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           {
             id: 'SCALE-1',
             timberMark: 'TM-1',
+            scaleType: '',
             species: 'Fir',
             grade: 'A',
             pieces: 12,
@@ -1140,6 +1167,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           {
             id: 'SCALE-1',
             timberMark: 'TM-1',
+            scaleType: '',
             species: 'Fir',
             grade: 'A',
             pieces: 12,
@@ -1197,6 +1225,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           {
             id: 'SCALE-1',
             timberMark: 'TM-1',
+            scaleType: '',
             species: 'Fir',
             grade: 'A',
             pieces: 12,
@@ -1414,6 +1443,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         {
           id: 'SCALE-1',
           timberMark: 'TM-1',
+          scaleType: '',
           species: 'Fir',
           grade: 'A',
           pieces: 12,
@@ -2146,6 +2176,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         {
           id: 'SCALE-9',
           timberMark: 'TM-9',
+          scaleType: '',
           species: 'HE',
           grade: 'A',
           pieces: 12,
@@ -3055,6 +3086,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         {
           id: '1',
           timberMark: 'TM1',
+          scaleType: '',
           species: 'Fir',
           grade: 'J',
           pieces: 1,

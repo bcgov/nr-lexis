@@ -1123,20 +1123,36 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void createPermitFromExemptionShouldRejectProvincialSubmitterEvenIfActionIsGranted() {
+  void createPermitFromExemptionShouldAllowProvincialSubmitterWhenActionIsGranted() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was created successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
     TestingAuthenticationToken authentication =
         authenticationWithRoles(
             "bceid\\submitter", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
     when(authorizationService.canPerformAction(
             List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createPermit"))
         .thenReturn(true);
+    when(service.createPermitFromExemption("EX-700", "bceid\\submitter")).thenReturn(dto);
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.createPermitFromExemption("EX-700", authentication);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    verify(serviceProvider, never()).getIfAvailable();
-    verifyNoInteractions(service);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(provincialAuthorizationService, times(2))
+        .requireExemption(authentication, "EX-700");
+    verify(service).createPermitFromExemption("EX-700", "bceid\\submitter");
   }
 
   @Test

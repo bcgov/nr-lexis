@@ -10,6 +10,8 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -313,8 +315,12 @@ public class ExemptionRepository extends OracleRepositorySupport {
               FIND_EXEMPTION_BY_NUMBER,
               cs -> cs.setString(1, normalized),
               2,
-              rs ->
-                  new ExemptionDetailDto(
+              rs -> {
+                double approvedVolume =
+                    coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d);
+                double remainingVolume =
+                    coalesce(getDouble(rs, "VOLUME_REMAINING"), 0.0d);
+                return new ExemptionDetailDto(
                       getString(rs, "EXEMPTION_NUMBER"),
                       getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
                       getString(rs, "TYPE_DESCRIPTION"),
@@ -326,13 +332,14 @@ public class ExemptionRepository extends OracleRepositorySupport {
                       getString(rs, "APPLICATION_STATUS"),
                       getLocalDate(rs, "APPROVAL_DATE"),
                       getLocalDate(rs, "EXPIRY_DATE"),
-                      coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d),
-                      0.0d,
-                      coalesce(getDouble(rs, "VOLUME_REMAINING"), 0.0d),
+                      approvedVolume,
+                      calculateUsedVolume(approvedVolume, remainingVolume),
+                      remainingVolume,
                       getString(rs, "OTHER_CONDITIONS"),
                       "B".equalsIgnoreCase(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
                       List.of(),
-                      List.of()));
+                      List.of());
+              });
       LOGGER.info(
           "event=lexis_exemption_detail_oracle operation=find_exemption_by_number outcome={} exemptionNumber={} durationMs={}",
           detail.isPresent() ? "found" : "not_found",
@@ -347,6 +354,14 @@ public class ExemptionRepository extends OracleRepositorySupport {
           exceptionType(exception));
       throw exception;
     }
+  }
+
+  private static double calculateUsedVolume(
+      double approvedVolume, double remainingVolume) {
+    return BigDecimal.valueOf(approvedVolume)
+        .subtract(BigDecimal.valueOf(remainingVolume))
+        .setScale(1, RoundingMode.HALF_EVEN)
+        .doubleValue();
   }
 
   public Optional<ExemptionAccessDto> findAccessByExemptionNumber(

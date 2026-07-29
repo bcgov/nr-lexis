@@ -14,6 +14,15 @@ export type ExemptionApplicationRow = {
   scaleVolume: string
   locked: boolean
   jurisdiction: string
+  ownerClientNumber: string
+  agentClientNumber: string
+  ownerClientLocationCode: string
+  agentClientLocationCode: string
+  applicantTypeCode: string
+  ownerContactName: string
+  agentContactName: string
+  ownerCompanyName: string
+  agentCompanyName: string
 }
 
 export type ExemptionApplicationsResult = {
@@ -112,6 +121,15 @@ export const fetchExemptionApplications = async (
         scaleVolume: asString(row.scaleVolume),
         locked: asBoolean(row.locked),
         jurisdiction: asString(row.jurisdiction),
+        ownerClientNumber: asString(row.ownerClientNumber),
+        agentClientNumber: asString(row.agentClientNumber),
+        ownerClientLocationCode: asString(row.ownerClientLocationCode),
+        agentClientLocationCode: asString(row.agentClientLocationCode),
+        applicantTypeCode: asString(row.applicantTypeCode),
+        ownerContactName: asString(row.ownerContactName),
+        agentContactName: asString(row.agentContactName),
+        ownerCompanyName: asString(row.ownerCompanyName),
+        agentCompanyName: asString(row.agentCompanyName),
       }
     }),
     containsUnmanu: asBoolean(payload.containsUnmanu),

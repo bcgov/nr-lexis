@@ -64,6 +64,11 @@ vi.mock('@/service/lexis-detail-service', () => ({
   releaseApplicationEditLock: vi.fn(),
 }))
 
+vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientData: vi.fn().mockResolvedValue(null),
+  fetchApplicationClientLocations: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock('@/service/provincial-exemption-documents-service', () => ({
   fetchExemptionDocuments: vi.fn(),
   openExemptionDocument: vi.fn(),
@@ -615,7 +620,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByRole('columnheader', { name: 'Volume (m³)' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Issue date' })).toBeInTheDocument()
-    expect(screen.getByText('900101')).toBeInTheDocument()
+    expect(screen.getByText('900101 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('25.5')).toBeInTheDocument()
     expect(screen.getByText('12-Jul-2026')).toBeInTheDocument()
     expect(screen.queryByText('900102')).not.toBeInTheDocument()

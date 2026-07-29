@@ -227,6 +227,17 @@ class ExemptionDetailsRpcRepositoryTest {
               assertThat(application.applicationNumber()).isEqualTo(108653L);
               assertThat(application.requestedVolume()).isEqualTo(847.7d);
               assertThat(application.scaleVolume()).isNaN();
+              assertThat(application.ownerClientNumber()).isEqualTo("00001074");
+              assertThat(application.agentClientNumber()).isEqualTo("00002176");
+              assertThat(application.ownerClientLocationCode()).isEqualTo("03");
+              assertThat(application.agentClientLocationCode()).isEqualTo("12");
+              assertThat(application.applicantTypeCode()).isEqualTo("A");
+              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
+              assertThat(application.ownerCompanyName())
+                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+              assertThat(application.agentCompanyName())
+                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
             });
 
     verify(cursor, never()).getDouble("TOTAL_SCALE_VOLUME");
@@ -285,7 +296,16 @@ class ExemptionDetailsRpcRepositoryTest {
     when(cursor.next()).thenReturn(true, false);
     when(cursor.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
     when(cursor.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(applicationVolume);
-    when(cursor.getString("OWNER_CLIENT_NUMBER")).thenReturn("00162575");
+    when(cursor.getString("OWNER_CLIENT_NUMBER")).thenReturn("00001074");
+    when(cursor.getString("AGENT_CLIENT_NUMBER")).thenReturn("00002176");
+    when(cursor.getString("OWNER_CLIENT_LOCATION_CODE")).thenReturn("03");
+    when(cursor.getString("AGENT_CLIENT_LOCATION_CODE")).thenReturn("12");
+    when(cursor.getString("EXPORT_APPLICANT_TYPE_CODE")).thenReturn("A");
+    when(cursor.getString("OWNER_CONTACT_NAME")).thenReturn("BOB TURMEL");
+    when(cursor.getString("AGENT_CONTACT_NAME")).thenReturn("EXPORT PERSON");
+    when(cursor.getString("OWNER_COMPANY_NAME")).thenReturn("NORSKE SKOG CANADA LIMITED");
+    when(cursor.getString("AGENT_COMPANY_NAME"))
+        .thenReturn("INTERNATIONAL FOREST PRODUCTS");
     when(cursor.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
     when(cursor.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("T");
     return cursor;

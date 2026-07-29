@@ -194,6 +194,11 @@ const OIC_INDICATOR_OPTIONS: SearchOption[] = [
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
 
+const optionDescription = (options: SearchOption[], value: string | null | undefined): string => {
+  const normalizedValue = value?.trim() ?? ''
+  return options.find((option) => option.value === normalizedValue)?.label ?? normalizedValue
+}
+
 const applicantTypeLabel = (value: string | null | undefined): string => {
   switch (value?.trim().toUpperCase()) {
     case 'A':
@@ -1017,7 +1022,7 @@ const ProvincialApplicationDetailsPage = () => {
     applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canAddScales
   const canEditSummary = canUseApplicationMutations && !!detail?.canEditApplicationDetails
   const needsApplicationOptions =
-    canEditSummary || canEditPackages || canAddPackages || canAddScales
+    Boolean(summaryForm) || canEditSummary || canEditPackages || canAddPackages || canAddScales
   const canUpdatePackageNumber = canEditPackages && !!detail?.canUpdatePackageNumber
   const canManageRemarks = canViewRemarks && !detail?.readOnly && !detail?.locked
   const isProvincialSubmitter = hasProvincialSubmitterRole(capabilities?.roles)
@@ -1458,6 +1463,7 @@ const ProvincialApplicationDetailsPage = () => {
     void fetchApplicationClientData(
       summaryOwnerClientNumberForLookup,
       summaryOwnerClientLocationCode,
+      { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
         if (isActive) {
@@ -1473,7 +1479,12 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [hasSummaryForm, summaryOwnerClientLocationCode, summaryOwnerClientNumberForLookup])
+  }, [
+    applicationNumber,
+    hasSummaryForm,
+    summaryOwnerClientLocationCode,
+    summaryOwnerClientNumberForLookup,
+  ])
 
   useEffect(() => {
     if (!hasSummaryForm || !summaryAgentClientNumberForLookup || !summaryAgentClientLocationCode) {
@@ -1500,6 +1511,7 @@ const ProvincialApplicationDetailsPage = () => {
     void fetchApplicationClientData(
       summaryAgentClientNumberForLookup,
       summaryAgentClientLocationCode,
+      { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
         if (isActive) {
@@ -1515,10 +1527,15 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [hasSummaryForm, summaryAgentClientLocationCode, summaryAgentClientNumberForLookup])
+  }, [
+    applicationNumber,
+    hasSummaryForm,
+    summaryAgentClientLocationCode,
+    summaryAgentClientNumberForLookup,
+  ])
 
   useEffect(() => {
-    if (!canEditSummary || !hasSummaryForm) {
+    if (!hasSummaryForm) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1556,13 +1573,20 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientLocations(summaryOwnerClientNumberForLookup, 'owner')
+    void fetchApplicationClientLocations(
+      summaryOwnerClientNumberForLookup,
+      'owner',
+      applicationNumber ?? '',
+    )
       .then((locations) => {
         if (!isActive) {
           return
         }
 
         setOwnerClientLocations(locations)
+        if (!canEditSummary) {
+          return
+        }
         setSummaryForm((current) => {
           if (!current || current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup) {
             return current
@@ -1586,10 +1610,10 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [canEditSummary, hasSummaryForm, summaryOwnerClientNumberForLookup])
+  }, [applicationNumber, canEditSummary, hasSummaryForm, summaryOwnerClientNumberForLookup])
 
   useEffect(() => {
-    if (!canEditSummary || !hasSummaryForm) {
+    if (!hasSummaryForm) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1627,13 +1651,20 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientLocations(summaryAgentClientNumberForLookup, 'agent')
+    void fetchApplicationClientLocations(
+      summaryAgentClientNumberForLookup,
+      'agent',
+      applicationNumber ?? '',
+    )
       .then((locations) => {
         if (!isActive) {
           return
         }
 
         setAgentClientLocations(locations)
+        if (!canEditSummary) {
+          return
+        }
         setSummaryForm((current) => {
           if (!current || current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup) {
             return current
@@ -1657,7 +1688,7 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [canEditSummary, hasSummaryForm, summaryAgentClientNumberForLookup])
+  }, [applicationNumber, canEditSummary, hasSummaryForm, summaryAgentClientNumberForLookup])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -1924,7 +1955,7 @@ const ProvincialApplicationDetailsPage = () => {
   ])
 
   useEffect(() => {
-    if (!canEditSummary || !summaryForm?.orgUnitNumber || summarySpeciesCodes.length === 0) {
+    if (!hasSummaryForm || !summaryForm?.orgUnitNumber || summarySpeciesCodes.length === 0) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -1944,6 +1975,9 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
         setApplicationEndUseOptions(options)
+        if (!canEditSummary) {
+          return
+        }
         setSummaryForm((current) => {
           if (!current || current.speciesCodes.join(',') !== summarySpeciesKey) {
             return current
@@ -1964,7 +1998,13 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [canEditSummary, summaryForm?.orgUnitNumber, summarySpeciesCodes, summarySpeciesKey])
+  }, [
+    canEditSummary,
+    hasSummaryForm,
+    summaryForm?.orgUnitNumber,
+    summarySpeciesCodes,
+    summarySpeciesKey,
+  ])
 
   useEffect(() => {
     if (!canReviewApplication) {
@@ -2764,6 +2804,14 @@ const ProvincialApplicationDetailsPage = () => {
     ownerClientLocationCode,
     ownerClientLocationName ?? '',
   )
+  const agentClientLocationCode = summaryForm?.agentClientLocationCode?.trim() ?? ''
+  const agentClientLocationName = agentClientLocations.find(
+    (location) => location.locationCode === agentClientLocationCode,
+  )?.locationName
+  const agentClientLocationDisplay = clientLocationLabel(
+    agentClientLocationCode,
+    agentClientLocationName ?? '',
+  )
   const summaryJurisdictionCode = summaryForm?.jurisdictionCode ?? ''
   const summaryJurisdictionOption = optionsWithCurrentValue(
     JURISDICTION_OPTIONS,
@@ -2772,6 +2820,26 @@ const ProvincialApplicationDetailsPage = () => {
   const summaryJurisdictionLabel = summaryJurisdictionOption
     ? optionLabel(summaryJurisdictionOption)
     : summaryJurisdictionCode
+  const summaryExemptionReasonDescription = optionDescription(
+    exemptionReasonOptions,
+    summaryForm?.exemptionReasonCode,
+  )
+  const summaryProductTypeDescription = optionDescription(
+    productTypeOptions,
+    summaryForm?.productTypeCode ?? detail?.productTypeCode,
+  )
+  const summaryRegionDescription =
+    optionDescription(regionOptions, summaryForm?.orgUnitNumber) ||
+    detail?.orgUnitName ||
+    String(detail?.orgUnitNumber ?? '')
+  const summaryGrowthTypeDescription = optionDescription(
+    growthTypeOptions,
+    summaryForm?.growthTypeCode,
+  )
+  const summaryEndUseCode = summaryForm?.endUseCode.trim() ?? ''
+  const summaryEndUseDescription =
+    applicationEndUseOptions.find((option) => option.code === summaryEndUseCode)?.description ??
+    summaryEndUseCode
   const ownerClientDetailFields: Array<[string, string]> = [
     ['Client number', summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? '')],
     ['Applicant type', ownerApplicantTypeLabel],
@@ -3460,10 +3528,10 @@ const ProvincialApplicationDetailsPage = () => {
                                 detail.statusDescription ?? detail.applicationStatusCode,
                               ),
                             ],
-                            ['Product type', displayValue(detail.productTypeCode)],
+                            ['Product type', displayValue(summaryProductTypeDescription)],
                             ['Owner client number', displayValue(detail.ownerClientNumber)],
                             ['Agent client number', displayValue(detail.agentClientNumber)],
-                            ['Org Unit', displayValue(detail.orgUnitName ?? detail.orgUnitNumber)],
+                            ['Org Unit', displayValue(summaryRegionDescription)],
                             ['Listing date', displayValue(detail.listingDate)],
                           ].map(([label, value]) => (
                             <div key={label} className="detail-field-item">
@@ -3960,7 +4028,10 @@ const ProvincialApplicationDetailsPage = () => {
                           <>
                             <dl className="detail-field-grid">
                               {[
-                                ['Exemption reason', displayValue(detail.exemptionReasonCode)],
+                                [
+                                  'Exemption reason',
+                                  displayValue(summaryExemptionReasonDescription),
+                                ],
                                 ['Application date', displayValue(detail.applicationDate)],
                                 ['Received date', displayValue(detail.receivedDate)],
                                 ['Term (days)', displayValue(detail.termDays)],
@@ -3974,20 +4045,14 @@ const ProvincialApplicationDetailsPage = () => {
                                   'Applicant type',
                                   displayValue(summaryForm ? ownerApplicantTypeLabel : null),
                                 ],
-                                [
-                                  'Owner client location',
-                                  displayValue(summaryForm?.ownerClientLocationCode),
-                                ],
+                                ['Owner client location', displayValue(ownerClientLocationDisplay)],
                                 ['Owner contact name', displayValue(summaryForm?.ownerContactName)],
-                                [
-                                  'Agent client location',
-                                  displayValue(summaryForm?.agentClientLocationCode),
-                                ],
+                                ['Agent client location', displayValue(agentClientLocationDisplay)],
                                 ['Agent contact name', displayValue(summaryForm?.agentContactName)],
                                 ...(productTypeRequiresGrowthType(
                                   summaryForm?.productTypeCode ?? '',
                                 )
-                                  ? [['Growth type', displayValue(summaryForm?.growthTypeCode)]]
+                                  ? [['Growth type', displayValue(summaryGrowthTypeDescription)]]
                                   : []),
                                 ...(productTypeRequiresLogDetails(
                                   summaryForm?.productTypeCode ?? '',
@@ -4003,7 +4068,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   'Application species',
                                   displayValue(summaryForm?.speciesCodes.join(', ')),
                                 ],
-                                ['Application end use', displayValue(summaryForm?.endUseCode)],
+                                ['Application end use', displayValue(summaryEndUseDescription)],
                               ].map(([label, value]) => (
                                 <div key={label} className="detail-field-item">
                                   <dt className="detail-field-label">{label}</dt>
