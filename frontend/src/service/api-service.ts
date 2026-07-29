@@ -204,12 +204,13 @@ class APIService {
     detailUrl: string,
     detailConfig?: AxiosRequestConfig,
   ): void {
-    const version = this.getHeader(response.headers, RECORD_VERSION_HEADER)
-    if (typeof version !== 'string' || !version.trim()) {
-      return
-    }
     const key = this.recordVersionKey(recordType, recordId)
     const existing = this.recordSnapshots.get(key)
+    const version = this.getHeader(response.headers, RECORD_VERSION_HEADER)
+    const normalizedVersion = typeof version === 'string' ? version.trim() : ''
+    if (!normalizedVersion && !existing) {
+      return
+    }
     const source: RecordSnapshotSource = { detailUrl, detailConfig, data: response.data }
     const sourceKey = this.snapshotSourceKey(source)
     const primarySourceKey = existing?.primarySourceKey ?? sourceKey
@@ -223,7 +224,10 @@ class APIService {
       sources.push(source)
     }
     this.recordSnapshots.set(key, {
-      version: !existing || sourceKey === primarySourceKey ? version.trim() : existing.version,
+      version:
+        normalizedVersion && (!existing || sourceKey === primarySourceKey)
+          ? normalizedVersion
+          : (existing?.version ?? normalizedVersion),
       primarySourceKey,
       sources,
     })

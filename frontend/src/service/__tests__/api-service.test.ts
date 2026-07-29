@@ -588,7 +588,7 @@ describe('api-service cached GET support', () => {
       'permit',
       '777',
       {
-        headers: { [RECORD_VERSION_HEADER]: 'supplemental-version-2' },
+        headers: {},
         data: { overrideEnabled: true },
       } as unknown as AxiosResponse<unknown>,
       '/lexis/rpc/permit-details/edit-context',
@@ -1182,7 +1182,7 @@ describe('api-service cached GET support', () => {
       'permit',
       '777',
       {
-        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        headers: {},
         data: { overrideEnabled: false, overrideComment: '' },
       } as unknown as AxiosResponse<unknown>,
       '/lexis/rpc/permit-details/edit-context',
