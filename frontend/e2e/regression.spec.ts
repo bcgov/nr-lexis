@@ -2805,6 +2805,104 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
+  test('creates and deletes an admin notification', async () => {
+    test.skip(
+      !isSharedTestRegressionBaseUrl(E2E_BASE_URL),
+      'Notification mutation regression runs only against shared TEST.',
+    )
+
+    const page = await authenticatedIdirPage()
+    const cleanup = new RegressionCleanupStack()
+    const notificationApiPath = '/api/lexis/admin/notifications'
+    const notificationTitle = `LEXIS E2E notification ${Date.now().toString(36).toUpperCase()}`
+    const notificationMessage = 'This is a TEST regression notification.'
+    const apiServerErrors = collectApiServerErrors(page)
+    const notificationCleanup = cleanup.defer('delete admin notification', async () => {
+      const notifications = asRecordArray(
+        await readJsonResponse<unknown>(await getWithAuth(page, notificationApiPath)),
+      )
+      const matchingNotifications = notifications.filter(
+        (notification) => String(notification.title ?? '') === notificationTitle,
+      )
+
+      for (const notification of matchingNotifications) {
+        const notificationId = Number(notification.id)
+        expect(notificationId).toBeGreaterThan(0)
+        const response = await deleteWithCsrf(page, `${notificationApiPath}/${notificationId}`)
+        expect([204, 404]).toContain(response.status())
+      }
+    })
+    let primaryError: unknown
+
+    try {
+      await expectAccessiblePage(page, '/notifications', /^Notifications$/)
+      await page.getByRole('button', { name: 'New notification' }).click()
+
+      const editor = page.getByRole('dialog', { name: 'New notification' })
+      await expect(editor).toBeVisible()
+      await editor.getByLabel('Title').fill(notificationTitle)
+      await editor.getByLabel('Notification content editor').fill(notificationMessage)
+      await editor.getByRole('radio', { name: /^Warning/ }).check()
+      await expect(
+        editor.getByRole('checkbox', { name: 'All authenticated LEXIS roles' }),
+      ).toBeChecked()
+
+      const createResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname === notificationApiPath,
+      )
+      await editor.getByRole('button', { name: 'Publish' }).click()
+      const createResponse = await createResponsePromise
+      expect(createResponse.status()).toBe(201)
+      const createdNotification = (await createResponse.json()) as Record<string, unknown>
+      const createdNotificationId = Number(createdNotification.id)
+      expect(createdNotificationId).toBeGreaterThan(0)
+
+      await expect(page.getByText('Notification published', { exact: true })).toBeVisible()
+      const notification = page
+        .getByRole('article')
+        .filter({ has: page.getByRole('heading', { name: notificationTitle, exact: true }) })
+      await expect(notification).toBeVisible()
+      await expect(notification.getByText(notificationMessage, { exact: true })).toBeVisible()
+      await expect(notification.getByText('Warning', { exact: true })).toBeVisible()
+      await expect(notification.getByText('Active', { exact: true })).toBeVisible()
+
+      const deleteResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'DELETE' &&
+          new URL(response.url()).pathname === `${notificationApiPath}/${createdNotificationId}`,
+      )
+      await notification.getByRole('button', { name: 'Delete' }).click()
+      const confirmation = page.getByRole('dialog', { name: 'Delete this notification?' })
+      await expect(confirmation).toContainText(notificationTitle)
+      await confirmation.getByRole('button', { name: 'Delete' }).click()
+      const deleteResponse = await deleteResponsePromise
+      expect(deleteResponse.status()).toBe(204)
+      notificationCleanup.complete()
+
+      await expect(page.getByText('Notification deleted', { exact: true })).toBeVisible()
+      await expect(notification).toHaveCount(0)
+      expect(apiServerErrors).toEqual([])
+    } catch (error) {
+      primaryError = error
+    }
+
+    const cleanupFailures = await cleanup.run()
+    const failures = [...cleanupFailures]
+    if (primaryError !== undefined) {
+      failures.unshift(
+        primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
+      )
+    }
+    if (failures.length === 1) {
+      throw failures[0]
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Notification regression and cleanup failed.')
+    }
+  })
+
   test('creates, edits, terminalizes, and cleans up provincial records', async () => {
     test.setTimeout(300_000)
     test.skip(
