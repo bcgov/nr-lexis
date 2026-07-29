@@ -107,6 +107,45 @@ class ExemptionOracleServiceTest {
   }
 
   @Test
+  void detailShouldResolveLegacyCursorTypeCodeWithAuthoritativeDescription() {
+    ExemptionDetailDto dto =
+        new ExemptionDetailDto(
+            "26-8758",
+            "M",
+            null,
+            "ACT",
+            "Active",
+            "00077881",
+            "00055667",
+            1000456L,
+            "Approved",
+            LocalDate.of(2026, 3, 12),
+            LocalDate.of(2027, 3, 12),
+            95.0,
+            12.0,
+            83.0,
+            "Pending final confirmation",
+            false,
+            List.of("9020934"),
+            List.of());
+
+    when(repository.findByExemptionNumber("26-8758")).thenReturn(Optional.of(dto));
+    when(repository.loadExemptionTypeOptions())
+        .thenReturn(
+            List.of(
+                new CodeNameDto("B", "Blanket OIC"),
+                new CodeNameDto("M", "Ministerial")));
+
+    Optional<ExemptionDetailDto> result = service.findByExemptionNumber("26-8758");
+
+    assertThat(result)
+        .get()
+        .extracting(ExemptionDetailDto::exemptionTypeDescription)
+        .isEqualTo("Ministerial");
+    verify(repository).loadExemptionTypeOptions();
+  }
+
+  @Test
   void accessLookupShouldPassThroughRepository() {
     ExemptionAccessDto access =
         new ExemptionAccessDto("BO-001", "B", "ACT", true);

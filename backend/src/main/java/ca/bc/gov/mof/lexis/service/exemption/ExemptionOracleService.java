@@ -66,7 +66,9 @@ public class ExemptionOracleService implements ExemptionService {
 
   @Override
   public Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber) {
-    return repository.findByExemptionNumber(exemptionNumber);
+    return repository
+        .findByExemptionNumber(exemptionNumber)
+        .map(this::resolveExemptionTypeDescription);
   }
 
   @Override
@@ -85,6 +87,49 @@ public class ExemptionOracleService implements ExemptionService {
   @Override
   public List<Long> findOrgUnitNumbers(String exemptionNumber) {
     return repository.findOrgUnitNumbers(exemptionNumber);
+  }
+
+  private ExemptionDetailDto resolveExemptionTypeDescription(ExemptionDetailDto detail) {
+    if (trimToNull(detail.exemptionTypeDescription()) != null) {
+      return detail;
+    }
+
+    // The legacy FIND_EXEMPTION_BY_NUMBER cursor returns the type code without its description.
+    String typeCode = trimToNull(detail.exemptionTypeCode());
+    if (typeCode == null) {
+      return detail;
+    }
+
+    String typeDescription =
+        safeList(repository.loadExemptionTypeOptions()).stream()
+            .filter(option -> typeCode.equalsIgnoreCase(trimToNull(option.code())))
+            .map(option -> trimToNull(option.name()))
+            .filter(name -> name != null)
+            .findFirst()
+            .orElse(null);
+    if (typeDescription == null) {
+      return detail;
+    }
+
+    return new ExemptionDetailDto(
+        detail.exemptionNumber(),
+        detail.exemptionTypeCode(),
+        typeDescription,
+        detail.exemptionStatusCode(),
+        detail.exemptionStatusDescription(),
+        detail.ownerClientNumber(),
+        detail.agentClientNumber(),
+        detail.applicationNumber(),
+        detail.applicationStatus(),
+        detail.approvalDate(),
+        detail.expiryDate(),
+        detail.approvedVolume(),
+        detail.usedVolume(),
+        detail.remainingVolume(),
+        detail.otherConditions(),
+        detail.blanketOic(),
+        detail.permitNumbers(),
+        detail.remarks());
   }
 
   private ExemptionSearchCriteria normalizeCriteria(ExemptionSearchCriteria input) {
