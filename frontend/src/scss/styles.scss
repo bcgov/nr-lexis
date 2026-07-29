@@ -4538,12 +4538,6 @@ legend.cds--label {
   background: #f3f3f5;
 }
 
-.cds--data-table tbody tr:hover td,
-.cds--data-table tbody tr:hover th {
-  border-block-start-color: transparent;
-  border-block-end-color: transparent;
-}
-
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table thead th {
   background: var(--csp-table-header-bg);
 }
@@ -4558,6 +4552,15 @@ legend.cds--label {
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) td,
 :root[data-carbon-theme='g100'] .app-shell .cds--data-table tbody tr:nth-child(even) th {
   background: var(--csp-table-row-alt-bg);
+}
+
+.cds--data-table tbody tr:hover td,
+.cds--data-table tbody tr:hover th,
+.cds--data-table tbody tr:focus-within td,
+.cds--data-table tbody tr:focus-within th {
+  background: var(--csp-table-row-hover-bg);
+  border-block-start-color: transparent;
+  border-block-end-color: transparent;
 }
 
 .rtm-amv-table-wrap .cds--data-table td.rtm-amv-value-cell.has-warning {
