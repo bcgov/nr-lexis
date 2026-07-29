@@ -132,7 +132,7 @@ const ProvincialOffersPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [defaultListingToDate, setDefaultListingToDate] = useState('')
   const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
@@ -294,9 +294,6 @@ const ProvincialOffersPage = () => {
           cachedTotal,
           search: searchProvincialOffers,
           count: countProvincialOffers,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)

@@ -12,6 +12,8 @@ export const createTestCapabilities = (
   legacyPath: null,
   grantedActions: [],
   forestClientNumber: null,
+  availableForestClientNumbers: [],
+  forestClientSelectionRequired: false,
   ...overrides,
 })
 
@@ -25,6 +27,7 @@ export const createTestAuthContext = (
   usesExternalLogin: true,
   defaultRoute: '/admin',
   refresh: vi.fn().mockResolvedValue(undefined),
+  selectForestClient: vi.fn().mockResolvedValue(undefined),
   login: vi.fn().mockResolvedValue(undefined),
   logout: vi.fn().mockResolvedValue(undefined),
   canPerform: vi.fn().mockReturnValue(true),

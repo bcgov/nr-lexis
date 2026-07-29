@@ -38,8 +38,30 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_PERMITS_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
+  private static final String FIND_BLANKET_OIC_TOTALS =
+      """
+      SELECT
+        NVL(SUM(PERMIT_VOLUME), 0) AS REQUESTED_VOLUME,
+        NVL(
+          SUM(
+            CASE
+              WHEN EXPORT_PERMIT_STATUS_CODE = 'COM' THEN PERMIT_VOLUME
+              ELSE 0
+            END
+          ),
+          0
+        ) AS COMPLETED_VOLUME
+      FROM EXPORT_PERMIT_DETAIL
+      WHERE EXEMPTION_NUMBER = ?
+      """;
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
+  private static final String FIND_EXEMPTION_TYPE_BY_NUMBER =
+      """
+      SELECT EXPORT_EXEMPTION_TYPE_CODE
+      FROM EXPORT_EXEMPTION
+      WHERE EXEMPTION_NUMBER = ?
+      """;
   private static final String FIND_ALL_EXPIRING_EXEMPTIONS =
       LEXIS_GROUP_11_PACKAGE + "FIND_ALL_EXPIRING_EXEMPTIONS(?)";
   private static final String FIND_EXEMPTION_FILE_DETAILS =
@@ -112,16 +134,37 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         this::mapPermitSummaryRow);
   }
 
+  public BlanketOicTotalsRow findBlanketOicTotals(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return new BlanketOicTotalsRow(0.0d, 0.0d);
+    }
+    return jdbcTemplate
+        .query(
+            FIND_BLANKET_OIC_TOTALS,
+            (rs, rowNumber) ->
+                new BlanketOicTotalsRow(
+                    coalesce(getDouble(rs, "REQUESTED_VOLUME"), 0.0d),
+                    coalesce(getDouble(rs, "COMPLETED_VOLUME"), 0.0d)),
+            normalized)
+        .stream()
+        .findFirst()
+        .orElse(new BlanketOicTotalsRow(0.0d, 0.0d));
+  }
+
   public Optional<String> findExemptionTypeCodeByExemptionNumber(String exemptionNumber) {
     String normalized = trim(exemptionNumber);
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingleRequired(
-            FIND_EXEMPTION_BY_NUMBER,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")))
+    return jdbcTemplate
+        .query(
+            FIND_EXEMPTION_TYPE_BY_NUMBER,
+            (rs, rowNumber) ->
+                trim(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
+            normalized)
+        .stream()
+        .findFirst()
         .filter(value -> value != null && !value.isBlank());
   }
 
@@ -225,12 +268,15 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         FIND_PERMITS_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
-        rs ->
-            new ApplicationPermitRow(
-                coalesce(
-                    getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                    getLong(rs, "EXPORT_PERMIT_NUMBER")),
-                trim(getString(rs, "EXEMPTION_NUMBER"))));
+        rs -> {
+          // The deployed legacy cursor uses EXPORT_PERMIT_DETAIL_NUMBER. Keep the fallback lazy
+          // because reading a missing Oracle cursor column raises JDBC error 17006.
+          Long permitNumber =
+              Optional.ofNullable(getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"))
+                  .orElseGet(() -> getLong(rs, "EXPORT_PERMIT_NUMBER"));
+          return new ApplicationPermitRow(
+              coalesce(permitNumber, 0L), trim(getString(rs, "EXEMPTION_NUMBER")));
+        });
   }
 
   public boolean isExemptionTypeCodeValidRequired(String code) {
@@ -533,7 +579,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   private PermitSummaryRow mapPermitSummaryRow(ResultSet rs) {
     Long permitNumber =
         Optional.ofNullable(getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"))
-            .orElse(getLong(rs, "EXPORT_PERMIT_NUMBER"));
+            .orElseGet(() -> getLong(rs, "EXPORT_PERMIT_NUMBER"));
     return new PermitSummaryRow(
         coalesce(permitNumber, 0L),
         coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
@@ -694,6 +740,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LocalDate issueDate,
       String clientNumber,
       String agentNumber) {}
+
+  public record BlanketOicTotalsRow(double requestedVolume, double completedVolume) {}
 
   public record ApplicationPermitRow(Long permitNumber, String exemptionNumber) {}
 

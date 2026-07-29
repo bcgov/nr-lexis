@@ -350,7 +350,9 @@ describe('Layout shell', () => {
       legacyPath: null,
       grantedActions: ['/applicationReport', 'mofrListing'],
       forestClientNumber: null,
-    } as LexisSessionCapabilities
+      availableForestClientNumbers: [],
+      forestClientSelectionRequired: false,
+    } as unknown as LexisSessionCapabilities
 
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -507,6 +509,7 @@ describe('Layout shell', () => {
           roles: ['READ_ONLY'],
           orgUnitNo: '1903',
           forestClientNumber: '00012345',
+          availableForestClientNumbers: ['00012345', '00067890'],
         }),
       }),
     )
@@ -518,6 +521,11 @@ describe('Layout shell', () => {
     expect(within(profilePanel).getByText('idir\\analyst (Read Only)')).toBeVisible()
     expect(within(profilePanel).getByText('Organization unit: 1903')).toBeVisible()
     expect(within(profilePanel).getByText('Forest client: 00012345')).toBeVisible()
+
+    await userEvent.click(within(profilePanel).getByRole('button', { name: 'Switch organization' }))
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/select-organization')
+    expect(document.getElementById('profile-panel')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {

@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
@@ -41,6 +42,32 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "COUNT_EXEMPTIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
+  private static final String FIND_EXEMPTION_ACCESS =
+      """
+      SELECT
+        EXEMPTION_NUMBER,
+        EXPORT_EXEMPTION_TYPE_CODE,
+        EXPORT_EXEMPTION_STATUS_CODE
+      FROM EXPORT_EXEMPTION
+      WHERE EXEMPTION_NUMBER = ?
+      """;
+  private static final String LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT =
+      """
+      SELECT CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM EXPORT_EXEMPTION_APPLICATION
+          WHERE EXEMPTION_NUMBER = ?
+            AND EXPORT_JURISDICTION_CODE = 'P'
+            AND (
+              OWNER_CLIENT_NUMBER = ?
+              OR AGENT_CLIENT_NUMBER = ?
+            )
+        ) THEN 1
+        ELSE 0
+      END
+      FROM DUAL
+      """;
   private static final String FIND_EXEMPTION_ORG_UNIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_ORG_UNIT(?,?)";
   private static final String SEARCH_GROUP_BY =
@@ -320,6 +347,46 @@ public class ExemptionRepository extends OracleRepositorySupport {
           exceptionType(exception));
       throw exception;
     }
+  }
+
+  public Optional<ExemptionAccessDto> findAccessByExemptionNumber(
+      String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return jdbcTemplate
+        .query(
+            FIND_EXEMPTION_ACCESS,
+            (rs, rowNumber) -> {
+              String exemptionTypeCode =
+                  getString(rs, "EXPORT_EXEMPTION_TYPE_CODE");
+              return new ExemptionAccessDto(
+                  getString(rs, "EXEMPTION_NUMBER"),
+                  exemptionTypeCode,
+                  getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"),
+                  "B".equalsIgnoreCase(exemptionTypeCode));
+            },
+            normalized)
+        .stream()
+        .findFirst();
+  }
+
+  public boolean hasLinkedProvincialApplicationForClient(
+      String exemptionNumber, String clientNumber) {
+    String normalizedExemptionNumber = trim(exemptionNumber);
+    String normalizedClientNumber = trim(clientNumber);
+    if (normalizedExemptionNumber == null || normalizedClientNumber == null) {
+      return false;
+    }
+    Long matches =
+        jdbcTemplate.queryForObject(
+            LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT,
+            Long.class,
+            normalizedExemptionNumber,
+            normalizedClientNumber,
+            normalizedClientNumber);
+    return matches != null && matches > 0;
   }
 
   private static long elapsedMillis(long startedAtNanos) {

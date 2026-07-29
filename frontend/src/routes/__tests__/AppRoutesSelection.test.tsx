@@ -8,6 +8,10 @@ vi.mock('@/context/auth/useAuth', () => ({
   useAuth: () => mockUseAuth(),
 }))
 
+vi.mock('@/pages/ForestClientSelection', () => ({
+  default: () => <div>forest-client-selection</div>,
+}))
+
 vi.mock('@/routes/routePaths', () => ({
   getPublicRoutes: () => [
     {
@@ -39,6 +43,10 @@ describe('AppRoutes selection', () => {
       isLoading: false,
       isLoggedIn: false,
       hasAnyRole: false,
+      capabilities: {
+        forestClientNumber: null,
+        forestClientSelectionRequired: false,
+      },
     })
 
     render(<AppRoutes />)
@@ -51,6 +59,10 @@ describe('AppRoutes selection', () => {
       isLoading: false,
       isLoggedIn: true,
       hasAnyRole: false,
+      capabilities: {
+        forestClientNumber: null,
+        forestClientSelectionRequired: false,
+      },
     })
 
     render(<AppRoutes />)
@@ -63,6 +75,10 @@ describe('AppRoutes selection', () => {
       isLoading: false,
       isLoggedIn: true,
       hasAnyRole: true,
+      capabilities: {
+        forestClientNumber: null,
+        forestClientSelectionRequired: false,
+      },
     })
 
     render(<AppRoutes />)
@@ -75,11 +91,32 @@ describe('AppRoutes selection', () => {
       isLoading: true,
       isLoggedIn: true,
       hasAnyRole: true,
+      capabilities: {
+        forestClientNumber: null,
+        forestClientSelectionRequired: false,
+      },
     })
 
     render(<AppRoutes />)
 
     expect(screen.getByRole('img', { name: 'Loading session...' })).toBeInTheDocument()
+    expect(screen.queryByText('protected-routes')).not.toBeInTheDocument()
+  })
+
+  it('blocks protected routes until a multi-client user selects an organization', () => {
+    mockUseAuth.mockReturnValue({
+      isLoading: false,
+      isLoggedIn: true,
+      hasAnyRole: true,
+      capabilities: {
+        forestClientNumber: null,
+        forestClientSelectionRequired: true,
+      },
+    })
+
+    render(<AppRoutes />)
+
+    expect(screen.getByText('forest-client-selection')).toBeInTheDocument()
     expect(screen.queryByText('protected-routes')).not.toBeInTheDocument()
   })
 })

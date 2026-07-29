@@ -3724,6 +3724,44 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void updateApplicationSummaryShouldRejectUnknownRegionBeforeOracleUpdate() {
+    stubPersistedApplicationEndUse(9999L, true);
+    when(repository.isOrgUnitValidRequired(9999L)).thenReturn(false);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                9999L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).containsExactly("Application region does not exist.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
   void updateApplicationSummaryShouldRejectOracleTextStorageViolationsBeforeWriting() {
     when(repository.findApplicationUpdateRecord(1000456L))
         .thenReturn(Optional.of(applicationUpdateRecord()));

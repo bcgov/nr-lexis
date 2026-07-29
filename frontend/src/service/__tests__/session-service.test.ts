@@ -31,6 +31,8 @@ describe('session-service', () => {
       legacyPath: null,
       grantedActions: ['/applicationSearch'],
       forestClientNumber: '00012345',
+      availableForestClientNumbers: ['00012345'],
+      forestClientSelectionRequired: false,
     }
     getCachedResponseMock.mockResolvedValue({ data: payload })
 

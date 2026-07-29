@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
+import { authorizePageUnload } from '@/utils/page-unload'
 
 import UnsavedChangesGuard, { formValuesEqual } from './index'
 
@@ -297,7 +298,7 @@ describe('UnsavedChangesGuard', () => {
     )
   })
 
-  it('prevents native unload only while dirty', async () => {
+  it('prevents dirty native unload unless it was explicitly authorized', async () => {
     renderGuard(vi.fn().mockResolvedValue(true))
 
     const cleanUnload = new Event('beforeunload', { cancelable: true })
@@ -309,5 +310,10 @@ describe('UnsavedChangesGuard', () => {
     const dirtyUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(dirtyUnload)
     expect(dirtyUnload.defaultPrevented).toBe(true)
+
+    authorizePageUnload()
+    const authorizedUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(authorizedUnload)
+    expect(authorizedUnload.defaultPrevented).toBe(false)
   })
 })

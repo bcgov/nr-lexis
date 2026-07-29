@@ -695,6 +695,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(formCard).toBeVisible()
     await expect(sections).toHaveCount(5)
     await expect(sections.nth(1)).toHaveCSS('border-top-width', '1px')
+    await expect(sections.first()).toHaveCSS('border-color', 'rgb(198, 198, 198)')
+    const firstSectionTitleInset = await sections.first().evaluate((section) => {
+      const title = section.querySelector('legend')
+      if (!(title instanceof HTMLElement)) throw new Error('Offer section title not found')
+      return title.getBoundingClientRect().top - section.getBoundingClientRect().top
+    })
+    expect(firstSectionTitleInset).toBeGreaterThanOrEqual(16)
     await expect(page.getByRole('group', { name: 'Offer form actions' })).toBeVisible()
 
     await page.setViewportSize({ width: 390, height: 844 })
@@ -850,6 +857,75 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       ),
     ).toBe(false)
+  })
+
+  test('places policy add actions above their tables and uses focused add dialogs', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/admin/policies/fee', { waitUntil: 'domcontentloaded' })
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Fee policy administration' }),
+    ).toBeVisible()
+    const feeAddButton = page.getByRole('button', { name: 'Add fee policy' })
+    await expect(feeAddButton).toBeEnabled()
+    const feeLayout = await page.locator('.admin-policy-workspace').evaluate((workspace) => {
+      const button = workspace.querySelector('.admin-policy-table-actions .cds--btn')
+      const tableFrame = workspace.querySelector('.legacy-search-table-frame')
+      if (!(button instanceof HTMLElement) || !(tableFrame instanceof HTMLElement)) {
+        throw new Error('Fee policy add action or results table not found')
+      }
+
+      const buttonRect = button.getBoundingClientRect()
+      const tableRect = tableFrame.getBoundingClientRect()
+      return {
+        buttonBottom: buttonRect.bottom,
+        buttonRight: buttonRect.right,
+        tableRight: tableRect.right,
+        tableTop: tableRect.top,
+      }
+    })
+    expect(feeLayout.buttonBottom).toBeLessThanOrEqual(feeLayout.tableTop)
+    expect(Math.abs(feeLayout.buttonRight - feeLayout.tableRight)).toBeLessThanOrEqual(1)
+
+    await feeAddButton.click()
+    const feeDialog = page.getByRole('dialog', { name: 'Add fee policy' })
+    await expect(feeDialog).toBeVisible()
+    await expect(
+      feeDialog.getByText(
+        'Set the fee increase for one region from a given effective date onward.',
+      ),
+    ).toBeVisible()
+    await expect(feeDialog.getByLabel('Policy effective date')).toBeVisible()
+    await expect(feeDialog.getByLabel('Region')).toBeVisible()
+    await expect(feeDialog.getByLabel('Fee increase percentage')).toBeVisible()
+    await feeDialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(feeDialog).toBeHidden()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/admin/policies/fil', { waitUntil: 'domcontentloaded' })
+    const filAddButton = page.getByRole('button', { name: 'Add fee in lieu policy' })
+    await expect(filAddButton).toBeEnabled()
+    await filAddButton.click()
+    const filDialog = page.getByRole('dialog', { name: 'Add fee in lieu policy' })
+    await expect(filDialog).toBeVisible()
+    await expect(filDialog.getByLabel('Policy effective date')).toBeVisible()
+    await expect(filDialog.getByLabel('Fee in lieu percentage')).toBeVisible()
+
+    const mobileDialog = await filDialog.evaluate((dialog) => {
+      const fields = dialog.querySelector('.admin-policy-modal__fields')
+      if (!(fields instanceof HTMLElement)) {
+        throw new Error('Fee in lieu fields not found')
+      }
+      return {
+        dialogClientWidth: dialog.clientWidth,
+        dialogScrollWidth: dialog.scrollWidth,
+        gridColumns: getComputedStyle(fields).gridTemplateColumns,
+      }
+    })
+    expect(mobileDialog.dialogScrollWidth).toBeLessThanOrEqual(mobileDialog.dialogClientWidth)
+    expect(mobileDialog.gridColumns.split(' ')).toHaveLength(1)
   })
 
   test('keeps FSPTS upload surfaces coherent in dark mode', async ({ page }) => {

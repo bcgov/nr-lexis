@@ -286,9 +286,6 @@ const FederalPage = () => {
           cachedTotal,
           search: searchFederalApplications,
           count: countFederalApplications,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)

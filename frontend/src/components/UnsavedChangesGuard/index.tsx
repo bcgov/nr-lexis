@@ -2,6 +2,7 @@ import { use, useCallback, useEffect, useId, useLayoutEffect, useRef, useState }
 import { Button, Checkbox, InlineNotification, Modal } from '@carbon/react'
 import { UNSAFE_DataRouterContext, useBeforeUnload, useBlocker } from 'react-router-dom'
 import type { BlockerFunction } from 'react-router-dom'
+import { isPageUnloadAuthorized } from '@/utils/page-unload'
 
 import './UnsavedChangesGuard.css'
 
@@ -235,7 +236,7 @@ const UnsavedChangesGuard = (props: UnsavedChangesGuardProps) => {
   useBeforeUnload(
     useCallback(
       (event) => {
-        if (!props.isDirty && !props.isBusy) return
+        if (isPageUnloadAuthorized() || (!props.isDirty && !props.isBusy)) return
         event.preventDefault()
         event.returnValue = ''
       },

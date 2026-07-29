@@ -82,6 +82,13 @@ public class PermitOracleService implements PermitService {
   }
 
   @Override
+  public boolean hasLinkedProvincialApplicationForClient(
+      Long permitNumber, String clientNumber) {
+    return permitRpcRepository.hasLinkedProvincialApplicationForClient(
+        permitNumber, clientNumber);
+  }
+
+  @Override
   public List<Long> findLinkedApplicationNumbers(Long permitNumber) {
     if (permitNumber == null || permitNumber < 1) {
       return List.of();

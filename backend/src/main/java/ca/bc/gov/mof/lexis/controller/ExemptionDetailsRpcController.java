@@ -10,6 +10,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileN
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
@@ -225,11 +226,17 @@ public class ExemptionDetailsRpcController {
         service
             .getPermits(
                 exemptionNumber,
-                permitNumber ->
+                permit ->
                     canViewPermitDetails
                         && provincialAuthorizationService != null
-                        && provincialAuthorizationService.canAccessPermit(
-                            authentication, permitNumber))
+                        && provincialAuthorizationService.canAccessExemptionPermit(
+                            authentication,
+                            new PermitAccessDto(
+                                permit.permitNumber(),
+                                permit.applicantClientNumber(),
+                                permit.ownerClientNumber(),
+                                null),
+                            permit.oicLike()))
             .stream()
             .filter(ExemptionDetailsRpcService.PermitItem::canViewPermit)
             .map(

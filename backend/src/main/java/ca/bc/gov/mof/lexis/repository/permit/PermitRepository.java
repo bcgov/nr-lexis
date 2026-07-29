@@ -122,19 +122,13 @@ public class PermitRepository extends OracleRepositorySupport {
               + permitOwnerBind
               + " OR EPD.AGENT_NUMBER = :"
               + permitAgentBind
-              + " OR EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ACCESS_ESD"
-              + " INNER JOIN EXPORT_PACKAGE ACCESS_EP"
-              + " ON ACCESS_EP.PACKAGE_NUMBER = ACCESS_ESD.PACKAGE_NUMBER"
-              + " INNER JOIN EXPORT_EXEMPTION_APPLICATION ACCESS_EEA"
-              + " ON ACCESS_EEA.APPLICATION_NUMBER = ACCESS_EP.APPLICATION_NUMBER"
-              + " WHERE ACCESS_ESD.EXPORT_PERMIT_DETAIL_NUMBER ="
-              + " EPD.EXPORT_PERMIT_DETAIL_NUMBER"
-              + " AND ACCESS_EEA.EXPORT_JURISDICTION_CODE = 'P'"
-              + " AND (ACCESS_EEA.OWNER_CLIENT_NUMBER = :"
+              + " OR EP.OWNER_CLIENT_NUMBER = :"
               + applicationOwnerBind
-              + " OR ACCESS_EEA.AGENT_CLIENT_NUMBER = :"
+              + " OR EP.AGENT_CLIENT_NUMBER = :"
               + applicationAgentBind
-              + ")))",
+              + ")"
+              + " AND (EP.EXPORT_JURISDICTION_CODE = 'P'"
+              + " OR EP.EXPORT_JURISDICTION_CODE IS NULL)",
           accessClientNumber,
           accessClientNumber,
           accessClientNumber,

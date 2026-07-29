@@ -688,6 +688,35 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
   }, 15000)
 
+  it('restores the permit tab and loads deferred data after a conflict refresh', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/permit/777',
+            state: { lexisDetailTab: 'documents' },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Documents' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(
+      await screen.findByRole('heading', { name: 'No permit documents available', level: 3 }),
+    ).toBeInTheDocument()
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledWith('777')
+  })
+
   it('defers fee, document, and invoice data until their tabs are opened', async () => {
     let resolveFees:
       | ((value: Awaited<ReturnType<typeof fetchProvincialPermitFees>>) => void)
@@ -896,6 +925,27 @@ describe('Provincial Permit Detail Action Smoke', () => {
         blanketOic: false,
       }),
     )
+  })
+
+  it('loads a missing exemption type when permit volumes are already available', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: null,
+    })
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 250,
+      exemptionVolumeRemaining: 130,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+
+    renderPermitDetails()
+
+    expect(await screen.findByText('Ministerial')).toBeVisible()
+    expect(mockedFetchProvincialPermitExemptionContext).toHaveBeenCalledWith('EX-9')
   })
 
   it('shows unavailable fee summaries when the deferred fee request fails', async () => {
@@ -2198,6 +2248,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail.mock.calls[0]?.[0]).not.toHaveProperty('permitSubmitDate')
     expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
+  })
+
+  it('does not submit hidden Blanket OIC request limits for a normal permit', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      oicRequestPieces: 250,
+      oicRequestVolume: 125.75,
+      blanketOic: false,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'normal permit update')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitRemarks: 'normal permit update',
+          oicPermitTotalPieces: '',
+          oicPermitTotalVolume: '',
+        }),
+      )
+    })
   })
 
   it('guards unload only after a permit field differs from its edit baseline', async () => {

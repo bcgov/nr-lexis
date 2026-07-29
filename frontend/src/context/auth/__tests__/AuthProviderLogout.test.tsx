@@ -11,6 +11,11 @@ import {
   SESSION_IDLE_WARNING_MS,
 } from '@/context/auth/session-expiry'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  clearActiveForestClientNumber,
+  getActiveForestClientNumber,
+  setActiveForestClientNumber,
+} from '@/service/forest-client-selection'
 import { fetchSessionCapabilities } from '@/service/session-service'
 
 const authMocks = vi.hoisted(() => ({
@@ -63,6 +68,7 @@ const renderProbe = () => {
 describe('AuthProvider logout', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearActiveForestClientNumber()
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     authMocks.fetchAuthSession.mockResolvedValue({
       tokens: {
@@ -83,6 +89,8 @@ describe('AuthProvider logout', () => {
       grantedActions: ['/lexisAgentAdmin'],
       orgUnitNo: null,
       forestClientNumber: null,
+      availableForestClientNumbers: [],
+      forestClientSelectionRequired: false,
     })
   })
 
@@ -91,10 +99,12 @@ describe('AuthProvider logout', () => {
     vi.useRealTimers()
     window.history.replaceState({}, document.title, '/')
     clearSessionExpiredLoginNotice()
+    clearActiveForestClientNumber()
   })
 
   it('signs out of Cognito', async () => {
     markSessionExpiredLoginNotice()
+    setActiveForestClientNumber('00012345')
     renderProbe()
 
     await waitFor(() => {
@@ -110,6 +120,7 @@ describe('AuthProvider logout', () => {
     expect(authMocks.signOut).toHaveBeenCalledWith()
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(hasSessionExpiredLoginNotice()).toBe(false)
+    expect(getActiveForestClientNumber()).toBeNull()
   })
 
   it('uses the FSPTS-style federated logout chain when it is configured', async () => {

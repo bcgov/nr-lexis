@@ -66,6 +66,27 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       END
       FROM DUAL
       """;
+  private static final String LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT =
+      """
+      SELECT CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM EXPORT_SCALE_DETAIL ESD
+          INNER JOIN EXPORT_PACKAGE P
+            ON P.PACKAGE_NUMBER = ESD.PACKAGE_NUMBER
+          INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA
+            ON EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
+          WHERE ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+            AND EEA.EXPORT_JURISDICTION_CODE = 'P'
+            AND (
+              EEA.OWNER_CLIENT_NUMBER = ?
+              OR EEA.AGENT_CLIENT_NUMBER = ?
+            )
+        ) THEN 1
+        ELSE 0
+      END
+      FROM DUAL
+      """;
   private static final String FIND_PACKAGES_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
   private static final String FIND_PACKAGES_BY_EXEMPTION =
@@ -456,6 +477,25 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             normalizedPackageNumber,
             permitNumber,
             permitNumber);
+    return matches != null && matches > 0;
+  }
+
+  public boolean hasLinkedProvincialApplicationForClient(
+      Long permitNumber, String clientNumber) {
+    String normalizedClientNumber = trim(clientNumber);
+    if (permitNumber == null
+        || permitNumber < 1
+        || normalizedClientNumber == null) {
+      return false;
+    }
+
+    Long matches =
+        jdbcTemplate.queryForObject(
+            LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT,
+            Long.class,
+            permitNumber,
+            normalizedClientNumber,
+            normalizedClientNumber);
     return matches != null && matches > 0;
   }
 

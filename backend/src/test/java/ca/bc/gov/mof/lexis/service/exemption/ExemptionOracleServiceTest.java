@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
@@ -103,6 +104,71 @@ class ExemptionOracleServiceTest {
 
     assertThat(result).contains(dto);
     verify(repository).findByExemptionNumber("EX-205");
+  }
+
+  @Test
+  void detailShouldResolveLegacyCursorTypeCodeWithAuthoritativeDescription() {
+    ExemptionDetailDto dto =
+        new ExemptionDetailDto(
+            "26-8758",
+            "M",
+            null,
+            "ACT",
+            "Active",
+            "00077881",
+            "00055667",
+            1000456L,
+            "Approved",
+            LocalDate.of(2026, 3, 12),
+            LocalDate.of(2027, 3, 12),
+            95.0,
+            12.0,
+            83.0,
+            "Pending final confirmation",
+            false,
+            List.of("9020934"),
+            List.of());
+
+    when(repository.findByExemptionNumber("26-8758")).thenReturn(Optional.of(dto));
+    when(repository.loadExemptionTypeOptions())
+        .thenReturn(
+            List.of(
+                new CodeNameDto("B", "Blanket OIC"),
+                new CodeNameDto("M", "Ministerial")));
+
+    Optional<ExemptionDetailDto> result = service.findByExemptionNumber("26-8758");
+
+    assertThat(result)
+        .get()
+        .extracting(ExemptionDetailDto::exemptionTypeDescription)
+        .isEqualTo("Ministerial");
+    verify(repository).loadExemptionTypeOptions();
+  }
+
+  @Test
+  void accessLookupShouldPassThroughRepository() {
+    ExemptionAccessDto access =
+        new ExemptionAccessDto("BO-001", "B", "ACT", true);
+    when(repository.findAccessByExemptionNumber("BO-001"))
+        .thenReturn(Optional.of(access));
+
+    assertThat(service.findAccessByExemptionNumber("BO-001")).contains(access);
+    verify(repository).findAccessByExemptionNumber("BO-001");
+  }
+
+  @Test
+  void linkedClientAccessShouldPassThroughRepository() {
+    when(
+            repository.hasLinkedProvincialApplicationForClient(
+                "EX-205", "00012345"))
+        .thenReturn(true);
+
+    assertThat(
+            service.hasLinkedProvincialApplicationForClient(
+                "EX-205", "00012345"))
+        .isTrue();
+    verify(repository)
+        .hasLinkedProvincialApplicationForClient("EX-205", "00012345");
   }
 
   @Test

@@ -20,7 +20,8 @@ public interface ExemptionDetailsRpcService {
   /** Loads every direct permit key that must be serialized for an exemption mutation. */
   List<Long> getPermitNumbersForMutation(String exemptionNumber);
 
-  List<PermitItem> getPermits(String exemptionNumber, Predicate<Long> permitAccess);
+  List<PermitItem> getPermits(
+      String exemptionNumber, Predicate<PermitAccessContext> permitAccess);
 
   BlanketOicTotalsResponse getBlanketOicTotals(String exemptionNumber);
 
@@ -109,6 +110,12 @@ public interface ExemptionDetailsRpcService {
       String permitStatus,
       String permitIssueDate,
       boolean canViewPermit) {}
+
+  record PermitAccessContext(
+      long permitNumber,
+      String applicantClientNumber,
+      String ownerClientNumber,
+      boolean oicLike) {}
 
   record BlanketOicTotalsResponse(String requestedVolume, String completedVolume) {}
 

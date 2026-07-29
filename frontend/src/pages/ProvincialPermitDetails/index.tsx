@@ -57,6 +57,7 @@ import {
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import {
   fetchProvincialPermitDetail,
   fetchProvincialPermitExemptionContext,
@@ -197,6 +198,7 @@ const PERMIT_DETAIL_TABS = [
 
 type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
 type DeferredPermitTabId = Extract<PermitDetailTabId, 'fees' | 'documents' | 'invoices'>
+const PERMIT_DETAIL_TAB_IDS: readonly PermitDetailTabId[] = PERMIT_DETAIL_TABS.map(({ id }) => id)
 
 const EMPTY_DEFERRED_PERMIT_TAB_STATE: Record<DeferredPermitTabId, boolean> = {
   fees: false,
@@ -406,10 +408,22 @@ const buildPermitDetailForm = (permitDetail: ProvincialPermitDetail): PermitDeta
   otherPortOfExport: detailValue(permitDetail.otherPortOfExport),
 })
 
+const permitMutationRequest = (
+  form: PermitDetailMutationRequest,
+  blanketOic: boolean,
+): PermitDetailMutationRequest =>
+  blanketOic
+    ? form
+    : {
+        ...form,
+        // Legacy only exposes and accepts these request limits for Blanket OIC permits.
+        oicPermitTotalPieces: '',
+        oicPermitTotalVolume: '',
+      }
+
 const hasPermitExemptionContext = (permitDetail: ProvincialPermitDetail): boolean =>
-  permitDetail.blanketOic ||
-  permitDetail.approvedExemptionVolume !== null ||
-  permitDetail.exemptionVolumeRemaining !== null ||
+  permitDetail.approvedExemptionVolume !== null &&
+  permitDetail.exemptionVolumeRemaining !== null &&
   permitDetail.exemptionTypeDescription !== null
 
 const withUpdatedPermitDetail = (
@@ -500,12 +514,16 @@ const ProvincialPermitDetailsPage = () => {
   const { capabilities, canPerform } = useAuth()
   const { permitNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [selectedPermitTabId, selectPermitTab] = useReloadPreservedTab({
+    tabs: PERMIT_DETAIL_TAB_IDS,
+    defaultTab: 'permit',
+  })
   const [detail, setDetail] = useState<ProvincialPermitDetail | null>(null)
   const [tabsData, setTabsData] = useState<ProvincialPermitDetailTabsData | null>(null)
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [isClientDataLoading, setIsClientDataLoading] = useState(false)
-  const [shouldLoadClientData, setShouldLoadClientData] = useState(false)
+  const [clientDataRequested, setClientDataRequested] = useState(false)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
   const [permitForm, setPermitForm] = useState<PermitDetailForm | null>(null)
@@ -585,7 +603,6 @@ const ProvincialPermitDetailsPage = () => {
   const [invoiceDocumentUploadDirty, setInvoiceDocumentUploadDirty] = useState(false)
   const [invoiceDocumentUploadBusy, setInvoiceDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
-  const [selectedPermitTabId, setSelectedPermitTabId] = useState<PermitDetailTabId>('permit')
   const [touchedPermitFields, setTouchedPermitFields] = useState<
     TouchedFields<PermitDetailFormField>
   >({})
@@ -666,8 +683,7 @@ const ProvincialPermitDetailsPage = () => {
     setDocumentUploadResetKey((current) => current + 1)
     setDocumentRows([])
     setInvoiceRows([])
-    setSelectedPermitTabId('permit')
-    setShouldLoadClientData(false)
+    setClientDataRequested(false)
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setHasLoadedAvailablePermitApplications(false)
@@ -955,6 +971,17 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [permitNumber])
 
+  const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
+  const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0
+  const permitDetailTabs = PERMIT_DETAIL_TABS.filter(
+    ({ id }) => (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
+  )
+  const activePermitTabId = permitDetailTabs.some(({ id }) => id === selectedPermitTabId)
+    ? selectedPermitTabId
+    : 'permit'
+  const shouldLoadClientData =
+    clientDataRequested || activePermitTabId === 'owner' || activePermitTabId === 'agent'
+
   useEffect(() => {
     let isCancelled = false
 
@@ -1095,10 +1122,14 @@ const ProvincialPermitDetailsPage = () => {
   )
 
   useEffect(() => {
-    if (selectedPermitTabId === 'fees' && tabsData && !permitTablesErrorMessage) {
-      void loadDeferredPermitTab('fees')
+    if (
+      activePermitTabId === 'fees' ||
+      activePermitTabId === 'documents' ||
+      activePermitTabId === 'invoices'
+    ) {
+      void loadDeferredPermitTab(activePermitTabId)
     }
-  }, [loadDeferredPermitTab, permitTablesErrorMessage, selectedPermitTabId, tabsData])
+  }, [activePermitTabId, loadDeferredPermitTab])
 
   const filteredItems = useMemo(() => {
     if (!tabsData) {
@@ -1173,11 +1204,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const gbmsHistory = tabsData?.gbmsEvents ?? []
 
-  const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
-  const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0
-  const selectedPermitTabIndex = PERMIT_DETAIL_TABS.findIndex(
-    ({ id }) => id === selectedPermitTabId,
-  )
+  const selectedPermitTabIndex = PERMIT_DETAIL_TABS.findIndex(({ id }) => id === activePermitTabId)
 
   const filteredDocumentRows = useMemo(() => {
     return documentRows.filter((row) =>
@@ -1642,7 +1669,7 @@ const ProvincialPermitDetailsPage = () => {
       setActionInfoMessage('')
       setIsSavingPermit(true)
       try {
-        const result = await updatePermitDetail(request)
+        const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
         if (!isLatestRequest()) {
           return false
         }
@@ -1872,7 +1899,7 @@ const ProvincialPermitDetailsPage = () => {
     setActionInfoMessage('')
     setIsSavingFeeOverride(true)
     try {
-      const result = await updatePermitDetail(request)
+      const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
       if (!isLatestRequest()) {
         return false
       }
@@ -2924,9 +2951,9 @@ const ProvincialPermitDetailsPage = () => {
               onChange={({ selectedIndex }) => {
                 const selectedTab = PERMIT_DETAIL_TABS[selectedIndex]
                 if (selectedTab) {
-                  setSelectedPermitTabId(selectedTab.id)
+                  selectPermitTab(selectedTab.id)
                   if (selectedTab.id === 'owner' || selectedTab.id === 'agent') {
-                    setShouldLoadClientData(true)
+                    setClientDataRequested(true)
                   }
                   if (
                     selectedTab.id === 'fees' ||

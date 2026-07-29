@@ -240,7 +240,7 @@ public class PermitController {
         applicantClientNumber,
         ownerClientNumber,
         accessClientNumber,
-        false,
+        accessClientNumber != null && !accessClientNumber.isBlank(),
         regionNumbers == null ? List.of() : regionNumbers,
         sortField,
         page,

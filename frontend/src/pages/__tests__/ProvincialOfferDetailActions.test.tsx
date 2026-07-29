@@ -226,6 +226,33 @@ describe('Provincial Offer Detail Actions', () => {
     })
   })
 
+  it('allows a ministry-created legacy offer with no offering client to be updated', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      offeringClientNumber: null,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Offer conditions / remarks'))
+    await userEvent.type(
+      screen.getByLabelText('Offer conditions / remarks'),
+      'Reviewed by ministry',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offeringClientNumber: '',
+          pickupLocation: 'Port Moody',
+          offerCondition: 'Reviewed by ministry',
+        }),
+      )
+    })
+  })
+
   it('preserves the form when the backend rejects a stale offer lock', async () => {
     mockedSubmitProvincialOfferUpdate.mockResolvedValue({
       success: false,

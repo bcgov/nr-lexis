@@ -5,9 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
@@ -15,7 +17,6 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
-import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
@@ -39,13 +40,11 @@ class ProvincialAuthorizationServiceTest {
   @Mock private ObjectProvider<LexisApplicationService> applicationServiceProvider;
   @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   @Mock private ObjectProvider<ExemptionService> exemptionServiceProvider;
-  @Mock private ObjectProvider<ExemptionDetailsRpcService> exemptionDetailsServiceProvider;
   @Mock private ObjectProvider<PermitService> permitServiceProvider;
   @Mock private ObjectProvider<PurchaseOfferService> offerServiceProvider;
   @Mock private LexisApplicationService applicationService;
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private ExemptionService exemptionService;
-  @Mock private ExemptionDetailsRpcService exemptionDetailsService;
   @Mock private PermitService permitService;
   @Mock private PurchaseOfferService offerService;
 
@@ -60,7 +59,6 @@ class ProvincialAuthorizationServiceTest {
             applicationServiceProvider,
             applicationDetailsServiceProvider,
             exemptionServiceProvider,
-            exemptionDetailsServiceProvider,
             permitServiceProvider,
             offerServiceProvider);
   }
@@ -180,8 +178,6 @@ class ProvincialAuthorizationServiceTest {
   void scopedSubmitterExemptionWritesFollowLegacyLinkedApplicationOwnershipAndDenyBlanketOic() {
     Authentication authentication = submitter("00012345");
     when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
-    when(exemptionDetailsServiceProvider.getIfAvailable()).thenReturn(exemptionDetailsService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(exemptionService.findByExemptionNumber("E-1"))
         .thenReturn(Optional.of(exemption("E-1", "00012345", null, false)));
     when(exemptionService.findByExemptionNumber("E-2"))
@@ -192,16 +188,12 @@ class ProvincialAuthorizationServiceTest {
         .thenReturn(Optional.of(exemption("E-4", "00099999", null, false)));
     when(exemptionService.findByExemptionNumber("B-1"))
         .thenReturn(Optional.of(exemption("B-1", "00012345", null, true)));
-    when(exemptionDetailsService.getApplicationNumbersForMutation("E-2"))
-        .thenReturn(List.of());
-    when(exemptionDetailsService.getApplicationNumbersForMutation("E-3"))
-        .thenReturn(List.of(101L));
-    when(exemptionDetailsService.getApplicationNumbersForMutation("E-4"))
-        .thenReturn(List.of(102L));
-    when(applicationService.findByApplicationNumber(101L))
-        .thenReturn(Optional.of(application(101L, "00012345", null, 76L)));
-    when(applicationService.findByApplicationNumber(102L))
-        .thenReturn(Optional.of(application(102L, "00088888", null, 76L)));
+    when(exemptionService.hasLinkedProvincialApplicationForClient("E-2", "00012345"))
+        .thenReturn(false);
+    when(exemptionService.hasLinkedProvincialApplicationForClient("E-3", "00012345"))
+        .thenReturn(true);
+    when(exemptionService.hasLinkedProvincialApplicationForClient("E-4", "00012345"))
+        .thenReturn(false);
 
     assertThatCode(() -> service.requireExemptionAttachmentMutation(authentication, "E-1"))
         .doesNotThrowAnyException();
@@ -222,25 +214,56 @@ class ProvincialAuthorizationServiceTest {
   void scopedSubmitterCanAccessExemptionThroughAnyAuthoritativeLinkedApplication() {
     Authentication authentication = submitter("00012345");
     ExemptionDetailDto detail = exemption("E-3", "00099999", null, false);
-    when(exemptionDetailsServiceProvider.getIfAvailable()).thenReturn(exemptionDetailsService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(exemptionDetailsService.getApplicationNumbersForMutation("E-3"))
-        .thenReturn(List.of(101L, 102L));
-    when(applicationService.findByApplicationNumber(101L))
-        .thenReturn(Optional.of(application(101L, "00099999", null, 76L)));
-    when(applicationService.findByApplicationNumber(102L))
-        .thenReturn(Optional.of(application(102L, "00088888", "00012345", 76L)));
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(exemptionService.hasLinkedProvincialApplicationForClient("E-3", "00012345"))
+        .thenReturn(true);
 
     assertThat(service.canAccessExemption(authentication, detail)).isTrue();
+  }
+
+  @Test
+  void exemptionNumberAccessShouldUseLightweightProjectionAndSingleClientPredicate() {
+    Authentication authentication = submitter("00012345");
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(exemptionService.findAccessByExemptionNumber("E-3"))
+        .thenReturn(
+            Optional.of(
+                new ExemptionAccessDto("E-3", "M", "ACT", false)));
+    when(exemptionService.hasLinkedProvincialApplicationForClient("E-3", "00012345"))
+        .thenReturn(true);
+
+    assertThat(service.canAccessExemption(authentication, " E-3 ")).isTrue();
+
+    verify(exemptionService).findAccessByExemptionNumber("E-3");
+    verify(exemptionService)
+        .hasLinkedProvincialApplicationForClient("E-3", "00012345");
+    verify(exemptionService, never()).findByExemptionNumber("E-3");
+  }
+
+  @Test
+  void blanketOicNumberAccessShouldNotLoadApplications() {
+    Authentication authentication = submitter("00012345");
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(exemptionService.findAccessByExemptionNumber("BO-001"))
+        .thenReturn(
+            Optional.of(
+                new ExemptionAccessDto("BO-001", "B", "ACT", true)));
+
+    assertThat(service.canAccessExemption(authentication, "BO-001")).isTrue();
+
+    verify(exemptionService, never())
+        .hasLinkedProvincialApplicationForClient(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString());
+    verify(exemptionService, never()).findByExemptionNumber("BO-001");
   }
 
   @Test
   void scopedExemptionAccessPropagatesAuthoritativeRelationshipLookupFailure() {
     Authentication authentication = submitter("00012345");
     ExemptionDetailDto detail = exemption("E-3", "00099999", null, false);
-    when(exemptionDetailsServiceProvider.getIfAvailable()).thenReturn(exemptionDetailsService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(exemptionDetailsService.getApplicationNumbersForMutation("E-3"))
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(exemptionService.hasLinkedProvincialApplicationForClient("E-3", "00012345"))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
 
     assertThatThrownBy(() -> service.canAccessExemption(authentication, detail))
@@ -252,17 +275,16 @@ class ProvincialAuthorizationServiceTest {
   void scopedSubmitterPermitAttachmentWritesFollowLegacyDirectOrLinkedApplicationOwnership() {
     Authentication authentication = submitter("00012345");
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(permitService.findByPermitNumber(1L))
         .thenReturn(Optional.of(permit(1L, "00012345", "00099999", 76L)));
     when(permitService.findByPermitNumber(2L))
         .thenReturn(Optional.of(permit(2L, "00099999", "00088888", 76L)));
     when(permitService.findByPermitNumber(3L))
         .thenReturn(Optional.of(permit(3L, "00099999", "00088888", 76L)));
-    when(permitService.findLinkedApplicationNumbers(2L)).thenReturn(List.of(101L));
-    when(permitService.findLinkedApplicationNumbers(3L)).thenReturn(List.of());
-    when(applicationService.findByApplicationNumber(101L))
-        .thenReturn(Optional.of(application(101L, "00012345", null, 76L)));
+    when(permitService.hasLinkedProvincialApplicationForClient(2L, "00012345"))
+        .thenReturn(true);
+    when(permitService.hasLinkedProvincialApplicationForClient(3L, "00012345"))
+        .thenReturn(false);
 
     assertThatCode(() -> service.requirePermitAttachmentMutation(authentication, 1L))
         .doesNotThrowAnyException();
@@ -579,20 +601,36 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
+  void scopedBlanketOicPermitAccessShouldUseCursorOwnerAndAgentOnly() {
+    Authentication submitter = submitter("00012345");
+
+    assertThat(
+            service.canAccessExemptionPermit(
+                submitter,
+                permitAccess(1L, "00012345", 76L),
+                true))
+        .isTrue();
+    assertThat(
+            service.canAccessExemptionPermit(
+                submitter,
+                permitAccess(2L, "00099999", 76L),
+                true))
+        .isFalse();
+
+    verifyNoInteractions(permitServiceProvider);
+  }
+
+  @Test
   void scopedSubmitterCanAccessPermitThroughAnyAuthoritativeLinkedApplication() {
     Authentication submitter = submitter("00012345");
     PermitDetailDto permit = permit(1L, "00099999", "00088888", 12L);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(permitService.findLinkedApplicationNumbers(1L)).thenReturn(List.of(101L, 102L));
-    when(applicationService.findByApplicationNumber(101L))
-        .thenReturn(Optional.of(application(101L, "00099999", null, 76L)));
-    when(applicationService.findByApplicationNumber(102L))
-        .thenReturn(Optional.of(application(102L, "00088888", "00012345", 76L)));
+    when(permitService.hasLinkedProvincialApplicationForClient(1L, "00012345"))
+        .thenReturn(true);
 
     assertThat(service.canAccessPermit(submitter, permit)).isTrue();
 
-    verify(permitService).findLinkedApplicationNumbers(1L);
+    verify(permitService).hasLinkedProvincialApplicationForClient(1L, "00012345");
   }
 
   @Test
@@ -600,10 +638,8 @@ class ProvincialAuthorizationServiceTest {
     Authentication submitter = submitter("00012345");
     PermitDetailDto permit = permit(1L, "00099999", "00088888", 12L);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(permitService.findLinkedApplicationNumbers(1L)).thenReturn(List.of(101L));
-    when(applicationService.findByApplicationNumber(101L))
-        .thenReturn(Optional.of(application(101L, "00012345", "00077777", 76L)));
+    when(permitService.hasLinkedProvincialApplicationForClient(1L, "00012345"))
+        .thenReturn(true);
 
     assertThat(service.canAccessPermit(submitter, permit)).isTrue();
   }
@@ -612,8 +648,8 @@ class ProvincialAuthorizationServiceTest {
   void scopedPermitAccessShouldIgnoreNonAuthoritativeDetailApplicationNumber() {
     PermitDetailDto permit = permit(1L, "00099999", "00088888", 12L);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(permitService.findLinkedApplicationNumbers(1L)).thenReturn(List.of());
+    when(permitService.hasLinkedProvincialApplicationForClient(1L, "00012345"))
+        .thenReturn(false);
 
     assertThat(service.canAccessPermit(submitter("00012345"), permit)).isFalse();
   }
@@ -622,10 +658,8 @@ class ProvincialAuthorizationServiceTest {
   void scopedPermitAccessShouldRejectMatchingFederalLinkedApplication() {
     PermitDetailDto permit = permit(1L, "00099999", "00088888", 12L);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(permitService.findLinkedApplicationNumbers(1L)).thenReturn(List.of(101L));
-    when(applicationService.findByApplicationNumber(101L))
-        .thenReturn(Optional.of(application(101L, "00012345", null, 76L, "F")));
+    when(permitService.hasLinkedProvincialApplicationForClient(1L, "00012345"))
+        .thenReturn(false);
 
     assertThat(service.canAccessPermit(submitter("00012345"), permit)).isFalse();
   }
@@ -634,8 +668,7 @@ class ProvincialAuthorizationServiceTest {
   void scopedPermitAccessShouldPropagateAuthoritativeLinkLookupFailure() {
     PermitDetailDto permit = permit(1L, "00099999", "00088888", 12L);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
-    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(permitService.findLinkedApplicationNumbers(1L))
+    when(permitService.hasLinkedProvincialApplicationForClient(1L, "00012345"))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
 
     assertThatThrownBy(

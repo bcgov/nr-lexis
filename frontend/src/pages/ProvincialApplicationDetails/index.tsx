@@ -118,6 +118,7 @@ import {
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { triggerBrowserDownload } from '@/utils/download'
 import {
   isValidEmail,
@@ -134,11 +135,6 @@ const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Status change remark is required when rejecting, withdrawing, or expiring an application.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
-type ApplicationCreationNavigationState = {
-  applicationCreationNotice?: {
-    applicationNumber: string
-  }
-}
 type ApplicationDetailTabKey =
   | 'owner'
   | 'agent'
@@ -148,6 +144,11 @@ type ApplicationDetailTabKey =
   | 'remarks'
   | 'offers'
   | 'review'
+type ApplicationCreationNavigationState = Record<string, unknown> & {
+  applicationCreationNotice?: {
+    applicationNumber: string
+  }
+}
 // Carbon indexes the conditional JSX children as well as the visible tabs.
 // Keep these slots aligned with the TabList and TabPanels declarations below.
 const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
@@ -275,7 +276,11 @@ function ClientDataSummary({
   )
 }
 
-const optionsWithCurrentValue = (options: SearchOption[], currentValue: string): SearchOption[] => {
+const optionsWithCurrentValue = (
+  options: SearchOption[],
+  currentValue: string,
+  currentLabel?: string | null,
+): SearchOption[] => {
   const normalizedCurrentValue = currentValue.trim()
   if (
     !normalizedCurrentValue ||
@@ -284,8 +289,22 @@ const optionsWithCurrentValue = (options: SearchOption[], currentValue: string):
     return options
   }
 
-  return [{ value: normalizedCurrentValue, label: normalizedCurrentValue }, ...options]
+  return [
+    {
+      value: normalizedCurrentValue,
+      label: currentLabel?.trim() || normalizedCurrentValue,
+    },
+    ...options,
+  ]
 }
+
+const isActiveOrUnchangedOption = (
+  options: SearchOption[],
+  currentValue: string,
+  baselineValue?: string,
+): boolean =>
+  (baselineValue !== undefined && currentValue === baselineValue) ||
+  options.some((option) => option.value === currentValue)
 
 type ApplicationSummaryFormState = {
   applicationDate: string
@@ -533,9 +552,9 @@ const ProvincialApplicationDetailsPage = () => {
   const { canPerform, capabilities } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const createdApplicationNumber = (
-    location.state as ApplicationCreationNavigationState | null
-  )?.applicationCreationNotice?.applicationNumber.trim()
+  const navigationState = location.state as ApplicationCreationNavigationState | null
+  const createdApplicationNumber =
+    navigationState?.applicationCreationNotice?.applicationNumber.trim()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [industryViewableExemptionNumber, setIndustryViewableExemptionNumber] = useState<
     string | null
@@ -652,9 +671,11 @@ const ProvincialApplicationDetailsPage = () => {
     requestedApplicationTab === 'items' ? 1 : 0,
   )
   const [selectedPackageNumber, setSelectedPackageNumber] = useState('')
-  const [selectedApplicationTab, setSelectedApplicationTab] = useState<ApplicationDetailTabKey>(
-    () => (requestedApplicationTab === 'items' ? 'items' : 'owner'),
-  )
+  const [selectedApplicationTab, selectApplicationTab] = useReloadPreservedTab({
+    tabs: APPLICATION_DETAIL_TAB_SLOTS,
+    defaultTab: 'owner',
+    initialTab: requestedApplicationTab === 'items' ? 'items' : undefined,
+  })
   const beginDetailRequest = useLatestRequestGuard()
   const currentApplicationNumberRef = useRef(applicationNumber)
   currentApplicationNumberRef.current = applicationNumber
@@ -679,24 +700,32 @@ const ProvincialApplicationDetailsPage = () => {
     },
     [searchParams, setSearchParams],
   )
-  const focusPackageInItems = useCallback((packageNumber: string) => {
-    setSelectedApplicationTab('items')
-    setFocusedPackageNumber(packageNumber)
-    setFocusedPackageRequestId((current) => current + 1)
-  }, [])
+  const focusPackageInItems = useCallback(
+    (packageNumber: string) => {
+      selectApplicationTab('items')
+      setFocusedPackageNumber(packageNumber)
+      setFocusedPackageRequestId((current) => current + 1)
+    },
+    [selectApplicationTab],
+  )
 
   useEffect(() => {
     if (!createdApplicationNumber) {
       return
     }
 
+    const nextNavigationState = { ...(navigationState ?? {}) }
+    delete nextNavigationState.applicationCreationNotice
     navigate(
       {
         pathname: location.pathname,
         search: location.search,
         hash: location.hash,
       },
-      { replace: true, state: null },
+      {
+        replace: true,
+        state: Object.keys(nextNavigationState).length > 0 ? nextNavigationState : null,
+      },
     )
   }, [
     createdApplicationNumber,
@@ -705,6 +734,7 @@ const ProvincialApplicationDetailsPage = () => {
     location.search,
     location.state,
     navigate,
+    navigationState,
   ])
 
   const loadApplicationDetail = useCallback(async () => {
@@ -1039,9 +1069,12 @@ const ProvincialApplicationDetailsPage = () => {
     'offers',
     ...(canViewReview ? (['review'] as const) : []),
   ]
+  const activeApplicationTab = applicationDetailTabs.includes(selectedApplicationTab)
+    ? selectedApplicationTab
+    : 'owner'
   const selectedApplicationTabIndex = Math.max(
     0,
-    APPLICATION_DETAIL_TAB_SLOTS.indexOf(selectedApplicationTab),
+    APPLICATION_DETAIL_TAB_SLOTS.indexOf(activeApplicationTab),
   )
   const summaryAgentClientNumber = isSummaryAgentApplicant
     ? (summaryForm?.agentClientNumber.trim() ?? '')
@@ -1119,6 +1152,16 @@ const ProvincialApplicationDetailsPage = () => {
   const regionOptions = optionsWithCurrentValue(
     summaryRegionOptions,
     summaryForm?.orgUnitNumber ?? '',
+    summaryForm?.orgUnitNumber === summaryBaselineForm?.orgUnitNumber
+      ? detail?.orgUnitName
+      : undefined,
+  )
+  const scheduleOptions = optionsWithCurrentValue(
+    summaryScheduleOptions,
+    summaryForm?.exportScheduleId ?? '',
+    summaryForm?.exportScheduleId === summaryBaselineForm?.exportScheduleId
+      ? detail?.listingDate
+      : undefined,
   )
   const missingSummaryOptionLabels = [
     summaryExemptionReasonOptions.length === 0 ? 'exemption reason' : null,
@@ -1299,7 +1342,11 @@ const ProvincialApplicationDetailsPage = () => {
       orgUnitNumber: firstValidationError(
         () => requiredFieldError(summaryForm.orgUnitNumber, 'Region'),
         () =>
-          summaryRegionOptions.some((option) => option.value === summaryForm.orgUnitNumber)
+          isActiveOrUnchangedOption(
+            summaryRegionOptions,
+            summaryForm.orgUnitNumber,
+            summaryBaselineForm?.orgUnitNumber,
+          )
             ? null
             : 'Select a valid region.',
       ),
@@ -1326,7 +1373,11 @@ const ProvincialApplicationDetailsPage = () => {
       ),
       exportScheduleId:
         !summaryForm.exportScheduleId ||
-        summaryScheduleOptions.some((option) => option.value === summaryForm.exportScheduleId)
+        isActiveOrUnchangedOption(
+          summaryScheduleOptions,
+          summaryForm.exportScheduleId,
+          summaryBaselineForm?.exportScheduleId,
+        )
           ? undefined
           : 'Select a valid listing date.',
       productLocation: productTypeRequiresLogDetails(summaryForm.productTypeCode)
@@ -1362,6 +1413,7 @@ const ProvincialApplicationDetailsPage = () => {
     summaryProductTypeOptions,
     summaryRegionOptions,
     summaryScheduleOptions,
+    summaryBaselineForm,
   ])
   const hasSummaryValidationError = Object.values(summaryFieldErrors).some((error) => !!error)
   const visibleSummaryFieldError = (field: ApplicationSummaryField): string | undefined =>
@@ -2636,7 +2688,7 @@ const ProvincialApplicationDetailsPage = () => {
       return false
     }
     if (applicationItemsDirty) {
-      setSelectedApplicationTab('items')
+      selectApplicationTab('items')
       setActionErrorMessage(
         'Save or reset the package, species, or scale draft in the Items tab before leaving this application.',
       )
@@ -2661,6 +2713,7 @@ const ProvincialApplicationDetailsPage = () => {
     onUpdateReviewStatus,
     remarkDirty,
     reviewDirty,
+    selectApplicationTab,
     summaryDirty,
   ])
 
@@ -3143,7 +3196,7 @@ const ProvincialApplicationDetailsPage = () => {
               selectedIndex={selectedApplicationTabIndex}
               onChange={({ selectedIndex }) => {
                 const selectedTab = APPLICATION_DETAIL_TAB_SLOTS[selectedIndex]
-                setSelectedApplicationTab(
+                selectApplicationTab(
                   selectedTab && applicationDetailTabs.includes(selectedTab)
                     ? selectedTab
                     : 'owner',
@@ -3783,10 +3836,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   summaryScheduleOptions.length === 0
                                 }
                                 placeholder="Search listing date"
-                                options={optionsWithCurrentValue(
-                                  summaryScheduleOptions,
-                                  summaryForm.exportScheduleId,
-                                )}
+                                options={scheduleOptions}
                                 onChange={(value) => onSummaryFormChange('exportScheduleId', value)}
                               />
                               <SearchableSelect
