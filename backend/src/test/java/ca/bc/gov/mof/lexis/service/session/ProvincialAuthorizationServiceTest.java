@@ -77,6 +77,24 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
+  void accessibleApplicationAllowsClientLookupForEitherRecordedPartyOnly() {
+    Authentication authentication = submitter("00001074");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00002176", "00001074", 76L)));
+
+    assertThat(
+            service.canAccessApplicationClientLookup(authentication, 1L, "00002176"))
+        .isTrue();
+    assertThat(
+            service.canAccessApplicationClientLookup(authentication, 1L, "00001074"))
+        .isTrue();
+    assertThat(
+            service.canAccessApplicationClientLookup(authentication, 1L, "00099999"))
+        .isFalse();
+  }
+
+  @Test
   void scopedSubmitterCannotAccessMatchingFederalApplicationThroughGenericAuthorization() {
     Authentication authentication = submitter("00012345");
     LexisApplicationDetailDto federal =
@@ -543,6 +561,22 @@ class ProvincialAuthorizationServiceTest {
     assertThat(service.canAccessPermit(readOnly, 2L)).isTrue();
     assertThat(service.canAccessPermit(readOnly, 3L)).isTrue();
     assertThat(service.canAccessPermit(readOnly, 4L)).isFalse();
+  }
+
+  @Test
+  void accessiblePermitAllowsClientLookupForEitherRecordedPartyOnly() {
+    Authentication authentication = submitter("00001074");
+    when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
+    when(permitService.findAccessByPermitNumber(1L))
+        .thenReturn(
+            Optional.of(new PermitAccessDto(1L, "00001074", "00002176", 76L)));
+
+    assertThat(service.canAccessPermitClientLookup(authentication, 1L, "00002176"))
+        .isTrue();
+    assertThat(service.canAccessPermitClientLookup(authentication, 1L, "00001074"))
+        .isTrue();
+    assertThat(service.canAccessPermitClientLookup(authentication, 1L, "00099999"))
+        .isFalse();
   }
 
   @Test

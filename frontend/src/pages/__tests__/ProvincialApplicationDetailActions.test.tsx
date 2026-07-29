@@ -435,7 +435,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByText('Owner Contact')).toBeInTheDocument()
     expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00')
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
+      applicationNumber: '321',
+    })
     expect(
       within(getOwnerClientDetailsTile()).queryByRole('button', {
         name: 'Edit owner client details',
@@ -833,8 +835,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await waitFor(() => {
       expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent')
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent', '321')
       expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
         '00011122',
         '02',
@@ -847,8 +849,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         'agent',
         '321',
       )
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '02')
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01')
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '02', {
+        applicationNumber: '321',
+      })
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01', {
+        applicationNumber: '321',
+      })
     })
     await selectApplicationDetailTab('Owner')
     expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
@@ -956,9 +962,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await waitFor(() => {
       expect(summaryControls.queryByLabelText('Agent client number')).not.toBeInTheDocument()
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
     })
-    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033344', 'agent')
+    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith(
+      '00033344',
+      'agent',
+      '321',
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
@@ -1647,8 +1657,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Application')
     await waitFor(() => {
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00')
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
+        applicationNumber: '321',
+      })
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
       expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
         '00011122',
         '00',
@@ -1670,8 +1682,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedFetchApplicationClientContacts).not.toHaveBeenCalled()
 
     await waitFor(() => {
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00044444', '00')
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00044444', 'owner')
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00044444', '00', {
+        applicationNumber: '321',
+      })
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00044444', 'owner', '321')
       expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
         '00044444',
         '00',

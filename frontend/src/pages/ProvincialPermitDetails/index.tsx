@@ -232,12 +232,13 @@ const EMPTY_BLANKET_OIC_PACKAGE_FORM: BlanketOicPackageForm = {
 const fetchPermitClientData = (
   clientNumber: string | null,
   clientLocationCode: string | null,
+  permitNumber: string,
 ): Promise<ApplicationClientData | null> => {
   if (!clientNumber || !clientLocationCode) {
     return Promise.resolve(null)
   }
 
-  return fetchApplicationClientData(clientNumber, clientLocationCode)
+  return fetchApplicationClientData(clientNumber, clientLocationCode, { permitNumber })
 }
 
 type PermitClientTileProps = {
@@ -998,6 +999,7 @@ const ProvincialPermitDetailsPage = () => {
       const ownerClientLocationCode = detail.ownerClientLocationCode
       const agentClientNumber = detail.applicantClientNumber
       const agentClientLocationCode = detail.agentClientLocationCode
+      const resolvedPermitNumber = String(detail.permitNumber ?? permitNumber ?? '').trim()
       const hasClientLookup =
         (!!ownerClientNumber && !!ownerClientLocationCode) ||
         (!!agentClientNumber && !!agentClientLocationCode)
@@ -1010,8 +1012,8 @@ const ProvincialPermitDetailsPage = () => {
       setIsClientDataLoading(true)
       try {
         const [ownerResult, agentResult] = await Promise.all([
-          fetchPermitClientData(ownerClientNumber, ownerClientLocationCode),
-          fetchPermitClientData(agentClientNumber, agentClientLocationCode),
+          fetchPermitClientData(ownerClientNumber, ownerClientLocationCode, resolvedPermitNumber),
+          fetchPermitClientData(agentClientNumber, agentClientLocationCode, resolvedPermitNumber),
         ])
         if (!isCancelled) {
           setOwnerClientData(ownerResult)
@@ -1033,7 +1035,7 @@ const ProvincialPermitDetailsPage = () => {
     return () => {
       isCancelled = true
     }
-  }, [detail, shouldLoadClientData])
+  }, [detail, permitNumber, shouldLoadClientData])
 
   const loadDeferredPermitTab = useCallback(
     async (

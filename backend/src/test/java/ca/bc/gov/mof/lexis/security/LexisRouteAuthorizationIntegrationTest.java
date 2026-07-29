@@ -1196,13 +1196,13 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyPermitDetailsRpcWriteActionShouldRejectProvincialSubmitterRole() throws Exception {
+  void legacyPermitDetailsRpcWriteActionShouldAllowProvincialSubmitterRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/permitDetailsRPC")
                 .param("actionMapping", "updateShipping")
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNoContent());
   }
 
   @Test
@@ -1215,12 +1215,12 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void modernPermitDetailsWriteActionShouldRejectProvincialSubmitterRole() throws Exception {
+  void modernPermitDetailsWriteActionShouldAllowProvincialSubmitterRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/rpc/permit-details/update-permit")
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNoContent());
   }
 
   @Test

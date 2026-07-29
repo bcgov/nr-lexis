@@ -1458,6 +1458,7 @@ const ProvincialApplicationDetailsPage = () => {
     void fetchApplicationClientData(
       summaryOwnerClientNumberForLookup,
       summaryOwnerClientLocationCode,
+      { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
         if (isActive) {
@@ -1473,7 +1474,12 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [hasSummaryForm, summaryOwnerClientLocationCode, summaryOwnerClientNumberForLookup])
+  }, [
+    applicationNumber,
+    hasSummaryForm,
+    summaryOwnerClientLocationCode,
+    summaryOwnerClientNumberForLookup,
+  ])
 
   useEffect(() => {
     if (!hasSummaryForm || !summaryAgentClientNumberForLookup || !summaryAgentClientLocationCode) {
@@ -1500,6 +1506,7 @@ const ProvincialApplicationDetailsPage = () => {
     void fetchApplicationClientData(
       summaryAgentClientNumberForLookup,
       summaryAgentClientLocationCode,
+      { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
         if (isActive) {
@@ -1515,7 +1522,12 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [hasSummaryForm, summaryAgentClientLocationCode, summaryAgentClientNumberForLookup])
+  }, [
+    applicationNumber,
+    hasSummaryForm,
+    summaryAgentClientLocationCode,
+    summaryAgentClientNumberForLookup,
+  ])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -1556,7 +1568,11 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientLocations(summaryOwnerClientNumberForLookup, 'owner')
+    void fetchApplicationClientLocations(
+      summaryOwnerClientNumberForLookup,
+      'owner',
+      applicationNumber ?? '',
+    )
       .then((locations) => {
         if (!isActive) {
           return
@@ -1586,7 +1602,7 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [canEditSummary, hasSummaryForm, summaryOwnerClientNumberForLookup])
+  }, [applicationNumber, canEditSummary, hasSummaryForm, summaryOwnerClientNumberForLookup])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -1627,7 +1643,11 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientLocations(summaryAgentClientNumberForLookup, 'agent')
+    void fetchApplicationClientLocations(
+      summaryAgentClientNumberForLookup,
+      'agent',
+      applicationNumber ?? '',
+    )
       .then((locations) => {
         if (!isActive) {
           return
@@ -1657,7 +1677,7 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [canEditSummary, hasSummaryForm, summaryAgentClientNumberForLookup])
+  }, [applicationNumber, canEditSummary, hasSummaryForm, summaryAgentClientNumberForLookup])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {

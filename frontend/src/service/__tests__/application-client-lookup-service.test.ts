@@ -74,6 +74,29 @@ describe('application-client-lookup-service', () => {
     ])
   })
 
+  it('includes the parent application when loading related client locations', async () => {
+    getCachedDataMock.mockResolvedValue([
+      { locationCode: '01', locationName: '01 - AGENT LOCATION', selected: true },
+    ])
+
+    await fetchApplicationClientLocations('00033333', 'agent', '321')
+
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/rpc/application-details/client-locations',
+      {
+        params: {
+          applicantType: 'agent',
+          applicationNumber: '321',
+          clientNumber: '00033333',
+        },
+      },
+      {
+        cacheKey: 'application-client-locations:agent:00033333:321',
+        ttlMs: 300000,
+      },
+    )
+  })
+
   it('loads and parses client data for a selected location', async () => {
     getCachedDataMock.mockResolvedValue({
       clientNumber: ' 00011111 ',
@@ -124,6 +147,51 @@ describe('application-client-lookup-service', () => {
     await expect(fetchApplicationClientData('00011111', '')).resolves.toBeNull()
 
     expect(getCachedDataMock).not.toHaveBeenCalled()
+  })
+
+  it('scopes related client data lookups to their parent record', async () => {
+    getCachedDataMock.mockResolvedValue({
+      clientNumber: '00022222',
+      companyName: 'Related Agent',
+    })
+
+    await fetchApplicationClientData('00022222', '01', {
+      applicationNumber: '321',
+    })
+    await fetchApplicationClientData('00022222', '01', {
+      permitNumber: '9020431',
+    })
+
+    expect(getCachedDataMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/rpc/application-details/client-data',
+      {
+        params: {
+          applicationNumber: '321',
+          clientLocationCode: '01',
+          clientNumber: '00022222',
+        },
+      },
+      {
+        cacheKey: 'application-client-data:00022222:01:application:321',
+        ttlMs: 300000,
+      },
+    )
+    expect(getCachedDataMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/rpc/application-details/client-data',
+      {
+        params: {
+          permitNumber: '9020431',
+          clientLocationCode: '01',
+          clientNumber: '00022222',
+        },
+      },
+      {
+        cacheKey: 'application-client-data:00022222:01:permit:9020431',
+        ttlMs: 300000,
+      },
+    )
   })
 
   it('does not call the API when client number is blank', async () => {

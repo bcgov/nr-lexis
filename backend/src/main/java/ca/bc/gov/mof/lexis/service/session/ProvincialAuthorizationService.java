@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.session;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
@@ -95,6 +97,28 @@ public class ProvincialAuthorizationService {
             ? List.of()
             : List.of(application.orgUnitNumber()),
         OrgUnitSurface.APPLICATION_DETAIL);
+  }
+
+  public boolean canAccessApplicationClientLookup(
+      Authentication authentication, Long applicationNumber, String clientNumber) {
+    String requestedClientNumber = trimToNull(clientNumber);
+    LexisApplicationService service = applicationServiceProvider.getIfAvailable();
+    if (service == null
+        || applicationNumber == null
+        || applicationNumber < 1
+        || requestedClientNumber == null) {
+      return false;
+    }
+    return service
+        .findByApplicationNumber(applicationNumber)
+        .filter(application -> canAccessApplication(authentication, application))
+        .map(
+            application ->
+                matchesClient(
+                    requestedClientNumber,
+                    application.ownerClientNumber(),
+                    application.agentClientNumber()))
+        .orElse(false);
   }
 
   public boolean canReviewApplication(Authentication authentication, Long applicationNumber) {
@@ -235,6 +259,28 @@ public class ProvincialAuthorizationService {
         permit.ownerClientNumber(),
         permit.applicantClientNumber(),
         permit.orgUnitNumber());
+  }
+
+  public boolean canAccessPermitClientLookup(
+      Authentication authentication, Long permitNumber, String clientNumber) {
+    String requestedClientNumber = trimToNull(clientNumber);
+    PermitService service = permitServiceProvider.getIfAvailable();
+    if (service == null
+        || permitNumber == null
+        || permitNumber < 1
+        || requestedClientNumber == null) {
+      return false;
+    }
+    return service
+        .findAccessByPermitNumber(permitNumber)
+        .filter(permit -> canAccessPermit(authentication, permit))
+        .map(
+            permit ->
+                matchesClient(
+                    requestedClientNumber,
+                    permit.ownerClientNumber(),
+                    permit.applicantClientNumber()))
+        .orElse(false);
   }
 
   private boolean canAccessPermit(Authentication authentication, PermitAccessDto permit) {
