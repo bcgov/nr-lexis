@@ -125,8 +125,9 @@ describe('Notifications page', () => {
     render(<NotificationsPage />)
 
     await screen.findByText('Winter service update')
-    await user.click(screen.getByRole('button', { name: 'New notification' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Admin' })
+    const launcher = screen.getByRole('button', { name: 'New notification' })
+    await user.click(launcher)
+    const dialog = await screen.findByRole('dialog', { name: 'New notification' })
     expect(within(dialog).getByRole('heading', { name: 'New notification' })).toBeVisible()
     expect(within(dialog).getByLabelText('Title')).toHaveAttribute('maxlength', '80')
     expect(within(dialog).getByText('0 / 4,000 characters')).toBeVisible()
@@ -150,6 +151,7 @@ describe('Notifications page', () => {
         }),
       )
     })
+    await waitFor(() => expect(launcher).toHaveFocus())
   })
 
   it('treats formatted empty HTML as missing notification content', async () => {
@@ -164,7 +166,7 @@ describe('Notifications page', () => {
 
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'New notification' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Admin' })
+    const dialog = await screen.findByRole('dialog', { name: 'New notification' })
     await user.type(within(dialog).getByLabelText('Title'), 'Office closure')
     await user.type(within(dialog).getByLabelText('Notification content editor'), '<p>&nbsp;</p>')
     await user.click(within(dialog).getByRole('button', { name: 'Publish' }))
@@ -186,8 +188,36 @@ describe('Notifications page', () => {
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'Edit' }))
 
+    expect(screen.getByRole('dialog', { name: 'Edit notification' })).toBeVisible()
     expect(screen.getByLabelText('Start date')).toHaveAttribute('readonly')
     expect(screen.getByLabelText('End date')).not.toHaveAttribute('readonly')
+  })
+
+  it('hides recent-update messaging while editing and restores focus after cancelling', async () => {
+    const user = userEvent.setup()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+    mockedFetchAdminNotifications.mockResolvedValue([
+      {
+        ...notification,
+        updateTimestamp: new Date().toISOString(),
+      },
+    ])
+
+    render(<NotificationsPage />)
+
+    expect(await screen.findByText('Recently updated notifications')).toBeVisible()
+    const launcher = screen.getByRole('button', { name: 'New notification' })
+    await user.click(launcher)
+
+    expect(screen.queryByText('Recently updated notifications')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(launcher).toHaveFocus())
+    expect(screen.getByText('Recently updated notifications')).toBeVisible()
   })
 
   it('asks an administrator to confirm before deleting a notification', async () => {

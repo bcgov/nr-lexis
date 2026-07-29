@@ -258,10 +258,16 @@ export default function NotificationsPage() {
     setShowEditor(true)
   }
 
+  const restoreEditorLauncherFocus = (): void => {
+    const launcher = editorLauncherRef.current
+    window.setTimeout(() => launcher?.focus())
+  }
+
   const resetForm = (): void => {
     setForm(emptyForm())
     setShowEditor(false)
     setMessage(null)
+    restoreEditorLauncherFocus()
   }
 
   const toggleAudienceRole = (role: string, selected: boolean): void => {
@@ -323,6 +329,7 @@ export default function NotificationsPage() {
 
     setSaving(true)
     setMessage(null)
+    let restoreLauncherFocus = false
     try {
       if (form.id === null) {
         await createNotification(toRequest(form))
@@ -341,6 +348,7 @@ export default function NotificationsPage() {
       }
       setForm(emptyForm())
       setShowEditor(false)
+      restoreLauncherFocus = true
       await loadNotifications(false)
     } catch {
       setMessage({
@@ -350,6 +358,9 @@ export default function NotificationsPage() {
       })
     } finally {
       setSaving(false)
+      if (restoreLauncherFocus) {
+        restoreEditorLauncherFocus()
+      }
     }
   }
 
@@ -398,7 +409,7 @@ export default function NotificationsPage() {
         )}
       </section>
 
-      {showRecentUpdateToast && recentUpdateCount > 0 && (
+      {showRecentUpdateToast && !showEditor && recentUpdateCount > 0 && (
         <AppNotification
           kind="info"
           title="Recently updated notifications"
@@ -422,7 +433,7 @@ export default function NotificationsPage() {
         <Modal
           open
           className="notifications-page__editor-modal"
-          modalLabel="Admin"
+          modalLabel={<span>Admin</span>}
           modalHeading={editorTitle}
           aria-label={editorTitle}
           hasScrollingContent
