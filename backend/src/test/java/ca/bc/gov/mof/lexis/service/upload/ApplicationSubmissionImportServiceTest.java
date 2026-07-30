@@ -1366,6 +1366,55 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldRejectDedicatedFederalValidationWhenVirusScanFailsBeforeParsing() {
+    String fileName = "federal-validation-eicar.xml";
+    doThrow(VirusScanException.infected("stream: Eicar-Test-Signature FOUND"))
+        .when(virusScanService)
+        .assertClean(any(MultipartFile.class));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                federalSampleXmlText().getBytes(StandardCharsets.UTF_8),
+                fileName,
+                "FED-REF-EICAR");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("The uploaded file failed virus scanning.");
+    assertThat(result.fileName()).isEqualTo(fileName);
+    assertThat(result.userReference()).isEqualTo("FED-REF-EICAR");
+    ArgumentCaptor<MultipartFile> scannedFile = ArgumentCaptor.forClass(MultipartFile.class);
+    verify(virusScanService).assertClean(scannedFile.capture());
+    assertThat(scannedFile.getValue().getOriginalFilename()).isEqualTo(fileName);
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRejectDedicatedFederalCreateWhenVirusScanFailsBeforeParsing() {
+    String fileName = "federal-create-eicar.xml";
+    doThrow(VirusScanException.infected("stream: Eicar-Test-Signature FOUND"))
+        .when(virusScanService)
+        .assertClean(any(MultipartFile.class));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .importDedicatedFederalApplicationSubmission(
+                federalSampleXmlText().getBytes(StandardCharsets.UTF_8),
+                fileName,
+                "federal-user",
+                "FED-REF-EICAR");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("The uploaded file failed virus scanning.");
+    assertThat(result.fileName()).isEqualTo(fileName);
+    assertThat(result.userReference()).isEqualTo("FED-REF-EICAR");
+    ArgumentCaptor<MultipartFile> scannedFile = ArgumentCaptor.forClass(MultipartFile.class);
+    verify(virusScanService).assertClean(scannedFile.capture());
+    assertThat(scannedFile.getValue().getOriginalFilename()).isEqualTo(fileName);
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
   void shouldValidateManualUploadSampleFiles() throws Exception {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.isPackageValid(anyString()))
