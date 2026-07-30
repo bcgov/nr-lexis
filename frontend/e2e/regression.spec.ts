@@ -676,6 +676,47 @@ const antivirusTestPayloadHex =
 
 const antivirusTestPayload = (): Buffer => Buffer.from(antivirusTestPayloadHex, 'hex')
 
+const antivirusTestPdfPayload = (): Buffer =>
+  Buffer.concat([
+    Buffer.from(
+      `%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(antivirus-test.com) 5 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 0 >>
+stream
+
+endstream
+endobj
+5 0 obj
+<< /Type /Filespec /F (antivirus-test.com) /EF << /F 6 0 R >> >>
+endobj
+6 0 obj
+<< /Type /EmbeddedFile /Length ${antivirusTestPayload().length} >>
+stream
+`,
+      'ascii',
+    ),
+    antivirusTestPayload(),
+    Buffer.from(
+      `
+endstream
+endobj
+trailer
+<< /Root 1 0 R >>
+%%EOF
+`,
+      'ascii',
+    ),
+  ])
+
 const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
   {
     name: 'antivirus-test-application-import.xml',
@@ -689,10 +730,10 @@ const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
   },
 ]
 
-const infectedApplicationDocument = (): RegressionUploadFile => ({
-  name: 'antivirus-test-application-upload.txt',
-  mimeType: 'text/plain',
-  buffer: antivirusTestPayload(),
+const infectedApplicationDocumentPdf = (): RegressionUploadFile => ({
+  name: 'antivirus-test-application-upload.pdf',
+  mimeType: 'application/pdf',
+  buffer: antivirusTestPdfPayload(),
 })
 
 const adminNavigationSections: Array<{
@@ -1462,7 +1503,7 @@ const expectApplicationDocumentVirusScanRejection = (
 ): void => {
   expect(response.status, 'application document upload should be rejected by ClamAV').toBe(422)
   expect(response.payload.uploadType).toBe('application')
-  expect(response.payload.fileName).toBe('antivirus-test-application-upload.txt')
+  expect(response.payload.fileName).toBe('antivirus-test-application-upload.pdf')
   expect(response.payload.status).toBe('rejected')
   expect(response.payload.message ?? '').toContain(virusScanRejectionMessage)
 }
@@ -2794,7 +2835,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
   })
 
-  test('rejects ClamAV test payloads on application submission uploads', async () => {
+  test('rejects EICAR application submission uploads named as XML and GeoJSON', async () => {
     const page = await authenticatedIdirPage()
 
     for (const file of infectedApplicationSubmissionFiles()) {
@@ -2953,12 +2994,12 @@ test.describe('TEST IDIR admin regression', () => {
         rejectRegressionApplication(page, lifecycleApplicationNumber, `${marker} cleanup`),
       )
 
-      await test.step('reject an infected application document', async () => {
+      await test.step('reject an EICAR application document named as PDF', async () => {
         expectApplicationDocumentVirusScanRejection(
           await postRegressionApplicationDocumentFile(
             page,
             lifecycleApplicationNumber,
-            infectedApplicationDocument(),
+            infectedApplicationDocumentPdf(),
           ),
         )
       })
