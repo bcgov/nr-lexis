@@ -198,6 +198,12 @@ const contentText = (contentHtml: string): string => {
 
 const contentTextLength = (contentHtml: string): number => contentText(contentHtml).length
 
+const RequiredMarker = () => (
+  <span className="notifications-page__required-marker" aria-hidden="true">
+    *
+  </span>
+)
+
 export default function NotificationsPage() {
   const { capabilities } = useAuth()
   const isAdmin = hasRole(capabilities.roles, 'ADMIN')
@@ -488,22 +494,30 @@ export default function NotificationsPage() {
             <h3>Message</h3>
             <TextInput
               id="notification-title"
-              labelText="Title"
+              labelText={
+                <>
+                  Title <RequiredMarker />
+                </>
+              }
               value={form.title}
               maxLength={MAX_NOTIFICATION_TITLE_LENGTH}
+              required
               disabled={saving}
               onChange={(event) =>
                 setForm((current) => ({ ...current, title: event.target.value }))
               }
             />
             <div className="notifications-page__form-field">
-              <p className="cds--label">Message</p>
+              <p className="cds--label">
+                Message <RequiredMarker />
+              </p>
               <p className="notifications-page__field-help">
                 Explain what is happening and what, if anything, the reader should do.
               </p>
               <NotificationEditor
                 value={form.contentHtml}
                 disabled={saving}
+                required
                 onChange={(contentHtml) => setForm((current) => ({ ...current, contentHtml }))}
               />
               <p className="notifications-page__character-count" aria-live="polite">
@@ -583,8 +597,13 @@ export default function NotificationsPage() {
               <TextInput
                 id="notification-display-start-date"
                 type="date"
-                labelText="Start date"
+                labelText={
+                  <>
+                    Start date <RequiredMarker />
+                  </>
+                }
                 value={form.displayStartDate}
+                required
                 disabled={saving}
                 readOnly={isEditing}
                 helperText={isEditing ? 'The original start date cannot be changed.' : undefined}
@@ -598,16 +617,24 @@ export default function NotificationsPage() {
               <TextInput
                 id="notification-display-end-date"
                 type="date"
-                labelText="End date"
+                labelText={
+                  <>
+                    End date <RequiredMarker />
+                  </>
+                }
                 value={form.displayEndDate}
                 min={form.displayStartDate}
+                required
                 disabled={saving}
-                helperText="The notification hides automatically after this date."
                 onChange={(event) =>
                   setForm((current) => ({ ...current, displayEndDate: event.target.value }))
                 }
               />
             </div>
+            <p className="notifications-page__display-period-help">
+              The notice appears to readers between these dates, then hides automatically. No one
+              has to dismiss it.
+            </p>
           </section>
         </Modal>
       )}

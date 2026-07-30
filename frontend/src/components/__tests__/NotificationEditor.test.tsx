@@ -8,9 +8,14 @@ describe('NotificationEditor', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     try {
-      render(<NotificationEditor value="<p>Initial notification</p>" onChange={onChange} />)
+      render(
+        <NotificationEditor value="<p>Initial notification</p>" required onChange={onChange} />,
+      )
 
-      await screen.findByLabelText('Notification content editor')
+      expect(await screen.findByLabelText('Notification content editor')).toHaveAttribute(
+        'aria-required',
+        'true',
+      )
       expect(screen.getByRole('button', { name: 'Bold' })).toBeEnabled()
       expect(screen.getByRole('button', { name: 'Strikethrough' })).toBeEnabled()
       expect(screen.queryByRole('button', { name: 'Underline' })).not.toBeInTheDocument()

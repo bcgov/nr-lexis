@@ -18,9 +18,18 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/components/NotificationEditor', () => ({
-  default: ({ value, onChange }: { value: string; onChange: (contentHtml: string) => void }) => (
+  default: ({
+    value,
+    required,
+    onChange,
+  }: {
+    value: string
+    required?: boolean
+    onChange: (contentHtml: string) => void
+  }) => (
     <textarea
       aria-label="Notification content editor"
+      aria-required={required}
       value={value}
       onChange={(event) => onChange(event.target.value)}
     />
@@ -166,9 +175,21 @@ describe('Notifications page', () => {
     await user.click(launcher)
     const dialog = await screen.findByRole('dialog', { name: 'New notification' })
     expect(within(dialog).getByRole('heading', { name: 'New notification' })).toBeVisible()
-    expect(within(dialog).getByLabelText('Title')).toHaveAttribute('maxlength', '80')
+    expect(within(dialog).getByLabelText(/^Title/)).toHaveAttribute('maxlength', '80')
+    expect(within(dialog).getByLabelText(/^Title/)).toBeRequired()
+    expect(within(dialog).getByLabelText('Notification content editor')).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+    expect(within(dialog).getByLabelText(/^Start date/)).toBeRequired()
+    expect(within(dialog).getByLabelText(/^End date/)).toBeRequired()
+    expect(
+      within(dialog).getByText(
+        'The notice appears to readers between these dates, then hides automatically. No one has to dismiss it.',
+      ),
+    ).toBeVisible()
     expect(within(dialog).getByText('0 / 4,000 characters')).toBeVisible()
-    await user.type(within(dialog).getByLabelText('Title'), 'Office closure')
+    await user.type(within(dialog).getByLabelText(/^Title/), 'Office closure')
     await user.type(
       within(dialog).getByLabelText('Notification content editor'),
       'Office closed Friday.',
@@ -239,7 +260,7 @@ describe('Notifications page', () => {
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'New notification' }))
     const dialog = await screen.findByRole('dialog', { name: 'New notification' })
-    await user.type(within(dialog).getByLabelText('Title'), 'Office closure')
+    await user.type(within(dialog).getByLabelText(/^Title/), 'Office closure')
     await user.type(within(dialog).getByLabelText('Notification content editor'), '<p>&nbsp;</p>')
     await user.click(within(dialog).getByRole('button', { name: 'Publish' }))
 
@@ -261,8 +282,8 @@ describe('Notifications page', () => {
     await user.click(screen.getByRole('button', { name: 'Edit' }))
 
     expect(screen.getByRole('dialog', { name: 'Edit notification' })).toBeVisible()
-    expect(screen.getByLabelText('Start date')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('End date')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText(/^Start date/)).toHaveAttribute('readonly')
+    expect(screen.getByLabelText(/^End date/)).not.toHaveAttribute('readonly')
   })
 
   it('keeps recent-update messaging in page flow and restores focus after cancelling', async () => {

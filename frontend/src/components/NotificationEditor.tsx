@@ -17,6 +17,7 @@ import './NotificationEditor.scss'
 type NotificationEditorProps = {
   value: string
   disabled?: boolean
+  required?: boolean
   onChange: (value: string) => void
 }
 
@@ -44,6 +45,7 @@ const isSupportedLinkUrl = (value: string): boolean => {
 export default function NotificationEditor({
   value,
   disabled = false,
+  required = false,
   onChange,
 }: NotificationEditorProps) {
   const generatedId = useId().replaceAll(':', '')
@@ -73,6 +75,7 @@ export default function NotificationEditor({
     editorProps: {
       attributes: {
         'aria-label': 'Notification content editor',
+        ...(required ? { 'aria-required': 'true' } : {}),
         class: 'notification-editor__content',
       },
     },
