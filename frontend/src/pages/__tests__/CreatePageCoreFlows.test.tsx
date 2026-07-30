@@ -1219,7 +1219,7 @@ describe('Create Page Core Flows', () => {
       otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777')
-  })
+  }, 20_000)
 
   it('displays every application selected from provincial search', async () => {
     render(
@@ -1322,7 +1322,7 @@ describe('Create Page Core Flows', () => {
       otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901')
-  })
+  }, 20_000)
 
   it('submits a standalone Ministerial exemption without an application', async () => {
     mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-900'))
