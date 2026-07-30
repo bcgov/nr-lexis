@@ -59,8 +59,11 @@ class LexisUserPreferenceRepositoryTest {
     assertThat(sql.getValue())
         .contains("MERGE INTO THE.LEXIS_USER_PREFERENCE")
         .contains("WHEN MATCHED THEN")
+        .contains("target.UPDATE_USER = source.ACTOR")
         .contains("target.UPDATE_TIMESTAMP = SYSDATE")
         .contains("WHEN NOT MATCHED THEN")
+        .contains("UPDATE_USER,")
+        .doesNotContain("UPDATE_USERID")
         .doesNotContain("target.CREATE_TIMESTAMP =");
   }
 

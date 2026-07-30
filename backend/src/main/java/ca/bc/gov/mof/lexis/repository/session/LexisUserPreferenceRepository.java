@@ -36,7 +36,7 @@ public class LexisUserPreferenceRepository {
       WHEN MATCHED THEN
         UPDATE SET
           target.PREFERENCE_VALUE = source.PREFERENCE_VALUE,
-          target.UPDATE_USERID = source.ACTOR,
+          target.UPDATE_USER = source.ACTOR,
           target.UPDATE_TIMESTAMP = SYSDATE
       WHEN NOT MATCHED THEN
         INSERT (
@@ -45,7 +45,7 @@ public class LexisUserPreferenceRepository {
           PREFERENCE_VALUE,
           CREATE_USER,
           CREATE_TIMESTAMP,
-          UPDATE_USERID,
+          UPDATE_USER,
           UPDATE_TIMESTAMP
         )
         VALUES (
