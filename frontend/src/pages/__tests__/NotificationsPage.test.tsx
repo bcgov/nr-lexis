@@ -107,7 +107,7 @@ describe('Notifications page', () => {
     const notificationRow = within(notificationFeed).getByRole('listitem')
     expect(within(notificationRow).getByText('Warning')).toBeVisible()
     expect(within(notificationRow).getByText('Services are available.')).toBeVisible()
-    expect(within(notificationRow).getByText(/Posted Jan 1, 2026/)).toBeVisible()
+    expect(within(notificationRow).queryByText(/^Posted /)).not.toBeInTheDocument()
     expect(within(notificationRow).getByText(/Shows until Jan 8, 2026/)).toBeVisible()
     expect(mockedFetchNotifications).toHaveBeenCalledOnce()
     expect(mockedFetchAdminNotifications).not.toHaveBeenCalled()

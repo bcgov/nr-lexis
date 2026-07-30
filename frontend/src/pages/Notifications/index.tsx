@@ -769,11 +769,6 @@ export default function NotificationsPage() {
                       contentHtml={notification.contentHtml}
                     />
                     <div className="notifications-page__notification-meta">
-                      <span>Posted {formatDate(notification.displayStartDate)}</span>
-                      <span
-                        className="notifications-page__notification-meta-dot"
-                        aria-hidden="true"
-                      />
                       <span className="notifications-page__notification-window">
                         <Time size={14} aria-hidden="true" />
                         Shows until {formatDate(notification.displayEndDate)}
