@@ -191,6 +191,41 @@ describe('Notifications page', () => {
     await waitFor(() => expect(launcher).toHaveFocus())
   })
 
+  it('clears and disables individual audiences when all roles are selected', async () => {
+    const user = userEvent.setup()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    await screen.findByText('Winter service update')
+    await user.click(screen.getByRole('button', { name: 'New notification' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New notification' })
+    const allRoles = within(dialog).getByRole('checkbox', { name: 'All roles' })
+    const readOnly = within(dialog).getByRole('checkbox', { name: 'Read Only' })
+
+    expect(allRoles).toBeChecked()
+    expect(readOnly).toBeDisabled()
+    expect(
+      within(dialog).queryByText(
+        'Choose specific roles only when the notification does not apply to everyone.',
+      ),
+    ).not.toBeInTheDocument()
+
+    await user.click(allRoles)
+    expect(readOnly).toBeEnabled()
+
+    await user.click(readOnly)
+    expect(readOnly).toBeChecked()
+
+    await user.click(allRoles)
+    expect(readOnly).toBeDisabled()
+    expect(readOnly).not.toBeChecked()
+  })
+
   it('treats formatted empty HTML as missing notification content', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(

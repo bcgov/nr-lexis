@@ -549,7 +549,7 @@ export default function NotificationsPage() {
             <legend>Audience</legend>
             <Checkbox
               id="notification-audience-all"
-              labelText="All authenticated LEXIS roles"
+              labelText="All roles"
               checked={form.audienceMode === 'ALL'}
               disabled={saving}
               onChange={(_, { checked }) =>
@@ -560,7 +560,6 @@ export default function NotificationsPage() {
                 }))
               }
             />
-            <p>Choose specific roles only when the notification does not apply to everyone.</p>
             <div
               className="notifications-page__audience-options"
               aria-disabled={form.audienceMode === 'ALL'}
