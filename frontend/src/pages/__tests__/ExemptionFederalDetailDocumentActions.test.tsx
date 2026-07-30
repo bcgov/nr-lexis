@@ -1131,16 +1131,16 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
   })
 
-  it('does not invent an agent party for owner-filed federal applications', async () => {
+  it('hides residual agent data for owner-filed federal applications', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
       ownerApplicantType: 'O',
-      agentClientNumber: null,
-      agentClientLocationCode: null,
-      agentApplicantType: 'O',
+      agentClientNumber: federalDetail.ownerClientNumber,
+      agentClientLocationCode: federalDetail.ownerClientLocationCode,
+      agentApplicantType: 'A',
       agentContactName: null,
-      agentCompanyName: null,
-      agentClientContext: null,
+      agentCompanyName: federalDetail.ownerCompanyName,
+      agentClientContext: federalDetail.ownerClientContext,
     })
 
     render(
@@ -1156,6 +1156,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const ownerTile = screen.getByRole('heading', { name: 'Owner', level: 2 }).closest('.cds--tile')
     expect(ownerTile).toBeTruthy()
     expect(within(ownerTile as HTMLElement).queryByText('O')).not.toBeInTheDocument()
+
+    await selectDetailTab('Application')
+    expect(await screen.findByText('FED-888')).toBeInTheDocument()
   })
 
   it('shows the federal lock warning and suppresses every mutation and document control', async () => {

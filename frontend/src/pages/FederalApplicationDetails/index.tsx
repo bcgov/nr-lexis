@@ -225,13 +225,7 @@ const FederalApplicationDetailsPage = () => {
     applicationStatusCode !== 'EXP' &&
     (hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN'))
   const canEditApplicationDocuments = canUploadApplicationDocuments || canDeleteApplicationDocuments
-  const hasAgent =
-    currentDetail?.ownerApplicantType?.trim().toUpperCase() === 'A' ||
-    currentDetail?.agentApplicantType?.trim().toUpperCase() === 'A' ||
-    !!currentDetail?.agentClientNumber ||
-    !!currentDetail?.agentClientLocationCode ||
-    !!currentDetail?.agentContactName ||
-    !!currentDetail?.agentCompanyName
+  const hasAgent = currentDetail?.ownerApplicantType?.trim().toUpperCase() === 'A'
   const federalApplicationDetailTabs: FederalApplicationDetailTabKey[] = [
     'owner',
     ...(hasAgent ? (['agent'] as const) : []),
@@ -249,7 +243,7 @@ const FederalApplicationDetailsPage = () => {
     : 'owner'
   const selectedFederalApplicationTabIndex = Math.max(
     0,
-    FEDERAL_APPLICATION_DETAIL_TAB_SLOTS.indexOf(activeFederalApplicationTab),
+    federalApplicationDetailTabs.indexOf(activeFederalApplicationTab),
   )
 
   const withCurrentSearch = useCallback(
@@ -917,12 +911,7 @@ const FederalApplicationDetailsPage = () => {
             <Tabs
               selectedIndex={selectedFederalApplicationTabIndex}
               onChange={({ selectedIndex }) => {
-                const selectedTab = FEDERAL_APPLICATION_DETAIL_TAB_SLOTS[selectedIndex]
-                selectFederalApplicationTab(
-                  selectedTab && federalApplicationDetailTabs.includes(selectedTab)
-                    ? selectedTab
-                    : 'owner',
-                )
+                selectFederalApplicationTab(federalApplicationDetailTabs[selectedIndex] ?? 'owner')
               }}
             >
               <TabList
