@@ -138,6 +138,16 @@ describe('Layout shell', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('labels the provincial review navigation as application review', () => {
+    renderLayout('/provincial/review')
+
+    expect(screen.getByRole('link', { name: 'Application review' })).toHaveAttribute(
+      'href',
+      '/provincial/review',
+    )
+    expect(screen.queryByRole('link', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
   it('restores persisted theme, side-nav, and collapsed sections', async () => {
     window.localStorage.setItem(THEME_PREFERENCE_KEY, 'g100')
     window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'true')

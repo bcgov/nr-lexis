@@ -107,7 +107,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/provincial/review',
-        label: 'Review',
+        label: 'Application review',
         icon: TaskComplete,
         requiredActions: ['/applicationsReview'],
       },
