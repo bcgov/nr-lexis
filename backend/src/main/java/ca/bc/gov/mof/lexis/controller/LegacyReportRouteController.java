@@ -28,6 +28,9 @@ public class LegacyReportRouteController {
 
   private static final String ACTION_VIEW = "view";
   private static final String ACTION_GENERATE = "generate";
+  // INTENTIONAL_LEGACY_DIVERGENCE(ADVERTISING_REPORT_VARIANT_RETIREMENT):
+  // Legacy biweekly root routes and industry shortcuts are deliberately omitted. The modern
+  // /api/lexis/reports/biweeklyListing endpoint remains active.
   private static final Set<String> LEGACY_REPORT_ACTIONS =
       Set.of(
           "offerReport",

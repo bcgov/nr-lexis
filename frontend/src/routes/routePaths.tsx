@@ -165,6 +165,12 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
   },
 ]
 
+// INTENTIONAL_LEGACY_DIVERGENCE(ADMIN_PAGE_RETIREMENT):
+// The Users & Access landing page and IDIR lookup are deliberately absent from protected routes.
+// INTENTIONAL_LEGACY_DIVERGENCE(INDIGENOUS_RESERVE_MODULE_RETIREMENT):
+// Legacy Indian/Indigenous Reserve search, create, and detail pages are deliberately not routed.
+// INTENTIONAL_LEGACY_DIVERGENCE(PROVINCIAL_SUMMARY_RETIREMENT):
+// The legacy Provincial Summary page is retired; authenticated root navigation uses role defaults.
 export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/',
@@ -426,8 +432,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
-    // INTENTIONAL_LEGACY_DIVERGENCE(ADMIN_PAGE_RETIREMENT):
-    // The legacy-style Users & Access landing page and IDIR lookup are deliberately not routed.
     path: '/admin/rtm/emslogamv',
     id: 'Admin - Average Monthly Values',
     requiredActions: ['/lexisAgentAdmin'],

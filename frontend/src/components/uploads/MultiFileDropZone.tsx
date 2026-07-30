@@ -16,6 +16,11 @@ export type MultiFileDropZoneProps = {
   onFilesSelected: (files: FileList | null) => void
 }
 
+/**
+ * INTENTIONAL_LEGACY_DIVERGENCE(MULTI_FILE_UPLOAD_QUEUE):
+ * Legacy upload dialogs accepted one form file. Modern upload workflows queue and review
+ * multiple selected files before submitting them.
+ */
 function MultiFileDropZone({
   title,
   description,
