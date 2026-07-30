@@ -189,6 +189,17 @@ const contentText = (contentHtml: string): string => {
 
 const contentTextLength = (contentHtml: string): number => contentText(contentHtml).length
 
+const contentHtmlForDisplay = (contentHtml: string): string => {
+  const parsedDocument = new DOMParser().parseFromString(contentHtml, 'text/html')
+  parsedDocument.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((link) => {
+    link.target = '_blank'
+    link.rel = [
+      ...new Set([...link.rel.split(/\s+/).filter(Boolean), 'noopener', 'noreferrer']),
+    ].join(' ')
+  })
+  return parsedDocument.body.innerHTML
+}
+
 const RequiredMarker = () => (
   <span className="notifications-page__required-marker" aria-hidden="true">
     *
@@ -700,7 +711,9 @@ export default function NotificationsPage() {
                     <div
                       className="notifications-page__notification-content"
                       // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
-                      dangerouslySetInnerHTML={{ __html: notification.contentHtml }}
+                      dangerouslySetInnerHTML={{
+                        __html: contentHtmlForDisplay(notification.contentHtml),
+                      }}
                     />
                     <div className="notifications-page__notification-meta">
                       <span>Posted {formatDate(notification.displayStartDate)}</span>

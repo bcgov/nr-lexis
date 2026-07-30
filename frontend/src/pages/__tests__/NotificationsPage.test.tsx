@@ -160,6 +160,26 @@ describe('Notifications page', () => {
     )
   })
 
+  it('opens notification content links in a new protected tab', async () => {
+    mockedFetchNotifications.mockResolvedValue([
+      {
+        ...viewerNotification,
+        contentHtml: '<p><a href="https://www2.gov.bc.ca" rel="nofollow">Read the notice</a></p>',
+      },
+    ])
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    const link = await screen.findByRole('link', { name: 'Read the notice' })
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'nofollow noopener noreferrer')
+  })
+
   it('lets administrators create notifications from the same page', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(
