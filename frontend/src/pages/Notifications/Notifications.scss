@@ -401,6 +401,14 @@
   padding-left: 1.5rem;
 }
 
+.notifications-page__notification-content ul {
+  list-style: disc;
+}
+
+.notifications-page__notification-content ol {
+  list-style: decimal;
+}
+
 .notifications-page__notification-meta {
   display: flex;
   align-items: center;

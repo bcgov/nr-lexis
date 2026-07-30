@@ -127,6 +127,30 @@ describe('Notifications page', () => {
     ).toBeVisible()
   })
 
+  it('renders bulleted and numbered rich text in notification cards', async () => {
+    mockedFetchNotifications.mockResolvedValue([
+      {
+        ...viewerNotification,
+        contentHtml:
+          '<ul><li>Bring identification</li></ul><ol><li>Submit the application</li></ol>',
+      },
+    ])
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    await screen.findByText('Bring identification')
+    const content = document.querySelector('.notifications-page__notification-content')
+    expect(content?.querySelector('ul')).toContainElement(screen.getByText('Bring identification'))
+    expect(content?.querySelector('ol')).toContainElement(
+      screen.getByText('Submit the application'),
+    )
+  })
+
   it('lets administrators create notifications from the same page', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(
