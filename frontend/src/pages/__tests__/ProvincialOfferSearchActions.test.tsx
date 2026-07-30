@@ -43,7 +43,9 @@ const offerSearchResponse = (
   },
 })
 
-const renderPage = (path = '/provincial/offers') => {
+const renderPage = (
+  path = '/provincial/offers?page=1&pageSize=10&sortField=listingDate&sortDirection=asc',
+) => {
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
@@ -108,20 +110,18 @@ describe('Provincial Offer Search Actions', () => {
     expect(screen.queryByRole('link', { name: 'Add Offer' })).not.toBeInTheDocument()
   })
 
-  it('does not default region filters when opened without query parameters', async () => {
+  it('opens without results or a search request when no search has been applied', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
-    renderPage()
-    await screen.findByText('OFF-1001')
+    renderPage('/provincial/offers')
+    await waitFor(() => {
+      expect(mockedFetchProvincialOfferOptions).toHaveBeenCalledOnce()
+    })
 
-    expect(mockedSearchProvincialOffers).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({
-          region: [],
-        }),
-      }),
-      expect.objectContaining({ knownTotal: expect.any(Number) }),
-    )
+    expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('region', { name: 'Search results table', hidden: true }),
+    ).not.toBeVisible()
   })
 
   it('keeps the results loading while default search filters initialize', async () => {
@@ -208,11 +208,17 @@ describe('Provincial Offer Search Actions', () => {
       ],
     })
 
-    renderPage()
-    await screen.findByText('OFF-1001')
+    renderPage('/provincial/offers')
 
     await waitFor(() => {
-      expect(mockedSearchProvincialOffers).toHaveBeenCalledWith(
+      expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
+    })
+    expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialOffers).toHaveBeenLastCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({
             listingToDate: '2026-07-11',

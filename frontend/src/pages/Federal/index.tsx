@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Locked } from '@carbon/icons-react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -57,6 +57,7 @@ import {
   parsePositiveIntParam,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -129,7 +130,7 @@ const buildSearchParams = (
 const FederalPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform, isLoading } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('federal-applications')
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
@@ -318,18 +319,17 @@ const FederalPage = () => {
   }, [hasSearchQuery, requestFilters, runSearch, urlState.page, urlState.pageSize])
 
   useEffect(() => {
-    const hasSearchQuery = searchParams.toString().length > 0
     if (!isLoading && !hasSearchQuery) {
-      setSearchParams(
-        buildSearchParams(
-          { ...INITIAL_FILTERS, applicationStatus: 'APP' },
-          DEFAULT_SEARCH_PAGE,
-          DEFAULT_SEARCH_PAGE_SIZE,
-        ),
-        { replace: true },
+      setFilters((currentFilters) =>
+        currentFilters.applicationStatus === 'APP'
+          ? currentFilters
+          : {
+              ...currentFilters,
+              applicationStatus: 'APP',
+            },
       )
     }
-  }, [isLoading, searchParams, setSearchParams])
+  }, [hasSearchQuery, isLoading, setFilters])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -592,7 +592,7 @@ const FederalPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"

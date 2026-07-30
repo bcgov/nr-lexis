@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -65,6 +65,7 @@ import {
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -175,7 +176,7 @@ const buildSearchParams = (
 const ProvincialApplicationPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-applications')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
@@ -244,6 +245,7 @@ const ProvincialApplicationPage = () => {
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
+  const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setExemptionStatus(null)
@@ -379,6 +381,10 @@ const ProvincialApplicationPage = () => {
   )
 
   useEffect(() => {
+    if (!hasSearchQuery) {
+      return
+    }
+
     void runSearch({
       filters: requestFilters,
       page: urlState.page - 1,
@@ -387,6 +393,7 @@ const ProvincialApplicationPage = () => {
       sortDirection: urlState.sortDirection,
     })
   }, [
+    hasSearchQuery,
     requestFilters,
     runSearch,
     urlState.page,
@@ -738,7 +745,7 @@ const ProvincialApplicationPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"

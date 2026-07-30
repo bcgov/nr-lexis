@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -61,6 +61,7 @@ import {
 } from '@/pages/shared/search-total-cache'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -133,7 +134,7 @@ const buildSearchParams = (
 
 const ProvincialPermitPage = () => {
   const { capabilities } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-permits')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
@@ -186,6 +187,7 @@ const ProvincialPermitPage = () => {
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
+  const hasSearchQuery = searchParams.toString().length > 0
   const updateFilter = useCallback(
     <K extends keyof ProvincialPermitSearchFilters>(
       key: K,
@@ -299,6 +301,10 @@ const ProvincialPermitPage = () => {
   )
 
   useEffect(() => {
+    if (!hasSearchQuery) {
+      return
+    }
+
     void runSearch({
       filters: requestFilters,
       page: urlState.page - 1,
@@ -307,6 +313,7 @@ const ProvincialPermitPage = () => {
       sortDirection: urlState.sortDirection,
     })
   }, [
+    hasSearchQuery,
     requestFilters,
     runSearch,
     urlState.page,
@@ -494,7 +501,7 @@ const ProvincialPermitPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"

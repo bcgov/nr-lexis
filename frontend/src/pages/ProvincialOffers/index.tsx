@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -59,6 +59,7 @@ import {
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -129,10 +130,10 @@ const buildSearchParams = (
 
 const ProvincialOffersPage = () => {
   const { capabilities, canPerform } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-offers')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [defaultListingToDate, setDefaultListingToDate] = useState('')
   const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
@@ -368,23 +369,17 @@ const ProvincialOffersPage = () => {
       return
     }
 
-    const hasSearchQuery = searchParams.toString().length > 0
     if (!hasSearchQuery) {
-      setSearchParams(
-        buildSearchParams(
-          {
-            ...INITIAL_FILTERS,
-            listingToDate: defaultListingToDate,
-          },
-          DEFAULT_SORT_FIELD,
-          DEFAULT_SORT_DIRECTION,
-          DEFAULT_SEARCH_PAGE,
-          DEFAULT_SEARCH_PAGE_SIZE,
-        ),
-        { replace: true },
+      setFilters((currentFilters) =>
+        currentFilters.listingToDate === defaultListingToDate
+          ? currentFilters
+          : {
+              ...currentFilters,
+              listingToDate: defaultListingToDate,
+            },
       )
     }
-  }, [defaultListingToDate, isOptionsLoaded, searchParams, setSearchParams])
+  }, [defaultListingToDate, hasSearchQuery, isOptionsLoaded, setFilters])
 
   const onSearch = () => {
     if (loading || hasDateValidationError) {
@@ -544,7 +539,7 @@ const ProvincialOffersPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"

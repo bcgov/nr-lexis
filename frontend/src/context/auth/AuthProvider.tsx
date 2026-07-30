@@ -24,6 +24,7 @@ import {
 import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
+import { clearPersistedSearchState } from '@/pages/shared/usePersistedSearchParams'
 import apiService from '@/service/api-service'
 import {
   clearActiveForestClientNumber,
@@ -310,6 +311,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         apiService.clearCachedGetData()
         apiService.clearRecordVersions()
         clearAllPageDataCache()
+        clearPersistedSearchState()
         authenticatedSessionRef.current = false
         if (reason === 'idle-timeout') {
           markSessionExpiredLoginNotice()
@@ -374,6 +376,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             if (sessionGenerationRef.current === refreshGeneration) {
               sessionExpiryInFlightRef.current = false
               authenticatedSessionRef.current = false
+              clearPersistedSearchState()
               setCapabilities(DEFAULT_CAPABILITIES)
             }
             return
@@ -394,11 +397,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             clearActiveForestClientNumber()
             apiService.clearCachedGetData()
             clearAllPageDataCache()
+            clearPersistedSearchState()
             data = await fetchSessionCapabilities()
             if (sessionGenerationRef.current !== refreshGeneration) {
               return
             }
             nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+          }
+          if (!nextCapabilities.authenticated) {
+            clearPersistedSearchState()
           }
           authenticatedSessionRef.current = nextCapabilities.authenticated
           setCapabilities(nextCapabilities)
@@ -407,6 +414,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (sessionGenerationRef.current === refreshGeneration) {
           console.warn('Unable to load session capabilities.', error)
           authenticatedSessionRef.current = false
+          clearPersistedSearchState()
           setCapabilities(DEFAULT_CAPABILITIES)
         }
       } finally {
@@ -536,6 +544,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       sessionExpiryInFlightRef.current = false
       clearActiveForestClientNumber()
       apiService.clearCachedGetData()
+      clearPersistedSearchState()
       if (isCognitoConfigured) {
         const providerName =
           provider === 'business-bceid' ? businessBceidProviderName : idirProviderName
@@ -560,6 +569,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiService.clearCachedGetData()
       apiService.clearRecordVersions()
       clearAllPageDataCache()
+      clearPersistedSearchState()
       authenticatedSessionRef.current = false
 
       if (isCognitoConfigured && startFederatedLogout()) {
@@ -591,6 +601,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiService.clearCachedGetData()
       apiService.clearRecordVersions()
       clearAllPageDataCache()
+      clearPersistedSearchState()
 
       try {
         const data = await fetchSessionCapabilities()

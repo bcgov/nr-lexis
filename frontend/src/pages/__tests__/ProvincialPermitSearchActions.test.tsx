@@ -50,7 +50,9 @@ const PermitSearchLocation = () => {
   return <output data-testid="permit-search-location">{location.search}</output>
 }
 
-const renderPage = (initialEntry = '/provincial/permit') => {
+const renderPage = (
+  initialEntry = '/provincial/permit?page=1&pageSize=10&sortField=permitNumber&sortDirection=desc',
+) => {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
@@ -124,28 +126,22 @@ describe('Provincial Permit Search Actions', () => {
 
     expect(await screen.findByRole('link', { name: '9020935 (Pending)' })).toHaveAttribute(
       'href',
-      '/provincial/permit/9020935',
+      '/provincial/permit/9020935?page=1&pageSize=10&sortField=permitNumber&sortDirection=desc',
     )
   })
 
-  it('does not default region filters when opened without query parameters', async () => {
+  it('opens without results or a search request when no search has been applied', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
-    renderPage()
-    await screen.findByText('7001')
+    renderPage('/provincial/permit')
+    await waitFor(() => {
+      expect(mockedFetchProvincialPermitOptions).toHaveBeenCalledOnce()
+    })
 
-    expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({
-          invoiceNumber: '',
-          permitStatus: '',
-          region: [],
-        }),
-        sortField: 'permitNumber',
-        sortDirection: 'desc',
-      }),
-      expect.objectContaining({ knownTotal: expect.any(Number) }),
-    )
+    expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('region', { name: 'Search results table', hidden: true }),
+    ).not.toBeVisible()
   })
 
   it('keeps the table loading until the exact result count is available', async () => {

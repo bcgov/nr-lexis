@@ -1692,6 +1692,34 @@ test.describe('TEST IDIR admin regression', () => {
       },
     )
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/review')
+    await expect(page.locator('section[aria-label="Review queue"]')).toBeHidden()
+  })
+
+  test('restores an applied search after navigating to another page', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(
+      page,
+      `/provincial/application?applicationNumber=${missingApplicationNumber}`,
+      /provincial application search/i,
+    )
+    await expect(page.getByText('No applications found', { exact: true })).toBeVisible()
+
+    await expectAccessiblePage(
+      page,
+      `/federal?applicationNumber=${missingApplicationNumber}`,
+      /federal application search/i,
+    )
+    await page
+      .locator(sideNavSection('Provincial'))
+      .getByRole('link', { name: 'Applications', exact: true })
+      .click()
+
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/application')
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('applicationNumber'))
+      .toBe(missingApplicationNumber)
+    await expect(page.getByText('No applications found', { exact: true })).toBeVisible()
   })
 
   test('supports collapsible sidebar sections and collapsed icon navigation', async () => {

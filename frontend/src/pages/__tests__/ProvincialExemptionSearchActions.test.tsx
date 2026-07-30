@@ -55,7 +55,9 @@ const exemptionSearchResponse = (
   },
 })
 
-const renderPage = (path = '/provincial/exemption') => {
+const renderPage = (
+  path = '/provincial/exemption?page=1&pageSize=10&sortField=exemptionNumber&sortDirection=desc',
+) => {
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
@@ -684,7 +686,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
   })
 
-  it('does not default exemption approvers to their session region', async () => {
+  it('defaults exemption approver filters without searching or using the session region', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -695,9 +697,17 @@ describe('Provincial Exemption Search Actions', () => {
       }),
     )
 
-    renderPage()
-    await screen.findByText('EX-1001')
+    renderPage('/provincial/exemption')
+    await waitFor(() => {
+      expect(mockedFetchProvincialExemptionOptions).toHaveBeenCalledOnce()
+    })
 
+    expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('region', { name: 'Search results table', hidden: true }),
+    ).not.toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
       expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
         expect.objectContaining({

@@ -17,6 +17,8 @@ export type DetailFieldTileProps = {
   headerAction?: ReactNode
 }
 
+// INTENTIONAL_LEGACY_DIVERGENCE(DETAIL_VIEW_EDIT_MODES):
+// Detail fields render as values until an authorized user explicitly enters edit mode.
 export function DetailFieldTile({ title, fields, headerAction }: DetailFieldTileProps) {
   return (
     <Tile className="detail-section-card">

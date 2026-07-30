@@ -105,6 +105,11 @@ describe('AuthProvider logout', () => {
   it('signs out of Cognito', async () => {
     markSessionExpiredLoginNotice()
     setActiveForestClientNumber('00012345')
+    window.sessionStorage.setItem(
+      'lexis.search-state.v1.provincial-review',
+      'applicationNumber=43278',
+    )
+    window.sessionStorage.setItem('unrelated', 'keep')
     renderProbe()
 
     await waitFor(() => {
@@ -121,6 +126,8 @@ describe('AuthProvider logout', () => {
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(hasSessionExpiredLoginNotice()).toBe(false)
     expect(getActiveForestClientNumber()).toBeNull()
+    expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
+    expect(window.sessionStorage.getItem('unrelated')).toBe('keep')
   })
 
   it('uses the FSPTS-style federated logout chain when it is configured', async () => {
@@ -146,6 +153,10 @@ describe('AuthProvider logout', () => {
 
   it('preserves the inactivity notice while bootstrapping without Cognito tokens', async () => {
     markSessionExpiredLoginNotice()
+    window.sessionStorage.setItem(
+      'lexis.search-state.v1.provincial-review',
+      'applicationNumber=43278',
+    )
     authMocks.fetchAuthSession.mockResolvedValue({ tokens: undefined })
 
     renderProbe()
@@ -157,6 +168,7 @@ describe('AuthProvider logout', () => {
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
     expect(hasSessionExpiredLoginNotice()).toBe(true)
+    expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
   })
 
   it('clears local auth state after Cognito signout fails', async () => {
@@ -182,6 +194,10 @@ describe('AuthProvider logout', () => {
 
   it('expires authenticated sessions after 30 minutes of inactivity', async () => {
     window.history.replaceState({}, document.title, '/provincial/review')
+    window.sessionStorage.setItem(
+      'lexis.search-state.v1.provincial-review',
+      'applicationNumber=43278',
+    )
     let pathnameWhenSignOutStarted = ''
     authMocks.signOut.mockImplementation(async () => {
       pathnameWhenSignOutStarted = window.location.pathname
@@ -216,6 +232,7 @@ describe('AuthProvider logout', () => {
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(window.location.pathname).toBe('/')
     expect(hasSessionExpiredLoginNotice()).toBe(true)
+    expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
   })
 
   it('resets the 30 minute inactivity timer when the user interacts with the page', async () => {

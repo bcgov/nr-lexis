@@ -426,6 +426,8 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    // INTENTIONAL_LEGACY_DIVERGENCE(ADMIN_PAGE_RETIREMENT):
+    // The legacy-style Users & Access landing page and IDIR lookup are deliberately not routed.
     path: '/admin/rtm/emslogamv',
     id: 'Admin - Average Monthly Values',
     requiredActions: ['/lexisAgentAdmin'],

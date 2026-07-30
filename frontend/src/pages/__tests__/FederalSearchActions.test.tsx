@@ -35,9 +35,9 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchFederalApplications = vi.mocked(searchFederalApplications)
 const mockedFetchFederalApplicationOptions = vi.mocked(fetchFederalApplicationOptions)
 
-const renderPage = () => {
+const renderPage = (path = '/federal?applicationStatus=APP&page=1&pageSize=10') => {
   render(
-    <MemoryRouter initialEntries={['/federal']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/federal" element={<FederalPage />} />
       </Routes>
@@ -97,6 +97,18 @@ describe('Federal Search Actions', () => {
         totalPages: 1,
       },
     })
+  })
+
+  it('opens without results or a search request when no search has been applied', async () => {
+    renderPage('/federal')
+    await waitFor(() => {
+      expect(mockedFetchFederalApplicationOptions).toHaveBeenCalledOnce()
+    })
+
+    expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('region', { name: 'Search results table', hidden: true }),
+    ).not.toBeVisible()
   })
 
   it('only allows eligible federal applications to be selected for exemption creation', async () => {
