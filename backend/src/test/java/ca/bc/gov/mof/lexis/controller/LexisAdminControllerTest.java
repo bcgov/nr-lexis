@@ -33,34 +33,6 @@ class LexisAdminControllerTest {
   @Mock private LexisAdminRpcService adminRpcService;
 
   @Test
-  void adminPageShouldReturnNoContentWhenServiceMissing() {
-    when(adminServiceProvider.getIfAvailable()).thenReturn(null);
-    LexisAdminController controller =
-        new LexisAdminController(adminServiceProvider, adminRpcServiceProvider);
-
-    ResponseEntity<LexisAdminPageDto> response = controller.agentAdmin();
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-    verifyNoInteractions(adminService);
-  }
-
-  @Test
-  void agentAdminShouldDelegateToService() {
-    when(adminServiceProvider.getIfAvailable()).thenReturn(adminService);
-    LexisAdminController controller =
-        new LexisAdminController(adminServiceProvider, adminRpcServiceProvider);
-    LexisAdminPageDto payload =
-        new LexisAdminPageDto("agent", "/lexisAgentAdmin.do?actionMapping=view", Map.of("section", "agent"));
-    when(adminService.agentAdminPage()).thenReturn(Optional.of(payload));
-
-    ResponseEntity<LexisAdminPageDto> response = controller.agentAdmin();
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(payload);
-    verify(adminService).agentAdminPage();
-  }
-
-  @Test
   void feePolicyAdminShouldDelegateToService() {
     when(adminServiceProvider.getIfAvailable()).thenReturn(adminService);
     LexisAdminController controller =

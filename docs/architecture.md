@@ -18,7 +18,6 @@ flowchart LR
     Gateway -->|Scoped federal POST requests| Backend
 
     Backend --> Oracle[("Shared Oracle database")]
-    Backend --> Identity["FAM identity lookup"]
     Backend --> ClamAV["Shared ClamAV service<br/>separate namespace"]
     Backend --> Mail["Government mail relay"]
 ```

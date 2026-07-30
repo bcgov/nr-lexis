@@ -224,7 +224,7 @@ describe('Protected route guard access', () => {
       }),
     )
 
-    renderWithPath('/admin')
+    renderWithPath('/admin/policies/fee')
 
     expect(
       await screen.findByRole('heading', { name: "You don't have access to view this page" }),

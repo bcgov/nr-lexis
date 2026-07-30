@@ -5,10 +5,7 @@ import java.util.Optional;
 
 public interface LexisAdminService {
 
-  Optional<LexisAdminPageDto> agentAdminPage();
-
   Optional<LexisAdminPageDto> feePolicyAdminPage();
 
   Optional<LexisAdminPageDto> filPolicyAdminPage();
 }
-

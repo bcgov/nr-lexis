@@ -10,17 +10,6 @@ import org.junit.jupiter.api.Test;
 class InMemoryLexisAdminServiceTest {
 
   @Test
-  void shouldReturnAgentAdminPageMetadata() {
-    InMemoryLexisAdminService service = new InMemoryLexisAdminService();
-
-    LexisAdminPageDto page = service.agentAdminPage().orElseThrow();
-
-    assertThat(page.page()).isEqualTo("agent");
-    assertThat(page.legacyAction()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
-    assertThat(page.metadata()).containsEntry("mode", "in-memory");
-  }
-
-  @Test
   void shouldReturnFeePolicyPageMetadata() {
     InMemoryLexisAdminService service = new InMemoryLexisAdminService();
 

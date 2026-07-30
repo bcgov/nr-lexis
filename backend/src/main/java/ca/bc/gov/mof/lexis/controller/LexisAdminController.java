@@ -42,16 +42,6 @@ public class LexisAdminController {
     this.adminRpcServiceProvider = adminRpcServiceProvider;
   }
 
-  @GetMapping({"/agent", "/lexisAgentAdmin"})
-  public ResponseEntity<LexisAdminPageDto> agentAdmin() {
-    LexisAdminService service = adminServiceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Admin service unavailable - returning no content for lexisAgentAdmin");
-      return ResponseEntity.noContent().build();
-    }
-    return service.agentAdminPage().map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.noContent().build());
-  }
-
   @GetMapping({"/policy", "/lexisPolicyAdmin"})
   public ResponseEntity<LexisAdminPageDto> feePolicyAdmin() {
     LexisAdminService service = adminServiceProvider.getIfAvailable();

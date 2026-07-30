@@ -1504,58 +1504,6 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyAgentAdminShouldRejectReadOnlyRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/lexisAgentAdmin.do")
-                .param("actionMapping", "view")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void legacyAgentAdminShouldAllowAdminRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/lexisAgentAdmin.do")
-                .param("actionMapping", "view")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().is2xxSuccessful());
-  }
-
-  @Test
-  void famUserAccessLookupShouldRejectAnonymousRequests() throws Exception {
-    mockMvc.perform(get("/api/lexis/admin/fam-users").param("search", "smith"))
-        .andExpect(status().isUnauthorized());
-  }
-
-  @Test
-  void famUserAccessLookupShouldRejectReadOnlyRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/admin/fam-users")
-                .param("search", "smith")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void famUserAccessLookupShouldRejectDelegatedAdminRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/admin/fam-users")
-                .param("search", "smith")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void famUserAccessLookupShouldAllowLexisAdminRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/admin/fam-users")
-                .param("search", "smith")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.configured").value(false));
-  }
-
-  @Test
   void legacyPolicyAdminRpcShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/lexisPolicyAdminRPC")

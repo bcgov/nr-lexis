@@ -13,7 +13,6 @@ import {
   Notification,
   Report,
   Search,
-  Settings,
   Sun,
   Switcher,
   Tag,
@@ -244,12 +243,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     label: 'Admin',
     links: [
-      {
-        to: '/admin',
-        label: 'Users & Access',
-        icon: Settings,
-        requiredActions: ['/lexisAgentAdmin'],
-      },
       {
         to: '/admin/policies/fee',
         label: 'Fee Policy',

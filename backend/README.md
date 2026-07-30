@@ -48,7 +48,6 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `COGNITO_USERINFO_URI` | Cognito userinfo endpoint | - |
 | `KEYCLOAK_ISSUER_URI` | Keycloak issuer URI for machine-to-machine NEXCOL service-client tokens; optional locally and required for TEST/PROD deployment | - |
 | `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
-| `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
 | `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
 | `LEXIS_EXPIRY_ENABLED` | Enables the daily exemption-expiry scheduler | false |
 | `LEXIS_EXPIRY_CRON` | Spring six-field cron expression for the expiry scheduler | `30 0 0 * * *` |

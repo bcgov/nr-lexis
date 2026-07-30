@@ -12,7 +12,6 @@ import ForestClientSelectionPage from '@/pages/ForestClientSelection'
 import UnauthorizedPage from '@/pages/Unauthorized'
 import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
 
-const AdminPage = lazy(() => import('@/pages/Admin'))
 const AdminPoliciesPage = lazy(() => import('@/pages/AdminPolicies'))
 const AdminUploadsPage = lazy(() => import('@/pages/AdminUploads'))
 const FederalPage = lazy(() => import('@/pages/Federal'))
@@ -425,17 +424,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: false,
-  },
-  {
-    path: '/admin',
-    id: 'Admin',
-    requiredActions: ['/lexisAgentAdmin'],
-    element: (
-      <Layout>
-        <AdminPage />
-      </Layout>
-    ),
-    isNavigation: true,
   },
   {
     path: '/admin/rtm/emslogamv',

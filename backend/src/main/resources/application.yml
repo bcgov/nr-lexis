@@ -56,13 +56,6 @@ management:
       exposure:
         include: health,info,prometheus
 
-ca:
-  bc:
-    gov:
-      nrs:
-        identity-lookup:
-          base-url: ${IDENTITY_LOOKUP_BASE_URL:}
-
 lexis:
   runtime:
     require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}

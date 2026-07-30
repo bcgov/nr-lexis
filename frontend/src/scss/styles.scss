@@ -1263,12 +1263,6 @@ legend.cds--label {
   }
 }
 
-.landing-role-tags {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
 .unauthorized-landing .landing-actions,
 .forbidden-landing .landing-actions {
   margin-top: 4rem;
@@ -1276,52 +1270,6 @@ legend.cds--label {
 
 .dashboard-title {
   margin-block: 0 1rem;
-}
-
-.admin-section-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.admin-section-heading > :first-child {
-  min-inline-size: 0;
-}
-
-.admin-section-heading .dashboard-title {
-  margin-block-end: 0.5rem;
-}
-
-.admin-section-heading p {
-  margin: 0;
-}
-
-.admin-identity-workspace.cds--tile {
-  --cds-field: var(--csp-background);
-  --cds-field-hover: var(--csp-layer-hover);
-  display: grid;
-  gap: 1.5rem;
-  overflow: visible;
-}
-
-.admin-identity-workspace__search {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-  align-items: end;
-}
-
-.admin-identity-workspace__field {
-  min-inline-size: 0;
-  max-inline-size: 28rem;
-}
-
-.admin-identity-workspace__actions {
-  display: flex;
-  justify-content: flex-start;
-  gap: 0.75rem;
 }
 
 .admin-policy-page {
@@ -1402,21 +1350,7 @@ legend.cds--label {
   min-inline-size: 8.5rem;
 }
 
-@media (min-width: 672px) {
-  .admin-identity-workspace__search {
-    grid-template-columns: minmax(0, 28rem) auto;
-  }
-
-  .admin-identity-workspace__actions {
-    justify-content: flex-end;
-  }
-}
-
 @media (max-width: 671px) {
-  .admin-section-heading {
-    flex-direction: column;
-  }
-
   .admin-policy-table-actions .cds--btn,
   .admin-policy-modal__actions .cds--btn {
     flex: 1 1 100%;

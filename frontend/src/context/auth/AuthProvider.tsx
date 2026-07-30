@@ -57,7 +57,6 @@ const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
   offerssearch: '/provincial/offers',
   permitsearch: '/provincial/permit',
   federalapplicationsearch: '/federal',
-  lexisagentadmin: '/admin',
 }
 
 const ACTION_PRIORITY: string[] = [
@@ -68,7 +67,6 @@ const ACTION_PRIORITY: string[] = [
   'offersSearch',
   'permitSearch',
   'federalApplicationSearch',
-  'lexisAgentAdmin',
 ]
 
 const REPORT_ACTION_ROUTE_MAP: Record<string, string> = {

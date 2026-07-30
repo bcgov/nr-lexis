@@ -28,12 +28,12 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldRouteAdminsToAdminLandingWhenOtherRolesArePresent() {
+  void shouldRouteAdminsToApplicationReviewWhenOtherRolesArePresent() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin", "lexis_read_only"));
 
     assertThat(response.welcomeTarget()).isEqualTo("adminUser");
-    assertThat(response.legacyPath()).isEqualTo("/admin");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
@@ -96,12 +96,12 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldRouteSingleAdminToAdminLanding() {
+  void shouldRouteSingleAdminToApplicationReview() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin"));
 
     assertThat(response.welcomeTarget()).isEqualTo("adminUser");
-    assertThat(response.legacyPath()).isEqualTo("/admin");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN");
   }
 

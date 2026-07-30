@@ -181,7 +181,7 @@ describe('AuthProvider logout', () => {
   })
 
   it('expires authenticated sessions after 30 minutes of inactivity', async () => {
-    window.history.replaceState({}, document.title, '/admin')
+    window.history.replaceState({}, document.title, '/provincial/review')
     let pathnameWhenSignOutStarted = ''
     authMocks.signOut.mockImplementation(async () => {
       pathnameWhenSignOutStarted = window.location.pathname
@@ -219,7 +219,7 @@ describe('AuthProvider logout', () => {
   })
 
   it('resets the 30 minute inactivity timer when the user interacts with the page', async () => {
-    window.history.replaceState({}, document.title, '/admin')
+    window.history.replaceState({}, document.title, '/provincial/review')
     renderProbe()
 
     await waitFor(() => {
@@ -342,7 +342,7 @@ describe('AuthProvider logout', () => {
     ['the API reports session expiry', 'api-unauthorized'],
     ['the auth token cannot be resolved', 'token-unavailable'],
   ] as const)('returns authenticated users to the login shell when %s', async (_label, reason) => {
-    window.history.replaceState({}, document.title, '/admin')
+    window.history.replaceState({}, document.title, '/provincial/review')
     let pathnameWhenSignOutStarted = ''
     authMocks.signOut.mockImplementation(async () => {
       pathnameWhenSignOutStarted = window.location.pathname

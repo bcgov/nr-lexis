@@ -372,7 +372,7 @@ public class LexisSessionService {
     READ_ONLY("readOnly", "/provincial/application"),
     PROVINCIAL_SUBMITTER("industryUser", "/provincial/application"),
     INDUSTRY_USER("industryUser", "/provincial/application"),
-    ADMIN_USER("adminUser", "/admin"),
+    ADMIN_USER("adminUser", "/provincial/review"),
     EXEMPTION_APPROVER("exemptionApprover", "/provincial/exemption"),
     NO_ACCESS("noAccess", null),
     MOFR_USER("mofrUser", "/provincial/review");

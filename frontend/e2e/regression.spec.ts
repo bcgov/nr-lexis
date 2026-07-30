@@ -435,7 +435,6 @@ const selectedNaturalResourceRegionNames = [
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
-const famManageUrlPattern = /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
 const regressionEndUseCode = 'PL'
@@ -673,7 +672,7 @@ const adminNavigationSections: Array<{
   {
     section: 'Provincial',
     links: [
-      'Review',
+      'Application review',
       'Create/Edit Application',
       'Upload',
       'Applications',
@@ -705,18 +704,11 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Admin',
-    links: [
-      'Users & Access',
-      'Fee Policy',
-      'Fee in Lieu',
-      'Export Schedule',
-      'Average Monthly Values',
-    ],
+    links: ['Fee Policy', 'Fee in Lieu', 'Export Schedule', 'Average Monthly Values'],
   },
 ]
 
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/admin', /administration/i],
   ['/admin/policies/fee', /fee policy administration/i],
   ['/admin/policies/fil', /fee in lieu percent policy administration/i],
   ['/admin/schedules', /export schedule administration/i],
@@ -1562,7 +1554,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
 
-    await expectAccessiblePage(page, '/admin', /administration/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     const capabilities = await fetchSessionCapabilities(page)
     const roles = asStringArray(capabilities.roles)
@@ -1620,47 +1612,15 @@ test.describe('TEST IDIR admin regression', () => {
 
     await page.getByRole('button', { name: 'Collapse side navigation' }).click()
     await expect(page.getByRole('button', { name: 'Expand side navigation' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Review' })).toHaveAttribute('title', 'Review')
+    await expect(page.getByRole('link', { name: 'Application review' })).toHaveAttribute(
+      'title',
+      'Application review',
+    )
     await expect(page.getByRole('link', { name: 'Advertising List' })).toHaveAttribute(
       'title',
       'Advertising List',
     )
     await page.getByRole('button', { name: 'Expand side navigation' }).click()
-  })
-
-  test('keeps user access administration read-only and delegates changes to FAM', async () => {
-    const page = await authenticatedIdirPage()
-
-    await expectAccessiblePage(page, '/admin', /administration/i)
-
-    const famAccessSection = page.locator('.cds--tile', {
-      has: page.getByRole('heading', { name: 'IDIR identity lookup' }),
-    })
-    await expect(famAccessSection).toBeVisible()
-    await expect(
-      famAccessSection.getByText(
-        'Confirm that an IDIR identity exists before managing LEXIS role assignments in FAM. This lookup does not display or change FAM roles.',
-      ),
-    ).toBeVisible()
-    await expect(famAccessSection.getByLabel('IDIR username')).toBeVisible()
-    await expect(famAccessSection.getByRole('button', { name: 'Search IDIR' })).toBeVisible()
-
-    const manageLink = famAccessSection.getByRole('link', { name: 'Manage in FAM' })
-    await expect(manageLink).toBeVisible()
-    await expect(manageLink).toHaveAttribute('target', '_blank')
-    await expect(manageLink).toHaveAttribute('href', famManageUrlPattern)
-
-    for (const name of [
-      /^Grant/i,
-      /^Revoke/i,
-      /^Add role/i,
-      /^Remove role/i,
-      /^Save access/i,
-      /^Update access/i,
-    ]) {
-      await expect(famAccessSection.getByRole('button', { name })).toHaveCount(0)
-      await expect(famAccessSection.getByRole('link', { name })).toHaveCount(0)
-    }
   })
 
   test('keeps upload navigation scoped to provincial application submissions', async () => {
@@ -3384,7 +3344,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('returns an expired IDIR admin session to the login shell', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/admin', /administration/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     await expectLogoutRoundTrip(page, 'Expired IDIR admin session', () =>
       page.evaluate((eventName) => {
         window.dispatchEvent(
@@ -3400,7 +3360,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('signs out to the login shell without an expired-session warning', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/admin', /administration/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     const profileButton = page.locator('button[aria-controls="profile-panel"]')
     if ((await profileButton.getAttribute('aria-expanded')) !== 'true') {
       await profileButton.click()
