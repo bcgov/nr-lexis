@@ -7,10 +7,11 @@ import {
   TextStrikethrough,
   Unlink,
 } from '@carbon/icons-react'
+import { Modal, TextInput } from '@carbon/react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import LinkExtension from '@tiptap/extension-link'
 import StarterKit from '@tiptap/starter-kit'
-import { useEffect } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import './NotificationEditor.scss'
 
 type NotificationEditorProps = {
@@ -27,11 +28,29 @@ const resolveLinkUrl = (value: string): string => {
   return `https://${trimmed}`
 }
 
+const isSupportedLinkUrl = (value: string): boolean => {
+  if (!value) {
+    return true
+  }
+
+  try {
+    const { protocol } = new URL(value)
+    return protocol === 'https:' || protocol === 'mailto:'
+  } catch {
+    return false
+  }
+}
+
 export default function NotificationEditor({
   value,
   disabled = false,
   onChange,
 }: NotificationEditorProps) {
+  const generatedId = useId().replaceAll(':', '')
+  const linkInputId = `notification-editor-link-url-${generatedId}`
+  const linkButtonRef = useRef<HTMLButtonElement>(null)
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -74,27 +93,42 @@ export default function NotificationEditor({
     }
   }, [editor, value])
 
+  const openLinkModal = (): void => {
+    if (!editor || disabled) {
+      return
+    }
+
+    setLinkUrl(String(editor.getAttributes('link').href ?? ''))
+    setIsLinkModalOpen(true)
+  }
+
+  const closeLinkModal = (): void => {
+    setIsLinkModalOpen(false)
+  }
+
   const applyLink = (): void => {
     if (!editor || disabled) {
       return
     }
 
-    const existingUrl = String(editor.getAttributes('link').href ?? '')
-    const suppliedUrl = window.prompt('Enter an HTTPS or mailto link URL.', existingUrl)
-    if (suppliedUrl === null) {
+    const url = resolveLinkUrl(linkUrl)
+    if (!isSupportedLinkUrl(url)) {
       return
     }
 
-    const url = resolveLinkUrl(suppliedUrl)
     if (!url) {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      closeLinkModal()
       return
     }
 
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+    closeLinkModal()
   }
 
   const editorReady = Boolean(editor)
+  const resolvedLinkUrl = resolveLinkUrl(linkUrl)
+  const linkUrlIsValid = isSupportedLinkUrl(resolvedLinkUrl)
 
   return (
     <div className="notification-editor">
@@ -161,7 +195,8 @@ export default function NotificationEditor({
           aria-pressed={editor?.isActive('link') ?? false}
           title="Add or edit link"
           disabled={!editorReady || disabled}
-          onClick={applyLink}
+          onClick={openLinkModal}
+          ref={linkButtonRef}
         >
           <Link size={16} />
         </button>
@@ -177,6 +212,31 @@ export default function NotificationEditor({
         </button>
       </div>
       <EditorContent editor={editor} />
+      <Modal
+        open={isLinkModalOpen}
+        size="sm"
+        modalHeading="Add or edit link"
+        aria-label="Add or edit link"
+        launcherButtonRef={linkButtonRef}
+        selectorPrimaryFocus={`#${linkInputId}`}
+        primaryButtonText="Apply link"
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={!linkUrlIsValid}
+        onRequestClose={closeLinkModal}
+        onSecondarySubmit={closeLinkModal}
+        onRequestSubmit={applyLink}
+      >
+        <TextInput
+          id={linkInputId}
+          labelText="Link URL"
+          helperText="Enter an HTTPS URL or mailto link. Clear the URL to remove an existing link."
+          value={linkUrl}
+          invalid={!linkUrlIsValid}
+          invalidText="Enter a valid HTTPS URL or mailto link."
+          disabled={disabled}
+          onChange={(event) => setLinkUrl(event.currentTarget.value)}
+        />
+      </Modal>
     </div>
   )
 }
