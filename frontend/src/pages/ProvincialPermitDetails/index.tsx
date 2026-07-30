@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Edit } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -537,6 +538,8 @@ const ProvincialPermitDetailsPage = () => {
   const [isEditingPermit, setIsEditingPermit] = useState(false)
   const [isEditingShipping, setIsEditingShipping] = useState(false)
   const [isEditingFeeOverride, setIsEditingFeeOverride] = useState(false)
+  const [isEditingPermitDocuments, setIsEditingPermitDocuments] = useState(false)
+  const [isEditingInvoiceDocuments, setIsEditingInvoiceDocuments] = useState(false)
   const [isSavingPermit, setIsSavingPermit] = useState(false)
   const [isSavingShipping, setIsSavingShipping] = useState(false)
   const [isSavingFeeOverride, setIsSavingFeeOverride] = useState(false)
@@ -603,7 +606,8 @@ const ProvincialPermitDetailsPage = () => {
   const [permitDocumentUploadBusy, setPermitDocumentUploadBusy] = useState(false)
   const [invoiceDocumentUploadDirty, setInvoiceDocumentUploadDirty] = useState(false)
   const [invoiceDocumentUploadBusy, setInvoiceDocumentUploadBusy] = useState(false)
-  const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
+  const [permitDocumentUploadResetKey, setPermitDocumentUploadResetKey] = useState(0)
+  const [invoiceDocumentUploadResetKey, setInvoiceDocumentUploadResetKey] = useState(0)
   const [touchedPermitFields, setTouchedPermitFields] = useState<
     TouchedFields<PermitDetailFormField>
   >({})
@@ -681,7 +685,10 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
     setInvoiceDocumentUploadBusy(false)
-    setDocumentUploadResetKey((current) => current + 1)
+    setPermitDocumentUploadResetKey((current) => current + 1)
+    setInvoiceDocumentUploadResetKey((current) => current + 1)
+    setIsEditingPermitDocuments(false)
+    setIsEditingInvoiceDocuments(false)
     setDocumentRows([])
     setInvoiceRows([])
     setClientDataRequested(false)
@@ -1342,6 +1349,8 @@ const ProvincialPermitDetailsPage = () => {
     hasDocumentActorRole &&
     (adminUser || !readOnlyUser) &&
     permitStatusCode === 'ACT'
+  const canEditPermitDocuments = canUploadPermitDocuments || canDeletePermitDocuments
+  const canEditInvoiceDocuments = canUploadInvoiceDocuments
   const scaleAttachmentLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const feeOverrideLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const canOpenPermitReport = canPerform('/permitReport') && permitStatusCode === 'COM'
@@ -2439,6 +2448,22 @@ const ProvincialPermitDetailsPage = () => {
     setInvoicesErrorMessage('')
   }, [beginPermitDocumentsRequest, beginPermitInvoicesRequest, detail?.permitNumber, permitNumber])
 
+  const onCancelPermitDocumentEditing = useCallback(() => {
+    setPermitDocumentUploadDirty(false)
+    setPermitDocumentUploadBusy(false)
+    setPermitDocumentUploadResetKey((current) => current + 1)
+    setActionErrorMessage('')
+    setIsEditingPermitDocuments(false)
+  }, [])
+
+  const onCancelInvoiceDocumentEditing = useCallback(() => {
+    setInvoiceDocumentUploadDirty(false)
+    setInvoiceDocumentUploadBusy(false)
+    setInvoiceDocumentUploadResetKey((current) => current + 1)
+    setActionErrorMessage('')
+    setIsEditingInvoiceDocuments(false)
+  }, [])
+
   const onOpenDocument = useCallback(
     async (row: PermitDocumentRow) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
@@ -2698,7 +2723,10 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
     setInvoiceDocumentUploadBusy(false)
-    setDocumentUploadResetKey((current) => current + 1)
+    setPermitDocumentUploadResetKey((current) => current + 1)
+    setInvoiceDocumentUploadResetKey((current) => current + 1)
+    setIsEditingPermitDocuments(false)
+    setIsEditingInvoiceDocuments(false)
     setActionErrorMessage('')
   }, [boicScaleBaselineForm, detail, feeOverrideContext, resetBlanketOicPackageForm])
 
@@ -4398,10 +4426,32 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Permit documents</h2>
-                        {canUploadPermitDocuments && (
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Permit documents</h2>
+                          {canEditPermitDocuments &&
+                            (isEditingPermitDocuments ? (
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={permitDocumentUploadBusy || isRemovingDocumentId !== null}
+                                onClick={onCancelPermitDocumentEditing}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => setIsEditingPermitDocuments(true)}
+                              >
+                                Edit permit documents
+                              </Button>
+                            ))}
+                        </div>
+                        {isEditingPermitDocuments && canUploadPermitDocuments && (
                           <DetailDocumentUploadPanel
-                            key={`permit-document-upload-${permitNumber}-${documentUploadResetKey}`}
+                            key={`permit-document-upload-${permitNumber}-${permitDocumentUploadResetKey}`}
                             workflowType="permit"
                             targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
                             inputId="permitDocumentUpload"
@@ -4463,25 +4513,27 @@ const ProvincialPermitDetailsPage = () => {
                                           >
                                             Open
                                           </Button>
-                                          <Button
-                                            kind="danger--ghost"
-                                            size="sm"
-                                            disabled={
-                                              !canDeleteRow ||
-                                              row.deletable === false ||
-                                              isRemovingDocumentId === row.id
-                                            }
-                                            title={
-                                              row.deletable === false
-                                                ? 'The document source is not safe to delete from this page.'
-                                                : undefined
-                                            }
-                                            onClick={() => void onRemoveDocument(row)}
-                                          >
-                                            {isRemovingDocumentId === row.id
-                                              ? 'Deleting...'
-                                              : 'Delete'}
-                                          </Button>
+                                          {isEditingPermitDocuments && (
+                                            <Button
+                                              kind="danger--ghost"
+                                              size="sm"
+                                              disabled={
+                                                !canDeleteRow ||
+                                                row.deletable === false ||
+                                                isRemovingDocumentId === row.id
+                                              }
+                                              title={
+                                                row.deletable === false
+                                                  ? 'The document source is not safe to delete from this page.'
+                                                  : undefined
+                                              }
+                                              onClick={() => void onRemoveDocument(row)}
+                                            >
+                                              {isRemovingDocumentId === row.id
+                                                ? 'Deleting...'
+                                                : 'Delete'}
+                                            </Button>
+                                          )}
                                         </div>
                                       </TableCell>
                                     </TableRow>
@@ -4513,10 +4565,32 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Invoices</h2>
-                        {canUploadInvoiceDocuments && (
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Invoices</h2>
+                          {canEditInvoiceDocuments &&
+                            (isEditingInvoiceDocuments ? (
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={invoiceDocumentUploadBusy}
+                                onClick={onCancelInvoiceDocumentEditing}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => setIsEditingInvoiceDocuments(true)}
+                              >
+                                Edit invoice documents
+                              </Button>
+                            ))}
+                        </div>
+                        {isEditingInvoiceDocuments && canUploadInvoiceDocuments && (
                           <DetailDocumentUploadPanel
-                            key={`invoice-document-upload-${permitNumber}-${documentUploadResetKey}`}
+                            key={`invoice-document-upload-${permitNumber}-${invoiceDocumentUploadResetKey}`}
                             workflowType="invoice"
                             targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
                             inputId="permitInvoiceUpload"

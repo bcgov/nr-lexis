@@ -173,6 +173,9 @@ const FederalApplicationDetailsPage = () => {
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [permitForm, setPermitForm] = useState<FederalPermitMutation>(emptyPermitForm)
+  const [isEditingFederalStatus, setIsEditingFederalStatus] = useState(false)
+  const [isEditingFederalRemarks, setIsEditingFederalRemarks] = useState(false)
+  const [isEditingFederalDocuments, setIsEditingFederalDocuments] = useState(false)
   const [isEditingFederalPermit, setIsEditingFederalPermit] = useState(false)
   const [isSavingMutation, setIsSavingMutation] = useState(false)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
@@ -221,6 +224,7 @@ const FederalApplicationDetailsPage = () => {
     applicationStatusCode.length > 0 &&
     applicationStatusCode !== 'EXP' &&
     (hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN'))
+  const canEditApplicationDocuments = canUploadApplicationDocuments || canDeleteApplicationDocuments
   const hasAgent =
     currentDetail?.ownerApplicantType?.trim().toUpperCase() === 'A' ||
     currentDetail?.agentApplicantType?.trim().toUpperCase() === 'A' ||
@@ -362,6 +366,9 @@ const FederalApplicationDetailsPage = () => {
         )
         setStatusRemark('')
         setPermitForm(response ? permitFormFromDetail(response) : emptyPermitForm())
+        setIsEditingFederalStatus(false)
+        setIsEditingFederalRemarks(false)
+        setIsEditingFederalDocuments(false)
         setIsEditingFederalPermit(false)
         if (!response) {
           setErrorMessage(`No federal application found for ${applicationNumber}.`)
@@ -461,6 +468,7 @@ const FederalApplicationDetailsPage = () => {
     )
     setStatusRemark('')
     setPermitForm(refreshed ? permitFormFromDetail(refreshed) : emptyPermitForm())
+    setIsEditingFederalStatus(false)
     setIsEditingFederalPermit(false)
     if (canViewFederalApplication) {
       try {
@@ -496,6 +504,7 @@ const FederalApplicationDetailsPage = () => {
       }
       await refreshDetail()
       setActionInfoMessage(result.message || 'Federal application status updated.')
+      setIsEditingFederalStatus(false)
       return true
     } catch (error) {
       console.error(error)
@@ -606,6 +615,7 @@ const FederalApplicationDetailsPage = () => {
       setEditingRemarkId(null)
       setRemarkDraft('')
       setRemarkValidationMessage('')
+      setIsEditingFederalRemarks(false)
       setActionInfoMessage(result.message || 'Federal application remark saved.')
       return true
     } catch (error) {
@@ -626,6 +636,29 @@ const FederalApplicationDetailsPage = () => {
     setDocumentRows(documentsResult.rows)
     setDocumentsErrorMessage('')
   }, [applicationNumber])
+
+  const onCancelFederalStatusEdit = useCallback(() => {
+    setStatusCode(statusTransitions[0]?.code ?? '')
+    setStatusRemark('')
+    setActionErrorMessage('')
+    setIsEditingFederalStatus(false)
+  }, [statusTransitions])
+
+  const onCancelFederalRemarkEdit = useCallback(() => {
+    setRemarkDraft('')
+    setEditingRemarkId(null)
+    setRemarkValidationMessage('')
+    setActionErrorMessage('')
+    setIsEditingFederalRemarks(false)
+  }, [])
+
+  const onCancelFederalDocumentEdit = useCallback(() => {
+    setDocumentUploadDirty(false)
+    setDocumentUploadBusy(false)
+    setDocumentUploadResetKey((current) => current + 1)
+    setActionErrorMessage('')
+    setIsEditingFederalDocuments(false)
+  }, [])
 
   const onOpenDocument = useCallback(
     async (row: FederalApplicationDocumentRow) => {
@@ -691,12 +724,14 @@ const FederalApplicationDetailsPage = () => {
 
   const statusDraftDirty =
     canMutateFederalApplication &&
+    isEditingFederalStatus &&
     (statusCode !== (statusTransitions[0]?.code ?? '') || statusRemark.length > 0)
   const remarkBaseline =
     editingRemarkId === null
       ? ''
       : (remarkRows.find((remark) => remark.remarkId === editingRemarkId)?.remark ?? '')
-  const remarkDraftDirty = canMutateFederalApplication && remarkDraft !== remarkBaseline
+  const remarkDraftDirty =
+    canMutateFederalApplication && isEditingFederalRemarks && remarkDraft !== remarkBaseline
   const permitDraftDirty =
     isEditingFederalPermit &&
     canMutateFederalApplication &&
@@ -747,6 +782,9 @@ const FederalApplicationDetailsPage = () => {
     setEditingRemarkId(null)
     setRemarkValidationMessage('')
     setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
+    setIsEditingFederalStatus(false)
+    setIsEditingFederalRemarks(false)
+    setIsEditingFederalDocuments(false)
     setIsEditingFederalPermit(false)
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
@@ -1040,6 +1078,25 @@ const FederalApplicationDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <DetailFieldTile
                         title="Application"
+                        headerAction={
+                          canMutateFederalApplication &&
+                          statusTransitions.length > 0 &&
+                          !isEditingFederalStatus ? (
+                            <Button
+                              kind="tertiary"
+                              size="sm"
+                              renderIcon={Edit}
+                              onClick={() => {
+                                setStatusCode(statusTransitions[0]?.code ?? '')
+                                setStatusRemark('')
+                                setActionErrorMessage('')
+                                setIsEditingFederalStatus(true)
+                              }}
+                            >
+                              Edit federal status
+                            </Button>
+                          ) : undefined
+                        }
                         fields={[
                           {
                             label: 'Region',
@@ -1096,46 +1153,58 @@ const FederalApplicationDetailsPage = () => {
                           },
                         ]}
                       />
-                      {canMutateFederalApplication && statusTransitions.length > 0 && (
-                        <Tile>
-                          <h2 className="detail-tile-title">Update federal status</h2>
-                          <div className="legacy-search-grid">
-                            <Select
-                              id="federalApplicationStatus"
-                              labelText="Status"
-                              value={statusCode}
-                              onChange={(event) => setStatusCode(event.target.value)}
-                            >
-                              {statusTransitions.map((transition) => (
-                                <SelectItem
-                                  key={transition.code}
-                                  value={transition.code}
-                                  text={transition.label}
-                                />
-                              ))}
-                            </Select>
-                            <TextArea
-                              id="federalApplicationStatusRemark"
-                              labelText="Remark"
-                              value={statusRemark}
-                              onChange={(event) => setStatusRemark(event.target.value)}
-                            />
-                          </div>
-                          <Button
-                            kind="primary"
-                            size="sm"
-                            disabled={
-                              isSavingMutation ||
-                              !statusCode ||
-                              ((statusCode === 'REJ' || statusCode === 'WDN') &&
-                                !statusRemark.trim())
-                            }
-                            onClick={() => void onSaveStatus()}
-                          >
-                            {isSavingMutation ? 'Saving...' : 'Update status'}
-                          </Button>
-                        </Tile>
-                      )}
+                      {canMutateFederalApplication &&
+                        statusTransitions.length > 0 &&
+                        isEditingFederalStatus && (
+                          <Tile>
+                            <h2 className="detail-tile-title">Update federal status</h2>
+                            <div className="legacy-search-grid">
+                              <Select
+                                id="federalApplicationStatus"
+                                labelText="Status"
+                                value={statusCode}
+                                onChange={(event) => setStatusCode(event.target.value)}
+                              >
+                                {statusTransitions.map((transition) => (
+                                  <SelectItem
+                                    key={transition.code}
+                                    value={transition.code}
+                                    text={transition.label}
+                                  />
+                                ))}
+                              </Select>
+                              <TextArea
+                                id="federalApplicationStatusRemark"
+                                labelText="Remark"
+                                value={statusRemark}
+                                onChange={(event) => setStatusRemark(event.target.value)}
+                              />
+                            </div>
+                            <div className="legacy-search-actions">
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={
+                                  isSavingMutation ||
+                                  !statusCode ||
+                                  ((statusCode === 'REJ' || statusCode === 'WDN') &&
+                                    !statusRemark.trim())
+                                }
+                                onClick={() => void onSaveStatus()}
+                              >
+                                {isSavingMutation ? 'Saving...' : 'Update status'}
+                              </Button>
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                disabled={isSavingMutation}
+                                onClick={onCancelFederalStatusEdit}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </Tile>
+                        )}
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -1310,8 +1379,24 @@ const FederalApplicationDetailsPage = () => {
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <Tile className="application-detail-section application-detail-remarks">
-                          <h2 className="detail-tile-title">Remarks</h2>
-                          {canMutateFederalApplication && (
+                          <div className="detail-section-card__header">
+                            <h2 className="detail-tile-title">Remarks</h2>
+                            {canMutateFederalApplication && !isEditingFederalRemarks && (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                onClick={() => {
+                                  setRemarkDraft('')
+                                  setEditingRemarkId(null)
+                                  setRemarkValidationMessage('')
+                                  setIsEditingFederalRemarks(true)
+                                }}
+                              >
+                                Add remark
+                              </Button>
+                            )}
+                          </div>
+                          {canMutateFederalApplication && isEditingFederalRemarks && (
                             <div className="legacy-search-actions">
                               <TextArea
                                 id="federalApplicationRemark"
@@ -1341,20 +1426,14 @@ const FederalApplicationDetailsPage = () => {
                                     ? 'Update Remark'
                                     : 'Save Remark'}
                               </Button>
-                              {editingRemarkId && (
-                                <Button
-                                  kind="ghost"
-                                  size="sm"
-                                  disabled={isSavingRemark}
-                                  onClick={() => {
-                                    setEditingRemarkId(null)
-                                    setRemarkDraft('')
-                                    setRemarkValidationMessage('')
-                                  }}
-                                >
-                                  Cancel Edit
-                                </Button>
-                              )}
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                disabled={isSavingRemark}
+                                onClick={onCancelFederalRemarkEdit}
+                              >
+                                Cancel
+                              </Button>
                             </div>
                           )}
                           {remarksErrorMessage ? (
@@ -1392,6 +1471,7 @@ const FederalApplicationDetailsPage = () => {
                                               setEditingRemarkId(item.remarkId)
                                               setRemarkDraft(item.remark)
                                               setRemarkValidationMessage('')
+                                              setIsEditingFederalRemarks(true)
                                             }}
                                           >
                                             Edit
@@ -1420,8 +1500,30 @@ const FederalApplicationDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Documents</h2>
-                        {canUploadApplicationDocuments && (
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Documents</h2>
+                          {canEditApplicationDocuments &&
+                            (isEditingFederalDocuments ? (
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={documentUploadBusy || isRemovingDocumentId !== null}
+                                onClick={onCancelFederalDocumentEdit}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => setIsEditingFederalDocuments(true)}
+                              >
+                                Edit documents
+                              </Button>
+                            ))}
+                        </div>
+                        {isEditingFederalDocuments && canUploadApplicationDocuments && (
                           <DetailDocumentUploadPanel
                             key={`federal-application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
                             workflowType="application"
@@ -1468,21 +1570,23 @@ const FederalApplicationDetailsPage = () => {
                                         >
                                           Open
                                         </Button>
-                                        {!federalApplicationLocked && row.deletable !== false && (
-                                          <Button
-                                            kind="danger--ghost"
-                                            size="sm"
-                                            disabled={
-                                              !canDeleteApplicationDocuments ||
-                                              isRemovingDocumentId === row.id
-                                            }
-                                            onClick={() => void onRemoveDocument(row)}
-                                          >
-                                            {isRemovingDocumentId === row.id
-                                              ? 'Deleting...'
-                                              : 'Delete'}
-                                          </Button>
-                                        )}
+                                        {isEditingFederalDocuments &&
+                                          !federalApplicationLocked &&
+                                          row.deletable !== false && (
+                                            <Button
+                                              kind="danger--ghost"
+                                              size="sm"
+                                              disabled={
+                                                !canDeleteApplicationDocuments ||
+                                                isRemovingDocumentId === row.id
+                                              }
+                                              onClick={() => void onRemoveDocument(row)}
+                                            >
+                                              {isRemovingDocumentId === row.id
+                                                ? 'Deleting...'
+                                                : 'Delete'}
+                                            </Button>
+                                          )}
                                       </div>
                                     </TableCell>
                                   </TableRow>

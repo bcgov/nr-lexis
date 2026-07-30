@@ -58,6 +58,12 @@ import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth
 const openDetailUploadModal = async (
   name: 'Add document' | 'Add invoice',
 ): Promise<HTMLElement> => {
+  const editButtonName =
+    name === 'Add document' ? 'Edit permit documents' : 'Edit invoice documents'
+  const editButton = screen.queryByRole('button', { name: editButtonName })
+  if (editButton) {
+    await userEvent.click(editButton)
+  }
   await userEvent.click(await screen.findByRole('button', { name }))
   return screen.findByRole('dialog', { name })
 }
@@ -258,6 +264,14 @@ const selectPermitDetailTab = async (name: string) => {
   if (tab.getAttribute('aria-selected') !== 'true') {
     await userEvent.click(tab)
   }
+}
+
+const enterPermitDocumentEditMode = async (): Promise<void> => {
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit permit documents' }))
+}
+
+const enterInvoiceDocumentEditMode = async (): Promise<void> => {
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit invoice documents' }))
 }
 
 const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
@@ -3289,6 +3303,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Upload Permit Document' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open Permit Report' })).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Edit permit documents' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    await enterPermitDocumentEditMode()
     expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
   })
 
@@ -3309,6 +3326,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(screen.queryByRole('button', { name: 'Upload Invoice' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: 'Edit invoice documents' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add invoice' })).not.toBeInTheDocument()
+    await enterInvoiceDocumentEditMode()
     expect(await screen.findByRole('button', { name: 'Add invoice' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Upload invoice conversion rate')).not.toBeInTheDocument()
   })
@@ -3338,9 +3360,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
     expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
 
     await selectPermitDetailTab('Invoices')
+    await enterInvoiceDocumentEditMode()
     expect(await screen.findByRole('button', { name: 'Add invoice' })).toBeInTheDocument()
   })
 
@@ -3477,6 +3501,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
     await screen.findByText('permit-doc.pdf')
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeEnabled()
@@ -3525,6 +3550,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
     await screen.findByText('locked-invoice-doc.pdf')
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeEnabled()
@@ -3567,6 +3593,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
     await screen.findByText('admin-invoice-doc.pdf')
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
@@ -3597,6 +3624,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
     await screen.findByText('complete-invoice-doc.pdf')
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
   })
@@ -3638,6 +3666,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
     await screen.findByText('readonly-permit-doc.pdf')
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
   })
@@ -3682,6 +3711,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    await enterPermitDocumentEditMode()
     await screen.findByText('submitter-permit-doc.pdf')
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
@@ -3714,6 +3744,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
     const documentRow = (await screen.findByText('unknown-source.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getAllByText('Unknown')).toHaveLength(2)
@@ -3751,6 +3782,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
     const documentRow = (await screen.findByText('application-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getAllByText('Application')).toHaveLength(2)

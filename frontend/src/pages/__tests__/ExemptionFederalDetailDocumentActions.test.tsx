@@ -50,6 +50,10 @@ import { fetchShippingReferenceOptions } from '@/service/shipping-reference-serv
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const openDocumentUploadModal = async (): Promise<void> => {
+  const editButton = screen.queryByRole('button', { name: 'Edit documents' })
+  if (editButton) {
+    await userEvent.click(editButton)
+  }
   await userEvent.click(await screen.findByRole('button', { name: 'Add document' }))
   await screen.findByRole('dialog', { name: 'Add document' })
 }
@@ -155,6 +159,18 @@ const selectDetailTab = async (name: string) => {
   if (tab.getAttribute('aria-selected') !== 'true') {
     await userEvent.click(tab)
   }
+}
+
+const enterDocumentEditMode = async (): Promise<void> => {
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit documents' }))
+}
+
+const enterFederalStatusEditMode = async (): Promise<void> => {
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit federal status' }))
+}
+
+const enterFederalRemarkEditMode = async (): Promise<void> => {
+  await userEvent.click(await screen.findByRole('button', { name: 'Add remark' }))
 }
 
 const renderFederalDataRouter = () => {
@@ -456,6 +472,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Open Approved Exemption Report' })).toBeNull()
 
     await selectDetailTab('Documents')
+    expect(await screen.findByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    await enterDocumentEditMode()
     expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
@@ -776,6 +795,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
+    await enterDocumentEditMode()
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -820,6 +840,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
+    await enterDocumentEditMode()
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -862,6 +883,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
+    await enterDocumentEditMode()
     const documentRow = (await screen.findByText('application-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getByText('Application')).toBeInTheDocument()
@@ -903,6 +925,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Upload Exemption Document' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    await enterDocumentEditMode()
     const documentName = await screen.findByText('locked-exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -956,8 +979,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
       )
     })
     expect(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
-    ).toBeDisabled()
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
   })
 
   it('allows exemption uploads but denies document delete after expiry', async () => {
@@ -990,6 +1013,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
+    await enterDocumentEditMode()
     expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     const documentRow = (await screen.findByText('expired-exemption-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1075,6 +1099,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('TM-1')).toBeInTheDocument()
 
     await selectDetailTab('Documents')
+    expect(await screen.findByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    await enterDocumentEditMode()
     expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
@@ -1220,6 +1247,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
         }),
       edit: async () => {
         await selectDetailTab('Application')
+        await enterFederalStatusEditMode()
         await userEvent.type(screen.getByLabelText('Remark'), 'Status draft')
       },
     },
@@ -1228,6 +1256,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       arrange: () => undefined,
       edit: async () => {
         await selectDetailTab('Remarks')
+        await enterFederalRemarkEditMode()
         await userEvent.type(screen.getByLabelText('New Remark'), 'Remark draft')
       },
     },
@@ -1261,6 +1290,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     renderFederalDataRouter()
     await screen.findByRole('heading', { name: 'LEXIS application 888', level: 1 })
     await selectDetailTab('Documents')
+    await enterDocumentEditMode()
     await user.click(screen.getByRole('button', { name: 'Add document' }))
     await user.upload(
       screen.getByLabelText('Document File'),
@@ -1397,6 +1427,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
     const statusSelect = await screen.findByLabelText('Status')
     expect(within(statusSelect).getByRole('option', { name: 'Approved' })).toBeInTheDocument()
     expect(within(statusSelect).queryByRole('option', { name: 'Rejected' })).not.toBeInTheDocument()
@@ -1427,6 +1458,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
     const updateButton = await screen.findByRole('button', { name: 'Update status' })
     expect(screen.getByLabelText('Status')).toHaveValue('APP')
 
@@ -1457,6 +1489,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
     const statusSelect = await screen.findByLabelText('Status')
     expect(within(statusSelect).queryByRole('option', { name: 'Approved' })).not.toBeInTheDocument()
     expect(within(statusSelect).getByRole('option', { name: 'Rejected' })).toBeInTheDocument()
@@ -1485,6 +1518,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
     const statusSelect = await screen.findByLabelText('Status')
     const remark = screen.getByLabelText('Remark')
     const updateButton = screen.getByRole('button', { name: 'Update status' })
@@ -1693,6 +1727,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
 
+    await enterFederalRemarkEditMode()
     const newRemarkInput = screen.getByLabelText('New Remark')
     expect(newRemarkInput.closest('.legacy-search-actions')).toHaveTextContent('Save Remark')
 
@@ -1794,6 +1829,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
+    await enterDocumentEditMode()
     const documentName = await screen.findByText('federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1885,6 +1921,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    await enterDocumentEditMode()
     const documentName = await screen.findByText('locked-federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1927,8 +1964,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const documentRow = (await screen.findByText('readonly-federal-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
-    ).toBeDisabled()
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
 
     await selectDetailTab('Application')

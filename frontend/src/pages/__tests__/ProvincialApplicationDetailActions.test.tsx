@@ -36,6 +36,7 @@ import {
   mockedUpdateApplicationSummary,
   newExemptionDetail,
   selectApplicationDetailTab,
+  selectApplicationRemarksForEditing,
   selectApplicationReviewTile,
   selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
@@ -82,6 +83,38 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Application highlights',
       }),
     ).not.toBeInTheDocument()
+  })
+
+  it('opens the application summary in view mode without repeating the application number', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Application 321' })).toBeVisible()
+    const summaryTile = await selectApplicationSummaryTile(false)
+    const summary = within(summaryTile)
+
+    expect(summary.queryByText('Application number')).not.toBeInTheDocument()
+    expect(summary.getByRole('button', { name: 'Edit application summary' })).toBeInTheDocument()
+    expect(summary.queryByRole('button', { name: 'Save Summary' })).not.toBeInTheDocument()
+    expect(summary.queryByLabelText('Location of logs')).not.toBeInTheDocument()
+
+    await userEvent.click(summary.getByRole('button', { name: 'Edit application summary' }))
+    fireEvent.change(await summary.findByLabelText('Location of logs'), {
+      target: { value: 'Changed location' },
+    })
+    await userEvent.click(summary.getByRole('button', { name: 'Cancel' }))
+
+    expect(summary.queryByLabelText('Location of logs')).not.toBeInTheDocument()
+    expect(summary.getByRole('button', { name: 'Edit application summary' })).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
   it('shows a green creation confirmation after redirecting from application creation', async () => {
@@ -220,7 +253,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() => expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled())
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Application')
+    await selectApplicationSummaryTile()
     expect(await screen.findByText('Application summary options unavailable')).toBeInTheDocument()
     expect(
       screen.getByText(
@@ -817,17 +850,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Items')
-    expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add Scale' })).not.toBeInTheDocument()
     await selectApplicationDetailTab('Documents')
     expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     expect(await screen.findByText('locked-doc.pdf')).toBeInTheDocument()
-    screen
-      .getAllByRole('button', { name: 'Delete' })
-      .forEach((button) => expect(button).toBeDisabled())
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     await selectApplicationDetailTab('Remarks')
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
@@ -944,7 +976,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
+    await selectApplicationSummaryTile()
     const summaryControls = within(await waitFor(() => getApplicationSummaryTile()))
     expect(summaryControls.getByLabelText('Application status')).toHaveAttribute('readonly')
     expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
@@ -991,7 +1023,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Agent')
     expect(screen.getByText('Agent Export Services')).toBeInTheDocument()
-    expect(screen.getByText('agent@example.test')).toBeInTheDocument()
+    expect(within(getAgentDetailsTile()).getByText('agent@example.test')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Application')
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
@@ -1550,7 +1582,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
+    await selectApplicationSummaryTile()
     await screen.findByLabelText('Application volume (m³)')
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
@@ -1645,14 +1677,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       '02 - Owner Alternate Location',
     )
     await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Region'), 'Interior')
-    await userEvent.click(summaryControls.getByRole('button', { name: 'Reset Summary' }))
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Cancel' }))
 
+    const resetSummaryControls = within(await selectApplicationSummaryTile())
     await waitFor(() => {
-      expect(summaryControls.getByLabelText('Location of logs')).toHaveValue('BC')
-      expect(getSummaryComboBox(summaryControls, 'Owner client location')).toHaveValue(
+      expect(resetSummaryControls.getByLabelText('Location of logs')).toHaveValue('BC')
+      expect(getSummaryComboBox(resetSummaryControls, 'Owner client location')).toHaveValue(
         '00 - Owner Main Location',
       )
-      expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
+      expect(getSummaryComboBox(resetSummaryControls, 'Region')).toHaveValue('Coast')
     })
   })
 
@@ -1681,7 +1714,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     window.dispatchEvent(dirtyUnload)
     expect(dirtyUnload.defaultPrevented).toBe(true)
 
-    await userEvent.click(summaryControls.getByRole('button', { name: 'Reset Summary' }))
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Cancel' }))
     const resetUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(resetUnload)
     expect(resetUnload.defaultPrevented).toBe(false)
@@ -1710,11 +1743,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     render(<RouterProvider router={router} />)
 
-    await selectApplicationDetailTab('Application')
+    await selectApplicationSummaryTile()
     fireEvent.change(await screen.findByLabelText('Location of logs'), {
       target: { value: 'AB' },
     })
-    await selectApplicationDetailTab('Remarks')
+    await selectApplicationRemarksForEditing()
     fireEvent.change(await screen.findByLabelText('New Remark'), {
       target: { value: 'Sequential remark' },
     })
@@ -1758,7 +1791,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
+    await selectApplicationSummaryTile()
     const ownerContactInput = await screen.findByLabelText('Owner contact name')
     fireEvent.change(ownerContactInput, { target: { value: 'Typed Owner' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
@@ -1784,7 +1817,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
+    await selectApplicationSummaryTile()
     await waitFor(() => {
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
         applicationNumber: '321',
@@ -1851,9 +1884,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const reviewTile = await selectApplicationReviewTile()
-    await waitFor(() =>
-      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(''),
-    )
+    const emailField = within(reviewTile)
+      .getByText('Client email address')
+      .closest('.detail-field-item')
+    expect(emailField).toBeTruthy()
+    expect(within(emailField as HTMLElement).getByText('Not provided')).toBeInTheDocument()
   })
 
   it('shows detail error contract when application detail endpoint fails', async () => {

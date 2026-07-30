@@ -14,13 +14,15 @@ export type DetailListItem = {
 export type DetailFieldTileProps = {
   title: string
   fields: DetailField[]
+  headerAction?: ReactNode
 }
 
-export function DetailFieldTile({ title, fields }: DetailFieldTileProps) {
+export function DetailFieldTile({ title, fields, headerAction }: DetailFieldTileProps) {
   return (
     <Tile className="detail-section-card">
       <div className="detail-section-card__header">
         <h2 className="detail-tile-title">{title}</h2>
+        {headerAction}
       </div>
       <dl className="detail-field-grid">
         {fields.map((field) => (

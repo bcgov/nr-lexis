@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Edit } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -297,6 +298,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [isEditingDocuments, setIsEditingDocuments] = useState(false)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -464,6 +466,7 @@ const ProvincialExemptionDetailsPage = () => {
         setEditContextLoaded(false)
         setEditContextRefreshing(false)
         setEditForm(null)
+        setIsEditingDocuments(false)
         setDocumentsErrorMessage('')
         setDocumentsErrorDismissed(false)
         setApplicationsErrorMessage('')
@@ -486,6 +489,7 @@ const ProvincialExemptionDetailsPage = () => {
       setActionInfoMessage('')
       if (!isRefreshingCurrentExemption) {
         setEditing(false)
+        setIsEditingDocuments(false)
         setApplications([])
         setPermitRows([])
         setBlanketOicTotals(null)
@@ -886,6 +890,7 @@ const ProvincialExemptionDetailsPage = () => {
     persistedStatusCode !== 'EXP' &&
     editContextLoaded &&
     !exemptionEditLocked
+  const canEditExemptionDocuments = canUploadExemptionDocuments || canDeleteExemptionDocuments
 
   const refreshPermitData = useCallback(
     async (currentExemptionNumber: string, blanketOic: boolean) => {
@@ -1046,6 +1051,7 @@ const ProvincialExemptionDetailsPage = () => {
       setEditForm(toEditForm(detail, editContext))
     }
     setEditing(false)
+    setIsEditingDocuments(false)
     setActionErrorMessage('')
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
@@ -1296,6 +1302,14 @@ const ProvincialExemptionDetailsPage = () => {
     setDocumentRows(documentsResult.rows)
     setDocumentsErrorMessage('')
   }, [exemptionNumber])
+
+  const onCancelDocumentEditing = useCallback(() => {
+    setDocumentUploadDirty(false)
+    setDocumentUploadBusy(false)
+    setDocumentUploadResetKey((current) => current + 1)
+    setActionErrorMessage('')
+    setIsEditingDocuments(false)
+  }, [])
 
   const onOpenDocument = useCallback(
     async (row: ProvincialExemptionDocumentRow) => {
@@ -2197,8 +2211,30 @@ const ProvincialExemptionDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Documents</h2>
-                        {canUploadExemptionDocuments && (
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Documents</h2>
+                          {canEditExemptionDocuments &&
+                            (isEditingDocuments ? (
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={documentUploadBusy || isRemovingDocumentId !== null}
+                                onClick={onCancelDocumentEditing}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => setIsEditingDocuments(true)}
+                              >
+                                Edit documents
+                              </Button>
+                            ))}
+                        </div>
+                        {isEditingDocuments && canUploadExemptionDocuments && (
                           <DetailDocumentUploadPanel
                             key={`exemption-document-upload-${exemptionNumber}-${documentUploadResetKey}`}
                             workflowType="exemption"
@@ -2256,25 +2292,27 @@ const ProvincialExemptionDetailsPage = () => {
                                         >
                                           Open
                                         </Button>
-                                        <Button
-                                          kind="danger--ghost"
-                                          size="sm"
-                                          disabled={
-                                            !canDeleteExemptionDocuments ||
-                                            row.deletable === false ||
-                                            isRemovingDocumentId === row.id
-                                          }
-                                          title={
-                                            row.deletable === false
-                                              ? `Delete this document from its ${row.source || 'source'} details page.`
-                                              : undefined
-                                          }
-                                          onClick={() => void onRemoveDocument(row)}
-                                        >
-                                          {isRemovingDocumentId === row.id
-                                            ? 'Deleting...'
-                                            : 'Delete'}
-                                        </Button>
+                                        {isEditingDocuments && (
+                                          <Button
+                                            kind="danger--ghost"
+                                            size="sm"
+                                            disabled={
+                                              !canDeleteExemptionDocuments ||
+                                              row.deletable === false ||
+                                              isRemovingDocumentId === row.id
+                                            }
+                                            title={
+                                              row.deletable === false
+                                                ? `Delete this document from its ${row.source || 'source'} details page.`
+                                                : undefined
+                                            }
+                                            onClick={() => void onRemoveDocument(row)}
+                                          >
+                                            {isRemovingDocumentId === row.id
+                                              ? 'Deleting...'
+                                              : 'Delete'}
+                                          </Button>
+                                        )}
                                       </div>
                                     </TableCell>
                                   </TableRow>

@@ -277,6 +277,7 @@ describe('Detail Quick Action Smoke', () => {
 
     render(<RouterProvider router={router} />)
     await userEvent.click(await screen.findByRole('tab', { name: 'Remarks' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
     await userEvent.type(screen.getByLabelText('New Remark'), 'Unsaved draft')
     await openOffersTab()
     await userEvent.click(screen.getByRole('button', { name: 'Create offer' }))
