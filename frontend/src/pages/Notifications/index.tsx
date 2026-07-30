@@ -39,7 +39,6 @@ import {
 } from '@/service/notification-service'
 import './Notifications.scss'
 
-const RECENT_UPDATE_WINDOW_DAYS = 3
 const DEFAULT_DISPLAY_DURATION_DAYS = 7
 const MAX_NOTIFICATION_TITLE_LENGTH = 80
 const MAX_NOTIFICATION_CONTENT_LENGTH = 4_000
@@ -183,14 +182,6 @@ const notificationStatus = (notification: LexisNotificationView): string => {
   return notification.displayEndDate < currentDate ? 'Past' : 'Active'
 }
 
-const hasRecentUpdate = (notification: LexisNotificationView): boolean => {
-  const updateTime = new Date(notification.updateTimestamp).getTime()
-  if (Number.isNaN(updateTime)) {
-    return false
-  }
-  return updateTime >= Date.now() - RECENT_UPDATE_WINDOW_DAYS * 24 * 60 * 60 * 1000
-}
-
 const contentText = (contentHtml: string): string => {
   const parsedDocument = new DOMParser().parseFromString(contentHtml, 'text/html')
   return (parsedDocument.body.textContent ?? '').replace(/\u00a0/g, ' ').trim()
@@ -214,7 +205,6 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<NotificationMessage | null>(null)
-  const [showRecentUpdateMessage, setShowRecentUpdateMessage] = useState(false)
   const [notificationPendingDeletion, setNotificationPendingDeletion] =
     useState<LexisNotification | null>(null)
   const editorLauncherRef = useRef<HTMLElement>(null)
@@ -232,7 +222,6 @@ export default function NotificationsPage() {
         ])
         setNotifications(loadedNotifications)
         setAudienceRoles(loadedAudienceRoles)
-        setShowRecentUpdateMessage(loadedNotifications.some(hasRecentUpdate))
       } catch {
         setMessage({
           kind: 'error',
@@ -254,10 +243,6 @@ export default function NotificationsPage() {
   const editorTitle = isEditing ? 'Edit notification' : 'New notification'
   const pageDescription =
     'Updates and bulletins from your administrators. Each notice shows until its posted end date.'
-  const recentUpdateCount = useMemo(
-    () => notifications.filter(hasRecentUpdate).length,
-    [notifications],
-  )
   const activeNotificationCount = useMemo(
     () =>
       notifications.filter((notification) => notificationStatus(notification) === 'Active').length,
@@ -427,17 +412,6 @@ export default function NotificationsPage() {
           </Button>
         )}
       </section>
-
-      {showRecentUpdateMessage && !showEditor && recentUpdateCount > 0 && (
-        <InlineNotification
-          className="notifications-page__message"
-          kind="info"
-          title="Recently updated notifications"
-          subtitle={`${recentUpdateCount} notification${recentUpdateCount === 1 ? ' was' : 's were'} updated in the last ${RECENT_UPDATE_WINDOW_DAYS} days.`}
-          lowContrast
-          onCloseButtonClick={() => setShowRecentUpdateMessage(false)}
-        />
-      )}
 
       {message && !showEditor && (
         <InlineNotification

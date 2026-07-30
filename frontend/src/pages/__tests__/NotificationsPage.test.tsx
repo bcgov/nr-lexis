@@ -286,7 +286,7 @@ describe('Notifications page', () => {
     expect(screen.getByLabelText(/^End date/)).not.toHaveAttribute('readonly')
   })
 
-  it('keeps recent-update messaging in page flow and restores focus after cancelling', async () => {
+  it('does not show recent-update messaging and restores focus after cancelling', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -302,17 +302,14 @@ describe('Notifications page', () => {
 
     render(<NotificationsPage />)
 
-    const recentUpdateMessage = await screen.findByText('Recently updated notifications')
-    expect(recentUpdateMessage).toBeVisible()
-    expect(document.querySelector('.notifications-page')).toContainElement(recentUpdateMessage)
-    const launcher = screen.getByRole('button', { name: 'New notification' })
+    const launcher = await screen.findByRole('button', { name: 'New notification' })
+    expect(screen.queryByText('Recently updated notifications')).not.toBeInTheDocument()
     await user.click(launcher)
 
-    expect(screen.queryByText('Recently updated notifications')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect(launcher).toHaveFocus())
-    expect(screen.getByText('Recently updated notifications')).toBeVisible()
+    expect(screen.queryByText('Recently updated notifications')).not.toBeInTheDocument()
   })
 
   it('asks an administrator to confirm before deleting a notification', async () => {
