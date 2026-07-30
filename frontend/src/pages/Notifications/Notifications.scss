@@ -89,6 +89,7 @@
   height: 100vh;
   max-height: 100vh;
   border: 0;
+  background: var(--csp-content-bg);
   box-shadow: 0 0 0.75rem rgb(0 0 0 / 20%);
   transform: translate3d(100%, 0, 0);
   transform-origin: right center;
@@ -107,6 +108,21 @@
 
 .notifications-page__editor-modal .cds--modal-content {
   padding: 1.5rem 1.25rem 2rem;
+}
+
+// Carbon fades the bottom of scrolling modal content. The notification drawer
+// has a persistent footer, so the fade obscures the final form content.
+.notifications-page__editor-modal .cds--modal-scroll-content {
+  mask-image: none;
+}
+
+.notifications-page__editor-modal .cds--text-input,
+.notifications-page__editor-modal .notification-editor {
+  background: var(--csp-background);
+}
+
+.notifications-page__editor-modal .notification-editor__toolbar {
+  background: var(--csp-content-bg);
 }
 
 .notifications-page__editor-modal .cds--modal-footer {
