@@ -552,6 +552,50 @@ class OracleLexisAdminRpcServiceTest {
   }
 
   @Test
+  void shouldRejectHistoricalFeeAndFilPolicyDeletes() {
+    RecordingTransactionOperations transactions = new RecordingTransactionOperations();
+    OracleLexisAdminRpcService service =
+        new OracleLexisAdminRpcService(repository, principalService, transactions);
+    LocalDate today = LexisBusinessTime.today();
+    LexisAdminPolicyRepository.FeePolicyRow feePolicy =
+        new LexisAdminPolicyRepository.FeePolicyRow(
+            8L, today, 1903L, 12L, "idir\\owner", today, "idir\\editor", today);
+    LexisAdminPolicyRepository.FilPolicyRow filPolicy =
+        new LexisAdminPolicyRepository.FilPolicyRow(
+            9L,
+            today.minusDays(1),
+            20L,
+            "idir\\owner",
+            today.minusDays(1),
+            "idir\\editor",
+            today.minusDays(1));
+    when(repository.findFeePolicyById(8L)).thenReturn(Optional.of(feePolicy));
+    when(repository.findFilPolicyById(9L)).thenReturn(Optional.of(filPolicy));
+
+    Object feeResponse =
+        service
+            .executeFeePolicyRpc(
+                new LexisAdminRpcRequestDto("deletePolicy", Map.of("feePolicyId", "8")))
+            .orElseThrow();
+    Object filResponse =
+        service
+            .executeFilPolicyRpc(
+                new LexisAdminRpcRequestDto("deleteFilPolicy", Map.of("filPolicyId", "9")))
+            .orElseThrow();
+
+    assertThat(((Map<?, ?>) feeResponse).get("success")).isEqualTo(false);
+    assertThat(((Map<?, ?>) feeResponse).get("errors"))
+        .isEqualTo(List.of("Only future-dated fee policies can be deleted."));
+    assertThat(((Map<?, ?>) filResponse).get("success")).isEqualTo(false);
+    assertThat(((Map<?, ?>) filResponse).get("errors"))
+        .isEqualTo(List.of("Only future-dated fee in lieu policies can be deleted."));
+    assertThat(transactions.executionCount()).isEqualTo(2);
+    assertThat(transactions.rollbackOnly()).isTrue();
+    verify(repository, never()).deleteFeePolicy(8L);
+    verify(repository, never()).deleteFilPolicy(9L);
+  }
+
+  @Test
   void shouldRollBackWhenDeletedFeePolicyRemainsVisible() {
     RecordingTransactionOperations transactions = new RecordingTransactionOperations();
     OracleLexisAdminRpcService service =
@@ -1075,7 +1119,7 @@ class OracleLexisAdminRpcServiceTest {
   }
 
   private static LexisAdminPolicyRepository.FeePolicyRow feePolicyRow(long id) {
-    LocalDate effectiveDate = LocalDate.of(2026, 8, 1);
+    LocalDate effectiveDate = LexisBusinessTime.today().plusDays(5);
     return new LexisAdminPolicyRepository.FeePolicyRow(
         id,
         effectiveDate,
@@ -1088,7 +1132,7 @@ class OracleLexisAdminRpcServiceTest {
   }
 
   private static LexisAdminPolicyRepository.FilPolicyRow filPolicyRow(long id) {
-    LocalDate effectiveDate = LocalDate.of(2026, 8, 1);
+    LocalDate effectiveDate = LexisBusinessTime.today().plusDays(5);
     return new LexisAdminPolicyRepository.FilPolicyRow(
         id,
         effectiveDate,

@@ -1,6 +1,17 @@
 import apiService from '@/service/api-service'
-import { parsePayloadArray, payloadValueAsString as asString } from '@/service/payload-utils'
+import {
+  parsePayloadArray,
+  payloadValueAsString as asString,
+  payloadValueAsStringArray as asStringArray,
+} from '@/service/payload-utils'
 import { recordOrEmpty } from '@/utils/record'
+
+export class AdminPolicyMutationError extends Error {
+  constructor(errors: string[]) {
+    super(errors.join(' ') || 'The policy change could not be completed.')
+    this.name = 'AdminPolicyMutationError'
+  }
+}
 
 export type FeePolicyRow = {
   id: string
@@ -118,6 +129,13 @@ const normalizePolicyPage = <TRow>(
   }
 }
 
+const assertSuccessfulMutation = (payload: unknown): void => {
+  const source = recordOrEmpty(payload)
+  if (source.success !== true) {
+    throw new AdminPolicyMutationError(asStringArray(source.errors))
+  }
+}
+
 export const fetchFeePolicyPage = async (
   page = DEFAULT_ADMIN_PAGE,
   size = DEFAULT_ADMIN_PAGE_SIZE,
@@ -154,14 +172,23 @@ export const upsertFeePolicy = async (request: UpsertFeePolicyRequest): Promise<
   }
 
   if (request.id) {
-    await apiService.getAxiosInstance().put(`/lexis/admin/policies/fee/${request.id}`, payload)
+    const response = await apiService
+      .getAxiosInstance()
+      .put<unknown>(`/lexis/admin/policies/fee/${request.id}`, payload)
+    assertSuccessfulMutation(response.data)
   } else {
-    await apiService.getAxiosInstance().post('/lexis/admin/policies/fee', payload)
+    const response = await apiService
+      .getAxiosInstance()
+      .post<unknown>('/lexis/admin/policies/fee', payload)
+    assertSuccessfulMutation(response.data)
   }
 }
 
 export const deleteFeePolicy = async (rowId: string): Promise<void> => {
-  await apiService.getAxiosInstance().delete(`/lexis/admin/policies/fee/${rowId}`)
+  const response = await apiService
+    .getAxiosInstance()
+    .delete<unknown>(`/lexis/admin/policies/fee/${rowId}`)
+  assertSuccessfulMutation(response.data)
 }
 
 export const fetchFilPolicyPage = async (
@@ -199,12 +226,21 @@ export const upsertFilPolicy = async (request: UpsertFilPolicyRequest): Promise<
   }
 
   if (request.id) {
-    await apiService.getAxiosInstance().put(`/lexis/admin/policies/fil/${request.id}`, payload)
+    const response = await apiService
+      .getAxiosInstance()
+      .put<unknown>(`/lexis/admin/policies/fil/${request.id}`, payload)
+    assertSuccessfulMutation(response.data)
   } else {
-    await apiService.getAxiosInstance().post('/lexis/admin/policies/fil', payload)
+    const response = await apiService
+      .getAxiosInstance()
+      .post<unknown>('/lexis/admin/policies/fil', payload)
+    assertSuccessfulMutation(response.data)
   }
 }
 
 export const deleteFilPolicy = async (rowId: string): Promise<void> => {
-  await apiService.getAxiosInstance().delete(`/lexis/admin/policies/fil/${rowId}`)
+  const response = await apiService
+    .getAxiosInstance()
+    .delete<unknown>(`/lexis/admin/policies/fil/${rowId}`)
+  assertSuccessfulMutation(response.data)
 }

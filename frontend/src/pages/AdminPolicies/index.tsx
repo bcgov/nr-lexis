@@ -21,6 +21,7 @@ import {
 import { Add } from '@carbon/icons-react'
 import { useAuth } from '@/context/auth/useAuth'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
 import PageHeader from '@/components/PageHeader'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
@@ -49,6 +50,7 @@ import {
   deleteFilPolicy as deleteFilPolicyRequest,
   fetchFeePolicyPage,
   fetchFilPolicyPage,
+  AdminPolicyMutationError,
   type AdminPolicySortDirection,
   type FeePolicyRow,
   type FeePolicySortField,
@@ -59,6 +61,7 @@ import {
 } from '@/service/admin-policy-service'
 import { fetchReportOptions, type SearchOption } from '@/service/search-options-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import { formatBusinessIsoDate } from '@/utils/date'
 import { getResponseStatus } from '@/utils/http-error'
 
 type PolicyField =
@@ -78,6 +81,12 @@ export type AdminPolicyArea = 'fee' | 'fil' | 'schedule'
 
 type AdminPoliciesPageProps = {
   area: AdminPolicyArea
+}
+
+type PendingPolicyDeletion = {
+  area: 'fee' | 'fil'
+  rowId: string
+  effectiveDate: string
 }
 
 const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
@@ -136,9 +145,23 @@ const FEE_POLICY_SORT_COLUMNS: Array<{ id: FeePolicySortField; label: string }> 
 ]
 
 const FIL_POLICY_SORT_COLUMNS: Array<{ id: FilPolicySortField; label: string }> = [
-  { id: 'effective_date', label: 'Effective date' },
+  { id: 'effective_date', label: 'Policy effective date' },
   { id: 'fil_percent', label: 'Fee in lieu %' },
 ]
+
+const isFuturePolicyDate = (effectiveDate: string): boolean =>
+  /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) && effectiveDate > formatBusinessIsoDate()
+
+const policyMutationErrorMessage = (
+  error: unknown,
+  httpErrorMessage: string,
+  fallbackMessage: string,
+): string => {
+  if (error instanceof AdminPolicyMutationError) {
+    return error.message
+  }
+  return getResponseStatus(error) ? httpErrorMessage : fallbackMessage
+}
 
 const applicationSearchPathForExportSchedule = (exportScheduleId: string): string => {
   const searchParams = new URLSearchParams({
@@ -200,6 +223,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [showFilValidationErrors, setShowFilValidationErrors] = useState(false)
   const [showScheduleValidationErrors, setShowScheduleValidationErrors] = useState(false)
   const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
+  const [policyPendingDeletion, setPolicyPendingDeletion] = useState<PendingPolicyDeletion | null>(
+    null,
+  )
 
   const pageTitle =
     area === 'fee'
@@ -540,14 +566,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       setIsPolicyEditorOpen(false)
     } catch (error) {
       console.error(error)
-      const status = getResponseStatus(error)
-      if (status) {
-        setErrorMessage(
+      setErrorMessage(
+        policyMutationErrorMessage(
+          error,
           'Unable to save the fee policy right now. Please check your entry and try again. If this continues, contact support.',
-        )
-      } else {
-        setErrorMessage('Unable to save the fee policy. Please try again or contact support.')
-      }
+          'Unable to save the fee policy. Please try again or contact support.',
+        ),
+      )
     } finally {
       setIsMutatingPolicies(false)
     }
@@ -581,16 +606,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         resetFeeForm()
       }
       setSuccessMessage('Fee policy deleted.')
-    } catch (error) {
-      console.error(error)
-      const status = getResponseStatus(error)
-      if (status) {
-        setErrorMessage(
-          'Unable to delete the fee policy. Refresh and try again, or contact support if the issue persists.',
-        )
-      } else {
-        setErrorMessage('Fee policy delete failed.')
-      }
     } finally {
       setIsMutatingPolicies(false)
     }
@@ -626,16 +641,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       setIsPolicyEditorOpen(false)
     } catch (error) {
       console.error(error)
-      const status = getResponseStatus(error)
-      if (status) {
-        setErrorMessage(
+      setErrorMessage(
+        policyMutationErrorMessage(
+          error,
           'Unable to save the fee in lieu policy right now. Please check your entry and try again. If this continues, contact support.',
-        )
-      } else {
-        setErrorMessage(
           'Unable to save the fee in lieu policy. Please try again or contact support.',
-        )
-      }
+        ),
+      )
     } finally {
       setIsMutatingPolicies(false)
     }
@@ -661,21 +673,34 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         resetFilForm()
       }
       setSuccessMessage('Fee in lieu policy deleted.')
-    } catch (error) {
-      console.error(error)
-      const status = getResponseStatus(error)
-      if (status) {
-        setErrorMessage(
-          'Unable to delete the fee in lieu policy. Refresh and try again, or contact support if the issue persists.',
-        )
-      } else {
-        setErrorMessage(
-          'Unable to delete the fee in lieu policy. Please try again or contact support.',
-        )
-      }
     } finally {
       setIsMutatingPolicies(false)
     }
+  }
+
+  const requestPolicyDelete = (
+    policyArea: 'fee' | 'fil',
+    rowId: string,
+    effectiveDate: string,
+  ): void => {
+    clearNotifications()
+    setPolicyPendingDeletion({ area: policyArea, rowId, effectiveDate })
+  }
+
+  const handlePolicyDeleteError = (error: unknown, policyArea: 'fee' | 'fil'): void => {
+    console.error(error)
+    setErrorMessage(
+      policyMutationErrorMessage(
+        error,
+        policyArea === 'fee'
+          ? 'Unable to delete the fee policy. Refresh and try again, or contact support if the issue persists.'
+          : 'Unable to delete the fee in lieu policy. Refresh and try again, or contact support if the issue persists.',
+        policyArea === 'fee'
+          ? 'Fee policy delete failed.'
+          : 'Unable to delete the fee in lieu policy. Please try again or contact support.',
+      ),
+    )
+    setPolicyPendingDeletion(null)
   }
 
   const editExportSchedule = (row: ExportScheduleRow): void => {
@@ -1004,6 +1029,28 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         </Modal>
       )}
 
+      {policyPendingDeletion && (
+        <ConfirmationModal
+          open
+          title={
+            policyPendingDeletion.area === 'fee'
+              ? 'Delete fee policy?'
+              : 'Delete fee in lieu policy?'
+          }
+          description={`Policy effective date ${policyPendingDeletion.effectiveDate} will be permanently deleted. This cannot be undone.`}
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          danger
+          onConfirm={() =>
+            policyPendingDeletion.area === 'fee'
+              ? deleteFeePolicy(policyPendingDeletion.rowId)
+              : deleteFilPolicy(policyPendingDeletion.rowId)
+          }
+          onClose={() => setPolicyPendingDeletion(null)}
+          onError={(error) => handlePolicyDeleteError(error, policyPendingDeletion.area)}
+        />
+      )}
+
       {area === 'fee' && (
         <Column sm={4} md={8} lg={16}>
           <div className="admin-policy-workspace">
@@ -1070,30 +1117,34 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                           {row.updateTimestamp}
                         </TableCell>
                         <TableCell>
-                          <div className="admin-policy-row-actions">
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => editFeePolicy(row)}
-                              disabled={
-                                isLoadingPolicies ||
-                                isMutatingPolicies ||
-                                isLoadingFeeRegionOptions ||
-                                Boolean(feeRegionOptionsError) ||
-                                feeRegionOptions.length === 0
-                              }
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => void deleteFeePolicy(row.id)}
-                              disabled={isLoadingPolicies || isMutatingPolicies}
-                            >
-                              Delete
-                            </Button>
-                          </div>
+                          {isFuturePolicyDate(row.effectiveDate) && (
+                            <div className="admin-policy-row-actions">
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => editFeePolicy(row)}
+                                disabled={
+                                  isLoadingPolicies ||
+                                  isMutatingPolicies ||
+                                  isLoadingFeeRegionOptions ||
+                                  Boolean(feeRegionOptionsError) ||
+                                  feeRegionOptions.length === 0
+                                }
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  requestPolicyDelete('fee', row.id, row.effectiveDate)
+                                }
+                                disabled={isLoadingPolicies || isMutatingPolicies}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1168,24 +1219,28 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                           {row.updateTimestamp}
                         </TableCell>
                         <TableCell>
-                          <div className="admin-policy-row-actions">
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => editFilPolicy(row)}
-                              disabled={isLoadingPolicies || isMutatingPolicies}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => void deleteFilPolicy(row.id)}
-                              disabled={isLoadingPolicies || isMutatingPolicies}
-                            >
-                              Delete
-                            </Button>
-                          </div>
+                          {isFuturePolicyDate(row.effectiveDate) && (
+                            <div className="admin-policy-row-actions">
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => editFilPolicy(row)}
+                                disabled={isLoadingPolicies || isMutatingPolicies}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  requestPolicyDelete('fil', row.id, row.effectiveDate)
+                                }
+                                disabled={isLoadingPolicies || isMutatingPolicies}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

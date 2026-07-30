@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  AdminPolicyMutationError,
   deleteFeePolicy,
   deleteFilPolicy,
   fetchFeePolicies,
@@ -376,5 +377,39 @@ describe('admin-policy-service', () => {
         policyPercentage: ' 5 ',
       }),
     ).rejects.toEqual({ response: { status: 404 } })
+  })
+
+  it('throws backend validation errors for logical policy mutation failures', async () => {
+    const failureResponse = {
+      data: {
+        success: false,
+        errors: ['Only future-dated policies can be changed.', 'Refresh the table.'],
+      },
+    }
+    postMock.mockResolvedValue(failureResponse)
+    putMock.mockResolvedValue(failureResponse)
+    deleteMock.mockResolvedValue(failureResponse)
+
+    await expect(
+      upsertFeePolicy({
+        effectiveDate: '2026-04-01',
+        orgUnitNo: '1904',
+        policyPercentage: '5',
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<AdminPolicyMutationError>>({
+        name: 'AdminPolicyMutationError',
+        message: 'Only future-dated policies can be changed. Refresh the table.',
+      }),
+    )
+    await expect(
+      upsertFilPolicy({
+        id: '21',
+        effectiveDate: '2026-04-01',
+        filPercentage: '12',
+      }),
+    ).rejects.toBeInstanceOf(AdminPolicyMutationError)
+    await expect(deleteFeePolicy('15')).rejects.toBeInstanceOf(AdminPolicyMutationError)
+    await expect(deleteFilPolicy('21')).rejects.toBeInstanceOf(AdminPolicyMutationError)
   })
 })
