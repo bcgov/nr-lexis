@@ -256,6 +256,13 @@ const installSyntheticLexisApi = async (page: Page) => {
   })
 }
 
+const submitApplicationSearch = async (page: Page) => {
+  const searchButton = page.getByRole('button', { name: 'Search', exact: true })
+  await expect(searchButton).toBeVisible()
+  await searchButton.click()
+  await expect(page.getByText('2 results found', { exact: true })).toBeVisible()
+}
+
 test.describe('FSPTS-aligned LEXIS shell', () => {
   test.beforeEach(async ({ page }) => {
     await installSyntheticCognitoSession(page, {
@@ -311,8 +318,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
+    await submitApplicationSearch(page)
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
-    await expect(page.getByText('2 results found', { exact: true })).toBeVisible()
     const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
     await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
     await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
@@ -392,6 +399,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
   test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await submitApplicationSearch(page)
 
     const resultsRegion = page.getByRole('region', { name: 'Search results table' })
     const table = resultsRegion.getByRole('table')
@@ -477,7 +485,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Search' })).toBeVisible()
+    await submitApplicationSearch(page)
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
     await expect(page.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
       'tabindex',
