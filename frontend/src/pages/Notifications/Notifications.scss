@@ -413,6 +413,38 @@
   list-style: decimal;
 }
 
+.notifications-page__content-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
+  margin-top: 0.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-link-primary, #0f62fe);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.notifications-page__content-toggle:hover {
+  text-decoration: underline;
+}
+
+.notifications-page__content-toggle:focus-visible {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: 2px;
+}
+
+.notifications-page__content-toggle-icon {
+  transition: transform 0.15s ease;
+}
+
+.notifications-page__content-toggle[aria-expanded='true'] .notifications-page__content-toggle-icon {
+  transform: rotate(180deg);
+}
+
 .notifications-page__notification-meta {
   display: flex;
   align-items: center;

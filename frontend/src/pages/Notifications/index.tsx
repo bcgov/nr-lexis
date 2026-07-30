@@ -1,5 +1,6 @@
 import {
   Add,
+  ChevronDown,
   Edit,
   InformationFilled,
   Notification as NotificationIcon,
@@ -42,6 +43,7 @@ import './Notifications.scss'
 const DEFAULT_DISPLAY_DURATION_DAYS = 7
 const MAX_NOTIFICATION_TITLE_LENGTH = 80
 const MAX_NOTIFICATION_CONTENT_LENGTH = 4_000
+const NOTIFICATION_CONTENT_CLAMP_LENGTH = 190
 
 const notificationLevels: ReadonlyArray<{
   value: NotificationLevel
@@ -198,6 +200,61 @@ const contentHtmlForDisplay = (contentHtml: string): string => {
     ].join(' ')
   })
   return parsedDocument.body.innerHTML
+}
+
+const truncatedContentText = (content: string): string => {
+  let truncated = content.slice(0, NOTIFICATION_CONTENT_CLAMP_LENGTH)
+  const lastSpace = truncated.lastIndexOf(' ')
+  if (lastSpace > NOTIFICATION_CONTENT_CLAMP_LENGTH - 40) {
+    truncated = truncated.slice(0, lastSpace)
+  }
+  return `${truncated.trimEnd()}…`
+}
+
+type NotificationContentProps = {
+  notificationId: number
+  contentHtml: string
+}
+
+function NotificationContent({ notificationId, contentHtml }: NotificationContentProps) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const textContent = contentText(contentHtml)
+  const canExpand = textContent.length > NOTIFICATION_CONTENT_CLAMP_LENGTH
+  const isCollapsed = canExpand && !isExpanded
+  const contentId = `notification-content-${notificationId}`
+
+  return (
+    <>
+      {isCollapsed ? (
+        <div id={contentId} className="notifications-page__notification-content">
+          {truncatedContentText(textContent)}
+        </div>
+      ) : (
+        <div
+          id={contentId}
+          className="notifications-page__notification-content"
+          // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
+          dangerouslySetInnerHTML={{ __html: contentHtmlForDisplay(contentHtml) }}
+        />
+      )}
+      {canExpand && (
+        <button
+          type="button"
+          className="notifications-page__content-toggle"
+          aria-controls={contentId}
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? 'Show less' : 'Show more'}
+          <ChevronDown
+            className="notifications-page__content-toggle-icon"
+            size={16}
+            aria-hidden="true"
+          />
+        </button>
+      )}
+    </>
+  )
 }
 
 const RequiredMarker = () => (
@@ -707,12 +764,9 @@ export default function NotificationsPage() {
                         </div>
                       )}
                     </div>
-                    <div
-                      className="notifications-page__notification-content"
-                      // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
-                      dangerouslySetInnerHTML={{
-                        __html: contentHtmlForDisplay(notification.contentHtml),
-                      }}
+                    <NotificationContent
+                      notificationId={notification.id}
+                      contentHtml={notification.contentHtml}
                     />
                     <div className="notifications-page__notification-meta">
                       <span>Posted {formatDate(notification.displayStartDate)}</span>

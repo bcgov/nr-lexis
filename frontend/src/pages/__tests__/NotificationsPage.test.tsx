@@ -160,6 +160,46 @@ describe('Notifications page', () => {
     )
   })
 
+  it('clamps long notification content until the reader requests more', async () => {
+    const user = userEvent.setup()
+    const longContent = `${'This notification explains an important operational update. '.repeat(6)}Final detail.`
+    mockedFetchNotifications.mockResolvedValue([
+      {
+        ...viewerNotification,
+        contentHtml: `<p>${longContent}</p>`,
+      },
+    ])
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    const content = () => document.getElementById('notification-content-9')
+    const showMore = await screen.findByRole('button', { name: 'Show more' })
+    expect(showMore).toHaveAttribute('aria-expanded', 'false')
+    expect(content()).toHaveTextContent('…')
+    expect(content()).not.toHaveTextContent('Final detail.')
+
+    await user.click(showMore)
+
+    expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(content()).toHaveTextContent(longContent)
+
+    await user.click(screen.getByRole('button', { name: 'Show less' }))
+
+    expect(screen.getByRole('button', { name: 'Show more' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(content()).not.toHaveTextContent('Final detail.')
+  })
+
   it('shows a status tag only for scheduled notifications', async () => {
     mockedFetchAdminNotifications.mockResolvedValue([
       {
