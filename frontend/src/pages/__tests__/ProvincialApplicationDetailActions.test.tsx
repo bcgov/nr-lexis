@@ -51,6 +51,16 @@ const getOwnerClientDetailsTile = (): HTMLElement => {
   return tile as HTMLElement
 }
 
+const getAgentDetailsTile = (): HTMLElement => {
+  const title = screen.getByRole('heading', {
+    name: 'Agent details',
+    level: 2,
+  })
+  const tile = title.closest('.cds--tile')
+  expect(tile).toBeTruthy()
+  return tile as HTMLElement
+}
+
 describe.sequential('Provincial Application Detail Actions - application', () => {
   beforeEach(setupApplicationDetailTests)
 
@@ -410,6 +420,110 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(within(clientNumberField as HTMLElement).getByText('00011122')).toBeInTheDocument()
   })
 
+  it('edits agent details using the legacy editable fields', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await selectApplicationDetailTab('Agent')
+    const agentTile = getAgentDetailsTile()
+    const agentControls = within(agentTile)
+
+    expect(
+      agentControls.queryByRole('heading', {
+        name: 'Agent client details',
+        level: 3,
+      }),
+    ).not.toBeInTheDocument()
+    expect(agentControls.getByText('01 - Agent Main Location')).toBeInTheDocument()
+
+    await userEvent.click(
+      agentControls.getByRole('button', {
+        name: 'Edit agent details',
+      }),
+    )
+
+    expect(agentControls.getByLabelText('Agent number')).toHaveValue('00033344')
+    expect(agentControls.getByLabelText('Applicant type')).toHaveValue('Agent')
+    expect(agentControls.getByLabelText('Applicant type')).toHaveAttribute('readonly')
+
+    await chooseComboBoxOption(
+      agentControls.getByRole('combobox', { name: 'Contact location' }),
+      '02 - Agent Alternate Location',
+    )
+    await waitFor(() =>
+      expect(
+        agentControls.getByRole('combobox', {
+          name: 'Contact name',
+        }),
+      ).toBeEnabled(),
+    )
+    await chooseComboBoxOption(
+      agentControls.getByRole('combobox', { name: 'Contact name' }),
+      'Agent Alternate Contact',
+    )
+
+    await userEvent.click(agentControls.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
+          agentClientNumber: '00033344',
+          agentClientLocationCode: '02',
+          agentContactName: 'Agent Alternate Contact',
+          applicantTypeCode: 'A',
+        }),
+      )
+    })
+    expect(
+      await agentControls.findByRole('button', {
+        name: 'Edit agent details',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Agent details saved.')).toBeInTheDocument()
+  })
+
+  it('cancels agent edits without changing the persisted summary', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await selectApplicationDetailTab('Agent')
+    const agentControls = within(getAgentDetailsTile())
+    await userEvent.click(
+      agentControls.getByRole('button', {
+        name: 'Edit agent details',
+      }),
+    )
+    fireEvent.change(agentControls.getByLabelText('Agent number'), {
+      target: { value: '00099988' },
+    })
+    await userEvent.click(agentControls.getByRole('button', { name: 'Cancel' }))
+
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    expect(agentControls.queryByLabelText('Agent number')).not.toBeInTheDocument()
+    const agentNumberField = agentControls.getByText('Agent number').closest('.detail-field-item')
+    expect(agentNumberField).toBeTruthy()
+    expect(within(agentNumberField as HTMLElement).getByText('00033344')).toBeInTheDocument()
+  })
+
   it('loads complete application context without enabling edits for read-only viewers', async () => {
     mockApplicationDetailAuth((action) => action === '/applicationDetails', ['LEXIS_READ_ONLY'])
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -444,6 +558,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       within(getOwnerClientDetailsTile()).queryByRole('button', {
         name: 'Edit owner client details',
+      }),
+    ).not.toBeInTheDocument()
+
+    await selectApplicationDetailTab('Agent')
+    expect(
+      within(getAgentDetailsTile()).queryByRole('button', {
+        name: 'Edit agent details',
       }),
     ).not.toBeInTheDocument()
 

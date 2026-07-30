@@ -340,7 +340,7 @@ type ApplicationSummaryFormState = {
 }
 
 type ApplicationSummaryField = keyof ApplicationSummaryFormState & string
-type SummarySaveSource = 'summary' | 'owner'
+type SummarySaveSource = 'summary' | 'owner' | 'agent'
 
 const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
   applicationDate: detail.applicationDate ?? '',
@@ -596,6 +596,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [summaryVolumeWarningAccepted, setSummaryVolumeWarningAccepted] = useState(false)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
   const [isEditingOwnerDetails, setIsEditingOwnerDetails] = useState(false)
+  const [isEditingAgentDetails, setIsEditingAgentDetails] = useState(false)
   const [pendingSummarySaveSource, setPendingSummarySaveSource] =
     useState<SummarySaveSource>('summary')
   const [summaryAccuracyConfirmationOpen, setSummaryAccuracyConfirmationOpen] = useState(false)
@@ -764,6 +765,7 @@ const ProvincialApplicationDetailsPage = () => {
       setSummaryForm(null)
       setSummaryBaselineForm(null)
       setIsEditingOwnerDetails(false)
+      setIsEditingAgentDetails(false)
       setReviewStatusCode('')
       setReviewStatusRemark('')
       setReviewStatusBaselineCode('')
@@ -783,6 +785,7 @@ const ProvincialApplicationDetailsPage = () => {
     setActionInfoMessage('')
     if (!retainingCurrentDetail) {
       setIsEditingOwnerDetails(false)
+      setIsEditingAgentDetails(false)
       setIndustryViewableExemptionNumber(null)
       setDocumentRows([])
       setPermitRows([])
@@ -2273,6 +2276,30 @@ const ProvincialApplicationDetailsPage = () => {
     setPendingSummarySaveSource('summary')
   }, [summaryBaselineForm])
 
+  const onCancelAgentDetails = useCallback(() => {
+    setSummaryForm((current) => {
+      if (!current || !summaryBaselineForm) {
+        return current
+      }
+
+      return {
+        ...current,
+        agentClientNumber: summaryBaselineForm.agentClientNumber,
+        agentClientLocationCode: summaryBaselineForm.agentClientLocationCode,
+        agentContactName: summaryBaselineForm.agentContactName,
+      }
+    })
+    setIsEditingAgentDetails(false)
+    setShowSummaryValidationErrors(false)
+    setSummaryVolumeWarningAccepted(false)
+    setActionErrorMessage('')
+    setActionWarningMessage('')
+    setSummaryAccuracyConfirmationOpen(false)
+    setSummaryAccuracyConfirmed(false)
+    setSummaryAccuracyApplicationNumber(null)
+    setPendingSummarySaveSource('summary')
+  }, [summaryBaselineForm])
+
   const onAddApplicationSpecies = useCallback(() => {
     const nextSpecies = applicationSpeciesCandidate.trim()
     if (!nextSpecies) {
@@ -2451,6 +2478,10 @@ const ProvincialApplicationDetailsPage = () => {
       if (saved && source === 'owner') {
         setIsEditingOwnerDetails(false)
         setActionInfoMessage('Owner client details saved.')
+      }
+      if (saved && source === 'agent') {
+        setIsEditingAgentDetails(false)
+        setActionInfoMessage('Agent details saved.')
       }
       return saved
     },
@@ -2764,6 +2795,7 @@ const ProvincialApplicationDetailsPage = () => {
     )
     setSummaryVolumeWarningAccepted(false)
     setIsEditingOwnerDetails(false)
+    setIsEditingAgentDetails(false)
     closeSummaryAccuracyConfirmation()
     setShowSummaryValidationErrors(false)
     setApplicationSpeciesCandidate('')
@@ -2860,13 +2892,14 @@ const ProvincialApplicationDetailsPage = () => {
   const agentClientDetailFields: Array<[string, string]> = [
     ['Agent number', summaryForm?.agentClientNumber ?? String(detail?.agentClientNumber ?? '')],
     ['Applicant type', 'Agent'],
-    ['Contact location', summaryForm?.agentClientLocationCode ?? ''],
+    ['Contact location', agentClientLocationDisplay],
     ['Contact name', summaryForm?.agentContactName ?? ''],
   ]
   const agentClientSummaryContent =
     agentClientData || isLoadingAgentClientData ? (
       <ClientDataSummary
-        title="Agent client details"
+        title="Agent details"
+        showTitle={false}
         clientData={agentClientData}
         isLoading={isLoadingAgentClientData}
         detailFields={agentClientDetailFields}
@@ -3202,7 +3235,8 @@ const ProvincialApplicationDetailsPage = () => {
             <AuthoritativeOptionsUnavailableNotification title="Application options unavailable" />
           )}
           {(selectedApplicationTab === 'application' ||
-            (selectedApplicationTab === 'owner' && isEditingOwnerDetails)) &&
+            (selectedApplicationTab === 'owner' && isEditingOwnerDetails) ||
+            (selectedApplicationTab === 'agent' && isEditingAgentDetails)) &&
             requiredSummaryOptionsMissing && (
               <AppNotification
                 kind="warning"
@@ -3476,13 +3510,148 @@ const ProvincialApplicationDetailsPage = () => {
                           id="application-agent-details"
                           className="application-detail-section application-detail-clients"
                         >
-                          <h2 className="detail-tile-title">Agent</h2>
-                          {agentClientSummaryContent ?? (
-                            <EmptyState
-                              title="No agent assigned"
-                              description="No agent is assigned to this application."
-                              headingLevel={3}
-                            />
+                          <div className="detail-section-card__header">
+                            <h2 className="detail-tile-title">Agent details</h2>
+                            {canEditSummary && summaryForm && !isEditingAgentDetails && (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => {
+                                  setActionErrorMessage('')
+                                  setActionWarningMessage('')
+                                  setIsEditingAgentDetails(true)
+                                }}
+                              >
+                                Edit agent details
+                              </Button>
+                            )}
+                          </div>
+                          {isEditingAgentDetails && summaryForm ? (
+                            <>
+                              <div className="legacy-search-grid application-client-edit-grid">
+                                <TextInput
+                                  id="applicationAgentClientNumberEdit"
+                                  labelText="Agent number"
+                                  value={summaryForm.agentClientNumber}
+                                  invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
+                                  invalidText={visibleSummaryFieldError('agentClientNumber')}
+                                  disabled={isSavingSummary}
+                                  onChange={(event) =>
+                                    onSummaryFormChange('agentClientNumber', event.target.value)
+                                  }
+                                />
+                                <TextInput
+                                  id="applicationAgentApplicantTypeEdit"
+                                  labelText="Applicant type"
+                                  value="Agent"
+                                  readOnly
+                                />
+                                <SearchableSelect
+                                  id="applicationAgentClientLocationEdit"
+                                  labelText="Contact location"
+                                  value={summaryForm.agentClientLocationCode}
+                                  invalid={Boolean(
+                                    visibleSummaryFieldError('agentClientLocationCode'),
+                                  )}
+                                  invalidText={visibleSummaryFieldError('agentClientLocationCode')}
+                                  disabled={
+                                    isSavingSummary ||
+                                    !summaryForm.agentClientNumber.trim() ||
+                                    isLoadingAgentClientLocations
+                                  }
+                                  placeholder={agentClientLocationPlaceholder}
+                                  options={agentClientLocations
+                                    .filter(isSelectableClientLocation)
+                                    .map((clientLocation) => ({
+                                      value: clientLocation.locationCode,
+                                      label: clientLocationLabel(
+                                        clientLocation.locationCode,
+                                        clientLocation.locationName,
+                                      ),
+                                    }))}
+                                  onChange={(value) =>
+                                    onSummaryFormChange('agentClientLocationCode', value)
+                                  }
+                                />
+                                {hasSelectableAgentClientContacts ||
+                                isLoadingAgentClientContacts ? (
+                                  <SearchableSelect
+                                    id="applicationAgentContactNameEdit"
+                                    labelText="Contact name"
+                                    value={summaryForm.agentContactName}
+                                    invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
+                                    invalidText={visibleSummaryFieldError('agentContactName')}
+                                    disabled={
+                                      isSavingSummary ||
+                                      !summaryForm.agentClientLocationCode.trim() ||
+                                      isLoadingAgentClientContacts
+                                    }
+                                    placeholder={agentContactPlaceholder}
+                                    options={agentClientContacts
+                                      .filter(isSelectableClientContact)
+                                      .map((contact) => ({
+                                        value: contact.contactName,
+                                        label: contact.contactName,
+                                      }))}
+                                    onChange={(value) =>
+                                      onSummaryFormChange('agentContactName', value)
+                                    }
+                                  />
+                                ) : (
+                                  <TextInput
+                                    id="applicationAgentContactNameEdit"
+                                    labelText="Contact name"
+                                    value={summaryForm.agentContactName}
+                                    invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
+                                    invalidText={visibleSummaryFieldError('agentContactName')}
+                                    disabled={
+                                      isSavingSummary || !summaryForm.agentClientLocationCode.trim()
+                                    }
+                                    placeholder="Enter contact name"
+                                    onChange={(event) =>
+                                      onSummaryFormChange('agentContactName', event.target.value)
+                                    }
+                                  />
+                                )}
+                              </div>
+                              <ClientDataSummary
+                                title="Agent details"
+                                showTitle={false}
+                                clientData={agentClientData}
+                                isLoading={isLoadingAgentClientData}
+                              />
+                              <div className="legacy-search-actions">
+                                <Button
+                                  kind="secondary"
+                                  size="sm"
+                                  disabled={isSavingSummary}
+                                  onClick={onCancelAgentDetails}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  kind="primary"
+                                  size="sm"
+                                  disabled={
+                                    isSavingSummary ||
+                                    summaryOptionsAvailability !== 'available' ||
+                                    requiredSummaryOptionsMissing
+                                  }
+                                  onClick={() => onRequestSaveSummary('agent')}
+                                >
+                                  {isSavingSummary ? 'Saving...' : 'Save changes'}
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            (agentClientSummaryContent ?? (
+                              <EmptyState
+                                title="No agent assigned"
+                                description="No agent is assigned to this application."
+                                headingLevel={3}
+                              />
+                            ))
                           )}
                         </Tile>
                       </Column>
@@ -4465,9 +4634,9 @@ const ProvincialApplicationDetailsPage = () => {
             open
             confirmed={summaryAccuracyConfirmed}
             busy={isSavingSummary}
-            confirmLabel={pendingSummarySaveSource === 'owner' ? 'Save changes' : 'Save summary'}
+            confirmLabel={pendingSummarySaveSource === 'summary' ? 'Save summary' : 'Save changes'}
             pendingLabel={
-              pendingSummarySaveSource === 'owner' ? 'Saving changes…' : 'Saving summary…'
+              pendingSummarySaveSource === 'summary' ? 'Saving summary…' : 'Saving changes…'
             }
             onConfirmedChange={setSummaryAccuracyConfirmed}
             onConfirm={onConfirmSummaryAccuracy}
