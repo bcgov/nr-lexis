@@ -424,6 +424,20 @@ class RegressionCleanupStack {
   }
 }
 
+const throwRegressionFailures = (summary: string, failures: Error[]): void => {
+  if (failures.length === 0) {
+    return
+  }
+  if (failures.length === 1) {
+    throw failures[0]
+  }
+
+  const details = failures.map((failure, index) => `${index + 1}. ${failure.message}`).join('\n')
+  throw new Error(`${summary}\n${details}`, {
+    cause: new AggregateError(failures, summary),
+  })
+}
+
 const missingApplicationNumber = '999999999'
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionClientEmail = 'lexis-regression@example.test'
@@ -460,7 +474,10 @@ const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   }
 }
 
-const expectDatedScheduleOptions = (schedules: Record<string, unknown>[], source: string): void => {
+const expectFutureScheduleOptions = (
+  schedules: Record<string, unknown>[],
+  source: string,
+): void => {
   const today = formatBusinessIsoDate()
 
   expect(
@@ -487,7 +504,7 @@ const expectApplicationScheduleOptions = (value: unknown, source: string): void 
   expect(optionName(blankSchedule), `${source} last schedule option should be labeled Blank`).toBe(
     'Blank',
   )
-  expectDatedScheduleOptions(
+  expectFutureScheduleOptions(
     schedules.filter((schedule) => optionCode(schedule)),
     source,
   )
@@ -495,16 +512,29 @@ const expectApplicationScheduleOptions = (value: unknown, source: string): void 
 
 const expectReportScheduleOptions = (value: unknown, source: string): void => {
   const schedules = asRecordArray(value)
+  const today = formatBusinessIsoDate()
 
-  expect(
-    schedules.length,
-    `${source} should expose no more than two list dates`,
-  ).toBeLessThanOrEqual(2)
+  expect(schedules, `${source} should expose the current and next list boundaries`).toHaveLength(2)
   expect(
     schedules.every((schedule) => optionCode(schedule)),
     `${source} should expose dated schedules only`,
   ).toBe(true)
-  expectDatedScheduleOptions(schedules, source)
+  const scheduleDates = schedules.map(optionName)
+  for (const scheduleDate of scheduleDates) {
+    expect(scheduleDate, `${source} schedule names should be ISO dates`).toMatch(isoDatePattern)
+  }
+  expect(
+    scheduleDates[0] <= today,
+    `${source} first boundary should start the current reporting period`,
+  ).toBe(true)
+  expect(
+    scheduleDates[1] > today,
+    `${source} second boundary should start the next reporting period`,
+  ).toBe(true)
+  expect(
+    scheduleDates[0] < scheduleDates[1],
+    `${source} schedule boundaries should be ascending`,
+  ).toBe(true)
 }
 
 const expectLoginShell = async (page: Page, source: string): Promise<void> => {
@@ -1201,22 +1231,44 @@ const shippingFixture = async (
   return { transportType, portOfExport }
 }
 
-const permitShippingForm = (
-  permitNumber: number,
+const permitMutationForm = (
+  permit: Record<string, unknown>,
   marker: string,
   shipping: { transportType: string; portOfExport: string },
   permitStatus?: string,
 ): Record<string, string> => ({
-  permitNumber: String(permitNumber),
-  ...(permitStatus ? { permitStatus } : {}),
+  permitNumber: String(permit.permitNumber ?? ''),
+  permitStatus: permitStatus ?? String(permit.permitStatusCode ?? ''),
+  permitIssueDate: String(permit.issueDate ?? ''),
+  permitExpiryDate: String(permit.expiryDate ?? ''),
+  permitRequestDate: String(permit.receivedDate ?? ''),
+  exemptionNumber: String(permit.exemptionNumber ?? ''),
+  permitReceiptNo: String(permit.receiptNumber ?? ''),
+  permitRemarks: marker,
+  permitTotalVolume: String(permit.permitVolume ?? ''),
+  permitNumberOfPieces: String(permit.numberOfPieces ?? ''),
+  oicPermitTotalPieces: '',
+  oicPermitTotalVolume: '',
+  orgUnitNumber: String(permit.orgUnitNumber ?? ''),
+  ownerClientNumber: String(permit.ownerClientNumber ?? ''),
+  ownerClientLocation: String(permit.ownerClientLocationCode ?? ''),
+  agentClientNumber: String(permit.applicantClientNumber ?? ''),
+  agentClientLocation: String(permit.agentClientLocationCode ?? ''),
   destinationCompanyName: 'LEXIS E2E REGRESSION',
   destinationCountry: 'CA',
   transportType: shipping.transportType,
   transportName: marker,
   estimatedShippingDate: formatBusinessIsoDate(),
   portOfExport: shipping.portOfExport,
-  permitRemarks: marker,
+  otherPortOfExport: '',
 })
+
+const permitMutationFailure = (result: PermitMutationResponse, fallback: string): string => {
+  const details = [result.message, ...asStringArray(result.errors)]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+  return details.length > 0 ? details.join(' ') : fallback
+}
 
 const cancelRegressionPermit = async (
   page: Page,
@@ -1234,10 +1286,13 @@ const cancelRegressionPermit = async (
   const result = await readJsonResponse<PermitMutationResponse>(
     await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
       headers: versionHeaders(current.version),
-      form: permitShippingForm(permitNumber, marker, shipping, 'CAN'),
+      form: permitMutationForm(current.payload, marker, shipping, 'CAN'),
     }),
   )
-  expect(result.success).toBe(true)
+  expect(
+    result.success,
+    permitMutationFailure(result, `Permit ${permitNumber} cancellation returned success=false.`),
+  ).toBe(true)
   expect(result.permitStatus).toBe('CAN')
   expect(asStringArray(result.errors)).toEqual([])
 }
@@ -2186,16 +2241,13 @@ test.describe('TEST IDIR admin regression', () => {
     const createDocumentsHeading = page.getByRole('heading', { name: 'Documents', exact: true })
     await expect(createDocumentsHeading).toBeVisible()
     await expect(createDocumentsHeading).not.toContainText('API')
-    await expect(page.getByText('Upload documents')).toBeVisible()
-    await expect(page.getByText('Queued files')).toBeVisible()
-    await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
-    await expect(page.getByLabel('Document File')).toBeDisabled()
-    await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Submit upload' })).toHaveCount(0)
-    await expect(
-      page.getByRole('button', { name: 'Choose files for Upload documents' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+    const addDocumentButton = page.getByRole('button', { name: 'Add document' })
+    await expect(addDocumentButton).toBeDisabled()
+    await expect(addDocumentButton).toHaveAttribute(
+      'title',
+      'Save the application before uploading documents.',
+    )
+    await expect(page.getByLabel('Document File')).toHaveCount(0)
   })
 
   test('uses save and cancel workflow on provincial create/edit pages', async () => {
@@ -2814,7 +2866,7 @@ test.describe('TEST IDIR admin regression', () => {
 
       await expect(page.getByText('Notification published', { exact: true })).toBeVisible()
       const notification = page
-        .getByRole('article')
+        .getByRole('listitem')
         .filter({ has: page.getByRole('heading', { name: notificationTitle, exact: true }) })
       await expect(notification).toBeVisible()
       await expect(notification.getByText(notificationMessage, { exact: true })).toBeVisible()
@@ -2848,12 +2900,7 @@ test.describe('TEST IDIR admin regression', () => {
         primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
       )
     }
-    if (failures.length === 1) {
-      throw failures[0]
-    }
-    if (failures.length > 1) {
-      throw new AggregateError(failures, 'Notification regression and cleanup failed.')
-    }
+    throwRegressionFailures('Notification regression and cleanup failed.', failures)
   })
 
   test('creates, edits, terminalizes, and cleans up provincial records', async () => {
@@ -3239,8 +3286,8 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/permits/${permitNumber}`,
       )
-      const permitUpdate = permitShippingForm(
-        permitNumber,
+      const permitUpdate = permitMutationForm(
+        currentPermit.payload,
         packageNumber.slice(0, 24),
         schedule.shipping,
         'ACT',
@@ -3251,7 +3298,13 @@ test.describe('TEST IDIR admin regression', () => {
           form: permitUpdate,
         }),
       )
-      expect(updatedPermit.success).toBe(true)
+      expect(
+        updatedPermit.success,
+        permitMutationFailure(
+          updatedPermit,
+          `Permit ${permitNumber} update returned success=false.`,
+        ),
+      ).toBe(true)
       expect(updatedPermit.permitStatus).toBe('ACT')
       expect(asStringArray(updatedPermit.errors)).toEqual([])
 
@@ -3333,12 +3386,7 @@ test.describe('TEST IDIR admin regression', () => {
         primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
       )
     }
-    if (failures.length === 1) {
-      throw failures[0]
-    }
-    if (failures.length > 1) {
-      throw new AggregateError(failures, 'Provincial CRUD regression and cleanup failed.')
-    }
+    throwRegressionFailures('Provincial CRUD regression and cleanup failed.', failures)
   })
 
   test('returns an expired IDIR admin session to the login shell', async () => {
