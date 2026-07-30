@@ -160,6 +160,44 @@ describe('Notifications page', () => {
     )
   })
 
+  it('shows a status tag only for scheduled notifications', async () => {
+    mockedFetchAdminNotifications.mockResolvedValue([
+      {
+        ...notification,
+        id: 10,
+        title: 'Active notification',
+        displayStartDate: '2000-01-01',
+        displayEndDate: '9999-12-31',
+      },
+      {
+        ...notification,
+        id: 11,
+        title: 'Past notification',
+        displayStartDate: '2000-01-01',
+        displayEndDate: '2000-01-02',
+      },
+      {
+        ...notification,
+        id: 12,
+        title: 'Scheduled notification',
+        displayStartDate: '9999-01-01',
+        displayEndDate: '9999-01-02',
+      },
+    ])
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    expect(await screen.findByText('Scheduled notification')).toBeVisible()
+    expect(screen.getByText('Scheduled', { exact: true })).toBeVisible()
+    expect(screen.queryByText('Active', { exact: true })).not.toBeInTheDocument()
+    expect(screen.queryByText('Past', { exact: true })).not.toBeInTheDocument()
+  })
+
   it('opens notification content links in a new protected tab', async () => {
     mockedFetchNotifications.mockResolvedValue([
       {

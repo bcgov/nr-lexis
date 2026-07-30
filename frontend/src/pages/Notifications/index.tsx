@@ -661,6 +661,7 @@ export default function NotificationsPage() {
           >
             {notifications.map((notification) => {
               const adminNotification = isAdminNotification(notification) ? notification : null
+              const status = isAdmin ? notificationStatus(notification) : null
               return (
                 <article
                   key={notification.id}
@@ -679,10 +680,8 @@ export default function NotificationsPage() {
                         >
                           {levelLabel(notification.notificationLevel)}
                         </span>
-                        {isAdmin && (
-                          <span className="notifications-page__status">
-                            {notificationStatus(notification)}
-                          </span>
+                        {status === 'Scheduled' && (
+                          <span className="notifications-page__status">{status}</span>
                         )}
                       </div>
                       {isAdmin && adminNotification && (
