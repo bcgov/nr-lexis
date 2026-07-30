@@ -1267,15 +1267,19 @@ describe('Create Page Core Flows', () => {
       name: 'Application number (optional)',
     })
     const addApplication = screen.getByRole('button', { name: 'Add application' })
+    const setApplicationNumber = async (value: string) => {
+      fireEvent.change(applicationNumber, { target: { value } })
+      await waitFor(() => expect(addApplication).toBeEnabled())
+    }
 
-    await userEvent.type(applicationNumber, '321')
+    await setApplicationNumber('321')
     await userEvent.click(addApplication)
     await waitFor(() =>
       expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenLastCalledWith(['321']),
     )
     await waitFor(() => expect(applicationNumber).toHaveValue(''))
 
-    await userEvent.type(applicationNumber, '2001')
+    await setApplicationNumber('2001')
     await userEvent.click(addApplication)
     await waitFor(() =>
       expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenLastCalledWith(['321', '2001']),
@@ -1293,7 +1297,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await waitFor(() => expect(applicationNumber).toHaveValue(''))
-    await userEvent.type(applicationNumber, '321')
+    await setApplicationNumber('321')
     await userEvent.click(addApplication)
     await waitFor(() =>
       expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenLastCalledWith(['2001', '321']),
