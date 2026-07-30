@@ -1731,6 +1731,57 @@ legend.cds--label {
   min-block-size: calc(2 * var(--cds-layout-size-height-md, 2.5rem));
 }
 
+.exemption-create-application-field {
+  grid-column: span 2;
+  min-inline-size: 0;
+}
+
+.exemption-create-application-picker {
+  display: grid;
+  align-items: end;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.exemption-create-application-picker .cds--btn {
+  min-inline-size: 8rem;
+}
+
+.exemption-create-application-selection > p {
+  margin: 0.5rem 0 0;
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.exemption-create-application-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exemption-create-application-list > li {
+  display: flex;
+}
+
+@media (max-width: 671px) {
+  .exemption-create-application-field {
+    grid-column: 1 / -1;
+  }
+
+  .exemption-create-application-picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .exemption-create-application-picker .cds--btn {
+    inline-size: 100%;
+  }
+}
+
 .create-form-grid .cds--date-picker-input__wrapper > span {
   inline-size: 100%;
   max-inline-size: 100%;

@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Checkbox, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
+import {
+  Button,
+  Checkbox,
+  Column,
+  DismissibleTag,
+  Grid,
+  TextArea,
+  TextInput,
+  Tile,
+} from '@carbon/react'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { AppNotification } from '../../components/AppNotification'
@@ -187,20 +196,6 @@ const mergePrefillState = (
   }
 }
 
-const buildInitialForm = (
-  prefillState: ExemptionCreatePrefillState | null,
-): ProvincialExemptionCreateForm => {
-  if (!prefillState) {
-    return INITIAL_FORM
-  }
-
-  return {
-    ...INITIAL_FORM,
-    applicationNumber: prefillState.selectedApplicationNumbers[0],
-    otherConditions: '',
-  }
-}
-
 type PageStatus = {
   kind: 'success' | 'error'
   title: string
@@ -220,9 +215,23 @@ const ProvincialExemptionCreatePage = () => {
       ),
     [location.state, searchParams],
   )
-  const initialForm = useMemo(() => buildInitialForm(prefillState), [prefillState])
-  const [form, setForm] = useState<ProvincialExemptionCreateForm>(() => initialForm)
+  const initialSelectedApplicationNumbers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (prefillState?.selectedApplicationNumbers ?? [])
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0),
+        ),
+      ),
+    [prefillState],
+  )
+  const [form, setForm] = useState<ProvincialExemptionCreateForm>(INITIAL_FORM)
+  const [selectedApplicationNumbers, setSelectedApplicationNumbers] = useState<string[]>(
+    () => initialSelectedApplicationNumbers,
+  )
   const draftBaselineRef = useRef(form)
+  const selectedApplicationNumbersBaselineRef = useRef(selectedApplicationNumbers)
   const [formEdited, setFormEdited] = useState(false)
   const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
@@ -260,14 +269,6 @@ const ProvincialExemptionCreatePage = () => {
     hasRole(roles, 'APPLICATION_APPROVER') ||
     hasRole(roles, 'READ_ONLY') ||
     hasProvincialSubmitterRole(roles)
-  const selectedApplicationNumbers = useMemo(() => {
-    const values =
-      prefillState?.selectedApplicationNumbers ??
-      (form.applicationNumber.trim() ? [form.applicationNumber.trim()] : [])
-    return Array.from(
-      new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
-    )
-  }, [form.applicationNumber, prefillState])
   const hasCurrentPreview =
     previewState === 'ready' &&
     confirmedApplicationNumbers.length === selectedApplicationNumbers.length &&
@@ -373,7 +374,16 @@ const ProvincialExemptionCreatePage = () => {
 
   const fieldErrors = useMemo<FieldErrors<ProvincialExemptionCreateField>>(
     () => ({
-      applicationNumber: positiveNumericFieldError(form.applicationNumber) ?? undefined,
+      applicationNumber:
+        firstValidationError(
+          () => positiveNumericFieldError(form.applicationNumber),
+          () => {
+            const applicationNumber = form.applicationNumber.trim()
+            return applicationNumber && selectedApplicationNumbers.includes(applicationNumber)
+              ? `Application ${applicationNumber} is already selected.`
+              : null
+          },
+        ) ?? undefined,
       exemptionNumber: oicLike
         ? (firstValidationError(
             () => requiredFieldError(form.exemptionNumber, 'Exemption number'),
@@ -436,7 +446,15 @@ const ProvincialExemptionCreatePage = () => {
             ? 'Select valid regions for a Blanket OIC exemption.'
             : undefined,
     }),
-    [availableExemptionTypes, blanketOic, exemptionStatuses, form, oicLike, regionOptions],
+    [
+      availableExemptionTypes,
+      blanketOic,
+      exemptionStatuses,
+      form,
+      oicLike,
+      regionOptions,
+      selectedApplicationNumbers,
+    ],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
@@ -497,6 +515,32 @@ const ProvincialExemptionCreatePage = () => {
     })
   }
 
+  const onAddApplication = (): void => {
+    const applicationNumber = form.applicationNumber.trim()
+    if (!applicationNumber || fieldErrors.applicationNumber) {
+      markFieldTouched('applicationNumber')
+      return
+    }
+
+    markFormEdited()
+    setSelectedApplicationNumbers((current) => [...current, applicationNumber])
+    setForm((current) => ({ ...current, applicationNumber: '' }))
+    setTouchedFields((current) => ({ ...current, applicationNumber: false }))
+    setShowPrefillNotice(false)
+    setStatus(null)
+  }
+
+  const onRemoveApplication = (applicationNumber: string): void => {
+    markFormEdited()
+    setSelectedApplicationNumbers((current) =>
+      current.filter(
+        (selectedApplicationNumber) => selectedApplicationNumber !== applicationNumber,
+      ),
+    )
+    setShowPrefillNotice(false)
+    setStatus(null)
+  }
+
   const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
     if (
       !optionsLoaded ||
@@ -504,6 +548,15 @@ const ProvincialExemptionCreatePage = () => {
       requiredOptionsUnavailable ||
       !canUseApplicationPrefill
     ) {
+      return false
+    }
+    if (form.applicationNumber.trim()) {
+      markFieldTouched('applicationNumber')
+      setStatus({
+        kind: 'error',
+        title: 'Application Not Added',
+        message: 'Add or clear the pending application number before saving.',
+      })
       return false
     }
     if (selectedApplicationNumbers.length > 0 && !hasCurrentPreview) {
@@ -528,17 +581,16 @@ const ProvincialExemptionCreatePage = () => {
     setStatus(null)
     setIsSubmitting(true)
     try {
+      const linkedApplicationNumbers =
+        confirmedApplicationNumbers.length > 0 ? confirmedApplicationNumbers : []
       const result = await submitProvincialExemptionCreate({
         ...form,
-        linkedApplicationNumbers:
-          confirmedApplicationNumbers.length > 0
-            ? confirmedApplicationNumbers
-            : form.applicationNumber.trim()
-              ? [form.applicationNumber.trim()]
-              : [],
+        applicationNumber: linkedApplicationNumbers[0] ?? '',
+        linkedApplicationNumbers,
       })
       if (result.success) {
         draftBaselineRef.current = form
+        selectedApplicationNumbersBaselineRef.current = [...selectedApplicationNumbers]
         setFormEdited(false)
         if (result.createdId) {
           if (navigateToCreatedRecord) {
@@ -579,13 +631,17 @@ const ProvincialExemptionCreatePage = () => {
 
   const onDiscardCreateDraft = (): void => {
     setForm(draftBaselineRef.current)
+    setSelectedApplicationNumbers([...selectedApplicationNumbersBaselineRef.current])
     setFormEdited(false)
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus(null)
   }
 
-  const isCreateDraftDirty = formEdited && !formValuesEqual(form, draftBaselineRef.current)
+  const isCreateDraftDirty =
+    formEdited &&
+    (!formValuesEqual(form, draftBaselineRef.current) ||
+      !formValuesEqual(selectedApplicationNumbers, selectedApplicationNumbersBaselineRef.current))
 
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-exemption-create-page">
@@ -661,28 +717,62 @@ const ProvincialExemptionCreatePage = () => {
             <legend>Exemption details</legend>
             <div className="legacy-search-grid create-form-grid">
               {!blanketOic &&
-                (prefillState ? (
+                (isFederalApplicationPrefill ? (
                   <TextArea
                     className="selected-application-numbers"
                     id="selectedApplicationNumbers"
                     labelText="Selected application numbers"
-                    value={prefillState.selectedApplicationNumbers.join('\n')}
-                    rows={Math.min(Math.max(prefillState.selectedApplicationNumbers.length, 2), 6)}
+                    value={selectedApplicationNumbers.join('\n')}
+                    rows={Math.min(Math.max(selectedApplicationNumbers.length, 2), 6)}
                     readOnly
                   />
                 ) : (
-                  <ApplicationNumberSelect
-                    id="applicationNumber"
-                    labelText="Application number (optional)"
-                    value={form.applicationNumber}
-                    invalid={!!fieldError('applicationNumber')}
-                    invalidText={fieldError('applicationNumber')}
-                    onBlur={() => markFieldTouched('applicationNumber')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, applicationNumber: value }))
-                    }}
-                  />
+                  <div className="exemption-create-application-field">
+                    <div className="exemption-create-application-picker">
+                      <ApplicationNumberSelect
+                        id="applicationNumber"
+                        labelText="Application number (optional)"
+                        value={form.applicationNumber}
+                        invalid={!!fieldError('applicationNumber')}
+                        invalidText={fieldError('applicationNumber')}
+                        onBlur={() => markFieldTouched('applicationNumber')}
+                        onChange={(value) => {
+                          markFormEdited()
+                          setForm((current) => ({ ...current, applicationNumber: value }))
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        kind="secondary"
+                        size="sm"
+                        disabled={!form.applicationNumber.trim()}
+                        onClick={onAddApplication}
+                      >
+                        Add application
+                      </Button>
+                    </div>
+                    {selectedApplicationNumbers.length > 0 && (
+                      <div className="exemption-create-application-selection">
+                        <p>Selected applications</p>
+                        <ul
+                          className="exemption-create-application-list"
+                          aria-label="Selected applications"
+                        >
+                          {selectedApplicationNumbers.map((applicationNumber) => (
+                            <li key={applicationNumber}>
+                              <DismissibleTag
+                                type="blue"
+                                text={applicationNumber}
+                                title={`Remove application ${applicationNumber}`}
+                                dismissTooltipLabel={`Remove application ${applicationNumber}`}
+                                onClose={() => onRemoveApplication(applicationNumber)}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 ))}
               <SearchableSelect
                 id="exemptionTypeCode"
@@ -882,9 +972,11 @@ const ProvincialExemptionCreatePage = () => {
             ? 'Authoritative exemption options must load before this exemption can be saved.'
             : !canUseApplicationPrefill
               ? 'Authorization to create this exemption is required before it can be saved.'
-              : selectedApplicationNumbers.length > 0 && !hasCurrentPreview
-                ? 'The selected applications must be validated before this exemption can be saved.'
-                : undefined
+              : form.applicationNumber.trim()
+                ? 'Add or clear the pending application number before this exemption can be saved.'
+                : selectedApplicationNumbers.length > 0 && !hasCurrentPreview
+                  ? 'The selected applications must be validated before this exemption can be saved.'
+                  : undefined
         }
       />
     </Grid>
