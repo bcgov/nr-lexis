@@ -130,7 +130,7 @@ const SCHEDULE_SORT_COLUMNS: Array<{ id: ExportScheduleSortField; label: string 
 ]
 
 const FEE_POLICY_SORT_COLUMNS: Array<{ id: FeePolicySortField; label: string }> = [
-  { id: 'effective_date', label: 'Effective Date' },
+  { id: 'effective_date', label: 'Policy effective date' },
   { id: 'org_unit_no', label: 'Region' },
   { id: 'percent_increase', label: 'Fee Increase %' },
 ]

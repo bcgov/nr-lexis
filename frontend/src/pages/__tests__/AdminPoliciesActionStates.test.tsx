@@ -214,6 +214,19 @@ describe('Admin policy action states', () => {
     })
   })
 
+  it('labels the first fee policy column as the policy effective date', async () => {
+    renderPage()
+
+    const effectiveDateHeader = await screen.findByRole('button', {
+      name: 'Policy effective date',
+    })
+    const table = effectiveDateHeader.closest('table')
+    expect(table).not.toBeNull()
+    const headers = within(table as HTMLTableElement).getAllByRole('columnheader')
+
+    expect(headers[0]).toContainElement(effectiveDateHeader)
+  })
+
   it('submits fee policy add when required fields are valid', async () => {
     mockedFetchFeePolicyPage
       .mockResolvedValueOnce({
