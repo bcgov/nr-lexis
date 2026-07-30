@@ -615,7 +615,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
     const pageHeading = screen.getByRole('heading', {
-      name: 'Permit 777',
+      name: 'Permit 777 (Pending)',
       level: 1,
     })
     const pageHeader = pageHeading.closest('header')
@@ -641,7 +641,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       .closest('.cds--tile')
     expect(permitSummaryTile).toBeTruthy()
     expect(within(permitSummaryTile as HTMLElement).getByText('Permit number')).toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getByText('777')).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getByText('777 (Pending)')).toBeInTheDocument()
     expect(
       within(permitSummaryTile as HTMLElement).getByText('Application number'),
     ).toBeInTheDocument()

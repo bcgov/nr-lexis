@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edit } from '@carbon/icons-react'
 import {
   Button,
@@ -113,6 +113,21 @@ const EXEMPTION_DETAIL_TAB_SLOTS: readonly ExemptionDetailTabKey[] = [
   'fees',
   'documents',
 ]
+
+const EXEMPTION_DETAIL_TAB_LABELS: Record<ExemptionDetailTabKey, string> = {
+  owner: 'Owner',
+  agent: 'Agent',
+  summary: 'Summary',
+  applications: 'Applications',
+  permits: 'Permits',
+  fees: 'Fees',
+  documents: 'Documents',
+}
+
+const ContiguousTabPanels = ({ children }: { children: ReactNode }) => {
+  const panels = Array.isArray(children) ? children.filter(Boolean) : children
+  return <TabPanels>{panels}</TabPanels>
+}
 
 type ExemptionEditForm = {
   exemptionTypeCode: string
@@ -309,6 +324,7 @@ const ProvincialExemptionDetailsPage = () => {
   const beginDetailRequest = useLatestRequestGuard()
   const currentDetail = detail && String(detail.exemptionNumber) === exemptionNumber ? detail : null
   const clientContextApplication = applications[0] ?? null
+  const clientContextHasAgent = isAgentApplicant(clientContextApplication?.applicantTypeCode ?? '')
   const linkedApplicationNumber = clientContextApplication?.applicationNumber.trim() ?? ''
   const exemptionOwnerClientNumber = clientContextApplication?.ownerClientNumber.trim() ?? ''
   const exemptionAgentClientNumber = clientContextApplication?.agentClientNumber.trim() ?? ''
@@ -378,7 +394,7 @@ const ProvincialExemptionDetailsPage = () => {
                   applicationNumber: linkedApplicationNumber,
                 })
               : Promise.resolve(null),
-            exemptionAgentClientNumber && agentClientLocationCode
+            clientContextHasAgent && exemptionAgentClientNumber && agentClientLocationCode
               ? fetchApplicationClientData(exemptionAgentClientNumber, agentClientLocationCode, {
                   applicationNumber: linkedApplicationNumber,
                 })
@@ -390,7 +406,7 @@ const ProvincialExemptionDetailsPage = () => {
                   linkedApplicationNumber,
                 )
               : Promise.resolve([]),
-            exemptionAgentClientNumber
+            clientContextHasAgent && exemptionAgentClientNumber
               ? fetchApplicationClientLocations(
                   exemptionAgentClientNumber,
                   'agent',
@@ -429,6 +445,7 @@ const ProvincialExemptionDetailsPage = () => {
   }, [
     agentClientLocationCode,
     clientContextApplication,
+    clientContextHasAgent,
     exemptionAgentClientNumber,
     exemptionOwnerClientNumber,
     linkedApplicationNumber,
@@ -761,7 +778,9 @@ const ProvincialExemptionDetailsPage = () => {
   const showOwner =
     showApplications && Boolean(linkedApplicationNumber && exemptionOwnerClientNumber)
   const showAgent =
-    showApplications && Boolean(linkedApplicationNumber && exemptionAgentClientNumber)
+    showApplications &&
+    clientContextHasAgent &&
+    Boolean(linkedApplicationNumber && exemptionAgentClientNumber)
   const feeManagementAvailable =
     currentTypeCode === 'B' ||
     currentTypeCode === 'O' ||
@@ -780,10 +799,7 @@ const ProvincialExemptionDetailsPage = () => {
   const activeExemptionTab = exemptionDetailTabs.includes(selectedExemptionTab)
     ? selectedExemptionTab
     : 'summary'
-  const selectedExemptionTabIndex = Math.max(
-    0,
-    EXEMPTION_DETAIL_TAB_SLOTS.indexOf(activeExemptionTab),
-  )
+  const selectedExemptionTabIndex = Math.max(0, exemptionDetailTabs.indexOf(activeExemptionTab))
   const canManageFeeRate = !applicationsErrorMessage && feeManagementAvailable && editContextLoaded
   const canEditFeeOverride =
     canManageFeeRate &&
@@ -1584,12 +1600,7 @@ const ProvincialExemptionDetailsPage = () => {
             <Tabs
               selectedIndex={selectedExemptionTabIndex}
               onChange={({ selectedIndex }) => {
-                const selectedTab = EXEMPTION_DETAIL_TAB_SLOTS[selectedIndex]
-                selectExemptionTab(
-                  selectedTab && exemptionDetailTabs.includes(selectedTab)
-                    ? selectedTab
-                    : 'summary',
-                )
+                selectExemptionTab(exemptionDetailTabs[selectedIndex] ?? 'summary')
               }}
             >
               <TabList
@@ -1598,15 +1609,11 @@ const ProvincialExemptionDetailsPage = () => {
                 size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
-                {showOwner && <Tab>Owner</Tab>}
-                {showAgent && <Tab>Agent</Tab>}
-                <Tab>Summary</Tab>
-                {showApplications && <Tab>Applications</Tab>}
-                <Tab>Permits</Tab>
-                {showFees && <Tab>Fees</Tab>}
-                <Tab>Documents</Tab>
+                {exemptionDetailTabs.map((tab) => (
+                  <Tab key={tab}>{EXEMPTION_DETAIL_TAB_LABELS[tab]}</Tab>
+                ))}
               </TabList>
-              <TabPanels>
+              <ContiguousTabPanels>
                 {showOwner && (
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
@@ -1788,10 +1795,14 @@ const ProvincialExemptionDetailsPage = () => {
                                 label: 'Owner client number',
                                 value: displayValue(detail.ownerClientNumber),
                               },
-                              {
-                                label: 'Agent client number',
-                                value: displayValue(detail.agentClientNumber),
-                              },
+                              ...(showAgent
+                                ? [
+                                    {
+                                      label: 'Agent client number',
+                                      value: displayValue(detail.agentClientNumber),
+                                    },
+                                  ]
+                                : []),
                               {
                                 label: 'Approval date',
                                 value: displayValue(detail.approvalDate),
@@ -2339,7 +2350,7 @@ const ProvincialExemptionDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-              </TabPanels>
+              </ContiguousTabPanels>
             </Tabs>
           </Column>
         </>

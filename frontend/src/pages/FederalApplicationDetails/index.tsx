@@ -66,7 +66,7 @@ import {
   fetchApplicationPackageScales,
   type ApplicationPackageScaleRow,
 } from '@/service/provincial-application-items-service'
-import { formatBusinessIsoDate } from '@/utils/date'
+import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
 import { displayAuditIdentity } from '@/utils/text'
 import {
   firstValidationError,
@@ -195,6 +195,9 @@ const FederalApplicationDetailsPage = () => {
   const beginDetailRequest = useLatestRequestGuard()
   const currentDetail =
     detail && String(detail.applicationNumber) === applicationNumber ? detail : null
+  const federalApplicationDisplayNumber =
+    currentDetail?.federalApplicationNumber?.trim() ||
+    String(currentDetail?.applicationNumber ?? applicationNumber ?? '').trim()
   const isRefreshingDetail = loading && !!currentDetail
 
   const federalApplicationLocked = currentDetail?.locked === true
@@ -795,7 +798,7 @@ const FederalApplicationDetailsPage = () => {
       )}
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={`LEXIS application ${currentDetail?.applicationNumber ?? applicationNumber ?? ''}`.trim()}
+          title={`LEXIS application ${federalApplicationDisplayNumber}`.trim()}
           subtitle="Check and manage this federal application"
           status={
             currentDetail ? (
@@ -1448,7 +1451,7 @@ const FederalApplicationDetailsPage = () => {
                                 <TableBody>
                                   {remarkRows.map((item) => (
                                     <TableRow key={item.remarkId}>
-                                      <TableCell>{displayValue(item.date)}</TableCell>
+                                      <TableCell>{formatBusinessDateTime(item.date)}</TableCell>
                                       <TableCell>{displayValue(item.user)}</TableCell>
                                       <TableCell>{item.remark}</TableCell>
                                       {canMutateFederalApplication && (

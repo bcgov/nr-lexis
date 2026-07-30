@@ -71,6 +71,7 @@ import {
   searchProvincialPermits,
 } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
+import { formatPermitNumber } from '@/utils/permit'
 
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   applicationNumber: '',
@@ -538,7 +539,7 @@ const ProvincialPermitPage = () => {
                           className="cds--link"
                           to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
                         >
-                          {row.permitNumber}
+                          {formatPermitNumber(row.permitNumber, row.status)}
                         </Link>
                       </TableCell>
                       <TableCell>

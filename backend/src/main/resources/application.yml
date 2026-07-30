@@ -137,7 +137,6 @@ lexis:
         - "/federalApplicationDetails"
         - "viewFederalApplication"
         - "manageFederalApplication"
-        - "/applicationReport"
         - "/offerReport"
         - "/teacReport"
         - "/exemptionReport"

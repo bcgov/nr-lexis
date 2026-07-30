@@ -47,6 +47,9 @@ class LexisAuthorizationMatrixParityTest {
   private static final List<String> NON_PERMIT_REPORT_ACTIONS =
       REPORT_ACTIONS.stream().filter(action -> !"/permitReport".equals(action)).toList();
 
+  private static final List<String> APPLICATION_APPROVER_REPORT_ACTIONS =
+      REPORT_ACTIONS.stream().filter(action -> !"/applicationReport".equals(action)).toList();
+
   private static final List<String> FEDERAL_READ_ACTIONS =
       List.of(
           "/federalApplicationSearch",
@@ -224,7 +227,7 @@ class LexisAuthorizationMatrixParityTest {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .containsAll(FEDERAL_READ_ACTIONS)
-        .containsAll(REPORT_ACTIONS)
+        .containsAll(APPLICATION_APPROVER_REPORT_ACTIONS)
         .contains(
             "/applicationsReview",
             "/changeApplicantType",
@@ -246,6 +249,7 @@ class LexisAuthorizationMatrixParityTest {
             "/filePermitUpload")
         .doesNotContain(
             "/summary",
+            "/applicationReport",
             "/lexisAgentAdmin",
             "/lexisFILAdmin",
             "/lexisPolicyAdmin");

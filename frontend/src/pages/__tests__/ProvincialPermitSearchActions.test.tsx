@@ -102,6 +102,32 @@ describe('Provincial Permit Search Actions', () => {
     expect(screen.queryByRole('link', { name: 'Add Permit' })).not.toBeInTheDocument()
   })
 
+  it('marks active permits as pending without changing the detail route', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    mockedSearchProvincialPermits.mockResolvedValue(
+      permitSearchResponse([
+        {
+          permitNumber: '9020935',
+          status: 'Active',
+          applicantClientNumber: '11111111',
+          ownerClientNumber: '22222222',
+          totalVolume: 120,
+          issueDate: '2026-01-10',
+          region: '11',
+          packageNumber: 'PKG-1',
+          applicationNumber: '3001',
+        },
+      ]),
+    )
+
+    renderPage()
+
+    expect(await screen.findByRole('link', { name: '9020935 (Pending)' })).toHaveAttribute(
+      'href',
+      '/provincial/permit/9020935',
+    )
+  })
+
   it('does not default region filters when opened without query parameters', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
