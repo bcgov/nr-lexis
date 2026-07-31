@@ -36,7 +36,7 @@ const mockedSearchProvincialApplications = vi.mocked(searchProvincialApplication
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 
 const renderPage = (
-  path = '/provincial/application?page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
+  path = '/provincial/application?region=11&page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
 ) => {
   render(
     <MemoryRouter initialEntries={[path]}>
@@ -276,7 +276,9 @@ describe('Provincial Application Search Actions', () => {
   })
 
   it('restores received date filters from the URL and clears them', async () => {
-    renderPage('/provincial/application?receivedFromDate=2026-01-01&receivedToDate=2026-01-31')
+    renderPage(
+      '/provincial/application?receivedFromDate=2026-01-01&receivedToDate=2026-01-31&region=11',
+    )
     await screen.findByText('321')
 
     expect(screen.getByLabelText('Received from date')).toHaveValue('2026-01-01')
@@ -301,6 +303,7 @@ describe('Provincial Application Search Actions', () => {
           filters: expect.objectContaining({
             receivedFromDate: '',
             receivedToDate: '',
+            region: ['11'],
           }),
         }),
         expect.any(Object),
@@ -465,12 +468,14 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('opens without results or a search request when no search has been applied', async () => {
+  it('defaults all regions without searching when no search has been applied', async () => {
     renderPage('/provincial/application')
     await waitFor(() => {
       expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledOnce()
     })
 
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
     expect(
       screen.getByRole('region', { name: 'Search results table', hidden: true }),
@@ -478,7 +483,7 @@ describe('Provincial Application Search Actions', () => {
   })
 
   it('loads an export schedule link and explicitly submits its removal', async () => {
-    renderPage('/provincial/application?exportScheduleId=1002')
+    renderPage('/provincial/application?exportScheduleId=1002&region=11')
     await screen.findByText('321')
 
     expect(screen.getByText('Export schedule filter applied')).toBeInTheDocument()
