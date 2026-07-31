@@ -47,6 +47,7 @@ describe('NotificationEditor', () => {
       expect(linkUrl).toHaveFocus()
       expect(prompt).not.toHaveBeenCalled()
       expect(dialog).toHaveClass('cds--modal-container')
+      expect(dialog.closest('.notification-editor__link-modal')?.parentElement).toBe(document.body)
     } finally {
       prompt.mockRestore()
     }

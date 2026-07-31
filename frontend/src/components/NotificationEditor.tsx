@@ -12,6 +12,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import LinkExtension from '@tiptap/extension-link'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import './NotificationEditor.scss'
 
 type NotificationEditorProps = {
@@ -134,112 +135,118 @@ export default function NotificationEditor({
   const linkUrlIsValid = isSupportedLinkUrl(resolvedLinkUrl)
 
   return (
-    <div className="notification-editor">
-      <div className="notification-editor__toolbar" role="toolbar" aria-label="Text formatting">
-        <button
-          type="button"
-          className="notification-editor__toolbar-button"
-          aria-label="Bold"
-          aria-pressed={editor?.isActive('bold') ?? false}
-          title="Bold"
-          disabled={!editorReady || disabled}
-          onClick={() => editor?.chain().focus().toggleBold().run()}
-        >
-          <TextBold size={16} />
-        </button>
-        <button
-          type="button"
-          className="notification-editor__toolbar-button"
-          aria-label="Italic"
-          aria-pressed={editor?.isActive('italic') ?? false}
-          title="Italic"
-          disabled={!editorReady || disabled}
-          onClick={() => editor?.chain().focus().toggleItalic().run()}
-        >
-          <TextItalic size={16} />
-        </button>
-        <button
-          type="button"
-          className="notification-editor__toolbar-button"
-          aria-label="Strikethrough"
-          aria-pressed={editor?.isActive('strike') ?? false}
-          title="Strikethrough"
-          disabled={!editorReady || disabled}
-          onClick={() => editor?.chain().focus().toggleStrike().run()}
-        >
-          <TextStrikethrough size={16} />
-        </button>
-        <button
-          type="button"
-          className="notification-editor__toolbar-button"
-          aria-label="Bulleted list"
-          aria-pressed={editor?.isActive('bulletList') ?? false}
-          title="Bulleted list"
-          disabled={!editorReady || disabled}
-          onClick={() => editor?.chain().focus().toggleBulletList().run()}
-        >
-          <ListBulleted size={16} />
-        </button>
-        <button
-          type="button"
-          className="notification-editor__toolbar-button"
-          aria-label="Numbered list"
-          aria-pressed={editor?.isActive('orderedList') ?? false}
-          title="Numbered list"
-          disabled={!editorReady || disabled}
-          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-        >
-          <ListNumbered size={16} />
-        </button>
-        <button
-          type="button"
-          className="notification-editor__toolbar-button"
-          aria-label="Add or edit link"
-          aria-pressed={editor?.isActive('link') ?? false}
-          title="Add or edit link"
-          disabled={!editorReady || disabled}
-          onClick={openLinkModal}
-          ref={linkButtonRef}
-        >
-          <Link size={16} />
-        </button>
-        <button
-          type="button"
-          className="notification-editor__toolbar-button"
-          aria-label="Remove link"
-          title="Remove link"
-          disabled={!editorReady || disabled || !editor?.isActive('link')}
-          onClick={() => editor?.chain().focus().unsetLink().run()}
-        >
-          <Unlink size={16} />
-        </button>
+    <>
+      <div className="notification-editor">
+        <div className="notification-editor__toolbar" role="toolbar" aria-label="Text formatting">
+          <button
+            type="button"
+            className="notification-editor__toolbar-button"
+            aria-label="Bold"
+            aria-pressed={editor?.isActive('bold') ?? false}
+            title="Bold"
+            disabled={!editorReady || disabled}
+            onClick={() => editor?.chain().focus().toggleBold().run()}
+          >
+            <TextBold size={16} />
+          </button>
+          <button
+            type="button"
+            className="notification-editor__toolbar-button"
+            aria-label="Italic"
+            aria-pressed={editor?.isActive('italic') ?? false}
+            title="Italic"
+            disabled={!editorReady || disabled}
+            onClick={() => editor?.chain().focus().toggleItalic().run()}
+          >
+            <TextItalic size={16} />
+          </button>
+          <button
+            type="button"
+            className="notification-editor__toolbar-button"
+            aria-label="Strikethrough"
+            aria-pressed={editor?.isActive('strike') ?? false}
+            title="Strikethrough"
+            disabled={!editorReady || disabled}
+            onClick={() => editor?.chain().focus().toggleStrike().run()}
+          >
+            <TextStrikethrough size={16} />
+          </button>
+          <button
+            type="button"
+            className="notification-editor__toolbar-button"
+            aria-label="Bulleted list"
+            aria-pressed={editor?.isActive('bulletList') ?? false}
+            title="Bulleted list"
+            disabled={!editorReady || disabled}
+            onClick={() => editor?.chain().focus().toggleBulletList().run()}
+          >
+            <ListBulleted size={16} />
+          </button>
+          <button
+            type="button"
+            className="notification-editor__toolbar-button"
+            aria-label="Numbered list"
+            aria-pressed={editor?.isActive('orderedList') ?? false}
+            title="Numbered list"
+            disabled={!editorReady || disabled}
+            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+          >
+            <ListNumbered size={16} />
+          </button>
+          <button
+            type="button"
+            className="notification-editor__toolbar-button"
+            aria-label="Add or edit link"
+            aria-pressed={editor?.isActive('link') ?? false}
+            title="Add or edit link"
+            disabled={!editorReady || disabled}
+            onClick={openLinkModal}
+            ref={linkButtonRef}
+          >
+            <Link size={16} />
+          </button>
+          <button
+            type="button"
+            className="notification-editor__toolbar-button"
+            aria-label="Remove link"
+            title="Remove link"
+            disabled={!editorReady || disabled || !editor?.isActive('link')}
+            onClick={() => editor?.chain().focus().unsetLink().run()}
+          >
+            <Unlink size={16} />
+          </button>
+        </div>
+        <EditorContent editor={editor} />
       </div>
-      <EditorContent editor={editor} />
-      <Modal
-        open={isLinkModalOpen}
-        size="sm"
-        modalHeading="Add or edit link"
-        aria-label="Add or edit link"
-        launcherButtonRef={linkButtonRef}
-        selectorPrimaryFocus={`#${linkInputId}`}
-        primaryButtonText="Apply link"
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={!linkUrlIsValid}
-        onRequestClose={closeLinkModal}
-        onSecondarySubmit={closeLinkModal}
-        onRequestSubmit={applyLink}
-      >
-        <TextInput
-          id={linkInputId}
-          labelText="Link URL"
-          helperText="Enter an HTTPS URL or mailto link. Clear the URL to remove an existing link."
-          value={linkUrl}
-          invalid={!linkUrlIsValid}
-          invalidText="Enter a valid HTTPS URL or mailto link."
-          disabled={disabled}
-          onChange={(event) => setLinkUrl(event.currentTarget.value)}
-        />
-      </Modal>
-    </div>
+      {createPortal(
+        <Modal
+          open={isLinkModalOpen}
+          className="notification-editor__link-modal"
+          size="sm"
+          modalHeading="Add or edit link"
+          aria-label="Add or edit link"
+          launcherButtonRef={linkButtonRef}
+          selectorPrimaryFocus={`#${linkInputId}`}
+          primaryButtonText="Apply link"
+          secondaryButtonText="Cancel"
+          primaryButtonDisabled={!linkUrlIsValid}
+          onRequestClose={closeLinkModal}
+          onSecondarySubmit={closeLinkModal}
+          onRequestSubmit={applyLink}
+        >
+          <TextInput
+            id={linkInputId}
+            labelText="Link URL"
+            helperText="Enter an HTTPS URL or mailto link. Clear the URL to remove an existing link."
+            value={linkUrl}
+            invalid={!linkUrlIsValid}
+            invalidText="Enter a valid HTTPS URL or mailto link."
+            disabled={disabled}
+            onChange={(event) => setLinkUrl(event.currentTarget.value)}
+          />
+        </Modal>,
+        document.body,
+      )}
+    </>
   )
 }

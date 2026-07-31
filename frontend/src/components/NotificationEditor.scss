@@ -3,6 +3,10 @@
   background: var(--cds-layer);
 }
 
+.notification-editor__link-modal {
+  z-index: 9001;
+}
+
 .notification-editor:focus-within {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: 2px;
