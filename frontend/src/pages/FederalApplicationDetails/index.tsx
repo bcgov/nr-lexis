@@ -246,7 +246,7 @@ const FederalApplicationDetailsPage = () => {
     : 'owner'
   const selectedFederalApplicationTabIndex = Math.max(
     0,
-    federalApplicationDetailTabs.indexOf(activeFederalApplicationTab),
+    FEDERAL_APPLICATION_DETAIL_TAB_SLOTS.indexOf(activeFederalApplicationTab),
   )
 
   const withCurrentSearch = useCallback(
@@ -914,7 +914,9 @@ const FederalApplicationDetailsPage = () => {
             <Tabs
               selectedIndex={selectedFederalApplicationTabIndex}
               onChange={({ selectedIndex }) => {
-                selectFederalApplicationTab(federalApplicationDetailTabs[selectedIndex] ?? 'owner')
+                selectFederalApplicationTab(
+                  FEDERAL_APPLICATION_DETAIL_TAB_SLOTS[selectedIndex] ?? 'owner',
+                )
               }}
             >
               <TabList
