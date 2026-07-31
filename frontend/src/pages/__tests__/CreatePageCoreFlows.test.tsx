@@ -802,7 +802,7 @@ describe('Create Page Core Flows', () => {
         today,
       )
       expect(screen.getByRole('textbox', { name: 'Application term days' })).toHaveValue('180')
-      expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue(today)
+      expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue('')
       expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-07-01')
     })
 

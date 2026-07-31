@@ -339,6 +339,53 @@ const ProvincialPermitPage = () => {
     void loadOptions()
   }, [])
 
+  useEffect(() => {
+    if (
+      optionsLoading ||
+      optionsUnavailable ||
+      searchParams.has('region') ||
+      regionOptions.length === 0
+    ) {
+      return
+    }
+
+    const defaultRegions = regionOptions.map((region) => region.id)
+    if (hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          {
+            ...urlState.filters,
+            region: defaultRegions,
+          },
+          urlState.sortField,
+          urlState.sortDirection,
+          urlState.page,
+          urlState.pageSize,
+        ),
+        { replace: true },
+      )
+      return
+    }
+
+    setFilters((currentFilters) =>
+      currentFilters.region.length > 0
+        ? currentFilters
+        : {
+            ...currentFilters,
+            region: defaultRegions,
+          },
+    )
+  }, [
+    hasSearchQuery,
+    optionsLoading,
+    optionsUnavailable,
+    regionOptions,
+    searchParams,
+    setFilters,
+    setSearchParams,
+    urlState,
+  ])
+
   const onSearch = () => {
     if (loading || hasDateValidationError) {
       return
@@ -367,10 +414,14 @@ const ProvincialPermitPage = () => {
   }
 
   const onClearFilters = () => {
-    setFilters(INITIAL_FILTERS)
+    const defaultFilters = {
+      ...INITIAL_FILTERS,
+      region: regionOptions.map((region) => region.id),
+    }
+    setFilters(defaultFilters)
     setSearchParams(
       buildSearchParams(
-        INITIAL_FILTERS,
+        defaultFilters,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,

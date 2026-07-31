@@ -194,7 +194,15 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "ADVERTISING_DATE"),
                 getLocalDate(rs, "OFFER_END_DATE"),
                 getDouble(rs, "EXPORT_PURCHASE_VOLUME"),
-                getString(rs, "REGION")));
+                getString(rs, "REGION"),
+                false,
+                false,
+                false,
+                false,
+                false,
+                null,
+                null,
+                firstNonNull(getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID"))));
   }
 
   public Optional<PurchaseOfferInsertRow> insertOffer(PurchaseOfferInsertRecord record) {

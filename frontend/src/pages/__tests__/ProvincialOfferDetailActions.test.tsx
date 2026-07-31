@@ -53,6 +53,7 @@ const offerDetail: ProvincialOfferDetail = {
   speciesGradeCode: 'FI/HE/LUM',
   offerVolume: 99.99,
   region: '12',
+  author: 'idir\\offer-author',
   canEditScheduleDates: true,
   canEditOfferRemarks: true,
   canEditOfferDetails: true,
@@ -114,6 +115,8 @@ describe('Provincial Offer Detail Actions', () => {
     expect(
       within(pageHeader as HTMLElement).getByRole('button', { name: 'Edit' }),
     ).toBeInTheDocument()
+    expect(screen.getByText('Author')).toBeInTheDocument()
+    expect(screen.getByText('idir\\offer-author')).toBeInTheDocument()
   })
 
   it('groups each offer form area in a distinct section', async () => {

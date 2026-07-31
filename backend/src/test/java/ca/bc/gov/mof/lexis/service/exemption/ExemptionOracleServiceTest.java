@@ -127,7 +127,8 @@ class ExemptionOracleServiceTest {
             "Pending final confirmation",
             false,
             List.of("9020934"),
-            List.of());
+            List.of(),
+            "IDIR\\EDITOR");
 
     when(repository.findByExemptionNumber("26-8758")).thenReturn(Optional.of(dto));
     when(repository.loadExemptionTypeOptions())
@@ -142,6 +143,7 @@ class ExemptionOracleServiceTest {
         .get()
         .extracting(ExemptionDetailDto::exemptionTypeDescription)
         .isEqualTo("Ministerial");
+    assertThat(result).get().extracting(ExemptionDetailDto::author).isEqualTo("IDIR\\EDITOR");
     verify(repository).loadExemptionTypeOptions();
   }
 

@@ -381,6 +381,53 @@ const ProvincialOffersPage = () => {
     }
   }, [defaultListingToDate, hasSearchQuery, isOptionsLoaded, setFilters])
 
+  useEffect(() => {
+    if (
+      !isOptionsLoaded ||
+      offerOptionsUnavailable ||
+      searchParams.has('region') ||
+      regionOptions.length === 0
+    ) {
+      return
+    }
+
+    const defaultRegions = regionOptions.map((region) => region.id)
+    if (hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          {
+            ...urlState.filters,
+            region: defaultRegions,
+          },
+          urlState.sortField,
+          urlState.sortDirection,
+          urlState.page,
+          urlState.pageSize,
+        ),
+        { replace: true },
+      )
+      return
+    }
+
+    setFilters((currentFilters) =>
+      currentFilters.region.length > 0
+        ? currentFilters
+        : {
+            ...currentFilters,
+            region: defaultRegions,
+          },
+    )
+  }, [
+    hasSearchQuery,
+    isOptionsLoaded,
+    offerOptionsUnavailable,
+    regionOptions,
+    searchParams,
+    setFilters,
+    setSearchParams,
+    urlState,
+  ])
+
   const onSearch = () => {
     if (loading || hasDateValidationError) {
       return
@@ -409,10 +456,15 @@ const ProvincialOffersPage = () => {
   }
 
   const onClearFilters = () => {
-    setFilters(INITIAL_FILTERS)
+    const defaultFilters = {
+      ...INITIAL_FILTERS,
+      listingToDate: defaultListingToDate,
+      region: regionOptions.map((region) => region.id),
+    }
+    setFilters(defaultFilters)
     setSearchParams(
       buildSearchParams(
-        INITIAL_FILTERS,
+        defaultFilters,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,

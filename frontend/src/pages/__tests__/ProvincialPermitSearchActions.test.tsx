@@ -51,7 +51,7 @@ const PermitSearchLocation = () => {
 }
 
 const renderPage = (
-  initialEntry = '/provincial/permit?page=1&pageSize=10&sortField=permitNumber&sortDirection=desc',
+  initialEntry = '/provincial/permit?region=11&page=1&pageSize=10&sortField=permitNumber&sortDirection=desc',
 ) => {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -126,11 +126,11 @@ describe('Provincial Permit Search Actions', () => {
 
     expect(await screen.findByRole('link', { name: '9020935 (Pending)' })).toHaveAttribute(
       'href',
-      '/provincial/permit/9020935?page=1&pageSize=10&sortField=permitNumber&sortDirection=desc',
+      '/provincial/permit/9020935?region=11&page=1&pageSize=10&sortField=permitNumber&sortDirection=desc',
     )
   })
 
-  it('opens without results or a search request when no search has been applied', async () => {
+  it('defaults all regions without searching when no search has been applied', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage('/provincial/permit')
@@ -138,6 +138,8 @@ describe('Provincial Permit Search Actions', () => {
       expect(mockedFetchProvincialPermitOptions).toHaveBeenCalledOnce()
     })
 
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
     expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
     expect(
       screen.getByRole('region', { name: 'Search results table', hidden: true }),
@@ -216,7 +218,7 @@ describe('Provincial Permit Search Actions', () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage(
-      '/provincial/permit?invoiceNumber=SI-99881&sortField=permitStatus&sortDirection=desc&page=3&pageSize=25',
+      '/provincial/permit?invoiceNumber=SI-99881&region=11&sortField=permitStatus&sortDirection=desc&page=3&pageSize=25',
     )
 
     const invoiceNumber = await screen.findByLabelText('Invoice number')
@@ -261,6 +263,7 @@ describe('Provincial Permit Search Actions', () => {
         screen.getByTestId('permit-search-location').textContent ?? '',
       )
       expect(currentParams.has('invoiceNumber')).toBe(false)
+      expect(currentParams.get('region')).toBe('11')
       expect(currentParams.get('sortField')).toBe('permitNumber')
       expect(currentParams.get('sortDirection')).toBe('desc')
       expect(currentParams.get('page')).toBe('1')
@@ -275,12 +278,12 @@ describe('Provincial Permit Search Actions', () => {
   it('reuses cached search results when the route remounts with the same URL state', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
-    const firstRender = renderPage('/provincial/permit?permitNumber=7001')
+    const firstRender = renderPage('/provincial/permit?permitNumber=7001&region=11')
     await screen.findByText('7001')
     expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
 
     firstRender.unmount()
-    renderPage('/provincial/permit?permitNumber=7001')
+    renderPage('/provincial/permit?permitNumber=7001&region=11')
 
     await screen.findByText('7001')
     expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
@@ -295,7 +298,7 @@ describe('Provincial Permit Search Actions', () => {
       }),
     )
 
-    renderPage('/provincial/permit?permitStatus=Issued')
+    renderPage('/provincial/permit?permitStatus=Issued&region=11')
     await waitFor(() => expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1))
 
     clearAllPageDataCache()
@@ -368,7 +371,7 @@ describe('Provincial Permit Search Actions', () => {
         ),
       )
 
-    renderPage('/provincial/permit?permitNumber=7001')
+    renderPage('/provincial/permit?permitNumber=7001&region=11')
     await screen.findByText('7001')
 
     await userEvent.click(screen.getByRole('button', { name: /next page/i }))

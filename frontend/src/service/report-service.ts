@@ -123,13 +123,13 @@ const resolveReportFormat = (
 
   const outputFormat = values.outputFormat?.trim().toUpperCase()
   if (reportId === 'tenureReport' && outputFormat === 'CSV') {
-    return 'XLSX'
+    return 'XLS'
   }
   if (outputFormat === 'CSV') {
     return 'CSV'
   }
   if (outputFormat === 'XLS' || outputFormat === 'XLSX') {
-    return 'XLSX'
+    return outputFormat
   }
   if (outputFormat === 'PDF') {
     return 'PDF'

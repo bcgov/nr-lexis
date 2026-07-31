@@ -218,7 +218,7 @@ const buildInitialFormFromQuery = (
       INITIAL_FORM.applicationTermDays,
     applicationTermMonths: query.get('applicationTermMonths') ?? query.get('termMonths') ?? '',
     applicationTermYears: query.get('applicationTermYears') ?? query.get('termYears') ?? '',
-    receivedDate: query.get('receivedDate') ?? today,
+    receivedDate: query.get('receivedDate') ?? INITIAL_FORM.receivedDate,
     exportScheduleId: query.get('exportScheduleId') ?? query.get('legacyExportScheduleId') ?? '',
     listingDate: query.get('listingDate') ?? '',
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',

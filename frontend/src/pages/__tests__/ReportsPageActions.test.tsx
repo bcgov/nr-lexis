@@ -260,6 +260,8 @@ describe('Reports Page Actions', () => {
         reportId: 'exemptionReport',
         actionMapping: 'generate',
         values: {
+          region: '12',
+          regionLabel: 'Coast',
           exemptionReason: 'SEC128',
           exemptionReasonLabel: 'Section 128',
           growthType: 'O',
@@ -420,7 +422,7 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('leaves unchanged TEAC region criteria unset instead of submitting every region', async () => {
+  it('submits every TEAC region when no default or explicit region is selected', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -456,6 +458,8 @@ describe('Reports Page Actions', () => {
         reportId: 'teacReport',
         actionMapping: 'generate',
         values: {
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
           exportJurisdictionCode: 'P',
           exportJurisdictionCodeLabel: 'Provincial',
           exportSchedule: '1001',
@@ -610,7 +614,7 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('leaves unchanged species and grade regions unset instead of submitting every region', async () => {
+  it('submits every species and grade region when none is selected', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -643,6 +647,8 @@ describe('Reports Page Actions', () => {
         reportId: 'speciesGradeReport',
         actionMapping: 'generate',
         values: {
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
           permitStatus: 'COM',
           permitStatusLabel: 'Complete',
         },
@@ -773,11 +779,14 @@ describe('Reports Page Actions', () => {
     await waitFor(() => {
       expect(getComboBox('Exemption type')).toHaveValue('Ministerial')
     })
+    await userEvent.click(getComboBox('Report variant'))
+    expect(screen.queryByRole('option', { name: 'Forest file report' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
     expect(screen.getByLabelText('Issued from date')).toHaveValue(defaultDates.fromDate)
     expect(screen.getByLabelText('Issued to date')).toHaveValue(defaultDates.toDate)
     expect(getComboBox('Client type')).toHaveValue('Permit holder')
     await chooseComboBoxOption('Exemption type', 'Ministerial')
-    await chooseComboBoxOption('Output format', 'XLSX')
+    await chooseComboBoxOption('Output format', 'XLS')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -790,7 +799,7 @@ describe('Reports Page Actions', () => {
           exemptionTypeLabel: 'Ministerial',
           clientType: 'P',
           clientTypeLabel: 'Permit holder',
-          outputFormat: 'XLSX',
+          outputFormat: 'XLS',
         },
       })
     })
@@ -873,7 +882,6 @@ describe('Reports Page Actions', () => {
     ['Permit details report', 'generatePermitReport'],
     ['Tenure types report', 'generateTenureReport'],
     ['Timber marks report', 'generateMarkReport'],
-    ['Forest file report', 'generateFileReport'],
   ])('submits the %s tenure variant distinctly', async (variantLabel, actionMapping) => {
     mockReportPermissions()
 
@@ -983,6 +991,8 @@ describe('Reports Page Actions', () => {
         actionMapping: 'generate',
         values: {
           outputFormat: 'CSV',
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
           fromDate: '2026-06-01',
           toDate: '2026-06-30',
         },
@@ -1125,7 +1135,7 @@ describe('Reports Page Actions', () => {
     )
   })
 
-  it('does not submit unchanged biweekly listing regions as every region option', async () => {
+  it('submits every biweekly listing region when none is selected', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -1162,6 +1172,8 @@ describe('Reports Page Actions', () => {
         reportId: 'biweeklyListing',
         actionMapping: 'generate',
         values: {
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
           exportJurisdictionCode: 'F',
           exportJurisdictionCodeLabel: 'Federal',
           fromDate: '2026-06-01',

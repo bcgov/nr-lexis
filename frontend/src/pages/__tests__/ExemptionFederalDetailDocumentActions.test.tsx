@@ -1159,6 +1159,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Application')
     expect(await screen.findByText('FED-888')).toBeInTheDocument()
+
+    await selectDetailTab('Shipping Details')
+    expect(
+      await screen.findByRole('heading', { name: 'Shipping details', level: 2 }),
+    ).toBeInTheDocument()
   })
 
   it('shows the federal lock warning and suppresses every mutation and document control', async () => {
