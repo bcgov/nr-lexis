@@ -319,39 +319,6 @@ const fetchRows = async <TRow>(
   }
 }
 
-const fetchPackageList = async (permitNumber: string, blanketOic: boolean): Promise<string[]> => {
-  const path = blanketOic
-    ? '/lexis/rpc/permit-details/oic-package-list'
-    : '/lexis/rpc/permit-details/package-list'
-
-  try {
-    const response = await apiService.getCachedResponse<unknown>(
-      path,
-      {
-        params: {
-          permitNumber,
-        },
-      },
-      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
-    )
-    if (response.status === 204) {
-      throw new Error(`Permit package list service unavailable at ${path}`)
-    }
-
-    const objectPayload = recordOrEmpty(response.data)
-    if (!Array.isArray(objectPayload.packageList)) {
-      throw new Error(`Invalid package list response from ${path}`)
-    }
-
-    const packageList = objectPayload.packageList
-    return packageList
-      .map(asString)
-      .filter((packageNumber) => packageNumber && packageNumber !== 'No Packages')
-  } catch (error) {
-    throw toSearchServiceError(`Unable to load permit package list from ${path}.`, error)
-  }
-}
-
 const normalizePackageInfoRow = (
   packageNumber: string,
   payload: unknown,
@@ -473,17 +440,13 @@ const fetchCoreTabs = async (
   }
 }
 
-const fetchScaleFeeRows = async (
-  permitNumber: string,
-  packageNumber: string,
-): Promise<unknown[]> => {
-  const path = '/lexis/rpc/permit-details/scale-fees-for-package'
+const fetchAllScaleFeeRows = async (permitNumber: string): Promise<unknown[]> => {
+  const path = '/lexis/rpc/permit-details/all-scale-fees'
   try {
     const response = await apiService.getCachedResponse<unknown>(
       path,
       {
         params: {
-          packageNumber,
           permitNumber,
         },
       },
@@ -493,15 +456,22 @@ const fetchScaleFeeRows = async (
       throw new Error(`Permit scale fee service unavailable at ${path}`)
     }
 
-    const rows = parsePayloadArray(response.data, PERMIT_TAB_ARRAY_KEYS)
-    if (!rows) {
-      throw new Error(`Invalid scale fee list response from ${path}`)
+    const payload = recordOrEmpty(response.data)
+    if (!Array.isArray(payload.packageList)) {
+      throw new Error(`Invalid package fee list response from ${path}`)
     }
 
-    return rows.map((row) => ({
-      ...recordOrEmpty(row),
-      packageNumber,
-    }))
+    return payload.packageList.flatMap((packageValue, packageIndex) => {
+      const packageFee = recordOrEmpty(packageValue)
+      const packageNumber = asString(packageFee.packageNumber)
+      if (!packageNumber || !Array.isArray(packageFee.scaleList)) {
+        throw new Error(`Invalid package fee data at index ${packageIndex} from ${path}`)
+      }
+      return packageFee.scaleList.map((row) => ({
+        ...recordOrEmpty(row),
+        packageNumber,
+      }))
+    })
   } catch (error) {
     throw toSearchServiceError(`Unable to load permit scale fees from ${path}.`, error)
   }
@@ -555,14 +525,7 @@ const fetchProvincialPermitDetailTabsData = async (
   // GBMS history is optional, but retain concurrent loading for callers that request the full set.
   const gbmsEventsPromise = includeGbms ? fetchGbmsRows(permitNumber, receiptNumber) : null
   const coreTabs = await fetchCoreTabs(permitNumber, blanketOic)
-  const packageFeeRows = includeFees
-    ? await Promise.all(
-        coreTabs.packageNumbers.map((packageNumber) =>
-          fetchScaleFeeRows(permitNumber, packageNumber),
-        ),
-      )
-    : []
-  const feeRows = packageFeeRows.flat()
+  const feeRows = includeFees ? await fetchAllScaleFeeRows(permitNumber) : []
 
   return {
     applications: coreTabs.applications,
@@ -589,17 +552,18 @@ export const fetchProvincialPermitGbmsEvents = async (
 
 export const fetchProvincialPermitFees = async ({
   permitNumber,
-  blanketOic = false,
   packageNumbers,
 }: ProvincialPermitFeesRequest): Promise<ProvincialPermitFeeRow[]> => {
-  const resolvedPackageNumbers = packageNumbers
-    ? packageNumbers.filter(Boolean)
-    : await fetchPackageList(permitNumber, !!blanketOic)
-  const packageFeeRows = await Promise.all(
-    resolvedPackageNumbers.map((packageNumber) => fetchScaleFeeRows(permitNumber, packageNumber)),
-  )
-
-  return packageFeeRows.flat().map(normalizeScaleFeeRow)
+  const packageFilter = packageNumbers?.filter(Boolean)
+  if (packageFilter && packageFilter.length === 0) {
+    return []
+  }
+  const feeRows = await fetchAllScaleFeeRows(permitNumber)
+  return feeRows
+    .filter(
+      (row) => !packageFilter || packageFilter.includes(asString(recordOrEmpty(row).packageNumber)),
+    )
+    .map(normalizeScaleFeeRow)
 }
 
 export const fetchProvincialPermitDetailTabs = async (

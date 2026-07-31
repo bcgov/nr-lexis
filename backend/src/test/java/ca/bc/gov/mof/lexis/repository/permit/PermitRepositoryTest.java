@@ -22,6 +22,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -110,7 +112,7 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void searchShouldUsePermitPackageAliasesForDynamicCriteria() {
+  void searchShouldUseOneDirectQueryAndExistsForJoinedCriteria() {
     TestPermitRepository repository = new TestPermitRepository();
 
     repository.search(
@@ -131,28 +133,31 @@ class PermitRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("EP.APPLICATION_NUMBER")
-        .contains("ESD.PACKAGE_NUMBER")
-        .contains("EPD.EXPORT_PERMIT_DETAIL_NUMBER")
-        .contains("ESI.EXPORT_SALES_INVOICE_NUMBER")
-        .contains("EPD.ORG_UNIT_NO")
-        .contains("ESD.EXPORT_PERMIT_DETAIL_NUMBER IS NOT NULL")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD")
+        .contains("TO_CHAR(EPD.EXPORT_PERMIT_DETAIL_NUMBER)")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_SALES_INVOICE ESI")
+        .contains("EPD.ORG_UNIT_NO IN (?)")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED")
         .contains(
             "ORDER BY EPD.EXPORT_PERMIT_ISSUE_DATE ASC, EPD.EXPORT_PERMIT_DETAIL_NUMBER ASC")
-        .doesNotContain("v.");
+        .doesNotContain(":1");
+    assertThat(repository.pageSelectSql())
+        .contains("FROM EXPORT_PERMIT_DETAIL EPD")
+        .doesNotContain("FIND_PERMIT_BY_CRITERIA");
     assertThat(repository.bindValues())
         .containsExactly(
             "900123",
             "PKG-1",
             "700001",
-            "2026-01-01",
-            "2026-01-31",
+            java.sql.Date.valueOf("2026-01-01"),
+            java.sql.Date.valueOf("2026-01-31"),
             "ACT",
             "INV-1",
             "00077881",
             "00055667",
             "00055667",
-            "1904");
+            1904L);
   }
 
   @Test
@@ -176,9 +181,9 @@ class PermitRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("CLIENT_NUMBER LIKE '%' || :1 || '%'")
-        .contains("EPD.AGENT_NUMBER LIKE '%' || :2 || '%'")
-        .contains("CLIENT_NUMBER LIKE '%' || :3 || '%' AND EPD.AGENT_NUMBER IS NULL");
+        .contains("EPD.CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("EPD.AGENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("EPD.CLIENT_NUMBER LIKE '%' || ? || '%' AND EPD.AGENT_NUMBER IS NULL");
     assertThat(repository.bindValues())
         .containsExactly("00077881", "00055667", "00055667");
   }
@@ -220,19 +225,20 @@ class PermitRepositoryTest {
 
     repository.search(criteria);
     String searchSql = repository.whereSql();
-    List<String> searchBinds = repository.bindValues();
+    List<Object> searchBinds = repository.bindValues();
 
     repository.count(criteria);
 
     assertThat(searchSql)
-        .contains("CLIENT_NUMBER LIKE")
+        .contains("EPD.CLIENT_NUMBER LIKE")
         .contains("EPD.AGENT_NUMBER LIKE")
         .contains("EPD.CLIENT_NUMBER =")
         .contains("EPD.AGENT_NUMBER =")
-        .contains("EP.OWNER_CLIENT_NUMBER =")
-        .contains("EP.AGENT_CLIENT_NUMBER =")
-        .contains("EP.EXPORT_JURISDICTION_CODE = 'P'")
-        .contains("EP.EXPORT_JURISDICTION_CODE IS NULL")
+        .contains("EP_ACCESS.OWNER_CLIENT_NUMBER =")
+        .contains("EP_ACCESS.AGENT_CLIENT_NUMBER =")
+        .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
+        .contains("NOT EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ANY")
         .doesNotContain("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL");
     assertThat(searchBinds)
         .containsExactly(
@@ -242,19 +248,20 @@ class PermitRepositoryTest {
             "00012345",
             "00012345",
             "00012345",
+            "00012345",
+            "00012345",
             "00012345");
-    assertThat(repository.whereSql()).isEqualTo(searchSql);
-    assertThat(repository.bindValues()).isEqualTo(searchBinds);
+    assertThat(repository.countWhereSql()).isEqualTo(searchSql.substring(0, searchSql.indexOf(" ORDER BY")));
+    assertThat(repository.countBindValues()).isEqualTo(searchBinds);
   }
 
   @Test
-  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
-    List<PermitSearchResultDto> firstPage =
-        java.util.stream.LongStream.rangeClosed(700001L, 700010L)
+  void searchShouldLoadRequestedDirectPageWithCountTotal() {
+    List<PermitSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(700001L, 700011L)
             .mapToObj(PermitRepositoryTest::permitResult)
             .toList();
-    TestPermitRepository repository =
-        new TestPermitRepository(List.<List<?>>of(firstPage, List.of(permitResult(700011L))));
+    TestPermitRepository repository = new TestPermitRepository(rows);
 
     Page<PermitSearchResultDto> results =
         repository.search(
@@ -270,13 +277,51 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void searchShouldUseKnownTotalWithoutCallingCountProcedure() {
-    List<PermitSearchResultDto> firstPage =
-        java.util.stream.LongStream.rangeClosed(700001L, 700010L)
+  void searchShouldNotStitchTwentyLegacyCallsForTwoHundredRows() {
+    List<PermitSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(700001L, 700200L)
             .mapToObj(PermitRepositoryTest::permitResult)
             .toList();
-    TestPermitRepository repository =
-        new TestPermitRepository(List.<List<?>>of(firstPage, List.of(permitResult(700011L))));
+    TestPermitRepository repository = new TestPermitRepository(rows);
+
+    Page<PermitSearchResultDto> results =
+        repository.search(
+            new PermitSearchCriteria(
+                null, null, null, null, null, null, null, null, null, List.of(), null, 0, 200));
+
+    assertThat(results.getNumberOfElements()).isEqualTo(200);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void countShouldUseLightweightSqlWithoutPageOrSortClauses() {
+    TestPermitRepository repository = new TestPermitRepository(List.of(permitResult(700001L)));
+
+    int total =
+        repository.count(
+            new PermitSearchCriteria(
+                null, "PKG-1", null, null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(total).isEqualTo(1);
+    assertThat(repository.countSelectSql())
+        .contains("SELECT COUNT(*)")
+        .contains("FROM EXPORT_PERMIT_DETAIL EPD")
+        .doesNotContain("EXPORT_SCALE_DETAIL");
+    assertThat(repository.countWhereSql())
+        .contains("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD")
+        .doesNotContain("ORDER BY")
+        .doesNotContain("OFFSET")
+        .doesNotContain("FETCH NEXT");
+  }
+
+  @Test
+  void searchShouldUseKnownTotalWithoutCallingCountProcedure() {
+    List<PermitSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(700001L, 700011L)
+            .mapToObj(PermitRepositoryTest::permitResult)
+            .toList();
+    TestPermitRepository repository = new TestPermitRepository(rows);
 
     Page<PermitSearchResultDto> results =
         repository.search(
@@ -297,9 +342,13 @@ class PermitRepositoryTest {
   }
 
   private static final class TestPermitRepository extends PermitRepository {
-    private final List<List<?>> pages;
+    private final List<?> rows;
     private String whereSql;
-    private List<String> bindValues;
+    private List<Object> bindValues;
+    private String pageSelectSql;
+    private String countSelectSql;
+    private String countWhereSql;
+    private List<Object> countBindValues;
     private int countCalls;
     private int pageCalls;
 
@@ -307,17 +356,33 @@ class PermitRepositoryTest {
       this(List.of());
     }
 
-    TestPermitRepository(List<List<?>> pages) {
+    TestPermitRepository(List<?> rows) {
       super(null);
-      this.pages = pages;
+      this.rows = rows;
     }
 
     String whereSql() {
       return whereSql;
     }
 
-    List<String> bindValues() {
+    List<Object> bindValues() {
       return bindValues;
+    }
+
+    String pageSelectSql() {
+      return pageSelectSql;
+    }
+
+    String countSelectSql() {
+      return countSelectSql;
+    }
+
+    String countWhereSql() {
+      return countWhereSql;
+    }
+
+    List<Object> countBindValues() {
+      return countBindValues;
     }
 
     int pageCalls() {
@@ -329,31 +394,31 @@ class PermitRepositoryTest {
     }
 
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
+    protected int queryDirectCount(String selectSql, DirectSql where) {
+      countSelectSql = selectSql;
+      countWhereSql = where.sql();
+      countBindValues = where.bindValues();
       countCalls++;
-      return pages.stream().mapToInt(List::size).sum();
+      return rows.size();
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
+      pageSelectSql = selectSql;
+      whereSql = whereAndOrder.sql();
+      bindValues = whereAndOrder.bindValues();
       pageCalls++;
-      if (page >= pages.size()) {
-        return List.of();
-      }
-      return (List<T>) pages.get(page);
+      int fromIndex = Math.min(rows.size(), Math.max(0, page) * Math.max(1, size));
+      int toIndex = Math.min(rows.size(), fromIndex + Math.max(1, size));
+      List<T> content = (List<T>) rows.subList(fromIndex, toIndex);
+      return new PageImpl<>(content, PageRequest.of(page, size), totalElements);
     }
   }
 

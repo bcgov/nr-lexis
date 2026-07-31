@@ -230,56 +230,28 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public List<DocumentItem> getDocumentDetails(String exemptionNumber) {
-    Map<String, String> attachmentTypeByCode = new LinkedHashMap<>();
-    List<DocumentItem> documents = new ArrayList<>();
-    repository.findExemptionDocumentDetailsByExemptionNumber(exemptionNumber).stream()
-        .map(
-            row ->
-                toDocumentItem(
-                    row,
-                    "exemption",
-                    exemptionNumber,
-                    null,
-                    true,
-                    attachmentTypeByCode))
-        .forEach(documents::add);
-
-    for (ExemptionDetailsRpcRepository.ApplicationSummaryRow application :
-        repository.findApplicationSummariesByExemptionNumber(exemptionNumber)) {
-      repository
-          .findApplicationDocumentDetailsByApplicationNumber(application.applicationNumber())
-          .stream()
-          .map(
-              row ->
-                  toDocumentItem(
-                      row,
-                      "application",
-                      null,
-                      application.applicationNumber(),
-                      false,
-                      attachmentTypeByCode))
-          .forEach(documents::add);
-    }
-
-    return List.copyOf(documents);
+    return repository.findExemptionDocumentContextRows(exemptionNumber).stream()
+        .map(context -> toDocumentItem(exemptionNumber, context))
+        .toList();
   }
 
   private DocumentItem toDocumentItem(
-      ExemptionDetailsRpcRepository.DocumentRow row,
-      String source,
-      String sourceExemptionNumber,
-      Long sourceApplicationNumber,
-      boolean deletable,
-      Map<String, String> attachmentTypeByCode) {
+      String exemptionNumber,
+      ExemptionDetailsRpcRepository.ExemptionDocumentContextRow context) {
+    ExemptionDetailsRpcRepository.DocumentRow row = context.documentRow();
+    String source = trimToNull(context.source());
+    String attachmentTypeCode = trimToNull(row.attachmentTypeCode());
     return new DocumentItem(
         row.id(),
         row.fileName(),
         normalizeDescription(row.description()),
-        resolveAttachmentTypeDescription(row.attachmentTypeCode(), attachmentTypeByCode),
-        source,
-        sourceExemptionNumber,
-        sourceApplicationNumber,
-        deletable);
+        Objects.requireNonNullElse(
+            trimToNull(context.attachmentTypeDescription()),
+            Objects.requireNonNullElse(attachmentTypeCode, "")),
+        Objects.requireNonNullElse(source, ""),
+        "exemption".equals(source) ? exemptionNumber : null,
+        context.sourceApplicationNumber(),
+        context.deletable());
   }
 
   @Override
@@ -834,22 +806,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             recipient,
             senderRoute));
     return true;
-  }
-
-  private String resolveAttachmentTypeDescription(
-      String attachmentTypeCode, Map<String, String> attachmentTypeByCode) {
-    String normalizedCode = trimToNull(attachmentTypeCode);
-    if (normalizedCode == null) {
-      return "";
-    }
-    String cached = attachmentTypeByCode.get(normalizedCode);
-    if (cached != null) {
-      return cached;
-    }
-    String resolved =
-        repository.findAttachmentTypeDescription(normalizedCode).orElse(normalizedCode);
-    attachmentTypeByCode.put(normalizedCode, resolved);
-    return resolved;
   }
 
   private String normalizeDescription(String description) {

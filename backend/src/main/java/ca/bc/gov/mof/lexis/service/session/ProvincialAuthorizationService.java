@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.session;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
@@ -70,6 +71,45 @@ public class ProvincialAuthorizationService {
             .findByApplicationNumber(applicationNumber)
             .map(detail -> canAccessApplication(authentication, detail))
             .orElse(false);
+  }
+
+  /** Authorizes a preloaded application projection without another application lookup. */
+  public boolean canAccessApplication(
+      Authentication authentication, ApplicationAccessContextDto application) {
+    if (application == null || application.applicationNumber() == null
+        || application.applicationNumber() < 1) {
+      return false;
+    }
+    Set<String> currentRoles = roles(authentication);
+    if (currentRoles.contains(ROLE_ADMIN)) {
+      return true;
+    }
+    if ("F".equalsIgnoreCase(application.jurisdictionCode())) {
+      return currentRoles.contains(ROLE_APPLICATION_APPROVER)
+          || (currentRoles.contains(ROLE_READ_ONLY)
+              && canAccessOrgUnits(
+                  authentication,
+                  application.orgUnitNumber() == null
+                      ? List.of()
+                      : List.of(application.orgUnitNumber()),
+                  OrgUnitSurface.FEDERAL_APPLICATION_SEARCH));
+    }
+    if (!"P".equalsIgnoreCase(application.jurisdictionCode())) {
+      return false;
+    }
+    String scopedClientNumber = scopedClientNumber(authentication);
+    if (scopedClientNumber != null) {
+      return matchesClient(
+          scopedClientNumber,
+          application.ownerClientNumber(),
+          application.agentClientNumber());
+    }
+    return canAccessOrgUnits(
+        authentication,
+        application.orgUnitNumber() == null
+            ? List.of()
+            : List.of(application.orgUnitNumber()),
+        OrgUnitSurface.APPLICATION_DETAIL);
   }
 
   public boolean canAccessApplication(

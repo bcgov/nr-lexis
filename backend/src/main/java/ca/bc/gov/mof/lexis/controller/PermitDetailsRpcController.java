@@ -7,6 +7,8 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.firstPresent;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
@@ -285,6 +287,19 @@ public class PermitDetailsRpcController {
         service.getScaleFeesForPackage(packageNumber, permitNumber, isMinistryUser(authentication)));
   }
 
+  @GetMapping("/all-scale-fees")
+  public ResponseEntity<PermitAllScaleFeesRpcResponseDto> getAllScaleFees(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      Authentication authentication) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for all scale fees");
+      return ResponseEntity.noContent().build();
+    }
+    requirePermitAccess(permitNumber, authentication);
+    return ResponseEntity.ok(service.getAllScaleFees(permitNumber, isMinistryUser(authentication)));
+  }
+
   @GetMapping("/scales-for-package")
   public ResponseEntity<PermitScalesForPackageRpcResponseDto> getScalesForPackage(
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
@@ -364,7 +379,8 @@ public class PermitDetailsRpcController {
     }
     requirePermitAccess(permitNumber, authentication);
     return ResponseEntity.ok(
-        service.getCoreTabs(permitNumber, blanketOic, applicationAccessPredicate(authentication)));
+        service.getCoreTabs(
+            permitNumber, blanketOic, applicationContextAccessPredicate(authentication)));
   }
 
   @GetMapping("/package-info")
@@ -1495,6 +1511,18 @@ public class PermitDetailsRpcController {
             && provincialAuthorizationService != null
             && provincialAuthorizationService.canAccessApplication(
                 authentication, applicationNumber);
+  }
+
+  private Predicate<ApplicationAccessContextDto> applicationContextAccessPredicate(
+      Authentication authentication) {
+    boolean canViewApplicationDetails =
+        authorizationService.canPerformAction(
+            sessionService.parseRolesFromPrincipal(authentication),
+            LEGACY_ACTION_APPLICATION_DETAILS);
+    return application ->
+        canViewApplicationDetails
+            && provincialAuthorizationService != null
+            && provincialAuthorizationService.canAccessApplication(authentication, application);
   }
 
   private void requirePackageAccess(

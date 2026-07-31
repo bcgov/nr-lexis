@@ -12,12 +12,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitDocumentContextRow;
 import java.io.ByteArrayOutputStream;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataRetrievalFailureException;
 
@@ -197,6 +201,149 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  void permitFeeScaleRowsShouldLoadScaleCodesAndAmvInOneDirectQuery() throws Exception {
+    when(resultSet.getString(anyString()))
+        .thenAnswer(
+            invocation ->
+                switch ((String) invocation.getArgument(0)) {
+                  case "EXPORT_SCALE_DETAIL_ID" -> "101";
+                  case "TIMBER_MARK" -> "TM-1";
+                  case "EXPORT_SPECIES_CODE" -> "HE";
+                  case "EXPORT_GRADE_CODE" -> "A";
+                  case "EXPORT_PERMIT_DETAIL_NUMBER" -> "7000123";
+                  case "PACKAGE_NUMBER" -> "PKG-100";
+                  case "APPLICATION_PRODUCT_TYPE_CODE" -> "T";
+                  case "SPECIES_DESCRIPTION" -> "Hemlock";
+                  case "GRADE_DESCRIPTION" -> "Grade A";
+                  case "PACKAGE_GROWTH_TYPE_CODE" -> "S";
+                  case "PACKAGE_GROWTH_TYPE_DESCRIPTION" -> "Second Growth";
+                  default -> null;
+                });
+    when(resultSet.getDouble("SPECIES_GRADE_VOLUME")).thenReturn(7.5d);
+    when(resultSet.getLong("PIECES_COUNT")).thenReturn(12L);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(resultSet.getBigDecimal("AVERAGE_MARKET_PRICE")).thenReturn(new java.math.BigDecimal("125.00"));
+    when(resultSet.wasNull()).thenReturn(false);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq(7000123L)))
+        .thenAnswer(
+            invocation ->
+                List.of(
+                    ((RowMapper<PermitRpcRepository.PermitFeeScaleRow>) invocation.getArgument(1))
+                        .mapRow(resultSet, 0)));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    var rows = repository.findPermitFeeScaleRows(7000123L);
+
+    assertThat(rows).hasSize(1);
+    assertThat(rows.get(0).applicationProductTypeCode()).isEqualTo("T");
+    assertThat(rows.get(0).speciesDescription()).isEqualTo("Hemlock");
+    assertThat(rows.get(0).averageMarketValue()).isEqualByComparingTo("125.00");
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("WITH SCALE_CONTEXT AS")
+        .contains("FROM EXPORT_SCALE_DETAIL SD")
+        .contains("EEA.EXPORT_PRODUCT_TYPE_CODE AS APPLICATION_PRODUCT_TYPE_CODE")
+        .contains("SCALE_AMV_DATE AS")
+        .contains("MAX(ELA.EFFECTIVE_DATE) AS EFFECTIVE_DATE")
+        .contains("LEFT JOIN EXPORT_LOG_AMV ELA")
+        .contains("ELA.EFFECTIVE_DATE <= TRUNC(SC.PERMIT_APPLICATION_DATE, 'MONTH')")
+        .contains("WHEN P.APPLICATION_NUMBER IS NULL THEN EPD.EXPORT_GROWTH_TYPE_CODE")
+        .contains("WHERE SD.EXPORT_PERMIT_DETAIL_NUMBER = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void corePackageContextsShouldUseOneDirectPermitQuery() {
+    when(
+            jdbcTemplate.query(
+                any(String.class), any(RowMapper.class), eq(7000123L), eq(7000123L)))
+        .thenReturn(List.of());
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findCorePackageContexts(7000123L, false)).isEmpty();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sql.capture(), any(RowMapper.class), eq(7000123L), eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("FROM EXPORT_PACKAGE P")
+        .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("LEFT JOIN EXPORT_EXEMPTION EE")
+        .contains("ASSIGNED_TO_PERMIT")
+        .contains("TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("ORDER BY P.PACKAGE_NUMBER");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void coreScaleRowsShouldBindAllPackagesInOneQuery() {
+    when(
+            jdbcTemplate.query(
+                any(String.class),
+                any(RowMapper.class),
+                eq("PKG-100"),
+                eq("PKG-200"),
+                eq(7000123L)))
+        .thenReturn(List.of());
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(
+            repository.findCoreScaleRows(
+                List.of("PKG-200", "PKG-100", "PKG-100"), 7000123L, false))
+        .isEmpty();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(
+            sql.capture(),
+            any(RowMapper.class),
+            eq("PKG-100"),
+            eq("PKG-200"),
+            eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("WHERE SD.PACKAGE_NUMBER IN (?, ?)")
+        .contains("SD.EXPORT_PERMIT_DETAIL_NUMBER IS NULL")
+        .contains("OR SD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("ORDER BY SD.PACKAGE_NUMBER");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void coreEndUsesShouldBindApplicationsAndPackagesInOneQuery() {
+    when(
+            jdbcTemplate.query(
+                any(String.class),
+                any(RowMapper.class),
+                eq(1000456L),
+                eq(1000457L),
+                eq("PKG-100")))
+        .thenReturn(List.of());
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(
+            repository.findCoreEndUseRows(
+                List.of(1000457L, 1000456L), List.of("PKG-100")))
+        .isEmpty();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(
+            sql.capture(),
+            any(RowMapper.class),
+            eq(1000456L),
+            eq(1000457L),
+            eq("PKG-100"));
+    assertThat(sql.getValue())
+        .contains("EEASE.APPLICATION_NUMBER IN (?, ?)")
+        .contains("EEASE.PACKAGE_NUMBER IN (?)")
+        .contains("'APPLICATION' AS ROW_KIND")
+        .contains("'PACKAGE' AS ROW_KIND")
+        .contains("'CANDIDATE' AS ROW_KIND");
+  }
+
+  @Test
   void findAllCountryCodesShouldUseOracleRowsWhenAvailable() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, false);
@@ -327,6 +474,90 @@ class PermitRpcRepositoryTest {
     when(resultSet.next()).thenReturn(false);
 
     assertThat(repository.isPermitFileAttachmentRequired(56L)).isFalse();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void permitDocumentContextShouldLoadEveryDocumentRelationshipInOneQuery() throws Exception {
+    when(resultSet.getString(anyString()))
+        .thenAnswer(
+            invocation ->
+                switch ((String) invocation.getArgument(0)) {
+                  case "FILE_NAME" -> "invoice.pdf";
+                  case "DESCRIPTION" -> "Sales invoice";
+                  case "EXPORT_ATTACHMENT_TYPE_CODE" -> "INV";
+                  case "ATTACHMENT_TYPE_DESCRIPTION" -> "Invoice";
+                  case "DOCUMENT_SOURCE" -> "invoice";
+                  default -> null;
+                });
+    when(resultSet.getLong("EXPORT_ATTACHMENT_ID")).thenReturn(50L);
+    when(resultSet.getLong("SOURCE_APPLICATION_NUMBER")).thenReturn(0L);
+    when(resultSet.getLong("SOURCE_PERMIT_NUMBER")).thenReturn(7000123L);
+    when(resultSet.getLong("DELETABLE")).thenReturn(1L);
+    when(resultSet.wasNull()).thenReturn(false, true, false, false);
+    when(
+            jdbcTemplate.query(
+                any(String.class),
+                any(RowMapper.class),
+                eq(7000123L),
+                eq(7000123L),
+                eq(7000123L)))
+        .thenAnswer(
+            invocation ->
+                List.of(
+                    ((RowMapper<PermitDocumentContextRow>) invocation.getArgument(1))
+                        .mapRow(resultSet, 0)));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    List<PermitDocumentContextRow> rows = repository.findPermitDocumentContextRows(7000123L);
+
+    assertThat(rows).hasSize(1);
+    assertThat(rows.get(0).documentRow().fileName()).isEqualTo("invoice.pdf");
+    assertThat(rows.get(0).source()).isEqualTo("invoice");
+    assertThat(rows.get(0).sourceApplicationNumber()).isNull();
+    assertThat(rows.get(0).sourcePermitNumber()).isEqualTo(7000123L);
+    assertThat(rows.get(0).deletable()).isTrue();
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(
+            sql.capture(),
+            any(RowMapper.class),
+            eq(7000123L),
+            eq(7000123L),
+            eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("WITH PERMIT_APPLICATIONS AS")
+        .contains("FROM EXPORT_PERMIT_FILE_ATTACHMENT")
+        .contains("FROM EXPORT_SALES_INVCE_FILE_ATTACH")
+        .contains("INNER JOIN EXPORT_APPL_FILE_ATTCHMNT")
+        .contains("LEFT JOIN EXPORT_ATTACHMENT_TYPE_CODE")
+        .contains("INVALID_APPLICATION_RELATIONSHIP");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void permitDocumentContextShouldRejectInvalidPackageApplicationRelationship() {
+    when(
+            jdbcTemplate.query(
+                any(String.class),
+                any(RowMapper.class),
+                eq(7000123L),
+                eq(7000123L),
+                eq(7000123L)))
+        .thenReturn(
+            List.of(
+                new PermitDocumentContextRow(
+                    new DocumentRow(0L, null, null, null),
+                    null,
+                    "INVALID_APPLICATION_RELATIONSHIP",
+                    null,
+                    null,
+                    false)));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findPermitDocumentContextRows(7000123L))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("invalid application relationship");
   }
 
   @Test

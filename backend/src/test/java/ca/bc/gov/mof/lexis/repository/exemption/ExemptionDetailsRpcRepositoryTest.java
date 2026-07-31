@@ -64,6 +64,61 @@ class ExemptionDetailsRpcRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  void documentContextShouldLoadAllLinkedDocumentsInOneDirectQuery() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("EXPORT_ATTACHMENT_ID")).thenReturn(20L);
+    when(resultSet.getLong("SOURCE_APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(resultSet.getLong("DELETABLE")).thenReturn(0L);
+    when(resultSet.getString("FILE_NAME")).thenReturn("application.pdf");
+    when(resultSet.getString("DESCRIPTION")).thenReturn("desc");
+    when(resultSet.getString("EXPORT_ATTACHMENT_TYPE_CODE")).thenReturn("UPLOAD");
+    when(resultSet.getString("ATTACHMENT_TYPE_DESCRIPTION"))
+        .thenReturn("Uploaded document");
+    when(resultSet.getString("DOCUMENT_SOURCE")).thenReturn("application");
+    when(resultSet.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.query(
+                any(String.class),
+                any(RowMapper.class),
+                eq("EX-205"),
+                eq("EX-205")))
+        .thenAnswer(
+            invocation ->
+                List.of(
+                    ((RowMapper<ExemptionDetailsRpcRepository.ExemptionDocumentContextRow>)
+                            invocation.getArgument(1))
+                        .mapRow(resultSet, 0)));
+    ExemptionDetailsRpcRepository repository =
+        new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findExemptionDocumentContextRows(" EX-205 "))
+        .singleElement()
+        .satisfies(
+            document -> {
+              assertThat(document.documentRow().id()).isEqualTo(20L);
+              assertThat(document.attachmentTypeDescription())
+                  .isEqualTo("Uploaded document");
+              assertThat(document.source()).isEqualTo("application");
+              assertThat(document.sourceApplicationNumber()).isEqualTo(1000456L);
+              assertThat(document.deletable()).isFalse();
+            });
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(
+            sql.capture(),
+            any(RowMapper.class),
+            eq("EX-205"),
+            eq("EX-205"));
+    assertThat(sql.getValue())
+        .contains("FROM EXPORT_EXEMPT_FILE_ATTCHMNT EEFA")
+        .contains("INNER JOIN EXPORT_APPL_FILE_ATTCHMNT EAFA")
+        .contains("LEFT JOIN EXPORT_ATTACHMENT_TYPE_CODE EATC")
+        .contains("ORDER BY DR.SOURCE_ORDER");
+  }
+
+  @Test
   void fileDeleteShouldPropagateOracleFailure() {
     ExemptionDetailsRpcRepository repository = new FailingExemptionDetailsRpcRepository();
 

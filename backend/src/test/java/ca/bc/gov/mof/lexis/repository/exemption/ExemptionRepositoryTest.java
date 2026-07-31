@@ -29,6 +29,8 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -115,9 +117,9 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void searchShouldUseExemptionPackageAliasesForDynamicCriteria() {
+  void searchShouldUseOneDirectQueryWithCorrelatedPackageAndRegionFilters() {
     TestExemptionRepository repository =
-        new TestExemptionRepository(List.of(List.of(exemptionResult("EX-1"))));
+        new TestExemptionRepository(List.of(exemptionResult("EX-1")));
 
     repository.search(
         new ExemptionSearchCriteria(
@@ -137,16 +139,20 @@ class ExemptionRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("EEA.APPLICATION_NUMBER")
-        .contains("EP.PACKAGE_NUMBER")
+        .contains("TO_CHAR(EEA.APPLICATION_NUMBER)")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP")
         .contains("EE.EXEMPTION_NUMBER")
         .contains("ES.ADVERTISING_DATE")
-        .contains("EO.ORG_UNIT_NO")
+        .contains("EEA_REGION.ORG_UNIT_NO IN (?)")
+        .contains("OEO_REGION.ORG_UNIT_NO IN (?)")
         .contains("MAX(CANON_EEA.APPLICATION_NUMBER)")
         .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST")
-        .contains("GROUP BY EE.EXEMPTION_NUMBER")
         .contains("ORDER BY EE.EXEMPTION_NUMBER DESC")
-        .doesNotContain(" v.");
+        .doesNotContain(":1");
+    assertThat(repository.pageSelectSql())
+        .contains("WITH PERMIT_VOLUME_BY_EXEMPTION AS")
+        .contains("SELECT DISTINCT")
+        .doesNotContain("FIND_EXEMPTIONS_BY_CRITERIA");
     assertThat(repository.bindValues())
         .containsExactly(
             "900123",
@@ -157,18 +163,19 @@ class ExemptionRepositoryTest {
             "00077881",
             "00055667",
             "00055667",
-            "2026-01-01",
-            "2026-01-31",
-            "2026-02-01",
-            "2026-02-28",
-            "1904",
+            java.sql.Date.valueOf("2026-01-01"),
+            java.sql.Date.valueOf("2026-01-31"),
+            java.sql.Date.valueOf("2026-02-01"),
+            java.sql.Date.valueOf("2026-02-28"),
+            1904L,
+            1904L,
             "900123",
             "PKG-1",
             "00077881",
             "00055667",
             "00055667",
-            "2026-02-01",
-            "2026-02-28");
+            java.sql.Date.valueOf("2026-02-01"),
+            java.sql.Date.valueOf("2026-02-28"));
   }
 
   @Test
@@ -180,7 +187,8 @@ class ExemptionRepositoryTest {
             null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
 
     assertThat(repository.whereSql())
-        .doesNotContain("EO.ORG_UNIT_NO")
+        .doesNotContain("EEA_REGION.ORG_UNIT_NO")
+        .doesNotContain("OEO_REGION.ORG_UNIT_NO")
         .doesNotContain("TO_NUMBER(0)");
     assertThat(repository.bindValues()).isEmpty();
   }
@@ -210,12 +218,20 @@ class ExemptionRepositoryTest {
     assertThat(repository.whereSql())
         .contains("EEA.AGENT_CLIENT_NUMBER")
         .contains("EEA.OWNER_CLIENT_NUMBER")
-        .contains("EO.ORG_UNIT_NO")
+        .contains("EEA_REGION.ORG_UNIT_NO")
+        .contains("OEO_REGION.ORG_UNIT_NO")
         .contains("OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
         .doesNotContain("EEA.AGENT_CLIENT_NUMBER IS NULL");
     assertThat(repository.bindValues())
         .containsExactly(
-            "00012345", "00012345", "76", "1826", "00012345", "00012345");
+            "00012345",
+            "00012345",
+            76L,
+            1826L,
+            76L,
+            1826L,
+            "00012345",
+            "00012345");
   }
 
   @Test
@@ -243,8 +259,8 @@ class ExemptionRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("EEA.AGENT_CLIENT_NUMBER LIKE '%' || :1 || '%'")
-        .contains("EEA.OWNER_CLIENT_NUMBER LIKE '%' || :2 || '%'")
+        .contains("EEA.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("EEA.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'")
         .contains("EEA.AGENT_CLIENT_NUMBER IS NULL");
     assertThat(repository.bindValues())
         .containsExactly("00055667", "00055667", "00055667", "00055667");
@@ -295,6 +311,11 @@ class ExemptionRepositoryTest {
         .contains("EE.EXEMPTION_NUMBER")
         .doesNotContain("GROUP BY")
         .doesNotContain("ORDER BY EE.");
+    assertThat(repository.countSelectSql())
+        .contains("SELECT COUNT(*)")
+        .contains("SELECT DISTINCT")
+        .doesNotContain("EXPORT_PERMIT_DETAIL")
+        .doesNotContain("EXEMPTION_ORG_UNIT");
     assertThat(repository.bindValues()).containsExactly("EX-1");
   }
 
@@ -320,23 +341,26 @@ class ExemptionRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("EEA.APPLICATION_NUMBER LIKE '%' || :1 || '%'")
-        .contains("ES.ADVERTISING_DATE >= TO_DATE(:2, 'YYYY-MM-DD')")
-        .contains("CANON_EEA.APPLICATION_NUMBER LIKE '%' || :3 || '%'")
-        .contains("CANON_ES.ADVERTISING_DATE >= TO_DATE(:4, 'YYYY-MM-DD')")
+        .contains("TO_CHAR(EEA.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
+        .contains("ES.ADVERTISING_DATE >= ?")
+        .contains("TO_CHAR(CANON_EEA.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
+        .contains("CANON_ES.ADVERTISING_DATE >= ?")
         .doesNotContain("GROUP BY", "ORDER BY EE.");
     assertThat(repository.bindValues())
-        .containsExactly("900123", "2026-02-01", "900123", "2026-02-01");
+        .containsExactly(
+            "900123",
+            java.sql.Date.valueOf("2026-02-01"),
+            "900123",
+            java.sql.Date.valueOf("2026-02-01"));
   }
 
   @Test
-  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
-    List<ExemptionSearchResultDto> firstPage =
-        java.util.stream.LongStream.rangeClosed(1L, 10L)
+  void searchShouldLoadRequestedDirectPageWithCountTotal() {
+    List<ExemptionSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(1L, 11L)
             .mapToObj(number -> exemptionResult("EX-" + number))
             .toList();
-    TestExemptionRepository repository =
-        new TestExemptionRepository(List.<List<?>>of(firstPage, List.of(exemptionResult("EX-11"))));
+    TestExemptionRepository repository = new TestExemptionRepository(rows);
 
     Page<ExemptionSearchResultDto> results =
         repository.search(
@@ -350,11 +374,29 @@ class ExemptionRepositoryTest {
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
+  @Test
+  void searchShouldNotStitchTwentyLegacyCallsForTwoHundredRows() {
+    List<ExemptionSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(1L, 200L)
+            .mapToObj(number -> exemptionResult("EX-" + number))
+            .toList();
+    TestExemptionRepository repository = new TestExemptionRepository(rows);
+
+    Page<ExemptionSearchResultDto> results =
+        repository.search(
+            new ExemptionSearchCriteria(
+                null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 200));
+
+    assertThat(results.getNumberOfElements()).isEqualTo(200);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
   @ParameterizedTest
   @MethodSource("supportedSortOrders")
   void searchShouldApplyOnlyWhitelistedSortFields(String requestedSort, String expectedOrder) {
     TestExemptionRepository repository =
-        new TestExemptionRepository(List.of(List.of(exemptionResult("EX-1"))));
+        new TestExemptionRepository(List.of(exemptionResult("EX-1")));
 
     repository.search(criteriaWithSort(requestedSort));
 
@@ -364,7 +406,7 @@ class ExemptionRepositoryTest {
   @Test
   void searchShouldDiscardUntrustedSortTextAndUseTheLegacyDefault() {
     TestExemptionRepository repository =
-        new TestExemptionRepository(List.of(List.of(exemptionResult("EX-1"))));
+        new TestExemptionRepository(List.of(exemptionResult("EX-1")));
 
     repository.search(criteriaWithSort("balanceRemaining DESC NULLS LAST; DELETE FROM X"));
 
@@ -375,24 +417,31 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void searchShouldSelectOneLinkedApplicationWithoutChangingTheLegacyPackageGroupBy() {
+  void searchShouldSelectOneCanonicalLinkedApplication() {
     TestExemptionRepository repository =
-        new TestExemptionRepository(List.of(List.of(exemptionResult("EX-1"))));
+        new TestExemptionRepository(List.of(exemptionResult("EX-1")));
 
     repository.search(criteriaWithSort(null));
 
     assertThat(repository.whereSql())
         .contains("EEA.APPLICATION_NUMBER IS NULL")
         .contains("MAX(CANON_EEA.APPLICATION_NUMBER)")
-        .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST");
-    String groupAndOrder =
-        repository.whereSql().substring(repository.whereSql().indexOf(" GROUP BY "));
-    assertThat(groupAndOrder)
-        .doesNotContain("EEA.APPLICATION_NUMBER")
-        .contains(
-            "EEA.AGENT_CLIENT_NUMBER",
-            "EEA.OWNER_CLIENT_NUMBER",
-            "ES.ADVERTISING_DATE");
+        .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST")
+        .doesNotContain("GROUP BY");
+  }
+
+  @Test
+  void searchShouldPreaggregatePermitVolumeBeforeJoiningApplications() {
+    TestExemptionRepository repository =
+        new TestExemptionRepository(List.of(exemptionResult("EX-1")));
+
+    repository.search(criteriaWithSort(null));
+
+    assertThat(repository.pageSelectSql())
+        .contains("PERMIT_VOLUME_BY_EXEMPTION AS")
+        .contains("SUM(PERMIT_VOLUME) AS USED_VOLUME")
+        .contains("LEFT JOIN PERMIT_VOLUME_BY_EXEMPTION PV")
+        .doesNotContain("LEFT JOIN EXPORT_PERMIT_DETAIL EPD");
   }
 
   @Test
@@ -517,32 +566,47 @@ class ExemptionRepositoryTest {
         Arguments.of("ownerClientNumber", "ORDER BY OWNER_CLIENT_NUMBER ASC"),
         Arguments.of("approvedVolume DESC", "ORDER BY EE.APPROVED_VOLUME DESC"),
         Arguments.of("balanceRemaining", "ORDER BY VOLUME_REMAINING ASC"),
-        Arguments.of("listingDate DESC", "ORDER BY ES.ADVERTISING_DATE DESC"),
+        Arguments.of("listingDate DESC", "ORDER BY ADVERTISING_DATE DESC"),
         Arguments.of("expiryDate", "ORDER BY EE.EXPIRY_DATE ASC"),
         Arguments.of("region DESC", "ORDER BY EO.ORG_UNIT_NAME DESC"));
   }
 
   private static final class TestExemptionRepository extends ExemptionRepository {
-    private final List<List<?>> pages;
+    private final List<?> rows;
     private String whereSql;
-    private List<String> bindValues;
+    private List<Object> bindValues;
+    private String pageSelectSql;
+    private String countSelectSql;
+    private int countCalls;
     private int pageCalls;
 
     TestExemptionRepository() {
       this(List.of());
     }
 
-    TestExemptionRepository(List<List<?>> pages) {
+    TestExemptionRepository(List<?> rows) {
       super(null);
-      this.pages = pages;
+      this.rows = rows;
     }
 
     String whereSql() {
       return whereSql;
     }
 
-    List<String> bindValues() {
+    List<Object> bindValues() {
       return bindValues;
+    }
+
+    String pageSelectSql() {
+      return pageSelectSql;
+    }
+
+    String countSelectSql() {
+      return countSelectSql;
+    }
+
+    int countCalls() {
+      return countCalls;
     }
 
     int pageCalls() {
@@ -550,30 +614,31 @@ class ExemptionRepositoryTest {
     }
 
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
-      return pages.stream().mapToInt(List::size).sum();
+    protected int queryDirectCount(String selectSql, DirectSql where) {
+      countSelectSql = selectSql;
+      whereSql = where.sql();
+      bindValues = where.bindValues();
+      countCalls++;
+      return rows.size();
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
+      pageSelectSql = selectSql;
+      whereSql = whereAndOrder.sql();
+      bindValues = whereAndOrder.bindValues();
       pageCalls++;
-      if (page >= pages.size()) {
-        return List.of();
-      }
-      return (List<T>) pages.get(page);
+      int fromIndex = Math.min(rows.size(), Math.max(0, page) * Math.max(1, size));
+      int toIndex = Math.min(rows.size(), fromIndex + Math.max(1, size));
+      List<T> content = (List<T>) rows.subList(fromIndex, toIndex);
+      return new PageImpl<>(content, PageRequest.of(page, size), totalElements);
     }
   }
 
@@ -608,17 +673,16 @@ class ExemptionRepositoryTest {
     }
 
     @Override
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      if (page > 0) {
-        return List.of();
-      }
       try {
-        return List.of(rowMapper.map(resultSet));
+        return new PageImpl<>(
+            List.of(rowMapper.map(resultSet)), PageRequest.of(page, size), totalElements);
       } catch (SQLException ex) {
         throw new DataRetrievalFailureException("Unable to map exemption cursor", ex);
       }

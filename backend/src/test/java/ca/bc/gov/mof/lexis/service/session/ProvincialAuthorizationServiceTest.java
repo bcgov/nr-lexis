@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
@@ -74,6 +75,19 @@ class ProvincialAuthorizationServiceTest {
 
     assertThat(service.canAccessApplication(authentication, 1L)).isTrue();
     assertThat(service.canAccessApplication(authentication, 2L)).isFalse();
+  }
+
+  @Test
+  void preloadedApplicationContextShouldAuthorizeWithoutApplicationRepositoryLookup() {
+    Authentication authentication = submitter("00012345");
+    ApplicationAccessContextDto owned =
+        new ApplicationAccessContextDto(1L, "P", 76L, "00012345", "00099999");
+    ApplicationAccessContextDto unrelated =
+        new ApplicationAccessContextDto(2L, "P", 76L, "00088888", "00099999");
+
+    assertThat(service.canAccessApplication(authentication, owned)).isTrue();
+    assertThat(service.canAccessApplication(authentication, unrelated)).isFalse();
+    verifyNoInteractions(applicationServiceProvider);
   }
 
   @Test
