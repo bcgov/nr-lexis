@@ -7,7 +7,7 @@ import {
   TextStrikethrough,
   Unlink,
 } from '@carbon/icons-react'
-import { Modal, TextInput } from '@carbon/react'
+import { Button, Modal, TextInput } from '@carbon/react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import LinkExtension from '@tiptap/extension-link'
 import StarterKit from '@tiptap/starter-kit'
@@ -221,18 +221,14 @@ export default function NotificationEditor({
       {createPortal(
         <Modal
           open={isLinkModalOpen}
+          passiveModal
           className="notification-editor__link-modal"
           size="sm"
           modalHeading="Add or edit link"
           aria-label="Add or edit link"
           launcherButtonRef={linkButtonRef}
           selectorPrimaryFocus={`#${linkInputId}`}
-          primaryButtonText="Apply link"
-          secondaryButtonText="Cancel"
-          primaryButtonDisabled={!linkUrlIsValid}
           onRequestClose={closeLinkModal}
-          onSecondarySubmit={closeLinkModal}
-          onRequestSubmit={applyLink}
         >
           <TextInput
             id={linkInputId}
@@ -244,6 +240,14 @@ export default function NotificationEditor({
             disabled={disabled}
             onChange={(event) => setLinkUrl(event.currentTarget.value)}
           />
+          <div className="notification-editor__link-modal-actions">
+            <Button kind="secondary" onClick={closeLinkModal}>
+              Cancel
+            </Button>
+            <Button kind="primary" disabled={!linkUrlIsValid} onClick={applyLink}>
+              Apply link
+            </Button>
+          </div>
         </Modal>,
         document.body,
       )}

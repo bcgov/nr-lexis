@@ -7,6 +7,33 @@
   z-index: 9001;
 }
 
+.notification-editor__link-modal .cds--modal-container {
+  border-radius: 0.5rem;
+}
+
+.notification-editor__link-modal .cds--modal-content {
+  padding-block-end: 1rem;
+}
+
+.notification-editor__link-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-block-start: 1.5rem;
+}
+
+.notification-editor__link-modal-actions .cds--btn {
+  min-inline-size: 7.5rem;
+}
+
+@media (max-width: 671px) {
+  .notification-editor__link-modal-actions .cds--btn {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
+}
+
 .notification-editor:focus-within {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: 2px;

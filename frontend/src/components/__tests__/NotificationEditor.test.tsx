@@ -48,6 +48,14 @@ describe('NotificationEditor', () => {
       expect(prompt).not.toHaveBeenCalled()
       expect(dialog).toHaveClass('cds--modal-container')
       expect(dialog.closest('.notification-editor__link-modal')?.parentElement).toBe(document.body)
+      const actions = dialog.querySelector('.notification-editor__link-modal-actions')
+      expect(actions).toBeInTheDocument()
+      expect(
+        within(actions as HTMLElement).getByRole('button', { name: 'Cancel' }),
+      ).toBeInTheDocument()
+      expect(
+        within(actions as HTMLElement).getByRole('button', { name: 'Apply link' }),
+      ).toBeInTheDocument()
     } finally {
       prompt.mockRestore()
     }
