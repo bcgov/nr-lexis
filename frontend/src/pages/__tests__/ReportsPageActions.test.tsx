@@ -260,6 +260,8 @@ describe('Reports Page Actions', () => {
         reportId: 'exemptionReport',
         actionMapping: 'generate',
         values: {
+          region: '12',
+          regionLabel: 'Coast',
           exemptionReason: 'SEC128',
           exemptionReasonLabel: 'Section 128',
           growthType: 'O',
@@ -420,7 +422,7 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('leaves unchanged TEAC region criteria unset instead of submitting every region', async () => {
+  it('submits every TEAC region when no default or explicit region is selected', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -456,6 +458,8 @@ describe('Reports Page Actions', () => {
         reportId: 'teacReport',
         actionMapping: 'generate',
         values: {
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
           exportJurisdictionCode: 'P',
           exportJurisdictionCodeLabel: 'Provincial',
           exportSchedule: '1001',
@@ -610,7 +614,7 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('leaves unchanged species and grade regions unset instead of submitting every region', async () => {
+  it('submits every species and grade region when none is selected', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -643,6 +647,8 @@ describe('Reports Page Actions', () => {
         reportId: 'speciesGradeReport',
         actionMapping: 'generate',
         values: {
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
           permitStatus: 'COM',
           permitStatusLabel: 'Complete',
         },
@@ -983,6 +989,8 @@ describe('Reports Page Actions', () => {
         actionMapping: 'generate',
         values: {
           outputFormat: 'CSV',
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
           fromDate: '2026-06-01',
           toDate: '2026-06-30',
         },
@@ -1125,7 +1133,7 @@ describe('Reports Page Actions', () => {
     )
   })
 
-  it('does not submit unchanged biweekly listing regions as every region option', async () => {
+  it('submits every biweekly listing region when none is selected', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -1162,6 +1170,8 @@ describe('Reports Page Actions', () => {
         reportId: 'biweeklyListing',
         actionMapping: 'generate',
         values: {
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
           exportJurisdictionCode: 'F',
           exportJurisdictionCodeLabel: 'Federal',
           fromDate: '2026-06-01',

@@ -812,6 +812,12 @@ const buildEffectiveReportValues = (
     ) {
       if (defaultRegion) {
         effectiveValues[field.key] = defaultRegion
+      } else {
+        const options = optionsByKey[field.optionKey ?? field.key] ?? []
+        effectiveValues[field.key] = options
+          .map((option) => option.value.trim())
+          .filter(Boolean)
+          .join(',')
       }
       return
     }
