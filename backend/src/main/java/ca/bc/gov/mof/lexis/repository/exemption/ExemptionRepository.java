@@ -223,10 +223,101 @@ public class ExemptionRepository extends OracleRepositorySupport {
         where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
       }
     }
+    addCanonicalApplicationFilter(where, criteria);
 
     return where.build(
         (includeGroupBy ? SEARCH_GROUP_BY : "")
             + (includeOrderBy ? buildSearchOrder(criteria.sortField()) : ""));
+  }
+
+  private void addCanonicalApplicationFilter(
+      SqlWhereBuilder where, ExemptionSearchCriteria criteria) {
+    StringBuilder clause =
+        new StringBuilder(
+            """
+             AND (
+               EEA.APPLICATION_NUMBER IS NULL
+               OR EEA.APPLICATION_NUMBER = (
+                 SELECT MAX(CANON_EEA.APPLICATION_NUMBER)
+                          KEEP (
+                            DENSE_RANK FIRST
+                            ORDER BY CANON_ES.ADVERTISING_DATE DESC NULLS LAST,
+                                     CANON_EEA.APPLICATION_NUMBER DESC
+                          )
+                 FROM EXPORT_EXEMPTION_APPLICATION CANON_EEA
+                 LEFT JOIN EXPORT_PACKAGE CANON_EP
+                   ON CANON_EP.APPLICATION_NUMBER = CANON_EEA.APPLICATION_NUMBER
+                 LEFT JOIN EXPORT_SCHEDULE CANON_ES
+                   ON CANON_ES.EXPORT_SCHEDULE_ID = CANON_EEA.EXPORT_SCHEDULE_ID
+                 WHERE CANON_EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+            """);
+    List<String> bindValues = new ArrayList<>();
+    int bindIndex = where.nextBindIndex();
+
+    String applicationNumber = trim(criteria.applicationNumber());
+    if (applicationNumber != null) {
+      clause
+          .append(" AND CANON_EEA.APPLICATION_NUMBER LIKE '%' || :")
+          .append(bindIndex++)
+          .append(" || '%'");
+      bindValues.add(applicationNumber);
+    }
+
+    String packageNumber = trim(criteria.packageNumber());
+    if (packageNumber != null) {
+      clause
+          .append(" AND CANON_EP.PACKAGE_NUMBER LIKE '%' || :")
+          .append(bindIndex++)
+          .append(" || '%'");
+      bindValues.add(packageNumber);
+    }
+
+    String ownerClientNumber = trim(criteria.ownerClientNumber());
+    if (ownerClientNumber != null) {
+      clause
+          .append(" AND CANON_EEA.OWNER_CLIENT_NUMBER LIKE '%' || :")
+          .append(bindIndex++)
+          .append(" || '%'");
+      bindValues.add(ownerClientNumber);
+    }
+
+    String applicantClientNumber = trim(criteria.applicantClientNumber());
+    if (applicantClientNumber != null) {
+      int agentBindIndex = bindIndex++;
+      int ownerBindIndex = bindIndex++;
+      clause
+          .append(" AND (CANON_EEA.AGENT_CLIENT_NUMBER LIKE '%' || :")
+          .append(agentBindIndex)
+          .append(" || '%' OR CANON_EEA.OWNER_CLIENT_NUMBER LIKE '%' || :")
+          .append(ownerBindIndex)
+          .append(" || '%'");
+      if (!criteria.includeBlanketOic()) {
+        clause.append(" AND CANON_EEA.AGENT_CLIENT_NUMBER IS NULL");
+      } else {
+        clause.append(" OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'");
+      }
+      clause.append(")");
+      bindValues.add(applicantClientNumber);
+      bindValues.add(applicantClientNumber);
+    }
+
+    if (criteria.listingFromDate() != null) {
+      clause
+          .append(" AND CANON_ES.ADVERTISING_DATE >= TO_DATE(:")
+          .append(bindIndex++)
+          .append(", 'YYYY-MM-DD')");
+      bindValues.add(criteria.listingFromDate().toString());
+    }
+    if (criteria.listingToDate() != null) {
+      clause
+          .append(" AND CANON_ES.ADVERTISING_DATE <= TO_DATE(:")
+          .append(bindIndex)
+          .append(", 'YYYY-MM-DD')");
+      bindValues.add(criteria.listingToDate().toString());
+    }
+
+    clause.append("))");
+    where.addRawWithBinds(clause.toString(), bindValues.toArray(String[]::new));
   }
 
   private ExemptionSearchResultDto mapSearchResult(ResultSet rs) throws SQLException {

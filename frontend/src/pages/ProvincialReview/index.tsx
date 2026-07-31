@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -64,6 +64,7 @@ import {
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
@@ -236,14 +237,14 @@ const buildSearchParams = (
 
 const ProvincialReviewPage = () => {
   const { capabilities, canPerform } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-review')
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
@@ -294,15 +295,14 @@ const ProvincialReviewPage = () => {
       ),
     }
   }, [searchParams])
-  const filtersReady =
-    !optionsLoading &&
-    (optionsUnavailable || searchParams.has('region') || regionOptions.length === 0)
+  const filtersReady = !optionsLoading
   const appliedFilters = urlState.filters
   const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
+  const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setReviewActionStatus(null)
@@ -467,6 +467,9 @@ const ProvincialReviewPage = () => {
     if (!filtersReady) {
       return
     }
+    if (!hasSearchQuery) {
+      return
+    }
 
     void runSearch({
       filters: requestFilters,
@@ -477,6 +480,7 @@ const ProvincialReviewPage = () => {
     })
   }, [
     filtersReady,
+    hasSearchQuery,
     requestFilters,
     runSearch,
     urlState.page,
@@ -514,20 +518,41 @@ const ProvincialReviewPage = () => {
       return
     }
 
-    setSearchParams(
-      buildSearchParams(
-        {
-          ...urlState.filters,
-          region: regionOptions.map((region) => region.id),
-        },
-        urlState.sortField,
-        urlState.sortDirection,
-        urlState.page,
-        urlState.pageSize,
-      ),
-      { replace: true },
+    if (hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          {
+            ...urlState.filters,
+            region: regionOptions.map((region) => region.id),
+          },
+          urlState.sortField,
+          urlState.sortDirection,
+          urlState.page,
+          urlState.pageSize,
+        ),
+        { replace: true },
+      )
+      return
+    }
+
+    setFilters((currentFilters) =>
+      currentFilters.region.length > 0
+        ? currentFilters
+        : {
+            ...currentFilters,
+            region: regionOptions.map((region) => region.id),
+          },
     )
-  }, [optionsLoading, optionsUnavailable, regionOptions, searchParams, setSearchParams, urlState])
+  }, [
+    hasSearchQuery,
+    optionsLoading,
+    optionsUnavailable,
+    regionOptions,
+    searchParams,
+    setFilters,
+    setSearchParams,
+    urlState,
+  ])
 
   const onSearch = () => {
     if (loading || hasDateValidationError) {
@@ -1085,7 +1110,7 @@ const ProvincialReviewPage = () => {
         </div>
       </Modal>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Review queue"

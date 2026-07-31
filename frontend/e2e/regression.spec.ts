@@ -424,6 +424,20 @@ class RegressionCleanupStack {
   }
 }
 
+const throwRegressionFailures = (summary: string, failures: Error[]): void => {
+  if (failures.length === 0) {
+    return
+  }
+  if (failures.length === 1) {
+    throw failures[0]
+  }
+
+  const details = failures.map((failure, index) => `${index + 1}. ${failure.message}`).join('\n')
+  throw new Error(`${summary}\n${details}`, {
+    cause: new AggregateError(failures, summary),
+  })
+}
+
 const missingApplicationNumber = '999999999'
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionClientEmail = 'lexis-regression@example.test'
@@ -435,7 +449,6 @@ const selectedNaturalResourceRegionNames = [
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
-const famManageUrlPattern = /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
 const regressionEndUseCode = 'PL'
@@ -461,7 +474,10 @@ const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   }
 }
 
-const expectDatedScheduleOptions = (schedules: Record<string, unknown>[], source: string): void => {
+const expectFutureScheduleOptions = (
+  schedules: Record<string, unknown>[],
+  source: string,
+): void => {
   const today = formatBusinessIsoDate()
 
   expect(
@@ -488,7 +504,7 @@ const expectApplicationScheduleOptions = (value: unknown, source: string): void 
   expect(optionName(blankSchedule), `${source} last schedule option should be labeled Blank`).toBe(
     'Blank',
   )
-  expectDatedScheduleOptions(
+  expectFutureScheduleOptions(
     schedules.filter((schedule) => optionCode(schedule)),
     source,
   )
@@ -496,16 +512,29 @@ const expectApplicationScheduleOptions = (value: unknown, source: string): void 
 
 const expectReportScheduleOptions = (value: unknown, source: string): void => {
   const schedules = asRecordArray(value)
+  const today = formatBusinessIsoDate()
 
-  expect(
-    schedules.length,
-    `${source} should expose no more than two list dates`,
-  ).toBeLessThanOrEqual(2)
+  expect(schedules, `${source} should expose the current and next list boundaries`).toHaveLength(2)
   expect(
     schedules.every((schedule) => optionCode(schedule)),
     `${source} should expose dated schedules only`,
   ).toBe(true)
-  expectDatedScheduleOptions(schedules, source)
+  const scheduleDates = schedules.map(optionName)
+  for (const scheduleDate of scheduleDates) {
+    expect(scheduleDate, `${source} schedule names should be ISO dates`).toMatch(isoDatePattern)
+  }
+  expect(
+    scheduleDates[0] <= today,
+    `${source} first boundary should start the current reporting period`,
+  ).toBe(true)
+  expect(
+    scheduleDates[1] > today,
+    `${source} second boundary should start the next reporting period`,
+  ).toBe(true)
+  expect(
+    scheduleDates[0] < scheduleDates[1],
+    `${source} schedule boundaries should be ascending`,
+  ).toBe(true)
 }
 
 const expectLoginShell = async (page: Page, source: string): Promise<void> => {
@@ -647,6 +676,47 @@ const antivirusTestPayloadHex =
 
 const antivirusTestPayload = (): Buffer => Buffer.from(antivirusTestPayloadHex, 'hex')
 
+const antivirusTestPdfPayload = (): Buffer =>
+  Buffer.concat([
+    Buffer.from(
+      `%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(antivirus-test.com) 5 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 0 >>
+stream
+
+endstream
+endobj
+5 0 obj
+<< /Type /Filespec /F (antivirus-test.com) /EF << /F 6 0 R >> >>
+endobj
+6 0 obj
+<< /Type /EmbeddedFile /Length ${antivirusTestPayload().length} >>
+stream
+`,
+      'ascii',
+    ),
+    antivirusTestPayload(),
+    Buffer.from(
+      `
+endstream
+endobj
+trailer
+<< /Root 1 0 R >>
+%%EOF
+`,
+      'ascii',
+    ),
+  ])
+
 const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
   {
     name: 'antivirus-test-application-import.xml',
@@ -660,10 +730,10 @@ const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
   },
 ]
 
-const infectedApplicationDocument = (): RegressionUploadFile => ({
-  name: 'antivirus-test-application-upload.txt',
-  mimeType: 'text/plain',
-  buffer: antivirusTestPayload(),
+const infectedApplicationDocumentPdf = (): RegressionUploadFile => ({
+  name: 'antivirus-test-application-upload.pdf',
+  mimeType: 'application/pdf',
+  buffer: antivirusTestPdfPayload(),
 })
 
 const adminNavigationSections: Array<{
@@ -673,7 +743,7 @@ const adminNavigationSections: Array<{
   {
     section: 'Provincial',
     links: [
-      'Review',
+      'Application review',
       'Create/Edit Application',
       'Upload',
       'Applications',
@@ -705,18 +775,11 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Admin',
-    links: [
-      'Users & Access',
-      'Fee Policy',
-      'Fee in Lieu',
-      'Export Schedule',
-      'Average Monthly Values',
-    ],
+    links: ['Fee Policy', 'Fee in Lieu', 'Export Schedule', 'Average Monthly Values'],
   },
 ]
 
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/admin', /administration/i],
   ['/admin/policies/fee', /fee policy administration/i],
   ['/admin/policies/fil', /fee in lieu percent policy administration/i],
   ['/admin/schedules', /export schedule administration/i],
@@ -1209,22 +1272,44 @@ const shippingFixture = async (
   return { transportType, portOfExport }
 }
 
-const permitShippingForm = (
-  permitNumber: number,
+const permitMutationForm = (
+  permit: Record<string, unknown>,
   marker: string,
   shipping: { transportType: string; portOfExport: string },
   permitStatus?: string,
 ): Record<string, string> => ({
-  permitNumber: String(permitNumber),
-  ...(permitStatus ? { permitStatus } : {}),
+  permitNumber: String(permit.permitNumber ?? ''),
+  permitStatus: permitStatus ?? String(permit.permitStatusCode ?? ''),
+  permitIssueDate: String(permit.issueDate ?? ''),
+  permitExpiryDate: String(permit.expiryDate ?? ''),
+  permitRequestDate: String(permit.receivedDate ?? ''),
+  exemptionNumber: String(permit.exemptionNumber ?? ''),
+  permitReceiptNo: String(permit.receiptNumber ?? ''),
+  permitRemarks: marker,
+  permitTotalVolume: String(permit.permitVolume ?? ''),
+  permitNumberOfPieces: String(permit.numberOfPieces ?? ''),
+  oicPermitTotalPieces: '',
+  oicPermitTotalVolume: '',
+  orgUnitNumber: String(permit.orgUnitNumber ?? ''),
+  ownerClientNumber: String(permit.ownerClientNumber ?? ''),
+  ownerClientLocation: String(permit.ownerClientLocationCode ?? ''),
+  agentClientNumber: String(permit.applicantClientNumber ?? ''),
+  agentClientLocation: String(permit.agentClientLocationCode ?? ''),
   destinationCompanyName: 'LEXIS E2E REGRESSION',
   destinationCountry: 'CA',
   transportType: shipping.transportType,
   transportName: marker,
   estimatedShippingDate: formatBusinessIsoDate(),
   portOfExport: shipping.portOfExport,
-  permitRemarks: marker,
+  otherPortOfExport: '',
 })
+
+const permitMutationFailure = (result: PermitMutationResponse, fallback: string): string => {
+  const details = [result.message, ...asStringArray(result.errors)]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+  return details.length > 0 ? details.join(' ') : fallback
+}
 
 const cancelRegressionPermit = async (
   page: Page,
@@ -1242,10 +1327,13 @@ const cancelRegressionPermit = async (
   const result = await readJsonResponse<PermitMutationResponse>(
     await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
       headers: versionHeaders(current.version),
-      form: permitShippingForm(permitNumber, marker, shipping, 'CAN'),
+      form: permitMutationForm(current.payload, marker, shipping, 'CAN'),
     }),
   )
-  expect(result.success).toBe(true)
+  expect(
+    result.success,
+    permitMutationFailure(result, `Permit ${permitNumber} cancellation returned success=false.`),
+  ).toBe(true)
   expect(result.permitStatus).toBe('CAN')
   expect(asStringArray(result.errors)).toEqual([])
 }
@@ -1415,7 +1503,7 @@ const expectApplicationDocumentVirusScanRejection = (
 ): void => {
   expect(response.status, 'application document upload should be rejected by ClamAV').toBe(422)
   expect(response.payload.uploadType).toBe('application')
-  expect(response.payload.fileName).toBe('antivirus-test-application-upload.txt')
+  expect(response.payload.fileName).toBe('antivirus-test-application-upload.pdf')
   expect(response.payload.status).toBe('rejected')
   expect(response.payload.message ?? '').toContain(virusScanRejectionMessage)
 }
@@ -1562,7 +1650,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
 
-    await expectAccessiblePage(page, '/admin', /administration/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     const capabilities = await fetchSessionCapabilities(page)
     const roles = asStringArray(capabilities.roles)
@@ -1604,6 +1692,34 @@ test.describe('TEST IDIR admin regression', () => {
       },
     )
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/review')
+    await expect(page.locator('section[aria-label="Review queue"]')).toBeHidden()
+  })
+
+  test('restores an applied search after navigating to another page', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(
+      page,
+      `/provincial/application?applicationNumber=${missingApplicationNumber}`,
+      /provincial application search/i,
+    )
+    await expect(page.getByText('No applications found', { exact: true })).toBeVisible()
+
+    await expectAccessiblePage(
+      page,
+      `/federal?applicationNumber=${missingApplicationNumber}`,
+      /federal application search/i,
+    )
+    await page
+      .locator(sideNavSection('Provincial'))
+      .getByRole('link', { name: 'Applications', exact: true })
+      .click()
+
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/application')
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('applicationNumber'))
+      .toBe(missingApplicationNumber)
+    await expect(page.getByText('No applications found', { exact: true })).toBeVisible()
   })
 
   test('supports collapsible sidebar sections and collapsed icon navigation', async () => {
@@ -1620,47 +1736,15 @@ test.describe('TEST IDIR admin regression', () => {
 
     await page.getByRole('button', { name: 'Collapse side navigation' }).click()
     await expect(page.getByRole('button', { name: 'Expand side navigation' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Review' })).toHaveAttribute('title', 'Review')
+    await expect(page.getByRole('link', { name: 'Application review' })).toHaveAttribute(
+      'title',
+      'Application review',
+    )
     await expect(page.getByRole('link', { name: 'Advertising List' })).toHaveAttribute(
       'title',
       'Advertising List',
     )
     await page.getByRole('button', { name: 'Expand side navigation' }).click()
-  })
-
-  test('keeps user access administration read-only and delegates changes to FAM', async () => {
-    const page = await authenticatedIdirPage()
-
-    await expectAccessiblePage(page, '/admin', /administration/i)
-
-    const famAccessSection = page.locator('.cds--tile', {
-      has: page.getByRole('heading', { name: 'IDIR identity lookup' }),
-    })
-    await expect(famAccessSection).toBeVisible()
-    await expect(
-      famAccessSection.getByText(
-        'Confirm that an IDIR identity exists before managing LEXIS role assignments in FAM. This lookup does not display or change FAM roles.',
-      ),
-    ).toBeVisible()
-    await expect(famAccessSection.getByLabel('IDIR username')).toBeVisible()
-    await expect(famAccessSection.getByRole('button', { name: 'Search IDIR' })).toBeVisible()
-
-    const manageLink = famAccessSection.getByRole('link', { name: 'Manage in FAM' })
-    await expect(manageLink).toBeVisible()
-    await expect(manageLink).toHaveAttribute('target', '_blank')
-    await expect(manageLink).toHaveAttribute('href', famManageUrlPattern)
-
-    for (const name of [
-      /^Grant/i,
-      /^Revoke/i,
-      /^Add role/i,
-      /^Remove role/i,
-      /^Save access/i,
-      /^Update access/i,
-    ]) {
-      await expect(famAccessSection.getByRole('button', { name })).toHaveCount(0)
-      await expect(famAccessSection.getByRole('link', { name })).toHaveCount(0)
-    }
   })
 
   test('keeps upload navigation scoped to provincial application submissions', async () => {
@@ -1768,15 +1852,17 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
-  test('does not expose the retired provincial summary page', async () => {
+  test('keeps the provincial client summary unavailable to IDIR administrators', async () => {
     const page = await authenticatedIdirPage()
 
     await page.goto(new URL('/provincial/summary', E2E_BASE_URL).toString(), {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
+    await expect(
+      page.getByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
   })
 
@@ -2226,16 +2312,13 @@ test.describe('TEST IDIR admin regression', () => {
     const createDocumentsHeading = page.getByRole('heading', { name: 'Documents', exact: true })
     await expect(createDocumentsHeading).toBeVisible()
     await expect(createDocumentsHeading).not.toContainText('API')
-    await expect(page.getByText('Upload documents')).toBeVisible()
-    await expect(page.getByText('Queued files')).toBeVisible()
-    await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
-    await expect(page.getByLabel('Document File')).toBeDisabled()
-    await expect(page.getByText('Drag and drop files here or click to upload')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Submit upload' })).toHaveCount(0)
-    await expect(
-      page.getByRole('button', { name: 'Choose files for Upload documents' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+    const addDocumentButton = page.getByRole('button', { name: 'Add document' })
+    await expect(addDocumentButton).toBeDisabled()
+    await expect(addDocumentButton).toHaveAttribute(
+      'title',
+      'Save the application before uploading documents.',
+    )
+    await expect(page.getByLabel('Document File')).toHaveCount(0)
   })
 
   test('uses save and cancel workflow on provincial create/edit pages', async () => {
@@ -2782,7 +2865,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
   })
 
-  test('rejects ClamAV test payloads on application submission uploads', async () => {
+  test('rejects EICAR application submission uploads named as XML and GeoJSON', async () => {
     const page = await authenticatedIdirPage()
 
     for (const file of infectedApplicationSubmissionFiles()) {
@@ -2854,7 +2937,7 @@ test.describe('TEST IDIR admin regression', () => {
 
       await expect(page.getByText('Notification published', { exact: true })).toBeVisible()
       const notification = page
-        .getByRole('article')
+        .getByRole('listitem')
         .filter({ has: page.getByRole('heading', { name: notificationTitle, exact: true }) })
       await expect(notification).toBeVisible()
       await expect(notification.getByText(notificationMessage, { exact: true })).toBeVisible()
@@ -2888,12 +2971,7 @@ test.describe('TEST IDIR admin regression', () => {
         primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
       )
     }
-    if (failures.length === 1) {
-      throw failures[0]
-    }
-    if (failures.length > 1) {
-      throw new AggregateError(failures, 'Notification regression and cleanup failed.')
-    }
+    throwRegressionFailures('Notification regression and cleanup failed.', failures)
   })
 
   test('creates, edits, terminalizes, and cleans up provincial records', async () => {
@@ -2946,12 +3024,12 @@ test.describe('TEST IDIR admin regression', () => {
         rejectRegressionApplication(page, lifecycleApplicationNumber, `${marker} cleanup`),
       )
 
-      await test.step('reject an infected application document', async () => {
+      await test.step('reject an EICAR application document named as PDF', async () => {
         expectApplicationDocumentVirusScanRejection(
           await postRegressionApplicationDocumentFile(
             page,
             lifecycleApplicationNumber,
-            infectedApplicationDocument(),
+            infectedApplicationDocumentPdf(),
           ),
         )
       })
@@ -3279,8 +3357,8 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/permits/${permitNumber}`,
       )
-      const permitUpdate = permitShippingForm(
-        permitNumber,
+      const permitUpdate = permitMutationForm(
+        currentPermit.payload,
         packageNumber.slice(0, 24),
         schedule.shipping,
         'ACT',
@@ -3291,7 +3369,13 @@ test.describe('TEST IDIR admin regression', () => {
           form: permitUpdate,
         }),
       )
-      expect(updatedPermit.success).toBe(true)
+      expect(
+        updatedPermit.success,
+        permitMutationFailure(
+          updatedPermit,
+          `Permit ${permitNumber} update returned success=false.`,
+        ),
+      ).toBe(true)
       expect(updatedPermit.permitStatus).toBe('ACT')
       expect(asStringArray(updatedPermit.errors)).toEqual([])
 
@@ -3373,18 +3457,13 @@ test.describe('TEST IDIR admin regression', () => {
         primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
       )
     }
-    if (failures.length === 1) {
-      throw failures[0]
-    }
-    if (failures.length > 1) {
-      throw new AggregateError(failures, 'Provincial CRUD regression and cleanup failed.')
-    }
+    throwRegressionFailures('Provincial CRUD regression and cleanup failed.', failures)
   })
 
   test('returns an expired IDIR admin session to the login shell', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/admin', /administration/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     await expectLogoutRoundTrip(page, 'Expired IDIR admin session', () =>
       page.evaluate((eventName) => {
         window.dispatchEvent(
@@ -3400,7 +3479,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('signs out to the login shell without an expired-session warning', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/admin', /administration/i)
+    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     const profileButton = page.locator('button[aria-controls="profile-panel"]')
     if ((await profileButton.getAttribute('aria-expanded')) !== 'true') {
       await profileButton.click()

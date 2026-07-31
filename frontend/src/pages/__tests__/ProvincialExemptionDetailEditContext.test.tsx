@@ -996,6 +996,7 @@ describe('Provincial exemption edit context', () => {
     expect(screen.getAllByText('Expired')).not.toHaveLength(0)
     expect(screen.queryByRole('button', { name: 'Edit exemption' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Documents' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit documents' }))
     expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })

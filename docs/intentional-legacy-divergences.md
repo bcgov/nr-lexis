@@ -1,0 +1,22 @@
+# Intentional legacy divergences
+
+Modern LEXIS normally preserves functional parity with legacy. Intentional modernizations, security
+controls, and approved retirements use the searchable code marker
+`INTENTIONAL_LEGACY_DIVERGENCE(<ID>)` and are recorded here so they are not mistaken for parity
+defects.
+
+| ID                                      | Modern behaviour                                                                                                                                                                                                             | Reason                                                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `SEARCH_STATE_PERSISTENCE`              | Applied search filters, sorting, and paging survive in-app navigation. Logout, session expiry, login, and organization changes clear the saved state. A fresh authenticated visit shows no results until Search is selected. | UI review request; legacy does not retain search state across page navigation.                          |
+| `DETAIL_VIEW_EDIT_MODES`                | Authorized detail pages open in view mode and expose explicit Edit and Cancel actions.                                                                                                                                       | UI review request to follow the modern design pattern instead of legacy's always-editable presentation. |
+| `ADMIN_PAGE_RETIREMENT`                 | The Users & Access page and its IDIR lookup API are not exposed. Other administration workflows remain available.                                                                                                            | Business-requested retirement; the legacy administration capability is no longer required.              |
+| `MULTI_FILE_UPLOAD_QUEUE`               | Application submission and document workflows can queue, validate, review, and submit multiple files.                                                                                                                        | Modern workflow improvement; legacy upload pop-ups accepted one `formFile`.                             |
+| `RTM_AMV_CONSOLIDATION`                 | The former RTM AMV workflow is hosted in LEXIS as one monthly species/grade grid with atomic batch saves while retaining the existing schema and synchronization trigger.                                                    | Supports RTM retirement without replacing the authoritative AMV data contract.                          |
+| `CLAMAV_UPLOAD_SCANNING`                | Deployed uploads are scanned through the shared ClamAV service before persistence. Infected files and unavailable scans are rejected.                                                                                        | Modern security control; legacy upload actions did not perform malware scanning.                        |
+| `INDIGENOUS_RESERVE_MODULE_RETIREMENT`  | Legacy Indian/Indigenous Reserve search, create, detail, API, authorization-action, and report-jurisdiction surfaces are not exposed.                                                                                        | Intentional retirement of the Indigenous Reserve module.                                                |
+| `ADVERTISING_REPORT_VARIANT_RETIREMENT` | The `generateIndustryPDF` and `generateIndustryCSV` shortcuts and legacy root `biweeklyListing` routes are retired. The filtered Advertising List remains and exposes PDF/CSV as an output-format choice.                    | Consolidates duplicate legacy shortcuts into one maintained report workflow.                            |
+
+The Advertising List change retired two legacy shortcuts, not two complete reports. The Approved
+Exemption and Permit printable reports remain available from their respective detail pages.
+
+Keep markers next to the controlling code rather than on every consuming component.

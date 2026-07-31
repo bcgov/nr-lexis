@@ -56,13 +56,6 @@ management:
       exposure:
         include: health,info,prometheus
 
-ca:
-  bc:
-    gov:
-      nrs:
-        identity-lookup:
-          base-url: ${IDENTITY_LOOKUP_BASE_URL:}
-
 lexis:
   runtime:
     require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}
@@ -144,7 +137,6 @@ lexis:
         - "/federalApplicationDetails"
         - "viewFederalApplication"
         - "manageFederalApplication"
-        - "/applicationReport"
         - "/offerReport"
         - "/teacReport"
         - "/exemptionReport"
@@ -174,6 +166,7 @@ lexis:
         - "approveExemption"
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
+        - "/summary"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/exemptionSearch"
@@ -192,7 +185,6 @@ lexis:
         - "createPermit"
         - "savePermit"
         - "uploadApplicationSubmission"
-      LEXIS_DELEGATED_ADMIN: []
   federal-submission:
     require-request-id: false
     require-user-reference: false

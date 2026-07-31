@@ -56,7 +56,6 @@ window.config = {
   VITE_COGNITO_SCOPES: "$(escape "${VITE_COGNITO_SCOPES:-}")",
   VITE_ZONE: "$(escape "${VITE_ZONE:-dev}")",
   VITE_LEXIS_PROD_RTM_ONLY: "$(escape "${VITE_LEXIS_PROD_RTM_ONLY:-false}")",
-  VITE_FAM_MANAGE_URL: "$(escape "${VITE_FAM_MANAGE_URL:-}")",
   VITE_LEXIS_REPORT_ENDPOINT_BASE: "$(escape "${VITE_LEXIS_REPORT_ENDPOINT_BASE:-/api}")",
   VITE_LEXIS_REPORT_API_BASE: "$(escape "${VITE_LEXIS_REPORT_API_BASE:-/lexis/reports}")"
 };

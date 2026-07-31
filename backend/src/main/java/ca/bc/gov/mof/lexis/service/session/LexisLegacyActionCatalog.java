@@ -6,6 +6,8 @@ final class LexisLegacyActionCatalog {
 
   private LexisLegacyActionCatalog() {}
 
+  // INTENTIONAL_LEGACY_DIVERGENCE(INDIGENOUS_RESERVE_MODULE_RETIREMENT):
+  // Retired Indian Reserve search/detail actions are deliberately absent from this catalog.
   static final List<String> ACTIONS =
       List.of(
           "/applicationDetails",

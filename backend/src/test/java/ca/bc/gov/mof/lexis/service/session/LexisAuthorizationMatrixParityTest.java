@@ -47,6 +47,9 @@ class LexisAuthorizationMatrixParityTest {
   private static final List<String> NON_PERMIT_REPORT_ACTIONS =
       REPORT_ACTIONS.stream().filter(action -> !"/permitReport".equals(action)).toList();
 
+  private static final List<String> APPLICATION_APPROVER_REPORT_ACTIONS =
+      REPORT_ACTIONS.stream().filter(action -> !"/applicationReport".equals(action)).toList();
+
   private static final List<String> FEDERAL_READ_ACTIONS =
       List.of(
           "/federalApplicationSearch",
@@ -74,8 +77,8 @@ class LexisAuthorizationMatrixParityTest {
             "LEXIS_READ_ONLY",
             "LEXIS_APPLICATION_APPROVER",
             "LEXIS_EXEMPTION_APPROVER",
-            "LEXIS_PROVINCIAL_SUBMITTER",
-            "LEXIS_DELEGATED_ADMIN");
+            "LEXIS_PROVINCIAL_SUBMITTER")
+        .doesNotContain("LEXIS_DELEGATED_ADMIN");
   }
 
   @Test
@@ -95,7 +98,12 @@ class LexisAuthorizationMatrixParityTest {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .contains(
-            "createApplication", "createOffer", "createPermit", "savePermit", "/permitReport")
+            "/summary",
+            "createApplication",
+            "createOffer",
+            "createPermit",
+            "savePermit",
+            "/permitReport")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -103,7 +111,6 @@ class LexisAuthorizationMatrixParityTest {
             "/fileInvoiceUpload",
             "/filePermitUpload")
         .doesNotContain(
-            "/summary",
             "/changeApplicantType",
             "/applicationRemarks",
             "/createExemption",
@@ -121,7 +128,12 @@ class LexisAuthorizationMatrixParityTest {
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .contains(
-            "createApplication", "createOffer", "createPermit", "savePermit", "/permitReport")
+            "/summary",
+            "createApplication",
+            "createOffer",
+            "createPermit",
+            "savePermit",
+            "/permitReport")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -149,7 +161,7 @@ class LexisAuthorizationMatrixParityTest {
   void knownRoleDetectionShouldNormalizeScopedProvincialSubmitters() {
     assertThat(authorizationService.hasKnownRole(List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .isTrue();
-    assertThat(authorizationService.hasKnownRole(List.of("LEXIS_DELEGATED_ADMIN"))).isTrue();
+    assertThat(authorizationService.hasKnownRole(List.of("LEXIS_DELEGATED_ADMIN"))).isFalse();
     assertThat(authorizationService.hasKnownRole(List.of("LEXIS_UNKNOWN"))).isFalse();
   }
 
@@ -162,7 +174,7 @@ class LexisAuthorizationMatrixParityTest {
         .doesNotContain(
             "LEXIS_READ_ONLY",
             "LEXIS_EXEMPTION_APPROVER",
-            "LEXIS_DELEGATED_ADMIN");
+            "LEXIS_PROVINCIAL_SUBMITTER");
   }
 
   @Test
@@ -224,7 +236,7 @@ class LexisAuthorizationMatrixParityTest {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .containsAll(FEDERAL_READ_ACTIONS)
-        .containsAll(REPORT_ACTIONS)
+        .containsAll(APPLICATION_APPROVER_REPORT_ACTIONS)
         .contains(
             "/applicationsReview",
             "/changeApplicantType",
@@ -246,6 +258,7 @@ class LexisAuthorizationMatrixParityTest {
             "/filePermitUpload")
         .doesNotContain(
             "/summary",
+            "/applicationReport",
             "/lexisAgentAdmin",
             "/lexisFILAdmin",
             "/lexisPolicyAdmin");

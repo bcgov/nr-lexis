@@ -12,28 +12,36 @@ import {
   updateExportSchedule,
 } from '@/service/admin-schedule-service'
 import {
+  AdminPolicyMutationError,
   deleteFeePolicy,
   deleteFilPolicy,
   fetchFeePolicyPage,
   fetchFilPolicyPage,
+  type FeePolicyRow,
+  type FilPolicyRow,
   upsertFeePolicy,
   upsertFilPolicy,
 } from '@/service/admin-policy-service'
 import { fetchReportOptions } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
+import type * as AdminPolicyServiceModule from '@/service/admin-policy-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
-vi.mock('@/service/admin-policy-service', () => ({
-  fetchFeePolicyPage: vi.fn(),
-  fetchFilPolicyPage: vi.fn(),
-  upsertFeePolicy: vi.fn(),
-  upsertFilPolicy: vi.fn(),
-  deleteFeePolicy: vi.fn(),
-  deleteFilPolicy: vi.fn(),
-}))
+vi.mock('@/service/admin-policy-service', async (importOriginal) => {
+  const actual = await importOriginal<typeof AdminPolicyServiceModule>()
+  return {
+    ...actual,
+    fetchFeePolicyPage: vi.fn(),
+    fetchFilPolicyPage: vi.fn(),
+    upsertFeePolicy: vi.fn(),
+    upsertFilPolicy: vi.fn(),
+    deleteFeePolicy: vi.fn(),
+    deleteFilPolicy: vi.fn(),
+  }
+})
 
 vi.mock('@/service/admin-schedule-service', () => ({
   fetchExportSchedulePage: vi.fn(),
@@ -80,6 +88,29 @@ const reportOptions = {
   portsOfExport: [],
 } satisfies Awaited<ReturnType<typeof fetchReportOptions>>
 
+const feePolicyRow = (id: string, effectiveDate: string): FeePolicyRow => ({
+  id,
+  effectiveDate,
+  orgUnitNo: '1904',
+  orgUnitCode: 'RCO',
+  orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+  policyPercentage: '4',
+  entryUserId: 'idir\\admin',
+  entryTimestamp: `${effectiveDate}T00:00:00.000Z`,
+  updateUserId: 'idir\\admin',
+  updateTimestamp: `${effectiveDate}T00:00:00.000Z`,
+})
+
+const filPolicyRow = (id: string, effectiveDate: string): FilPolicyRow => ({
+  id,
+  effectiveDate,
+  filPercentage: '2',
+  entryUserId: 'idir\\admin',
+  entryTimestamp: `${effectiveDate}T00:00:00.000Z`,
+  updateUserId: 'idir\\admin',
+  updateTimestamp: `${effectiveDate}T00:00:00.000Z`,
+})
+
 const renderPage = (area: 'fee' | 'fil' | 'schedule' = 'fee') => {
   const path =
     area === 'fee'
@@ -121,7 +152,7 @@ describe('Admin policy action states', () => {
       rows: [
         {
           id: 'fee-1',
-          effectiveDate: '2026-01-01',
+          effectiveDate: '2099-01-01',
           orgUnitNo: '1904',
           orgUnitCode: 'RCO',
           orgUnitName: 'Kootenay-Boundary Natural Resource Region',
@@ -141,7 +172,7 @@ describe('Admin policy action states', () => {
       rows: [
         {
           id: 'fil-1',
-          effectiveDate: '2026-01-01',
+          effectiveDate: '2099-01-01',
           filPercentage: '2',
           entryUserId: 'idir\\admin',
           entryTimestamp: '2026-01-01T00:00:00.000Z',
@@ -212,6 +243,146 @@ describe('Admin policy action states', () => {
       message: 'Export schedule deleted.',
       schedule: null,
     })
+  })
+
+  it.each([{ area: 'fee' as const }, { area: 'fil' as const }])(
+    'labels the first $area policy column as the policy effective date',
+    async ({ area }) => {
+      renderPage(area)
+
+      const effectiveDateHeader = await screen.findByRole('button', {
+        name: 'Policy effective date',
+      })
+      const table = effectiveDateHeader.closest('table')
+      expect(table).not.toBeNull()
+      const headers = within(table as HTMLTableElement).getAllByRole('columnheader')
+
+      expect(headers[0]).toContainElement(effectiveDateHeader)
+    },
+  )
+
+  it.each([{ area: 'fee' as const }, { area: 'fil' as const }])(
+    'shows $area actions only for future-dated policies',
+    async ({ area }) => {
+      if (area === 'fee') {
+        mockedFetchFeePolicyPage.mockResolvedValue({
+          rows: [
+            feePolicyRow('fee-historical', '2020-01-15'),
+            feePolicyRow('fee-future', '2099-01-01'),
+          ],
+          total: 2,
+          page: 0,
+          size: 100,
+        })
+      } else {
+        mockedFetchFilPolicyPage.mockResolvedValue({
+          rows: [
+            filPolicyRow('fil-historical', '2020-01-15'),
+            filPolicyRow('fil-future', '2099-01-01'),
+          ],
+          total: 2,
+          page: 0,
+          size: 100,
+        })
+      }
+
+      renderPage(area)
+
+      const historicalRow = (await screen.findByText('2020-01-15')).closest('tr')
+      const futureRow = screen.getByText('2099-01-01').closest('tr')
+      expect(historicalRow).not.toBeNull()
+      expect(futureRow).not.toBeNull()
+      expect(
+        within(historicalRow as HTMLElement).queryByRole('button', { name: 'Edit' }),
+      ).not.toBeInTheDocument()
+      expect(
+        within(historicalRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+      ).not.toBeInTheDocument()
+      expect(within(futureRow as HTMLElement).getByRole('button', { name: 'Edit' })).toBeEnabled()
+      expect(within(futureRow as HTMLElement).getByRole('button', { name: 'Delete' })).toBeEnabled()
+    },
+  )
+
+  it.each([
+    {
+      area: 'fee' as const,
+      rowId: 'fee-1',
+      dialogName: 'Delete fee policy?',
+      deleteRequest: mockedDeleteFeePolicy,
+      successMessage: 'Fee policy deleted.',
+    },
+    {
+      area: 'fil' as const,
+      rowId: 'fil-1',
+      dialogName: 'Delete fee in lieu policy?',
+      deleteRequest: mockedDeleteFilPolicy,
+      successMessage: 'Fee in lieu policy deleted.',
+    },
+  ])(
+    'confirms $area policy deletion before mutating',
+    async ({ area, rowId, dialogName, deleteRequest, successMessage }) => {
+      renderPage(area)
+
+      const policyRow = (await screen.findByText('2099-01-01')).closest('tr')
+      expect(policyRow).not.toBeNull()
+      await userEvent.click(
+        within(policyRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+      )
+
+      let dialog = screen.getByRole('dialog', { name: dialogName })
+      expect(deleteRequest).not.toHaveBeenCalled()
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByRole('dialog', { name: dialogName })).not.toBeInTheDocument()
+      expect(deleteRequest).not.toHaveBeenCalled()
+
+      await userEvent.click(
+        within(policyRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+      )
+      dialog = screen.getByRole('dialog', { name: dialogName })
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() => {
+        expect(deleteRequest).toHaveBeenCalledWith(rowId)
+      })
+      expect(await screen.findByText(successMessage)).toBeInTheDocument()
+    },
+  )
+
+  it('surfaces backend policy mutation errors', async () => {
+    mockedUpsertFeePolicy.mockRejectedValue(
+      new AdminPolicyMutationError(['Effective Date must be greater than the current date.']),
+    )
+    renderPage('fee')
+
+    const dialog = await openAddPolicyDialog('fee')
+    fireEvent.change(within(dialog).getByLabelText('Policy effective date'), {
+      target: { value: '2099-02-01' },
+    })
+    await userEvent.selectOptions(within(dialog).getByLabelText('Region'), '1904')
+    await userEvent.type(within(dialog).getByLabelText('Fee increase percentage'), '5')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee policy' }))
+
+    expect(
+      await within(dialog).findByText('Effective Date must be greater than the current date.'),
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces backend delete guard errors after confirmation', async () => {
+    mockedDeleteFeePolicy.mockRejectedValue(
+      new AdminPolicyMutationError(['Only future-dated fee policies can be deleted.']),
+    )
+    renderPage('fee')
+
+    const policyRow = (await screen.findByText('2099-01-01')).closest('tr')
+    expect(policyRow).not.toBeNull()
+    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete fee policy?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    expect(
+      await screen.findByText('Only future-dated fee policies can be deleted.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Delete fee policy?' })).not.toBeInTheDocument()
   })
 
   it('submits fee policy add when required fields are valid', async () => {
@@ -322,7 +493,7 @@ describe('Admin policy action states', () => {
     await waitFor(() => {
       expect(mockedUpsertFeePolicy).toHaveBeenCalledWith({
         id: 'fee-1',
-        effectiveDate: '2026-01-01',
+        effectiveDate: '2099-01-01',
         orgUnitNo: '1904',
         policyPercentage: '5',
       })
@@ -404,12 +575,12 @@ describe('Admin policy action states', () => {
       level: 1,
       name: 'Fee in lieu percent policy administration',
     })
-    const policyRow = screen.getByText('2026-01-01').closest('tr')
+    const policyRow = screen.getByText('2099-01-01').closest('tr')
     expect(policyRow).not.toBeNull()
     await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Edit' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Edit fee in lieu policy' })
-    expect(within(dialog).getByLabelText('Policy effective date')).toHaveValue('2026-01-01')
+    expect(within(dialog).getByLabelText('Policy effective date')).toHaveValue('2099-01-01')
     await userEvent.clear(within(dialog).getByLabelText('Fee in lieu percentage'))
     await userEvent.type(within(dialog).getByLabelText('Fee in lieu percentage'), '3')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Update fee in lieu policy' }))
@@ -417,7 +588,7 @@ describe('Admin policy action states', () => {
     await waitFor(() => {
       expect(mockedUpsertFilPolicy).toHaveBeenCalledWith({
         id: 'fil-1',
-        effectiveDate: '2026-01-01',
+        effectiveDate: '2099-01-01',
         filPercentage: '3',
       })
     })

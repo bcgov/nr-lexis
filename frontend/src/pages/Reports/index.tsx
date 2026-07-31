@@ -585,6 +585,8 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       TENURE_OUTPUT_FORMAT_FIELD,
     ],
   },
+  // INTENTIONAL_LEGACY_DIVERGENCE(ADVERTISING_REPORT_VARIANT_RETIREMENT):
+  // Legacy generateIndustryPDF/CSV shortcuts are consolidated into this filtered report.
   {
     id: 'biweeklyListing',
     title: 'Advertising List',

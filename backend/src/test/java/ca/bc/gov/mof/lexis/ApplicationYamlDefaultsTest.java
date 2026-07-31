@@ -72,19 +72,6 @@ class ApplicationYamlDefaultsTest {
             "lexis.mail.permit-request-recipients");
   }
 
-  @Test
-  void applicationYamlShouldKeepFamUserAccessLookupOptional() {
-    Properties properties = loadApplicationYaml();
-
-    assertThat(properties)
-        .containsEntry("ca.bc.gov.nrs.identity-lookup.base-url", "${IDENTITY_LOOKUP_BASE_URL:}")
-        .doesNotContainKeys(
-            "lexis.fam.admin.base-url",
-            "lexis.fam.admin.application-id",
-            "lexis.fam.admin.connect-timeout",
-            "lexis.fam.admin.read-timeout");
-  }
-
   private static Properties loadApplicationYaml() {
     YamlPropertiesFactoryBean factory = new YamlPropertiesFactoryBean();
     factory.setResources(new ClassPathResource("application.yml"));

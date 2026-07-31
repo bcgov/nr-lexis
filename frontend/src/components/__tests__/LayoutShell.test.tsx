@@ -138,6 +138,43 @@ describe('Layout shell', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('labels the provincial review navigation as application review', () => {
+    renderLayout('/provincial/review')
+
+    expect(screen.getByRole('link', { name: 'Application review' })).toHaveAttribute(
+      'href',
+      '/provincial/review',
+    )
+    expect(screen.queryByRole('link', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
+  it('shows Summary navigation only to provincial submitters', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER'],
+          grantedActions: ['/summary'],
+          forestClientNumber: '00012345',
+        }),
+        defaultRoute: '/provincial/summary',
+        canPerform: (action: string) => action === '/summary',
+      }),
+    )
+
+    const submitterView = renderLayout('/provincial/summary')
+    expect(screen.getByRole('link', { name: 'Summary' })).toHaveAttribute(
+      'href',
+      '/provincial/summary',
+    )
+
+    submitterView.unmount()
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    renderLayout('/provincial/review')
+
+    expect(screen.queryByRole('link', { name: 'Summary' })).not.toBeInTheDocument()
+  })
+
   it('restores persisted theme, side-nav, and collapsed sections', async () => {
     window.localStorage.setItem(THEME_PREFERENCE_KEY, 'g100')
     window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'true')
@@ -250,7 +287,6 @@ describe('Layout shell', () => {
   it('marks only the exact side-nav route as active', () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    const adminLink = screen.getByRole('link', { name: /Users & Access/i })
     const averageMonthlyValuesLink = screen.getByRole('link', {
       name: /Average Monthly Values/i,
     })
@@ -260,8 +296,6 @@ describe('Layout shell', () => {
     expect(activeLinks).toHaveLength(1)
     expect(averageMonthlyValuesLink).toHaveClass('cds--side-nav__link--active')
     expect(averageMonthlyValuesLink).toHaveAttribute('aria-current', 'page')
-    expect(adminLink).not.toHaveClass('cds--side-nav__link--active')
-    expect(adminLink).not.toHaveAttribute('aria-current')
   })
 
   it('renders split admin side-nav areas with distinct active routes', () => {
@@ -335,7 +369,7 @@ describe('Layout shell', () => {
     expect(uploadLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/provincial/application/upload',
     ])
-    expect(screen.getByRole('link', { name: /Users & Access/i })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
     const navLinks = sideNav.querySelectorAll('.csp-side-nav__link')
@@ -353,7 +387,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Go to your landing page' }))
 
-    expect(screen.getByTestId('current-path')).toHaveTextContent('/admin')
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/review')
   })
 
   it('lets pages own the only visible page title', () => {

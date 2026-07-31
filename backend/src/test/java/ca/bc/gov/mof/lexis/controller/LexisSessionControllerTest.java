@@ -46,22 +46,23 @@ class LexisSessionControllerTest {
   void welcomeShouldUseTokenRolesWhenAvailable() {
     MockHttpServletRequest request = new MockHttpServletRequest();
     TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_PROVINCIAL_SUBMITTER");
+        new TestingAuthenticationToken("bceid\\submitter", "n/a", "LEXIS_PROVINCIAL_SUBMITTER");
     request.setUserPrincipal(authentication);
 
-    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\jsmith");
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("bceid\\submitter");
     when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
 
     LexisSessionWelcomeDto dto =
         new LexisSessionWelcomeDto(
             true,
-            "idir\\jsmith",
+            "bceid\\submitter",
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
-            "industryUser",
-            "/provincial/application");
+            "provincialSubmitter",
+            "/provincial/summary");
 
-    when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+    when(sessionService.resolveWelcomeRoute(
+            "bceid\\submitter", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(dto);
 
     ResponseEntity<LexisSessionWelcomeDto> response = controller.showWelcome(request);
@@ -69,7 +70,8 @@ class LexisSessionControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(sessionService).parseRolesFromPrincipal(authentication);
-    verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    verify(sessionService)
+        .resolveWelcomeRoute("bceid\\submitter", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
   }
 
   @Test
@@ -83,8 +85,8 @@ class LexisSessionControllerTest {
             true,
             "idir\\jsmith",
             List.of(),
-            "mofrUser",
-            "/provincial/review");
+            "noAccess",
+            null);
 
     when(principalService.resolvePrincipalName(principal)).thenReturn("idir\\jsmith");
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of())).thenReturn(dto);
@@ -166,7 +168,7 @@ class LexisSessionControllerTest {
             "bceid\\buyer",
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
             "provincialSubmitter",
-            "/provincial/application");
+            "/provincial/summary");
     when(sessionService.resolveWelcomeRoute(
             "bceid\\buyer", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(welcome);
@@ -207,7 +209,7 @@ class LexisSessionControllerTest {
             "bceid\\buyer",
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
             "provincialSubmitter",
-            "/provincial/application");
+            "/provincial/summary");
     when(sessionService.resolveWelcomeRoute(
             "bceid\\buyer", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(welcome);

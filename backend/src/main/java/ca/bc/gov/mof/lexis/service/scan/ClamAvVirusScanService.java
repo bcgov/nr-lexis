@@ -20,6 +20,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * INTENTIONAL_LEGACY_DIVERGENCE(CLAMAV_UPLOAD_SCANNING): Modern deployed uploads are scanned by
+ * the shared ClamAV service before persistence; infected or unavailable scans fail closed.
+ */
 @Service
 public class ClamAvVirusScanService implements VirusScanService {
 

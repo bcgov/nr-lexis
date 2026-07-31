@@ -24,6 +24,7 @@ import {
 import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
+import { clearPersistedSearchState } from '@/pages/shared/usePersistedSearchParams'
 import apiService from '@/service/api-service'
 import {
   clearActiveForestClientNumber,
@@ -57,7 +58,6 @@ const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
   offerssearch: '/provincial/offers',
   permitsearch: '/provincial/permit',
   federalapplicationsearch: '/federal',
-  lexisagentadmin: '/admin',
 }
 
 const ACTION_PRIORITY: string[] = [
@@ -68,7 +68,6 @@ const ACTION_PRIORITY: string[] = [
   'offersSearch',
   'permitSearch',
   'federalApplicationSearch',
-  'lexisAgentAdmin',
 ]
 
 const REPORT_ACTION_ROUTE_MAP: Record<string, string> = {
@@ -90,9 +89,9 @@ const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_APPLICATION_APPROVER: 'APPLICATION_APPROVER',
   LEXIS_EXEMPTION_APPROVER: 'EXEMPTION_APPROVER',
   LEXIS_PROVINCIAL_SUBMITTER: 'PROVINCIAL_SUBMITTER',
-  LEXIS_DELEGATED_ADMIN: 'DELEGATED_ADMIN',
 }
 
+const NON_LEXIS_FAM_AUTHORITIES = new Set(['DELEGATED_ADMIN', 'LEXIS_DELEGATED_ADMIN'])
 const CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_PROVINCIAL_SUBMITTER_'
 const CANONICAL_PROVINCIAL_CONCRETE_PREFIX = 'PROVINCIAL_SUBMITTER_'
 const ROLE_ADMIN = 'ADMIN'
@@ -135,8 +134,12 @@ const clearOauthCallbackParams = (): void => {
   window.history.replaceState({}, document.title, cleanUrl)
 }
 
-const canonicalizeRole = (role: string): string => {
+const canonicalizeRole = (role: string): string | null => {
   const normalizedRole = role.trim().toUpperCase()
+
+  if (NON_LEXIS_FAM_AUTHORITIES.has(normalizedRole)) {
+    return null
+  }
 
   if (normalizedRole.startsWith(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX)) {
     return `${CANONICAL_PROVINCIAL_CONCRETE_PREFIX}${normalizedRole.slice(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX.length)}`
@@ -149,7 +152,7 @@ const canonicalizeRoles = (roles: string[]): string[] => {
   const deduped = new Set<string>()
   for (const role of roles) {
     const normalizedRole = canonicalizeRole(role)
-    if (normalizedRole.length > 0) {
+    if (normalizedRole && normalizedRole.length > 0) {
       deduped.add(normalizedRole)
     }
   }
@@ -228,6 +231,9 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   }
 
   if (isIndustryUser) {
+    if (isProvincialSubmitterUser && hasGrantedAction('/summary')) {
+      return '/provincial/summary'
+    }
     if (isProvincialSubmitterUser && hasGrantedAction('/applicationSearch')) {
       return '/provincial/application'
     }
@@ -312,6 +318,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         apiService.clearCachedGetData()
         apiService.clearRecordVersions()
         clearAllPageDataCache()
+        clearPersistedSearchState()
         authenticatedSessionRef.current = false
         if (reason === 'idle-timeout') {
           markSessionExpiredLoginNotice()
@@ -376,6 +383,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             if (sessionGenerationRef.current === refreshGeneration) {
               sessionExpiryInFlightRef.current = false
               authenticatedSessionRef.current = false
+              clearPersistedSearchState()
               setCapabilities(DEFAULT_CAPABILITIES)
             }
             return
@@ -396,11 +404,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             clearActiveForestClientNumber()
             apiService.clearCachedGetData()
             clearAllPageDataCache()
+            clearPersistedSearchState()
             data = await fetchSessionCapabilities()
             if (sessionGenerationRef.current !== refreshGeneration) {
               return
             }
             nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+          }
+          if (!nextCapabilities.authenticated) {
+            clearPersistedSearchState()
           }
           authenticatedSessionRef.current = nextCapabilities.authenticated
           setCapabilities(nextCapabilities)
@@ -409,6 +421,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (sessionGenerationRef.current === refreshGeneration) {
           console.warn('Unable to load session capabilities.', error)
           authenticatedSessionRef.current = false
+          clearPersistedSearchState()
           setCapabilities(DEFAULT_CAPABILITIES)
         }
       } finally {
@@ -538,6 +551,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       sessionExpiryInFlightRef.current = false
       clearActiveForestClientNumber()
       apiService.clearCachedGetData()
+      clearPersistedSearchState()
       if (isCognitoConfigured) {
         const providerName =
           provider === 'business-bceid' ? businessBceidProviderName : idirProviderName
@@ -562,6 +576,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiService.clearCachedGetData()
       apiService.clearRecordVersions()
       clearAllPageDataCache()
+      clearPersistedSearchState()
       authenticatedSessionRef.current = false
 
       if (isCognitoConfigured && startFederatedLogout()) {
@@ -593,6 +608,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiService.clearCachedGetData()
       apiService.clearRecordVersions()
       clearAllPageDataCache()
+      clearPersistedSearchState()
 
       try {
         const data = await fetchSessionCapabilities()

@@ -429,16 +429,15 @@ class LexisRouteAuthorizationIntegrationTest {
             get("/api/lexis/showWelcome.do")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.welcomeTarget").value("adminUser"));
+        .andExpect(jsonPath("$.welcomeTarget").value("administrator"));
   }
 
   @Test
-  void sessionShouldAllowDelegatedAdminButNotGrantApplicationRoutes() throws Exception {
+  void famDelegatedAdministrationShouldNotGrantLexisAccess() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/welcome")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"));
+        .andExpect(status().isForbidden());
 
     mockMvc.perform(
             get("/api/lexis/application-reviews/search")
@@ -1504,58 +1503,6 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyAgentAdminShouldRejectReadOnlyRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/lexisAgentAdmin.do")
-                .param("actionMapping", "view")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void legacyAgentAdminShouldAllowAdminRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/lexisAgentAdmin.do")
-                .param("actionMapping", "view")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().is2xxSuccessful());
-  }
-
-  @Test
-  void famUserAccessLookupShouldRejectAnonymousRequests() throws Exception {
-    mockMvc.perform(get("/api/lexis/admin/fam-users").param("search", "smith"))
-        .andExpect(status().isUnauthorized());
-  }
-
-  @Test
-  void famUserAccessLookupShouldRejectReadOnlyRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/admin/fam-users")
-                .param("search", "smith")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void famUserAccessLookupShouldRejectDelegatedAdminRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/admin/fam-users")
-                .param("search", "smith")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void famUserAccessLookupShouldAllowLexisAdminRole() throws Exception {
-    mockMvc.perform(
-            get("/api/lexis/admin/fam-users")
-                .param("search", "smith")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.configured").value(false));
-  }
-
-  @Test
   void legacyPolicyAdminRpcShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/lexisPolicyAdminRPC")
@@ -2378,12 +2325,12 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacySummaryRouteShouldRejectIndustryRole() throws Exception {
+  void legacySummaryRouteShouldAllowProvincialSubmitter() throws Exception {
     mockMvc.perform(
             post("/api/lexis/summary")
                 .param("actionMapping", "getApplications")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNoContent());
   }
 
   @Test

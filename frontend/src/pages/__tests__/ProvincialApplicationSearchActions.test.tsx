@@ -35,7 +35,9 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchProvincialApplications = vi.mocked(searchProvincialApplications)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 
-const renderPage = (path = '/provincial/application') => {
+const renderPage = (
+  path = '/provincial/application?page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
+) => {
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
@@ -463,18 +465,16 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('does not default region filters when opened without query parameters', async () => {
-    renderPage()
-    await screen.findByText('321')
+  it('opens without results or a search request when no search has been applied', async () => {
+    renderPage('/provincial/application')
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledOnce()
+    })
 
-    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({
-          region: [],
-        }),
-      }),
-      expect.objectContaining({ knownTotal: expect.any(Number) }),
-    )
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('region', { name: 'Search results table', hidden: true }),
+    ).not.toBeVisible()
   })
 
   it('loads an export schedule link and explicitly submits its removal', async () => {

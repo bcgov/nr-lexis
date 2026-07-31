@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Edit } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -112,6 +113,21 @@ const EXEMPTION_DETAIL_TAB_SLOTS: readonly ExemptionDetailTabKey[] = [
   'fees',
   'documents',
 ]
+
+const EXEMPTION_DETAIL_TAB_LABELS: Record<ExemptionDetailTabKey, string> = {
+  owner: 'Owner',
+  agent: 'Agent',
+  summary: 'Summary',
+  applications: 'Applications',
+  permits: 'Permits',
+  fees: 'Fees',
+  documents: 'Documents',
+}
+
+const ContiguousTabPanels = ({ children }: { children: ReactNode }) => {
+  const panels = Array.isArray(children) ? children.filter(Boolean) : children
+  return <TabPanels>{panels}</TabPanels>
+}
 
 type ExemptionEditForm = {
   exemptionTypeCode: string
@@ -297,6 +313,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [isEditingDocuments, setIsEditingDocuments] = useState(false)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -307,6 +324,7 @@ const ProvincialExemptionDetailsPage = () => {
   const beginDetailRequest = useLatestRequestGuard()
   const currentDetail = detail && String(detail.exemptionNumber) === exemptionNumber ? detail : null
   const clientContextApplication = applications[0] ?? null
+  const clientContextHasAgent = isAgentApplicant(clientContextApplication?.applicantTypeCode ?? '')
   const linkedApplicationNumber = clientContextApplication?.applicationNumber.trim() ?? ''
   const exemptionOwnerClientNumber = clientContextApplication?.ownerClientNumber.trim() ?? ''
   const exemptionAgentClientNumber = clientContextApplication?.agentClientNumber.trim() ?? ''
@@ -376,7 +394,7 @@ const ProvincialExemptionDetailsPage = () => {
                   applicationNumber: linkedApplicationNumber,
                 })
               : Promise.resolve(null),
-            exemptionAgentClientNumber && agentClientLocationCode
+            clientContextHasAgent && exemptionAgentClientNumber && agentClientLocationCode
               ? fetchApplicationClientData(exemptionAgentClientNumber, agentClientLocationCode, {
                   applicationNumber: linkedApplicationNumber,
                 })
@@ -388,7 +406,7 @@ const ProvincialExemptionDetailsPage = () => {
                   linkedApplicationNumber,
                 )
               : Promise.resolve([]),
-            exemptionAgentClientNumber
+            clientContextHasAgent && exemptionAgentClientNumber
               ? fetchApplicationClientLocations(
                   exemptionAgentClientNumber,
                   'agent',
@@ -427,6 +445,7 @@ const ProvincialExemptionDetailsPage = () => {
   }, [
     agentClientLocationCode,
     clientContextApplication,
+    clientContextHasAgent,
     exemptionAgentClientNumber,
     exemptionOwnerClientNumber,
     linkedApplicationNumber,
@@ -464,6 +483,7 @@ const ProvincialExemptionDetailsPage = () => {
         setEditContextLoaded(false)
         setEditContextRefreshing(false)
         setEditForm(null)
+        setIsEditingDocuments(false)
         setDocumentsErrorMessage('')
         setDocumentsErrorDismissed(false)
         setApplicationsErrorMessage('')
@@ -486,6 +506,7 @@ const ProvincialExemptionDetailsPage = () => {
       setActionInfoMessage('')
       if (!isRefreshingCurrentExemption) {
         setEditing(false)
+        setIsEditingDocuments(false)
         setApplications([])
         setPermitRows([])
         setBlanketOicTotals(null)
@@ -757,7 +778,9 @@ const ProvincialExemptionDetailsPage = () => {
   const showOwner =
     showApplications && Boolean(linkedApplicationNumber && exemptionOwnerClientNumber)
   const showAgent =
-    showApplications && Boolean(linkedApplicationNumber && exemptionAgentClientNumber)
+    showApplications &&
+    clientContextHasAgent &&
+    Boolean(linkedApplicationNumber && exemptionAgentClientNumber)
   const feeManagementAvailable =
     currentTypeCode === 'B' ||
     currentTypeCode === 'O' ||
@@ -776,10 +799,7 @@ const ProvincialExemptionDetailsPage = () => {
   const activeExemptionTab = exemptionDetailTabs.includes(selectedExemptionTab)
     ? selectedExemptionTab
     : 'summary'
-  const selectedExemptionTabIndex = Math.max(
-    0,
-    EXEMPTION_DETAIL_TAB_SLOTS.indexOf(activeExemptionTab),
-  )
+  const selectedExemptionTabIndex = Math.max(0, exemptionDetailTabs.indexOf(activeExemptionTab))
   const canManageFeeRate = !applicationsErrorMessage && feeManagementAvailable && editContextLoaded
   const canEditFeeOverride =
     canManageFeeRate &&
@@ -886,6 +906,7 @@ const ProvincialExemptionDetailsPage = () => {
     persistedStatusCode !== 'EXP' &&
     editContextLoaded &&
     !exemptionEditLocked
+  const canEditExemptionDocuments = canUploadExemptionDocuments || canDeleteExemptionDocuments
 
   const refreshPermitData = useCallback(
     async (currentExemptionNumber: string, blanketOic: boolean) => {
@@ -1046,6 +1067,7 @@ const ProvincialExemptionDetailsPage = () => {
       setEditForm(toEditForm(detail, editContext))
     }
     setEditing(false)
+    setIsEditingDocuments(false)
     setActionErrorMessage('')
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
@@ -1296,6 +1318,14 @@ const ProvincialExemptionDetailsPage = () => {
     setDocumentRows(documentsResult.rows)
     setDocumentsErrorMessage('')
   }, [exemptionNumber])
+
+  const onCancelDocumentEditing = useCallback(() => {
+    setDocumentUploadDirty(false)
+    setDocumentUploadBusy(false)
+    setDocumentUploadResetKey((current) => current + 1)
+    setActionErrorMessage('')
+    setIsEditingDocuments(false)
+  }, [])
 
   const onOpenDocument = useCallback(
     async (row: ProvincialExemptionDocumentRow) => {
@@ -1570,12 +1600,7 @@ const ProvincialExemptionDetailsPage = () => {
             <Tabs
               selectedIndex={selectedExemptionTabIndex}
               onChange={({ selectedIndex }) => {
-                const selectedTab = EXEMPTION_DETAIL_TAB_SLOTS[selectedIndex]
-                selectExemptionTab(
-                  selectedTab && exemptionDetailTabs.includes(selectedTab)
-                    ? selectedTab
-                    : 'summary',
-                )
+                selectExemptionTab(exemptionDetailTabs[selectedIndex] ?? 'summary')
               }}
             >
               <TabList
@@ -1584,15 +1609,11 @@ const ProvincialExemptionDetailsPage = () => {
                 size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
-                {showOwner && <Tab>Owner</Tab>}
-                {showAgent && <Tab>Agent</Tab>}
-                <Tab>Summary</Tab>
-                {showApplications && <Tab>Applications</Tab>}
-                <Tab>Permits</Tab>
-                {showFees && <Tab>Fees</Tab>}
-                <Tab>Documents</Tab>
+                {exemptionDetailTabs.map((tab) => (
+                  <Tab key={tab}>{EXEMPTION_DETAIL_TAB_LABELS[tab]}</Tab>
+                ))}
               </TabList>
-              <TabPanels>
+              <ContiguousTabPanels>
                 {showOwner && (
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
@@ -1774,10 +1795,14 @@ const ProvincialExemptionDetailsPage = () => {
                                 label: 'Owner client number',
                                 value: displayValue(detail.ownerClientNumber),
                               },
-                              {
-                                label: 'Agent client number',
-                                value: displayValue(detail.agentClientNumber),
-                              },
+                              ...(showAgent
+                                ? [
+                                    {
+                                      label: 'Agent client number',
+                                      value: displayValue(detail.agentClientNumber),
+                                    },
+                                  ]
+                                : []),
                               {
                                 label: 'Approval date',
                                 value: displayValue(detail.approvalDate),
@@ -2197,8 +2222,30 @@ const ProvincialExemptionDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Documents</h2>
-                        {canUploadExemptionDocuments && (
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Documents</h2>
+                          {canEditExemptionDocuments &&
+                            (isEditingDocuments ? (
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={documentUploadBusy || isRemovingDocumentId !== null}
+                                onClick={onCancelDocumentEditing}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => setIsEditingDocuments(true)}
+                              >
+                                Edit documents
+                              </Button>
+                            ))}
+                        </div>
+                        {isEditingDocuments && canUploadExemptionDocuments && (
                           <DetailDocumentUploadPanel
                             key={`exemption-document-upload-${exemptionNumber}-${documentUploadResetKey}`}
                             workflowType="exemption"
@@ -2256,25 +2303,27 @@ const ProvincialExemptionDetailsPage = () => {
                                         >
                                           Open
                                         </Button>
-                                        <Button
-                                          kind="danger--ghost"
-                                          size="sm"
-                                          disabled={
-                                            !canDeleteExemptionDocuments ||
-                                            row.deletable === false ||
-                                            isRemovingDocumentId === row.id
-                                          }
-                                          title={
-                                            row.deletable === false
-                                              ? `Delete this document from its ${row.source || 'source'} details page.`
-                                              : undefined
-                                          }
-                                          onClick={() => void onRemoveDocument(row)}
-                                        >
-                                          {isRemovingDocumentId === row.id
-                                            ? 'Deleting...'
-                                            : 'Delete'}
-                                        </Button>
+                                        {isEditingDocuments && (
+                                          <Button
+                                            kind="danger--ghost"
+                                            size="sm"
+                                            disabled={
+                                              !canDeleteExemptionDocuments ||
+                                              row.deletable === false ||
+                                              isRemovingDocumentId === row.id
+                                            }
+                                            title={
+                                              row.deletable === false
+                                                ? `Delete this document from its ${row.source || 'source'} details page.`
+                                                : undefined
+                                            }
+                                            onClick={() => void onRemoveDocument(row)}
+                                          >
+                                            {isRemovingDocumentId === row.id
+                                              ? 'Deleting...'
+                                              : 'Delete'}
+                                          </Button>
+                                        )}
                                       </div>
                                     </TableCell>
                                   </TableRow>
@@ -2301,7 +2350,7 @@ const ProvincialExemptionDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-              </TabPanels>
+              </ContiguousTabPanels>
             </Tabs>
           </Column>
         </>

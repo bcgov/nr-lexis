@@ -1,5 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
-import type { within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { expect, vi } from 'vitest'
@@ -339,14 +338,50 @@ const selectApplicationDetailTab = async (name: string): Promise<void> => {
   }
 }
 
-const selectApplicationSummaryTile = async (): Promise<HTMLElement> => {
+const selectApplicationSummaryTile = async (edit = true): Promise<HTMLElement> => {
   await selectApplicationDetailTab('Application')
-  return waitFor(() => getApplicationSummaryTile())
+  const summaryTile = await waitFor(() => getApplicationSummaryTile())
+  if (edit) {
+    const editButton = within(summaryTile).queryByRole('button', {
+      name: 'Edit application summary',
+    })
+    if (editButton) {
+      await userEvent.click(editButton)
+    }
+  }
+  return summaryTile
 }
 
-const selectApplicationReviewTile = async (): Promise<HTMLElement> => {
+const selectApplicationReviewTile = async (edit = true): Promise<HTMLElement> => {
   await selectApplicationDetailTab('Review')
-  return waitFor(() => getApplicationReviewTile())
+  const reviewTile = await waitFor(() => getApplicationReviewTile())
+  if (edit) {
+    const editButton = within(reviewTile).queryByRole('button', {
+      name: 'Edit application review',
+    })
+    if (editButton) {
+      await userEvent.click(editButton)
+    }
+  }
+  return reviewTile
+}
+
+const selectApplicationItemsForEditing = async (): Promise<void> => {
+  await selectApplicationDetailTab('Items')
+  const editButton = await screen.findByRole('button', { name: 'Edit items' })
+  await userEvent.click(editButton)
+}
+
+const selectApplicationDocumentsForEditing = async (): Promise<void> => {
+  await selectApplicationDetailTab('Documents')
+  const editButton = await screen.findByRole('button', { name: 'Edit documents' })
+  await userEvent.click(editButton)
+}
+
+const selectApplicationRemarksForEditing = async (): Promise<void> => {
+  await selectApplicationDetailTab('Remarks')
+  const addButton = await screen.findByRole('button', { name: 'Add remark' })
+  await userEvent.click(addButton)
 }
 
 export const setupApplicationDetailTests = (): void => {
@@ -678,6 +713,9 @@ export {
   mockedValidateAdminUpload,
   newExemptionDetail,
   selectApplicationDetailTab,
+  selectApplicationDocumentsForEditing,
+  selectApplicationItemsForEditing,
+  selectApplicationRemarksForEditing,
   selectApplicationReviewTile,
   selectApplicationSummaryTile,
 }

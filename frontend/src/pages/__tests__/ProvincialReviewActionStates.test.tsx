@@ -143,7 +143,9 @@ const applicationSummary = {
   speciesCodes: [],
 }
 
-const renderPage = (initialEntry = '/provincial/review') => {
+const renderPage = (
+  initialEntry = '/provincial/review?region=11,12&page=1&pageSize=100&sortField=applicationNumber&sortDirection=desc',
+) => {
   render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
@@ -787,13 +789,17 @@ describe('Provincial Review Action State Smoke', () => {
     expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
   }, 15000)
 
-  it('defaults to all active regions like the legacy review queue', async () => {
-    renderPage()
+  it('defaults to all active regions but waits for an explicit search', async () => {
+    renderPage('/provincial/review')
 
-    expect(screen.getByText('Loading results…')).toBeInTheDocument()
-    expect(screen.queryByText('0 results found')).not.toBeInTheDocument()
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
+    expect(within(selectedRegions).getByText('Coast')).toBeVisible()
+    expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
+    expect(screen.getByRole('region', { name: 'Review queue', hidden: true })).not.toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await screen.findByText('1000123')
-
     expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
@@ -804,9 +810,6 @@ describe('Provincial Review Action State Smoke', () => {
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
     expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
-    const selectedRegions = screen.getByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
-    expect(within(selectedRegions).getByText('Coast')).toBeVisible()
   })
 
   it('keeps review pagination at 100 by default with expanded page size options', async () => {

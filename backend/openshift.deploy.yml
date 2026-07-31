@@ -106,8 +106,6 @@ parameters:
   - name: ALLOWED_ORIGINS
     description: Comma-separated browser origins allowed to call the backend
     value: https://openapi.apps.gov.bc.ca
-  - name: IDENTITY_LOOKUP_BASE_URL
-    required: true
   - name: DATABASE_HOST
     required: true
   - name: DATABASE_SERVICE_NAME
@@ -226,8 +224,6 @@ objects:
                   value: ${KEYCLOAK_ISSUER_URI}
                 - name: ALLOWED_ORIGINS
                   value: ${ALLOWED_ORIGINS}
-                - name: IDENTITY_LOOKUP_BASE_URL
-                  value: ${IDENTITY_LOOKUP_BASE_URL}
                 - name: DATABASE_HOST
                   value: ${DATABASE_HOST}
                 - name: DATABASE_SERVICE_NAME

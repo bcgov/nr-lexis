@@ -211,4 +211,58 @@ describe('Provincial exemption client parity', () => {
       expect(fetchApplicationClientLocations).toHaveBeenCalledWith('00002176', 'agent', '45242')
     })
   })
+
+  it('hides residual agent data for owner-filed exemption applications', async () => {
+    vi.mocked(fetchExemptionApplications).mockResolvedValue({
+      applications: [
+        {
+          applicationNumber: '45242',
+          requestedVolume: '307.2',
+          scaleVolume: '',
+          locked: false,
+          jurisdiction: 'P',
+          ownerClientNumber: '00001074',
+          agentClientNumber: '00002176',
+          ownerClientLocationCode: '03',
+          agentClientLocationCode: '12',
+          applicantTypeCode: 'O',
+          ownerContactName: 'BOB TURMEL',
+          agentContactName: 'STALE AGENT',
+          ownerCompanyName: 'NORSKE SKOG CANADA LIMITED',
+          agentCompanyName: 'STALE AGENT COMPANY',
+        },
+      ],
+      containsUnmanu: false,
+      ownerNumber: '00001074',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Summary' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Exemption summary', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByText('Agent client number')).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(fetchApplicationClientData).toHaveBeenCalledWith('00001074', '03', {
+        applicationNumber: '45242',
+      })
+    })
+    expect(fetchApplicationClientData).not.toHaveBeenCalledWith('00002176', '12', {
+      applicationNumber: '45242',
+    })
+    expect(fetchApplicationClientLocations).not.toHaveBeenCalledWith('00002176', 'agent', '45242')
+  })
 })

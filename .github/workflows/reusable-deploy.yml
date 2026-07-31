@@ -206,7 +206,6 @@ jobs:
             -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
             -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
             -p ALLOWED_ORIGINS="${{ vars.ALLOWED_ORIGINS || 'https://openapi.apps.gov.bc.ca' }}"
-            -p IDENTITY_LOOKUP_BASE_URL="${{ vars.IDENTITY_LOOKUP_BASE_URL }}"
             -p DATABASE_HOST="$DATABASE_HOST"
             -p DATABASE_SERVICE_NAME="$DATABASE_SERVICE_NAME"
             -p DATABASE_USER="$DATABASE_USER"
@@ -302,7 +301,6 @@ jobs:
             -p VITE_COGNITO_SCOPES="${{ vars.VITE_COGNITO_SCOPES }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
             -p VITE_LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
-            -p VITE_FAM_MANAGE_URL="${{ vars.VITE_FAM_MANAGE_URL }}"
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"
           triggers: ${{ inputs.triggers }}

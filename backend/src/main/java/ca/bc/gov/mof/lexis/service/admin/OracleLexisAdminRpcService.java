@@ -44,6 +44,10 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   private static final String FEE_POLICY_KEY_EXISTS_MESSAGE =
       "Effective Date and region combination already exists.";
   private static final String FIL_POLICY_KEY_EXISTS_MESSAGE = "Effective Date already exists.";
+  private static final String FEE_POLICY_DELETE_FUTURE_ONLY_MESSAGE =
+      "Only future-dated fee policies can be deleted.";
+  private static final String FIL_POLICY_DELETE_FUTURE_ONLY_MESSAGE =
+      "Only future-dated fee in lieu policies can be deleted.";
 
   private static final Set<String> FEE_SORT_COLUMNS =
       Set.of("effective_date", "org_unit_no", "percent_increase");
@@ -294,8 +298,13 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     if (!errors.isEmpty()) {
       return failureResponse(errors);
     }
-    if (repository.findFeePolicyById(feePolicyId).isEmpty()) {
+    Optional<LexisAdminPolicyRepository.FeePolicyRow> existingPolicy =
+        repository.findFeePolicyById(feePolicyId);
+    if (existingPolicy.isEmpty()) {
       return failureResponse(List.of("Fee policy does not exist."));
+    }
+    if (!existingPolicy.get().effectiveDate().isAfter(LexisBusinessTime.today())) {
+      return failureResponse(List.of(FEE_POLICY_DELETE_FUTURE_ONLY_MESSAGE));
     }
 
     boolean deleted = repository.deleteFeePolicy(feePolicyId);
@@ -390,8 +399,13 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     if (!errors.isEmpty()) {
       return failureResponse(errors);
     }
-    if (repository.findFilPolicyById(filPolicyId).isEmpty()) {
+    Optional<LexisAdminPolicyRepository.FilPolicyRow> existingPolicy =
+        repository.findFilPolicyById(filPolicyId);
+    if (existingPolicy.isEmpty()) {
       return failureResponse(List.of("Fee in lieu policy does not exist."));
+    }
+    if (!existingPolicy.get().effectiveDate().isAfter(LexisBusinessTime.today())) {
+      return failureResponse(List.of(FIL_POLICY_DELETE_FUTURE_ONLY_MESSAGE));
     }
 
     boolean deleted = repository.deleteFilPolicy(filPolicyId);

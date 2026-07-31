@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Edit } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -118,6 +119,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { triggerBrowserDownload } from '@/utils/download'
+import { formatPermitNumber } from '@/utils/permit'
 import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 const formatAmount = (value: number): string => {
@@ -199,6 +201,11 @@ const PERMIT_DETAIL_TABS = [
 type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
 type DeferredPermitTabId = Extract<PermitDetailTabId, 'fees' | 'documents' | 'invoices'>
 const PERMIT_DETAIL_TAB_IDS: readonly PermitDetailTabId[] = PERMIT_DETAIL_TABS.map(({ id }) => id)
+
+const ContiguousTabPanels = ({ children }: { children: ReactNode }) => {
+  const panels = Array.isArray(children) ? children.filter(Boolean) : children
+  return <TabPanels>{panels}</TabPanels>
+}
 
 const EMPTY_DEFERRED_PERMIT_TAB_STATE: Record<DeferredPermitTabId, boolean> = {
   fees: false,
@@ -537,6 +544,8 @@ const ProvincialPermitDetailsPage = () => {
   const [isEditingPermit, setIsEditingPermit] = useState(false)
   const [isEditingShipping, setIsEditingShipping] = useState(false)
   const [isEditingFeeOverride, setIsEditingFeeOverride] = useState(false)
+  const [isEditingPermitDocuments, setIsEditingPermitDocuments] = useState(false)
+  const [isEditingInvoiceDocuments, setIsEditingInvoiceDocuments] = useState(false)
   const [isSavingPermit, setIsSavingPermit] = useState(false)
   const [isSavingShipping, setIsSavingShipping] = useState(false)
   const [isSavingFeeOverride, setIsSavingFeeOverride] = useState(false)
@@ -603,7 +612,8 @@ const ProvincialPermitDetailsPage = () => {
   const [permitDocumentUploadBusy, setPermitDocumentUploadBusy] = useState(false)
   const [invoiceDocumentUploadDirty, setInvoiceDocumentUploadDirty] = useState(false)
   const [invoiceDocumentUploadBusy, setInvoiceDocumentUploadBusy] = useState(false)
-  const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
+  const [permitDocumentUploadResetKey, setPermitDocumentUploadResetKey] = useState(0)
+  const [invoiceDocumentUploadResetKey, setInvoiceDocumentUploadResetKey] = useState(0)
   const [touchedPermitFields, setTouchedPermitFields] = useState<
     TouchedFields<PermitDetailFormField>
   >({})
@@ -681,7 +691,10 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
     setInvoiceDocumentUploadBusy(false)
-    setDocumentUploadResetKey((current) => current + 1)
+    setPermitDocumentUploadResetKey((current) => current + 1)
+    setInvoiceDocumentUploadResetKey((current) => current + 1)
+    setIsEditingPermitDocuments(false)
+    setIsEditingInvoiceDocuments(false)
     setDocumentRows([])
     setInvoiceRows([])
     setClientDataRequested(false)
@@ -1206,7 +1219,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const gbmsHistory = tabsData?.gbmsEvents ?? []
 
-  const selectedPermitTabIndex = PERMIT_DETAIL_TABS.findIndex(({ id }) => id === activePermitTabId)
+  const selectedPermitTabIndex = permitDetailTabs.findIndex(({ id }) => id === activePermitTabId)
 
   const filteredDocumentRows = useMemo(() => {
     return documentRows.filter((row) =>
@@ -1342,6 +1355,8 @@ const ProvincialPermitDetailsPage = () => {
     hasDocumentActorRole &&
     (adminUser || !readOnlyUser) &&
     permitStatusCode === 'ACT'
+  const canEditPermitDocuments = canUploadPermitDocuments || canDeletePermitDocuments
+  const canEditInvoiceDocuments = canUploadInvoiceDocuments
   const scaleAttachmentLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const feeOverrideLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const canOpenPermitReport = canPerform('/permitReport') && permitStatusCode === 'COM'
@@ -2439,6 +2454,22 @@ const ProvincialPermitDetailsPage = () => {
     setInvoicesErrorMessage('')
   }, [beginPermitDocumentsRequest, beginPermitInvoicesRequest, detail?.permitNumber, permitNumber])
 
+  const onCancelPermitDocumentEditing = useCallback(() => {
+    setPermitDocumentUploadDirty(false)
+    setPermitDocumentUploadBusy(false)
+    setPermitDocumentUploadResetKey((current) => current + 1)
+    setActionErrorMessage('')
+    setIsEditingPermitDocuments(false)
+  }, [])
+
+  const onCancelInvoiceDocumentEditing = useCallback(() => {
+    setInvoiceDocumentUploadDirty(false)
+    setInvoiceDocumentUploadBusy(false)
+    setInvoiceDocumentUploadResetKey((current) => current + 1)
+    setActionErrorMessage('')
+    setIsEditingInvoiceDocuments(false)
+  }, [])
+
   const onOpenDocument = useCallback(
     async (row: PermitDocumentRow) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
@@ -2698,7 +2729,10 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
     setInvoiceDocumentUploadBusy(false)
-    setDocumentUploadResetKey((current) => current + 1)
+    setPermitDocumentUploadResetKey((current) => current + 1)
+    setInvoiceDocumentUploadResetKey((current) => current + 1)
+    setIsEditingPermitDocuments(false)
+    setIsEditingInvoiceDocuments(false)
     setActionErrorMessage('')
   }, [boicScaleBaselineForm, detail, feeOverrideContext, resetBlanketOicPackageForm])
 
@@ -2742,6 +2776,10 @@ const ProvincialPermitDetailsPage = () => {
   const detailMatchesRoute =
     !!detail && !!permitNumber && String(detail.permitNumber) === permitNumber
   const isRefreshingDetail = loading && detailMatchesRoute
+  const permitDisplayNumber = formatPermitNumber(
+    detailMatchesRoute ? detail?.permitNumber : permitNumber,
+    detailMatchesRoute ? (detail?.permitStatusCode ?? detail?.permitStatusDescription) : null,
+  )
 
   return (
     <Grid
@@ -2761,9 +2799,7 @@ const ProvincialPermitDetailsPage = () => {
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={`Permit ${
-            detailMatchesRoute ? (detail?.permitNumber ?? '') : (permitNumber ?? '')
-          }`.trim()}
+          title={`Permit ${permitDisplayNumber}`.trim()}
           subtitle="Check and manage this provincial permit"
           status={
             detail && detailMatchesRoute ? (
@@ -2951,7 +2987,7 @@ const ProvincialPermitDetailsPage = () => {
             <Tabs
               selectedIndex={selectedPermitTabIndex}
               onChange={({ selectedIndex }) => {
-                const selectedTab = PERMIT_DETAIL_TABS[selectedIndex]
+                const selectedTab = permitDetailTabs[selectedIndex]
                 if (selectedTab) {
                   selectPermitTab(selectedTab.id)
                   if (selectedTab.id === 'owner' || selectedTab.id === 'agent') {
@@ -2973,18 +3009,11 @@ const ProvincialPermitDetailsPage = () => {
                 size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
-                {PERMIT_DETAIL_TABS.map(({ id, label }) => (
-                  <Tab
-                    key={id}
-                    hidden={
-                      (id === 'agent' && !hasPermitAgent) || (id === 'gbms' && !hasGbmsHistory)
-                    }
-                  >
-                    {label}
-                  </Tab>
+                {permitDetailTabs.map(({ id, label }) => (
+                  <Tab key={id}>{label}</Tab>
                 ))}
               </TabList>
-              <TabPanels>
+              <ContiguousTabPanels>
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
@@ -3084,7 +3113,13 @@ const ProvincialPermitDetailsPage = () => {
                         <DetailFieldTile
                           title="Permit summary"
                           fields={[
-                            { label: 'Permit number', value: displayValue(detail.permitNumber) },
+                            {
+                              label: 'Permit number',
+                              value: formatPermitNumber(
+                                detail.permitNumber,
+                                detail.permitStatusCode ?? detail.permitStatusDescription,
+                              ),
+                            },
                             {
                               label: 'Application number',
                               value: displayValue(detail.applicationNumber),
@@ -3425,19 +3460,21 @@ const ProvincialPermitDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <PermitClientTile
-                        title="Agent"
-                        clientNumber={detail.applicantClientNumber}
-                        locationCode={detail.agentClientLocationCode}
-                        clientData={agentClientData}
-                        isLoading={isClientDataLoading}
-                      />
-                    </Column>
-                  </Grid>
-                </TabPanel>
+                {hasPermitAgent && (
+                  <TabPanel className="application-detail-tab-panel">
+                    <Grid fullWidth className="application-detail-tab-grid">
+                      <Column sm={4} md={8} lg={16}>
+                        <PermitClientTile
+                          title="Agent"
+                          clientNumber={detail.applicantClientNumber}
+                          locationCode={detail.agentClientLocationCode}
+                          clientData={agentClientData}
+                          isLoading={isClientDataLoading}
+                        />
+                      </Column>
+                    </Grid>
+                  </TabPanel>
+                )}
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
@@ -4348,13 +4385,13 @@ const ProvincialPermitDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <h2 className="detail-tile-title">GBMS invoice history</h2>
-                        {!permitTablesErrorMessage &&
-                          (gbmsHistory.length > 0 ? (
+                {hasGbmsHistory && (
+                  <TabPanel className="application-detail-tab-panel">
+                    <Grid fullWidth className="application-detail-tab-grid">
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile>
+                          <h2 className="detail-tile-title">GBMS invoice history</h2>
+                          {!permitTablesErrorMessage && (
                             <TableFrame ariaLabel="GBMS invoice history">
                               <Table useZebraStyles>
                                 <TableHead>
@@ -4383,25 +4420,42 @@ const ProvincialPermitDetailsPage = () => {
                                 </TableBody>
                               </Table>
                             </TableFrame>
-                          ) : (
-                            <EmptyState
-                              title="No GBMS invoice history available"
-                              description="No GBMS invoice history is available for this permit."
-                              headingLevel={3}
-                            />
-                          ))}
-                      </Tile>
-                    </Column>
-                  </Grid>
-                </TabPanel>
+                          )}
+                        </Tile>
+                      </Column>
+                    </Grid>
+                  </TabPanel>
+                )}
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Permit documents</h2>
-                        {canUploadPermitDocuments && (
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Permit documents</h2>
+                          {canEditPermitDocuments &&
+                            (isEditingPermitDocuments ? (
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={permitDocumentUploadBusy || isRemovingDocumentId !== null}
+                                onClick={onCancelPermitDocumentEditing}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => setIsEditingPermitDocuments(true)}
+                              >
+                                Edit permit documents
+                              </Button>
+                            ))}
+                        </div>
+                        {isEditingPermitDocuments && canUploadPermitDocuments && (
                           <DetailDocumentUploadPanel
-                            key={`permit-document-upload-${permitNumber}-${documentUploadResetKey}`}
+                            key={`permit-document-upload-${permitNumber}-${permitDocumentUploadResetKey}`}
                             workflowType="permit"
                             targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
                             inputId="permitDocumentUpload"
@@ -4463,25 +4517,27 @@ const ProvincialPermitDetailsPage = () => {
                                           >
                                             Open
                                           </Button>
-                                          <Button
-                                            kind="danger--ghost"
-                                            size="sm"
-                                            disabled={
-                                              !canDeleteRow ||
-                                              row.deletable === false ||
-                                              isRemovingDocumentId === row.id
-                                            }
-                                            title={
-                                              row.deletable === false
-                                                ? 'The document source is not safe to delete from this page.'
-                                                : undefined
-                                            }
-                                            onClick={() => void onRemoveDocument(row)}
-                                          >
-                                            {isRemovingDocumentId === row.id
-                                              ? 'Deleting...'
-                                              : 'Delete'}
-                                          </Button>
+                                          {isEditingPermitDocuments && (
+                                            <Button
+                                              kind="danger--ghost"
+                                              size="sm"
+                                              disabled={
+                                                !canDeleteRow ||
+                                                row.deletable === false ||
+                                                isRemovingDocumentId === row.id
+                                              }
+                                              title={
+                                                row.deletable === false
+                                                  ? 'The document source is not safe to delete from this page.'
+                                                  : undefined
+                                              }
+                                              onClick={() => void onRemoveDocument(row)}
+                                            >
+                                              {isRemovingDocumentId === row.id
+                                                ? 'Deleting...'
+                                                : 'Delete'}
+                                            </Button>
+                                          )}
                                         </div>
                                       </TableCell>
                                     </TableRow>
@@ -4513,10 +4569,32 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Invoices</h2>
-                        {canUploadInvoiceDocuments && (
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Invoices</h2>
+                          {canEditInvoiceDocuments &&
+                            (isEditingInvoiceDocuments ? (
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={invoiceDocumentUploadBusy}
+                                onClick={onCancelInvoiceDocumentEditing}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => setIsEditingInvoiceDocuments(true)}
+                              >
+                                Edit invoice documents
+                              </Button>
+                            ))}
+                        </div>
+                        {isEditingInvoiceDocuments && canUploadInvoiceDocuments && (
                           <DetailDocumentUploadPanel
-                            key={`invoice-document-upload-${permitNumber}-${documentUploadResetKey}`}
+                            key={`invoice-document-upload-${permitNumber}-${invoiceDocumentUploadResetKey}`}
                             workflowType="invoice"
                             targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
                             inputId="permitInvoiceUpload"
@@ -4593,7 +4671,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-              </TabPanels>
+              </ContiguousTabPanels>
             </Tabs>
           </Column>
         </>

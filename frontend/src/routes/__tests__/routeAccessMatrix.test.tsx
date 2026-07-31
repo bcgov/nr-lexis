@@ -37,6 +37,12 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
     requiredActionsMatch: 'all',
   },
   {
+    path: '/provincial/summary',
+    requiredActions: ['/summary'],
+    requiredActionsMatch: 'any',
+    roleScope: 'provincialSubmitter',
+  },
+  {
     path: '/provincial/application/upload',
     requiredActions: ['uploadApplicationSubmission'],
     requiredActionsMatch: 'any',
@@ -80,11 +86,6 @@ describe('Protected route access matrix', () => {
     },
   )
 
-  it('requires admin action for admin landing route', () => {
-    const route = findRoute('/admin')
-    expect(route.requiredActions).toEqual(['/lexisAgentAdmin'])
-  })
-
   it('includes advertising list action in reports route requirements', () => {
     const route = findRoute('/reports')
     const detailRoute = findRoute('/reports/:reportId')
@@ -94,23 +95,15 @@ describe('Protected route access matrix', () => {
     expect(detailRoute.requiredActions).toEqual(route.requiredActions)
   })
 
-  it('does not expose retired Indian Reserve jurisdiction or legacy advertising routes', () => {
+  it('does not expose retired admin, Indian Reserve jurisdiction, or legacy advertising routes', () => {
     const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
       route.path.toLowerCase(),
     )
 
+    expect(routePaths).not.toContain('/admin')
     expect(routePaths.some((path) => path.includes('indian'))).toBe(false)
     expect(routePaths.some((path) => path.includes('reserve'))).toBe(false)
     expect(routePaths.some((path) => path.includes('advertising'))).toBe(false)
-  })
-
-  it('does not expose the replaced provincial summary route', () => {
-    const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
-      route.path.toLowerCase(),
-    )
-
-    expect(routePaths.some((path) => path === '/provincial/summary')).toBe(false)
-    expect(routePaths.some((path) => path.startsWith('/provincial/summary/'))).toBe(false)
   })
 
   it('keeps legacy dashboard URL as a redirect instead of a page', () => {

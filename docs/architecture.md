@@ -18,7 +18,6 @@ flowchart LR
     Gateway -->|Scoped federal POST requests| Backend
 
     Backend --> Oracle[("Shared Oracle database")]
-    Backend --> Identity["FAM identity lookup"]
     Backend --> ClamAV["Shared ClamAV service<br/>separate namespace"]
     Backend --> Mail["Government mail relay"]
 ```
@@ -50,6 +49,9 @@ active organization selection. The frontend sends that selection with each API r
 backend validates it against the client-scoped FAM authorities before enforcing it for every
 protected object, child resource, download, and mutation. The frontend treats its route and action
 guards as user experience controls rather than the security boundary.
+
+FAM delegated administration controls who may assign the five LEXIS application roles. It is a FAM
+permission type, not a LEXIS runtime role, and does not grant or appear as application access.
 
 NEXCOL does not use an interactive FAM role. It obtains a Keycloak service-client token with the
 `lexis:federal-submission:submit` scope and reaches only the federal validation and submission

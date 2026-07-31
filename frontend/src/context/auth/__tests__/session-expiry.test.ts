@@ -48,7 +48,7 @@ describe('session expiry helpers', () => {
   })
 
   it('returns expired users to the login shell through SPA navigation', () => {
-    window.history.replaceState({}, document.title, '/admin')
+    window.history.replaceState({}, document.title, '/provincial/review')
     const popstateListener = vi.fn()
     window.addEventListener('popstate', popstateListener)
 

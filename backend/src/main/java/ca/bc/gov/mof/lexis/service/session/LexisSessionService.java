@@ -24,8 +24,9 @@ public class LexisSessionService {
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
-  private static final String ROLE_DELEGATED_ADMIN = "LEXIS_DELEGATED_ADMIN";
   private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
+  private static final Set<String> NON_LEXIS_FAM_AUTHORITIES =
+      Set.of("DELEGATED_ADMIN", "LEXIS_DELEGATED_ADMIN");
 
   private static final Set<String> CANONICAL_ROLES =
       Set.of(
@@ -33,8 +34,7 @@ public class LexisSessionService {
           ROLE_READ_ONLY,
           ROLE_APPLICATION_APPROVER,
           ROLE_EXEMPTION_APPROVER,
-          ROLE_PROVINCIAL_SUBMITTER,
-          ROLE_DELEGATED_ADMIN);
+          ROLE_PROVINCIAL_SUBMITTER);
 
   private final Set<String> configuredIndustryRoles;
   private final ForestClientSelectionContext forestClientSelectionContext;
@@ -59,27 +59,21 @@ public class LexisSessionService {
     boolean readOnlyUser = roleSet.contains(ROLE_READ_ONLY);
     boolean applicationApprover = roleSet.contains(ROLE_APPLICATION_APPROVER);
     boolean provincialSubmitter = roleSet.contains(ROLE_PROVINCIAL_SUBMITTER);
-    boolean industryUser = roleSet.stream().anyMatch(this::isIndustryRole);
     boolean exemptionApprover = roleSet.contains(ROLE_EXEMPTION_APPROVER);
-    boolean delegatedAdminOnly = roleSet.size() == 1 && roleSet.contains(ROLE_DELEGATED_ADMIN);
 
     WelcomeTarget target;
     if (adminUser) {
-      target = WelcomeTarget.ADMIN_USER;
+      target = WelcomeTarget.ADMINISTRATOR;
     } else if (readOnlyUser) {
       target = WelcomeTarget.READ_ONLY;
     } else if (provincialSubmitter) {
       target = WelcomeTarget.PROVINCIAL_SUBMITTER;
-    } else if (industryUser) {
-      target = WelcomeTarget.INDUSTRY_USER;
     } else if (exemptionApprover) {
       target = WelcomeTarget.EXEMPTION_APPROVER;
     } else if (applicationApprover) {
-      target = WelcomeTarget.MOFR_USER;
-    } else if (delegatedAdminOnly || !roleSet.isEmpty()) {
-      target = WelcomeTarget.NO_ACCESS;
+      target = WelcomeTarget.APPLICATION_APPROVER;
     } else {
-      target = WelcomeTarget.MOFR_USER;
+      target = WelcomeTarget.NO_ACCESS;
     }
 
     return new LexisSessionWelcomeDto(
@@ -263,10 +257,6 @@ public class LexisSessionService {
     return Set.copyOf(parsed);
   }
 
-  private boolean isIndustryRole(String role) {
-    return configuredIndustryRoles.contains(role);
-  }
-
   private String collapseForestClientScopedIndustryRole(String normalizedRole) {
     String forestClientSuffix = extractForestClientSuffix(normalizedRole);
     if (forestClientSuffix == null) {
@@ -294,6 +284,9 @@ public class LexisSessionService {
       return null;
     }
     if (normalizedRole.startsWith(SCOPE_AUTHORITY_PREFIX)) {
+      return null;
+    }
+    if (NON_LEXIS_FAM_AUTHORITIES.contains(normalizedRole)) {
       return null;
     }
 
@@ -369,13 +362,12 @@ public class LexisSessionService {
   }
 
   private enum WelcomeTarget {
+    ADMINISTRATOR("administrator", "/provincial/review"),
     READ_ONLY("readOnly", "/provincial/application"),
-    PROVINCIAL_SUBMITTER("industryUser", "/provincial/application"),
-    INDUSTRY_USER("industryUser", "/provincial/application"),
-    ADMIN_USER("adminUser", "/admin"),
+    APPLICATION_APPROVER("applicationApprover", "/provincial/review"),
     EXEMPTION_APPROVER("exemptionApprover", "/provincial/exemption"),
-    NO_ACCESS("noAccess", null),
-    MOFR_USER("mofrUser", "/provincial/review");
+    PROVINCIAL_SUBMITTER("provincialSubmitter", "/provincial/summary"),
+    NO_ACCESS("noAccess", null);
 
     private final String forwardName;
     private final String legacyPath;

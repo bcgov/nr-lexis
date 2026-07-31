@@ -142,8 +142,9 @@ class ExemptionRepositoryTest {
         .contains("EE.EXEMPTION_NUMBER")
         .contains("ES.ADVERTISING_DATE")
         .contains("EO.ORG_UNIT_NO")
+        .contains("MAX(CANON_EEA.APPLICATION_NUMBER)")
+        .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST")
         .contains("GROUP BY EE.EXEMPTION_NUMBER")
-        .containsOnlyOnce("EEA.APPLICATION_NUMBER")
         .contains("ORDER BY EE.EXEMPTION_NUMBER DESC")
         .doesNotContain(" v.");
     assertThat(repository.bindValues())
@@ -160,7 +161,14 @@ class ExemptionRepositoryTest {
             "2026-01-31",
             "2026-02-01",
             "2026-02-28",
-            "1904");
+            "1904",
+            "900123",
+            "PKG-1",
+            "00077881",
+            "00055667",
+            "00055667",
+            "2026-02-01",
+            "2026-02-28");
   }
 
   @Test
@@ -206,7 +214,8 @@ class ExemptionRepositoryTest {
         .contains("OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
         .doesNotContain("EEA.AGENT_CLIENT_NUMBER IS NULL");
     assertThat(repository.bindValues())
-        .containsExactly("00012345", "00012345", "76", "1826");
+        .containsExactly(
+            "00012345", "00012345", "76", "1826", "00012345", "00012345");
   }
 
   @Test
@@ -237,7 +246,8 @@ class ExemptionRepositoryTest {
         .contains("EEA.AGENT_CLIENT_NUMBER LIKE '%' || :1 || '%'")
         .contains("EEA.OWNER_CLIENT_NUMBER LIKE '%' || :2 || '%'")
         .contains("EEA.AGENT_CLIENT_NUMBER IS NULL");
-    assertThat(repository.bindValues()).containsExactly("00055667", "00055667");
+    assertThat(repository.bindValues())
+        .containsExactly("00055667", "00055667", "00055667", "00055667");
   }
 
   @Test
@@ -270,7 +280,7 @@ class ExemptionRepositoryTest {
     assertThat(repository.whereSql())
         .contains("EE.EXPORT_EXEMPTION_TYPE_CODE != 'B'")
         .doesNotContain("GROUP BY")
-        .doesNotContain("ORDER BY");
+        .doesNotContain("ORDER BY EE.");
   }
 
   @Test
@@ -284,8 +294,39 @@ class ExemptionRepositoryTest {
     assertThat(repository.whereSql())
         .contains("EE.EXEMPTION_NUMBER")
         .doesNotContain("GROUP BY")
-        .doesNotContain("ORDER BY");
+        .doesNotContain("ORDER BY EE.");
     assertThat(repository.bindValues()).containsExactly("EX-1");
+  }
+
+  @Test
+  void countShouldApplyTheSameCanonicalLinkedApplicationCriteriaAsSearch() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.count(
+        new ExemptionSearchCriteria(
+            "900123",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            LocalDate.of(2026, 2, 1),
+            null,
+            List.of(),
+            0,
+            10));
+
+    assertThat(repository.whereSql())
+        .contains("EEA.APPLICATION_NUMBER LIKE '%' || :1 || '%'")
+        .contains("ES.ADVERTISING_DATE >= TO_DATE(:2, 'YYYY-MM-DD')")
+        .contains("CANON_EEA.APPLICATION_NUMBER LIKE '%' || :3 || '%'")
+        .contains("CANON_ES.ADVERTISING_DATE >= TO_DATE(:4, 'YYYY-MM-DD')")
+        .doesNotContain("GROUP BY", "ORDER BY EE.");
+    assertThat(repository.bindValues())
+        .containsExactly("900123", "2026-02-01", "900123", "2026-02-01");
   }
 
   @Test
@@ -329,20 +370,29 @@ class ExemptionRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains("ORDER BY EE.EXEMPTION_NUMBER DESC")
-        .doesNotContain("NULLS LAST")
+        .doesNotContain("DESC NULLS LAST; DELETE")
         .doesNotContain("DELETE FROM");
   }
 
   @Test
-  void searchGroupByShouldNotSplitOneExemptionByApplicationNumber() {
+  void searchShouldSelectOneLinkedApplicationWithoutChangingTheLegacyPackageGroupBy() {
     TestExemptionRepository repository =
         new TestExemptionRepository(List.of(List.of(exemptionResult("EX-1"))));
 
     repository.search(criteriaWithSort(null));
 
+    assertThat(repository.whereSql())
+        .contains("EEA.APPLICATION_NUMBER IS NULL")
+        .contains("MAX(CANON_EEA.APPLICATION_NUMBER)")
+        .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST");
     String groupAndOrder =
         repository.whereSql().substring(repository.whereSql().indexOf(" GROUP BY "));
-    assertThat(groupAndOrder).doesNotContain("EEA.APPLICATION_NUMBER");
+    assertThat(groupAndOrder)
+        .doesNotContain("EEA.APPLICATION_NUMBER")
+        .contains(
+            "EEA.AGENT_CLIENT_NUMBER",
+            "EEA.OWNER_CLIENT_NUMBER",
+            "ES.ADVERTISING_DATE");
   }
 
   @Test

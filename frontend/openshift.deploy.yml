@@ -66,8 +66,6 @@ parameters:
     required: true
   - name: VITE_LEXIS_PROD_RTM_ONLY
     value: "false"
-  - name: VITE_FAM_MANAGE_URL
-    value: ""
   - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
     value: /api
   - name: VITE_LEXIS_REPORT_API_BASE
@@ -164,8 +162,6 @@ objects:
                   value: ${VITE_ZONE}
                 - name: VITE_LEXIS_PROD_RTM_ONLY
                   value: ${VITE_LEXIS_PROD_RTM_ONLY}
-                - name: VITE_FAM_MANAGE_URL
-                  value: ${VITE_FAM_MANAGE_URL}
                 - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
                   value: ${VITE_LEXIS_REPORT_ENDPOINT_BASE}
                 - name: VITE_LEXIS_REPORT_API_BASE
