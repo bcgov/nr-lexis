@@ -50,6 +50,10 @@ describe('search-options-service', () => {
         { code: '987', name: '2026-01-11' },
         { code: '', name: 'Blank' },
       ],
+      nextSchedules: [
+        { code: '988', name: '2026-01-18' },
+        { code: '', name: 'Blank' },
+      ],
     })
 
     const result = await fetchProvincialApplicationOptions()
@@ -74,6 +78,10 @@ describe('search-options-service', () => {
       regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
       currentSchedules: [
         { value: '987', label: '2026-01-11' },
+        { value: '', label: 'Blank' },
+      ],
+      nextSchedules: [
+        { value: '988', label: '2026-01-18' },
         { value: '', label: 'Blank' },
       ],
     })

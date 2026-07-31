@@ -373,6 +373,28 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
+  void findNextSchedulesRequiredShouldUseLegacyCursorProcedureForApplicationListDates()
+      throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_NEXT_SCHEDULES(?) }");
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getLong("EXPORT_SCHEDULE_ID")).thenReturn(1003L, 1004L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getDate("ADVERTISING_DATE"))
+        .thenReturn(java.sql.Date.valueOf("2026-08-05"), java.sql.Date.valueOf("2026-08-12"));
+
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    var schedules = repository.findNextSchedulesRequired();
+
+    assertThat(schedules)
+        .extracting("exportScheduleId", "advertisingDate")
+        .containsExactly(
+            tuple(1003L, LocalDate.of(2026, 8, 5)),
+            tuple(1004L, LocalDate.of(2026, 8, 12)));
+    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   void findUpcomingExportSchedulesPageShouldFilterPastRowsAndBindOffsetLimit() throws Exception {
     when(jdbcTemplate.query(
