@@ -10,6 +10,8 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,10 +30,57 @@ public class PermitRepository extends OracleRepositorySupport {
   private static final String FIND_ALL_PERMIT_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)";
 
-  private static final String FIND_PERMIT_BY_CRITERIA =
-      LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_BY_CRITERIA(?,?,?,?,?)";
-  private static final String COUNT_PERMIT_BY_CRITERIA =
-      LEXIS_GROUP_5_PACKAGE + "COUNT_PERMIT_BY_CRITERIA(?,?,?,?)";
+  private static final String SEARCH_PERMITS =
+      """
+      SELECT
+        EPD.EXPORT_PERMIT_DETAIL_NUMBER,
+        EPSC.DESCRIPTION AS STATUS_DESCRIPTION,
+        EPD.EXPORT_PERMIT_STATUS_CODE,
+        EPD.AGENT_NUMBER,
+        EPD.CLIENT_NUMBER,
+        EPD.PERMIT_VOLUME,
+        EPD.EXPORT_PERMIT_ISSUE_DATE,
+        OU.ORG_UNIT_CODE AS REGION
+      FROM EXPORT_PERMIT_DETAIL EPD
+      INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
+        ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
+      LEFT JOIN ORG_UNIT OU
+        ON OU.ORG_UNIT_NO = EPD.ORG_UNIT_NO
+      """;
+  private static final String COUNT_PERMITS =
+      """
+      SELECT COUNT(*)
+      FROM EXPORT_PERMIT_DETAIL EPD
+      INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
+        ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
+      """;
+  private static final Map<String, String> SEARCH_SORT_COLUMNS =
+      Map.ofEntries(
+          Map.entry(
+              "applicationNumber",
+              "(SELECT MIN(EP_SORT.APPLICATION_NUMBER) "
+                  + "FROM EXPORT_EXEMPTION_APPLICATION EP_SORT "
+                  + "WHERE EP_SORT.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER)"),
+          Map.entry(
+              "packageNumber",
+              "(SELECT MIN(ESD_SORT.PACKAGE_NUMBER) "
+                  + "FROM EXPORT_SCALE_DETAIL ESD_SORT "
+                  + "WHERE ESD_SORT.EXPORT_PERMIT_DETAIL_NUMBER = "
+                  + "EPD.EXPORT_PERMIT_DETAIL_NUMBER)"),
+          Map.entry("permitNumber", "EPD.EXPORT_PERMIT_DETAIL_NUMBER"),
+          Map.entry(
+              "invoiceNumber",
+              "(SELECT MIN(ESI_SORT.EXPORT_SALES_INVOICE_NUMBER) "
+                  + "FROM EXPORT_SALES_INVOICE ESI_SORT "
+                  + "WHERE ESI_SORT.EXPORT_PERMIT_DETAIL_NUMBER = "
+                  + "EPD.EXPORT_PERMIT_DETAIL_NUMBER)"),
+          Map.entry("dateIssued", "EPD.EXPORT_PERMIT_ISSUE_DATE"),
+          Map.entry("permitStatus", "EPD.EXPORT_PERMIT_STATUS_CODE"),
+          Map.entry("applicantClientNumber", "EPD.AGENT_NUMBER"),
+          Map.entry("ownerClientNumber", "EPD.CLIENT_NUMBER"),
+          Map.entry("region", "OU.ORG_UNIT_CODE"),
+          Map.entry("permitVolume", "EPD.PERMIT_VOLUME"),
+          Map.entry("exemptionNumber", "EPD.EXEMPTION_NUMBER"));
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_PERMIT_ACCESS =
@@ -56,16 +105,15 @@ public class PermitRepository extends OracleRepositorySupport {
   }
 
   public Page<PermitSearchResultDto> search(PermitSearchCriteria criteria, Integer knownTotal) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    DirectSql countCriteria = buildSearchWhere(criteria, false);
+    DirectSql pageCriteria = buildSearchWhere(criteria, true);
     int totalElements =
         knownTotal == null
-            ? queryLegacyDynamicCountProcedure(
-                COUNT_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            ? queryDirectCount(COUNT_PERMITS, countCriteria)
             : Math.max(0, knownTotal);
-    return queryLegacyDynamicPage(
-        FIND_PERMIT_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
+    return queryDirectPage(
+        SEARCH_PERMITS,
+        pageCriteria,
         criteria.page(),
         criteria.size(),
         totalElements,
@@ -81,54 +129,70 @@ public class PermitRepository extends OracleRepositorySupport {
   }
 
   public int count(PermitSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return queryLegacyDynamicCountProcedure(COUNT_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryDirectCount(COUNT_PERMITS, buildSearchWhere(criteria, false));
   }
 
-  private SqlWhere buildSearchWhere(PermitSearchCriteria criteria) {
-    SqlWhereBuilder where = newWhereBuilder();
+  private DirectSql buildSearchWhere(PermitSearchCriteria criteria, boolean includeOrderBy) {
+    DirectSqlBuilder where = newDirectSqlBuilder();
 
-    where.addLike("EP.APPLICATION_NUMBER", criteria.applicationNumber());
-    where.addLike("ESD.PACKAGE_NUMBER", criteria.packageNumber());
-    where.addLike("EPD.EXPORT_PERMIT_DETAIL_NUMBER", criteria.permitNumber());
+    String applicationNumber = trim(criteria.applicationNumber());
+    if (applicationNumber != null) {
+      where.addRawWithBinds(
+          " AND EXISTS ("
+              + "SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP "
+              + "WHERE EP.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER "
+              + "AND TO_CHAR(EP.APPLICATION_NUMBER) LIKE '%' || ? || '%')",
+          applicationNumber);
+    }
+    String packageNumber = trim(criteria.packageNumber());
+    if (packageNumber != null) {
+      where.addRawWithBinds(
+          " AND EXISTS ("
+              + "SELECT 1 FROM EXPORT_SCALE_DETAIL ESD "
+              + "WHERE ESD.EXPORT_PERMIT_DETAIL_NUMBER = EPD.EXPORT_PERMIT_DETAIL_NUMBER "
+              + "AND ESD.PACKAGE_NUMBER LIKE '%' || ? || '%')",
+          packageNumber);
+    }
+    where.addNumberLike("EPD.EXPORT_PERMIT_DETAIL_NUMBER", criteria.permitNumber());
     where.addDateGte("EPD.EXPORT_PERMIT_ISSUE_DATE", criteria.issuedFromDate());
     where.addDateLte("EPD.EXPORT_PERMIT_ISSUE_DATE", criteria.issuedToDate());
     where.addLike("EPD.EXPORT_PERMIT_STATUS_CODE", criteria.permitStatus());
-    where.addLike("ESI.EXPORT_SALES_INVOICE_NUMBER", criteria.invoiceNumber());
-    where.addLike("CLIENT_NUMBER", criteria.ownerClientNumber());
+    String invoiceNumber = trim(criteria.invoiceNumber());
+    if (invoiceNumber != null) {
+      where.addRawWithBinds(
+          " AND EXISTS ("
+              + "SELECT 1 FROM EXPORT_SALES_INVOICE ESI "
+              + "WHERE ESI.EXPORT_PERMIT_DETAIL_NUMBER = EPD.EXPORT_PERMIT_DETAIL_NUMBER "
+              + "AND ESI.EXPORT_SALES_INVOICE_NUMBER LIKE '%' || ? || '%')",
+          invoiceNumber);
+    }
+    where.addLike("EPD.CLIENT_NUMBER", criteria.ownerClientNumber());
 
     String applicantClientNumber = trim(criteria.applicantClientNumber());
     if (applicantClientNumber != null) {
-      int idx1 = where.nextBindIndex();
-      int idx2 = idx1 + 1;
       where.addRawWithBinds(
-          " AND (EPD.AGENT_NUMBER LIKE '%' || :"
-              + idx1
-              + " || '%' OR (CLIENT_NUMBER LIKE '%' || :"
-              + idx2
-              + " || '%' AND EPD.AGENT_NUMBER IS NULL))",
+          " AND (EPD.AGENT_NUMBER LIKE '%' || ? || '%' "
+              + "OR (EPD.CLIENT_NUMBER LIKE '%' || ? || '%' "
+              + "AND EPD.AGENT_NUMBER IS NULL))",
           applicantClientNumber,
           applicantClientNumber);
     }
 
     String accessClientNumber = trim(criteria.accessClientNumber());
     if (accessClientNumber != null) {
-      int permitOwnerBind = where.nextBindIndex();
-      int permitAgentBind = permitOwnerBind + 1;
-      int applicationOwnerBind = permitOwnerBind + 2;
-      int applicationAgentBind = permitOwnerBind + 3;
       where.addRawWithBinds(
-          " AND (EPD.CLIENT_NUMBER = :"
-              + permitOwnerBind
-              + " OR EPD.AGENT_NUMBER = :"
-              + permitAgentBind
-              + " OR EP.OWNER_CLIENT_NUMBER = :"
-              + applicationOwnerBind
-              + " OR EP.AGENT_CLIENT_NUMBER = :"
-              + applicationAgentBind
-              + ")"
-              + " AND (EP.EXPORT_JURISDICTION_CODE = 'P'"
-              + " OR EP.EXPORT_JURISDICTION_CODE IS NULL)",
+          " AND (((EPD.CLIENT_NUMBER = ? OR EPD.AGENT_NUMBER = ?) "
+              + "AND NOT EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ANY "
+              + "WHERE EP_ANY.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER)) "
+              + "OR EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ACCESS "
+              + "WHERE EP_ACCESS.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER "
+              + "AND (EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P' "
+              + "OR EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL) "
+              + "AND (EPD.CLIENT_NUMBER = ? OR EPD.AGENT_NUMBER = ? "
+              + "OR EP_ACCESS.OWNER_CLIENT_NUMBER = ? "
+              + "OR EP_ACCESS.AGENT_CLIENT_NUMBER = ?)))",
+          accessClientNumber,
+          accessClientNumber,
           accessClientNumber,
           accessClientNumber,
           accessClientNumber,
@@ -139,29 +203,38 @@ public class PermitRepository extends OracleRepositorySupport {
       where.addInEqualsNumberOrNoResults("EPD.ORG_UNIT_NO", criteria.regionNumbers());
     }
     if (criteria.requireScalePermit()) {
-      where.addRaw(" AND ESD.EXPORT_PERMIT_DETAIL_NUMBER IS NOT NULL");
+      where.addRaw(
+          " AND EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED "
+              + "WHERE ESD_REQUIRED.EXPORT_PERMIT_DETAIL_NUMBER = "
+              + "EPD.EXPORT_PERMIT_DETAIL_NUMBER)");
     }
 
-    String orderBy =
-        sanitizedSort(
-            criteria.sortField(),
-            mapOf(
-                "applicationNumber", "EP.APPLICATION_NUMBER",
-                "packageNumber", "ESD.PACKAGE_NUMBER",
-                "permitNumber", "EPD.EXPORT_PERMIT_DETAIL_NUMBER",
-                "invoiceNumber", "ESI.EXPORT_SALES_INVOICE_NUMBER",
-                "dateIssued", "EPD.EXPORT_PERMIT_ISSUE_DATE",
-                "permitStatus", "EPD.EXPORT_PERMIT_STATUS_CODE",
-                "applicantClientNumber", "AGENT_NUMBER",
-                "ownerClientNumber", "CLIENT_NUMBER",
-                "region", "OU.ORG_UNIT_CODE",
-                "permitVolume", "EPD.PERMIT_VOLUME",
-                "exemptionNumber", "EPD.EXEMPTION_NUMBER"),
-            "permitNumber",
-            "DESC",
-            "permitNumber");
+    return where.build(includeOrderBy ? buildSearchOrder(criteria.sortField()) : "");
+  }
 
-    return where.build(orderBy);
+  private String buildSearchOrder(String requestedSort) {
+    String normalized = trim(requestedSort);
+    String direction = "ASC";
+    if (normalized == null) {
+      return " ORDER BY EPD.EXPORT_PERMIT_DETAIL_NUMBER DESC";
+    }
+
+    String upper = normalized.toUpperCase(Locale.ROOT);
+    if (upper.endsWith(" DESC")) {
+      direction = "DESC";
+      normalized = normalized.substring(0, normalized.length() - 5).trim();
+    } else if (upper.endsWith(" ASC")) {
+      normalized = normalized.substring(0, normalized.length() - 4).trim();
+    }
+
+    String expression = SEARCH_SORT_COLUMNS.get(normalized);
+    if (expression == null) {
+      return " ORDER BY EPD.EXPORT_PERMIT_DETAIL_NUMBER DESC";
+    }
+    String order = " ORDER BY " + expression + " " + direction;
+    return "EPD.EXPORT_PERMIT_DETAIL_NUMBER".equals(expression)
+        ? order
+        : order + ", EPD.EXPORT_PERMIT_DETAIL_NUMBER " + direction;
   }
 
   public Optional<PermitDetailDto> findByPermitNumber(Long permitNumber) {

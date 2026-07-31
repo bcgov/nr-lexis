@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.exemption;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -837,21 +838,23 @@ class OracleExemptionDetailsRpcServiceTest {
 
   @Test
   void getDocumentDetailsShouldMergeExemptionAndApplicationDocs() {
-    when(repository.findExemptionDocumentDetailsByExemptionNumber("EX-205"))
+    when(repository.findExemptionDocumentContextRows("EX-205"))
         .thenReturn(
             List.of(
-                new ExemptionDetailsRpcRepository.DocumentRow(
-                    10L, "exemption.pdf", "", "UPLOAD")));
-    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
-        .thenReturn(
-            List.of(
-                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
-                    1000456L, 0.0d, 0.0d, "00077881", "P", "S")));
-    when(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                new ExemptionDetailsRpcRepository.DocumentRow(20L, "application.pdf", "desc", "UPLOAD")));
-    when(repository.findAttachmentTypeDescription("UPLOAD")).thenReturn(Optional.of("Uploaded document"));
+                new ExemptionDetailsRpcRepository.ExemptionDocumentContextRow(
+                    new ExemptionDetailsRpcRepository.DocumentRow(
+                        10L, "exemption.pdf", "", "UPLOAD"),
+                    "Uploaded document",
+                    "exemption",
+                    null,
+                    true),
+                new ExemptionDetailsRpcRepository.ExemptionDocumentContextRow(
+                    new ExemptionDetailsRpcRepository.DocumentRow(
+                        20L, "application.pdf", "desc", "UPLOAD"),
+                    "Uploaded document",
+                    "application",
+                    1000456L,
+                    false)));
 
     List<ExemptionDetailsRpcService.DocumentItem> response = service.getDocumentDetails("EX-205");
 
@@ -866,7 +869,10 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.get(1).deletable()).isFalse();
     assertThat(service.documentCanBeRemovedFromExemption(10L, "EX-205")).isTrue();
     assertThat(service.documentCanBeRemovedFromExemption(20L, "EX-205")).isFalse();
-    verify(repository, times(3)).findApplicationDocumentDetailsByApplicationNumber(1000456L);
+    verify(repository, times(3)).findExemptionDocumentContextRows("EX-205");
+    verify(repository, never()).findApplicationSummariesByExemptionNumber("EX-205");
+    verify(repository, never()).findApplicationDocumentDetailsByApplicationNumber(anyLong());
+    verify(repository, never()).findAttachmentTypeDescription(any());
   }
 
   @Test

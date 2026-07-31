@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
@@ -53,6 +55,8 @@ public interface PermitDetailsRpcService {
       Long permitNumber,
       boolean ministryUser);
 
+  PermitAllScaleFeesRpcResponseDto getAllScaleFees(Long permitNumber, boolean ministryUser);
+
   PermitEditContext getEditContext(Long permitNumber);
 
   PermitScalesForPackageRpcResponseDto getScalesForPackage(String packageNumber);
@@ -79,7 +83,9 @@ public interface PermitDetailsRpcService {
       Long permitNumber, Predicate<Long> applicationAccess);
 
   PermitCoreTabsRpcResponseDto getCoreTabs(
-      Long permitNumber, boolean blanketOic, Predicate<Long> applicationAccess);
+      Long permitNumber,
+      boolean blanketOic,
+      Predicate<ApplicationAccessContextDto> applicationAccess);
 
   PermitAvailableApplicationListRpcResponseDto getAvailableApplicationList(
       String exemptionNumber,

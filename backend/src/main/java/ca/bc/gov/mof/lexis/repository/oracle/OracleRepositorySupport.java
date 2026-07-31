@@ -431,6 +431,50 @@ public abstract class OracleRepositorySupport {
     }
   }
 
+  /** Executes one directly paged Oracle query instead of stitching fixed-size procedure pages. */
+  protected <T> Page<T> queryDirectPage(
+      String selectSql,
+      DirectSql whereAndOrder,
+      int page,
+      int size,
+      int totalElements,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    int normalizedTotal = Math.max(0, totalElements);
+    long offset = (long) normalizedPage * normalizedSize;
+    if (offset >= normalizedTotal) {
+      return new PageImpl<>(
+          List.of(), PageRequest.of(normalizedPage, normalizedSize), normalizedTotal);
+    }
+
+    List<Object> bindValues = new ArrayList<>(whereAndOrder.bindValues());
+    bindValues.add(offset);
+    bindValues.add(normalizedSize);
+    List<T> rows =
+        jdbcTemplate.query(
+            selectSql
+                + whereAndOrder.sql()
+                + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+            (rs, rowNumber) -> rowMapper.map(rs),
+            bindValues.toArray());
+    return new PageImpl<>(
+        List.copyOf(rows),
+        PageRequest.of(normalizedPage, normalizedSize),
+        normalizedTotal);
+  }
+
+  /** Executes a lightweight direct count query using the same parameterized criteria. */
+  protected int queryDirectCount(String selectSql, DirectSql where) {
+    Long result =
+        jdbcTemplate.queryForObject(
+            selectSql + where.sql(), Long.class, where.bindValues().toArray());
+    if (result == null) {
+      throw new DataRetrievalFailureException("Oracle direct count query returned no result");
+    }
+    return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, result));
+  }
+
   /**
    * Executes a mutation procedure and propagates dependency failures.
    *
@@ -914,6 +958,123 @@ public abstract class OracleRepositorySupport {
     }
   }
 
+  protected static final class DirectSql {
+    private final String sql;
+    private final List<Object> bindValues;
+
+    DirectSql(String sql, List<Object> bindValues) {
+      this.sql = sql;
+      this.bindValues = bindValues;
+    }
+
+    public String sql() {
+      return sql;
+    }
+
+    public List<Object> bindValues() {
+      return bindValues;
+    }
+  }
+
+  protected final class DirectSqlBuilder {
+    private final StringBuilder sql = new StringBuilder(" WHERE 1=1");
+    private final List<Object> bindValues = new ArrayList<>();
+
+    public DirectSqlBuilder addLike(String column, String value) {
+      String normalized = trim(value);
+      if (normalized != null) {
+        addBind(" AND " + column + " LIKE '%' || ? || '%'", normalized);
+      }
+      return this;
+    }
+
+    public DirectSqlBuilder addNumberLike(String column, String value) {
+      String normalized = trim(value);
+      if (normalized != null) {
+        addBind(" AND TO_CHAR(" + column + ") LIKE '%' || ? || '%'", normalized);
+      }
+      return this;
+    }
+
+    public DirectSqlBuilder addEquals(String column, String value) {
+      String normalized = trim(value);
+      if (normalized != null) {
+        addBind(" AND " + column + " = ?", normalized);
+      }
+      return this;
+    }
+
+    public DirectSqlBuilder addDateGte(String column, LocalDate value) {
+      if (value != null) {
+        addBind(" AND " + column + " >= ?", Date.valueOf(value));
+      }
+      return this;
+    }
+
+    public DirectSqlBuilder addDateLte(String column, LocalDate value) {
+      if (value != null) {
+        addBind(" AND " + column + " <= ?", Date.valueOf(value));
+      }
+      return this;
+    }
+
+    public DirectSqlBuilder addInEqualsNumberOrNoResults(
+        String column, List<Long> values) {
+      Set<Long> distinct = new LinkedHashSet<>();
+      if (values != null) {
+        values.stream()
+            .filter(value -> value != null && value > 0)
+            .forEach(distinct::add);
+      }
+      if (distinct.isEmpty()) {
+        sql.append(" AND 1=0");
+        return this;
+      }
+
+      sql.append(" AND ").append(column).append(" IN (");
+      int index = 0;
+      for (Long value : distinct) {
+        if (index++ > 0) {
+          sql.append(", ");
+        }
+        sql.append("?");
+        bindValues.add(value);
+      }
+      sql.append(")");
+      return this;
+    }
+
+    public DirectSqlBuilder addRaw(String rawSqlFragment) {
+      if (rawSqlFragment != null && !rawSqlFragment.isBlank()) {
+        sql.append(rawSqlFragment);
+      }
+      return this;
+    }
+
+    public DirectSqlBuilder addRawWithBinds(
+        String rawSqlFragment, Object... values) {
+      if (rawSqlFragment == null || rawSqlFragment.isBlank()) {
+        return this;
+      }
+      sql.append(rawSqlFragment);
+      if (values != null) {
+        bindValues.addAll(List.of(values));
+      }
+      return this;
+    }
+
+    public DirectSql build(String orderByClause) {
+      return new DirectSql(
+          sql + (orderByClause == null ? "" : orderByClause),
+          List.copyOf(bindValues));
+    }
+
+    private void addBind(String clause, Object value) {
+      sql.append(clause);
+      bindValues.add(value);
+    }
+  }
+
   protected final class SqlWhereBuilder {
     private final StringBuilder sql = new StringBuilder(" WHERE 1=1");
     private final List<String> bindValues = new ArrayList<>();
@@ -1059,6 +1220,10 @@ public abstract class OracleRepositorySupport {
       sql.append(clause);
       bindValues.add(value);
     }
+  }
+
+  protected DirectSqlBuilder newDirectSqlBuilder() {
+    return new DirectSqlBuilder();
   }
 
   protected Map<String, String> mapOf(String... keyValuePairs) {
