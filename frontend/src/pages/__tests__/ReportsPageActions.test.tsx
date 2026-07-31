@@ -783,7 +783,7 @@ describe('Reports Page Actions', () => {
     expect(screen.getByLabelText('Issued to date')).toHaveValue(defaultDates.toDate)
     expect(getComboBox('Client type')).toHaveValue('Permit holder')
     await chooseComboBoxOption('Exemption type', 'Ministerial')
-    await chooseComboBoxOption('Output format', 'XLSX')
+    await chooseComboBoxOption('Output format', 'XLS')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -796,7 +796,7 @@ describe('Reports Page Actions', () => {
           exemptionTypeLabel: 'Ministerial',
           clientType: 'P',
           clientTypeLabel: 'Permit holder',
-          outputFormat: 'XLSX',
+          outputFormat: 'XLS',
         },
       })
     })

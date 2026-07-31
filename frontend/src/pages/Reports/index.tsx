@@ -100,7 +100,7 @@ const TENURE_OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
   ...OUTPUT_FORMAT_FIELD,
   options: [
     { value: 'PDF', label: 'PDF' },
-    { value: 'XLSX', label: 'XLSX' },
+    { value: 'XLS', label: 'XLS' },
   ],
 }
 

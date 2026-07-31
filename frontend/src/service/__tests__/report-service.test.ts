@@ -407,7 +407,7 @@ describe('report-service', () => {
     )
   })
 
-  it('keeps tenure XLSX requests as spreadsheet output', async () => {
+  it('keeps tenure XLS requests as legacy spreadsheet output', async () => {
     postMock.mockResolvedValue({
       data: new Blob(['report']),
       headers: {},
@@ -417,16 +417,16 @@ describe('report-service', () => {
       reportId: 'tenureReport',
       actionMapping: 'generatePermitReport',
       values: {
-        outputFormat: 'XLSX',
+        outputFormat: 'XLS',
       },
     })
 
-    expect(result.filename).toBe('tenure-analysis-report.xlsx')
+    expect(result.filename).toBe('tenure-analysis-report.xls')
 
     const [, payload] = postMock.mock.calls[0]
     expect(payload).toEqual(
       expect.objectContaining({
-        format: 'XLSX',
+        format: 'XLS',
         parameters: {
           legacyActionMapping: 'generatePermitReport',
         },
@@ -448,12 +448,12 @@ describe('report-service', () => {
       },
     })
 
-    expect(result.filename).toBe('tenure-analysis-report.xlsx')
+    expect(result.filename).toBe('tenure-analysis-report.xls')
 
     const [, payload] = postMock.mock.calls[0]
     expect(payload).toEqual(
       expect.objectContaining({
-        format: 'XLSX',
+        format: 'XLS',
         parameters: {
           legacyActionMapping: 'generatePermitReport',
         },
