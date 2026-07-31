@@ -4,6 +4,7 @@ import {
   Edit,
   InformationFilled,
   Notification as NotificationIcon,
+  Time,
   TrashCan,
   WarningAltFilled,
   WarningFilled,
@@ -133,6 +134,14 @@ const toRequest = (form: NotificationForm): NotificationUpsertRequest => ({
   displayEndDate: form.displayEndDate,
   audienceRoles: form.audienceMode === 'ALL' ? [] : form.audienceRoles,
 })
+
+const formatDate = (value: string): string => {
+  const date = new Date(`${toDateInputValue(value)}T12:00:00`)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat('en-CA', { dateStyle: 'medium' }).format(date)
+}
 
 const roleLabel = (role: string): string =>
   role
@@ -748,6 +757,17 @@ export default function NotificationsPage() {
                       notificationId={notification.id}
                       contentHtml={notification.contentHtml}
                     />
+                    <div className="notifications-page__notification-meta">
+                      <span>Posted {formatDate(notification.displayStartDate)}</span>
+                      <span
+                        className="notifications-page__notification-meta-dot"
+                        aria-hidden="true"
+                      />
+                      <span className="notifications-page__notification-window">
+                        <Time size={14} aria-hidden="true" />
+                        Shows until {formatDate(notification.displayEndDate)}
+                      </span>
+                    </div>
                   </div>
                 </article>
               )

@@ -461,6 +461,29 @@
   transform: rotate(180deg);
 }
 
+.notifications-page__notification-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+  color: var(--cds-text-helper);
+  font-size: 0.75rem;
+}
+
+.notifications-page__notification-meta-dot {
+  width: 0.1875rem;
+  height: 0.1875rem;
+  border-radius: 50%;
+  background: var(--cds-text-helper);
+  opacity: 0.6;
+}
+
+.notifications-page__notification-window {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+}
+
 @media (max-width: 42rem) {
   .notifications-page__header,
   .notifications-page__notification-heading {
@@ -479,6 +502,10 @@
   .notifications-page__notification {
     gap: 0.75rem;
     padding: 1rem 0.75rem;
+  }
+
+  .notifications-page__notification-meta {
+    flex-wrap: wrap;
   }
 
   .notifications-page__notification-actions {
