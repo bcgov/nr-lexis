@@ -24,11 +24,7 @@ import {
 } from '@carbon/icons-react'
 import { HeaderMenuButton, IconButton, SkipToContent } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import {
-  hasFederalSubmitterRole,
-  hasProvincialSubmitterRole,
-  hasRole,
-} from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
@@ -64,20 +60,16 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Administrator',
   APPLICATION_APPROVER: 'Application Approver',
   EXEMPTION_APPROVER: 'Exemption Approver',
-  DELEGATED_ADMIN: 'Delegated Administrator',
   READ_ONLY: 'Read Only',
   PROVINCIAL_SUBMITTER: 'Provincial Submitter',
-  FEDERAL_SUBMITTER: 'Federal Submitter',
 }
 
 const ROLE_DISPLAY_PRIORITY = [
   'ADMIN',
   'APPLICATION_APPROVER',
   'EXEMPTION_APPROVER',
-  'DELEGATED_ADMIN',
   'READ_ONLY',
   'PROVINCIAL_SUBMITTER',
-  'FEDERAL_SUBMITTER',
 ] as const
 
 const MOBILE_NAVIGATION_MEDIA_QUERY = '(max-width: 671px)'
@@ -357,9 +349,6 @@ const getPrimaryRoleLabel = (roles: string[] | null | undefined): string | null 
   if (normalizedRoles.some((role) => role.startsWith('PROVINCIAL_SUBMITTER_'))) {
     return ROLE_LABELS.PROVINCIAL_SUBMITTER
   }
-  if (normalizedRoles.some((role) => role.startsWith('FEDERAL_SUBMITTER_'))) {
-    return ROLE_LABELS.FEDERAL_SUBMITTER
-  }
   return normalizedRoles[0]?.replaceAll('_', ' ') ?? null
 }
 
@@ -383,14 +372,13 @@ const canShowRoleScopedLink = (
     return true
   }
 
-  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
   const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
   const hasProvincialStaffRole =
     hasRole(roles, 'READ_ONLY') ||
     hasRole(roles, 'APPLICATION_APPROVER') ||
     hasRole(roles, 'EXEMPTION_APPROVER')
 
-  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+  return hasProvincialSubmitter || hasProvincialStaffRole
 }
 
 function Layout({ children }: LayoutProps) {

@@ -15,18 +15,6 @@ export const hasProvincialSubmitterRole = (roles: string[] | null | undefined): 
   })
 }
 
-export const hasFederalSubmitterRole = (roles: string[] | null | undefined): boolean => {
-  return normalizeRoles(roles).some((role) => {
-    const normalizedRole = normalizeRole(role)
-    return (
-      normalizedRole === 'FEDERAL_SUBMITTER' ||
-      normalizedRole === 'LEXIS_FEDERAL_SUBMITTER' ||
-      normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
-      normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
-    )
-  })
-}
-
 export const hasRole = (roles: string[] | null | undefined, role: string): boolean => {
   const expectedRole = normalizeRole(role)
   return normalizeRoles(roles).some((entry) => {

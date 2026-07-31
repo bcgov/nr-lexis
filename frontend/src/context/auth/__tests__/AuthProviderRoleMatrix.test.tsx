@@ -358,7 +358,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('true')
   })
 
-  it('routes delegated admin without LEXIS actions to unauthorized', async () => {
+  it('ignores FAM delegated administration when resolving LEXIS access', async () => {
     mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\delegated',
@@ -371,7 +371,7 @@ describe('Auth Provider Role Matrix', () => {
     renderProbe(['/applicationsReview'])
     await waitForAuthLoad()
 
-    expect(screen.getByTestId('roles')).toHaveTextContent('DELEGATED_ADMIN')
+    expect(screen.getByTestId('roles')).toBeEmptyDOMElement()
     expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
   })

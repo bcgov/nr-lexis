@@ -77,8 +77,8 @@ class LexisAuthorizationMatrixParityTest {
             "LEXIS_READ_ONLY",
             "LEXIS_APPLICATION_APPROVER",
             "LEXIS_EXEMPTION_APPROVER",
-            "LEXIS_PROVINCIAL_SUBMITTER",
-            "LEXIS_DELEGATED_ADMIN");
+            "LEXIS_PROVINCIAL_SUBMITTER")
+        .doesNotContain("LEXIS_DELEGATED_ADMIN");
   }
 
   @Test
@@ -161,7 +161,7 @@ class LexisAuthorizationMatrixParityTest {
   void knownRoleDetectionShouldNormalizeScopedProvincialSubmitters() {
     assertThat(authorizationService.hasKnownRole(List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .isTrue();
-    assertThat(authorizationService.hasKnownRole(List.of("LEXIS_DELEGATED_ADMIN"))).isTrue();
+    assertThat(authorizationService.hasKnownRole(List.of("LEXIS_DELEGATED_ADMIN"))).isFalse();
     assertThat(authorizationService.hasKnownRole(List.of("LEXIS_UNKNOWN"))).isFalse();
   }
 
@@ -174,7 +174,7 @@ class LexisAuthorizationMatrixParityTest {
         .doesNotContain(
             "LEXIS_READ_ONLY",
             "LEXIS_EXEMPTION_APPROVER",
-            "LEXIS_DELEGATED_ADMIN");
+            "LEXIS_PROVINCIAL_SUBMITTER");
   }
 
   @Test

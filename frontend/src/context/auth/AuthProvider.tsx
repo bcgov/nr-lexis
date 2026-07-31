@@ -89,9 +89,9 @@ const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_APPLICATION_APPROVER: 'APPLICATION_APPROVER',
   LEXIS_EXEMPTION_APPROVER: 'EXEMPTION_APPROVER',
   LEXIS_PROVINCIAL_SUBMITTER: 'PROVINCIAL_SUBMITTER',
-  LEXIS_DELEGATED_ADMIN: 'DELEGATED_ADMIN',
 }
 
+const NON_LEXIS_FAM_AUTHORITIES = new Set(['DELEGATED_ADMIN', 'LEXIS_DELEGATED_ADMIN'])
 const CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_PROVINCIAL_SUBMITTER_'
 const CANONICAL_PROVINCIAL_CONCRETE_PREFIX = 'PROVINCIAL_SUBMITTER_'
 const ROLE_ADMIN = 'ADMIN'
@@ -134,8 +134,12 @@ const clearOauthCallbackParams = (): void => {
   window.history.replaceState({}, document.title, cleanUrl)
 }
 
-const canonicalizeRole = (role: string): string => {
+const canonicalizeRole = (role: string): string | null => {
   const normalizedRole = role.trim().toUpperCase()
+
+  if (NON_LEXIS_FAM_AUTHORITIES.has(normalizedRole)) {
+    return null
+  }
 
   if (normalizedRole.startsWith(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX)) {
     return `${CANONICAL_PROVINCIAL_CONCRETE_PREFIX}${normalizedRole.slice(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX.length)}`
@@ -148,7 +152,7 @@ const canonicalizeRoles = (roles: string[]): string[] => {
   const deduped = new Set<string>()
   for (const role of roles) {
     const normalizedRole = canonicalizeRole(role)
-    if (normalizedRole.length > 0) {
+    if (normalizedRole && normalizedRole.length > 0) {
       deduped.add(normalizedRole)
     }
   }

@@ -8,7 +8,7 @@ export const createTestCapabilities = (
   authenticated: true,
   principal: 'idir\\admin',
   roles: ['ADMIN'],
-  welcomeTarget: 'adminUser',
+  welcomeTarget: 'administrator',
   legacyPath: '/provincial/review',
   grantedActions: [],
   forestClientNumber: null,

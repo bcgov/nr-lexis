@@ -185,7 +185,6 @@ lexis:
         - "createPermit"
         - "savePermit"
         - "uploadApplicationSubmission"
-      LEXIS_DELEGATED_ADMIN: []
   federal-submission:
     require-request-id: false
     require-user-reference: false

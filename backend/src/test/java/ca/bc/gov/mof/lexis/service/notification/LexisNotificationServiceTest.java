@@ -134,8 +134,7 @@ class LexisNotificationServiceTest {
                 "LEXIS_READ_ONLY",
                 "LEXIS_APPLICATION_APPROVER",
                 "LEXIS_EXEMPTION_APPROVER",
-                "LEXIS_PROVINCIAL_SUBMITTER",
-                "LEXIS_DELEGATED_ADMIN"));
+                "LEXIS_PROVINCIAL_SUBMITTER"));
 
     assertThat(newService().audienceRoles().roles())
         .containsExactly(
@@ -159,9 +158,8 @@ class LexisNotificationServiceTest {
             LocalDate.of(2026, 7, 28),
             List.of("LEXIS_DELEGATED_ADMIN"));
     when(principalService.resolvePrincipalName(principal)).thenReturn("IDIR\\ADMIN");
-    when(sessionService.normalizeRole("LEXIS_DELEGATED_ADMIN"))
-        .thenReturn("LEXIS_DELEGATED_ADMIN");
-    when(authorizationService.getConfiguredRoles()).thenReturn(Set.of("LEXIS_DELEGATED_ADMIN"));
+    when(sessionService.normalizeRole("LEXIS_DELEGATED_ADMIN")).thenReturn(null);
+    when(authorizationService.getConfiguredRoles()).thenReturn(Set.of("LEXIS_ADMIN"));
 
     assertThatThrownBy(() -> service.create(request, principal))
         .isInstanceOf(IllegalArgumentException.class)

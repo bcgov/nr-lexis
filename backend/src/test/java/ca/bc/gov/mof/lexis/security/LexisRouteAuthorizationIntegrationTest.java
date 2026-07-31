@@ -429,16 +429,15 @@ class LexisRouteAuthorizationIntegrationTest {
             get("/api/lexis/showWelcome.do")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.welcomeTarget").value("adminUser"));
+        .andExpect(jsonPath("$.welcomeTarget").value("administrator"));
   }
 
   @Test
-  void sessionShouldAllowDelegatedAdminButNotGrantApplicationRoutes() throws Exception {
+  void famDelegatedAdministrationShouldNotGrantLexisAccess() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/welcome")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"));
+        .andExpect(status().isForbidden());
 
     mockMvc.perform(
             get("/api/lexis/application-reviews/search")

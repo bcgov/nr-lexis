@@ -32,7 +32,7 @@ class LexisSessionServiceTest {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin", "lexis_read_only"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("adminUser");
+    assertThat(response.welcomeTarget()).isEqualTo("administrator");
     assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
@@ -40,18 +40,19 @@ class LexisSessionServiceTest {
   @Test
   void shouldRouteProvincialSubmittersToSummary() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter"));
+        service.resolveWelcomeRoute("bceid\\submitter", List.of("lexis_provincial_submitter"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
+    assertThat(response.welcomeTarget()).isEqualTo("provincialSubmitter");
     assertThat(response.legacyPath()).isEqualTo("/provincial/summary");
   }
 
   @Test
   void shouldRouteForestClientScopedProvincialSubmittersToSummary() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter_00001234"));
+        service.resolveWelcomeRoute(
+            "bceid\\submitter", List.of("lexis_provincial_submitter_00001234"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
+    assertThat(response.welcomeTarget()).isEqualTo("provincialSubmitter");
     assertThat(response.legacyPath()).isEqualTo("/provincial/summary");
     assertThat(response.roles()).containsExactly("LEXIS_PROVINCIAL_SUBMITTER");
   }
@@ -100,7 +101,7 @@ class LexisSessionServiceTest {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("adminUser");
+    assertThat(response.welcomeTarget()).isEqualTo("administrator");
     assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN");
   }
@@ -116,23 +117,33 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldDefaultToMofrLanding() {
+  void shouldRouteApplicationApproversToApplicationReview() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\staff", List.of("lexis_application_approver"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
+    assertThat(response.welcomeTarget()).isEqualTo("applicationApprover");
     assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_APPLICATION_APPROVER");
   }
 
   @Test
-  void shouldRecognizeDelegatedAdminWithoutRoutingToUiLanding() {
+  void shouldIgnoreFamDelegatedAdministrationAsAnApplicationRole() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\delegated", List.of("lexis_delegated_admin"));
 
     assertThat(response.welcomeTarget()).isEqualTo("noAccess");
     assertThat(response.legacyPath()).isNull();
-    assertThat(response.roles()).containsExactly("LEXIS_DELEGATED_ADMIN");
+    assertThat(response.roles()).isEmpty();
+  }
+
+  @Test
+  void shouldNotRouteAuthenticatedUsersWithoutALexisRole() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("idir\\staff", List.of());
+
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
+    assertThat(response.roles()).isEmpty();
   }
 
   @Test
@@ -156,14 +167,11 @@ class LexisSessionServiceTest {
             List.of(
                 new SimpleGrantedAuthority("lexis_read_only"),
                 new SimpleGrantedAuthority("lexis_delegated_admin"),
+                new SimpleGrantedAuthority("delegated_admin"),
                 new SimpleGrantedAuthority("LEXIS_ADMIN"),
                 new SimpleGrantedAuthority("lexis_admin")));
 
-    assertThat(roles)
-        .containsExactly(
-            "LEXIS_READ_ONLY",
-            "LEXIS_DELEGATED_ADMIN",
-            "LEXIS_ADMIN");
+    assertThat(roles).containsExactly("LEXIS_READ_ONLY", "LEXIS_ADMIN");
   }
 
   @Test

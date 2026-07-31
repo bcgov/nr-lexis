@@ -35,7 +35,7 @@ class LegacySessionRouteControllerTest {
             true,
             "idir\\jsmith",
             List.of("LEXIS_ADMIN"),
-            "adminUser",
+            "administrator",
             "/provincial/review");
     when(sessionController.showWelcome(request)).thenReturn(ResponseEntity.ok(welcome));
 

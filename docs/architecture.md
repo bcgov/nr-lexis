@@ -50,6 +50,9 @@ backend validates it against the client-scoped FAM authorities before enforcing 
 protected object, child resource, download, and mutation. The frontend treats its route and action
 guards as user experience controls rather than the security boundary.
 
+FAM delegated administration controls who may assign the five LEXIS application roles. It is a FAM
+permission type, not a LEXIS runtime role, and does not grant or appear as application access.
+
 NEXCOL does not use an interactive FAM role. It obtains a Keycloak service-client token with the
 `lexis:federal-submission:submit` scope and reaches only the federal validation and submission
 endpoints exposed by the API gateway. The backend independently validates the forwarded token and
