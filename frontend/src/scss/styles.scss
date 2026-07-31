@@ -3907,6 +3907,10 @@ legend.cds--label {
   margin-block-start: 1rem;
 }
 
+.application-detail-summary .detail-field-grid + .detail-field-grid {
+  margin-block-start: 1rem;
+}
+
 .detail-section-card .detail-field-grid {
   grid-template-columns: 1fr;
   gap: 1rem 1.5rem;
