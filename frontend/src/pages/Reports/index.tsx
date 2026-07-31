@@ -480,7 +480,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       { value: 'generatePermitReport', label: 'Permit details report' },
       { value: 'generateTenureReport', label: 'Tenure types report' },
       { value: 'generateMarkReport', label: 'Timber marks report' },
-      { value: 'generateFileReport', label: 'Forest file report' },
     ],
     fields: [
       {

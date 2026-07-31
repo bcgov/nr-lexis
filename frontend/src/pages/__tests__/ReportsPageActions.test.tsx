@@ -779,6 +779,9 @@ describe('Reports Page Actions', () => {
     await waitFor(() => {
       expect(getComboBox('Exemption type')).toHaveValue('Ministerial')
     })
+    await userEvent.click(getComboBox('Report variant'))
+    expect(screen.queryByRole('option', { name: 'Forest file report' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
     expect(screen.getByLabelText('Issued from date')).toHaveValue(defaultDates.fromDate)
     expect(screen.getByLabelText('Issued to date')).toHaveValue(defaultDates.toDate)
     expect(getComboBox('Client type')).toHaveValue('Permit holder')
@@ -879,7 +882,6 @@ describe('Reports Page Actions', () => {
     ['Permit details report', 'generatePermitReport'],
     ['Tenure types report', 'generateTenureReport'],
     ['Timber marks report', 'generateMarkReport'],
-    ['Forest file report', 'generateFileReport'],
   ])('submits the %s tenure variant distinctly', async (variantLabel, actionMapping) => {
     mockReportPermissions()
 
