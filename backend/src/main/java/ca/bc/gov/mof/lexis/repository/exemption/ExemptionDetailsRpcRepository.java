@@ -74,6 +74,45 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_APP(?,?)";
   private static final String FIND_APPLICATION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
+  private static final String FIND_EXEMPTION_DOCUMENT_CONTEXT_ROWS =
+      """
+      WITH DOCUMENT_REFERENCES AS (
+        SELECT
+          EEFA.EXPORT_ATTACHMENT_ID,
+          CAST(NULL AS NUMBER(10)) AS SOURCE_APPLICATION_NUMBER,
+          'exemption' AS DOCUMENT_SOURCE,
+          1 AS DELETABLE,
+          0 AS SOURCE_ORDER
+        FROM EXPORT_EXEMPT_FILE_ATTCHMNT EEFA
+        WHERE EEFA.EXEMPTION_NUMBER = ?
+        UNION ALL
+        SELECT
+          EAFA.EXPORT_ATTACHMENT_ID,
+          EEA.APPLICATION_NUMBER AS SOURCE_APPLICATION_NUMBER,
+          'application' AS DOCUMENT_SOURCE,
+          0 AS DELETABLE,
+          1 AS SOURCE_ORDER
+        FROM EXPORT_EXEMPTION_APPLICATION EEA
+        INNER JOIN EXPORT_APPL_FILE_ATTCHMNT EAFA
+          ON EAFA.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+        WHERE EEA.EXEMPTION_NUMBER = ?
+      )
+      SELECT
+        EFA.EXPORT_ATTACHMENT_ID,
+        EFA.FILE_NAME,
+        EFA.DESCRIPTION,
+        EFA.EXPORT_ATTACHMENT_TYPE_CODE,
+        EATC.DESCRIPTION AS ATTACHMENT_TYPE_DESCRIPTION,
+        DR.DOCUMENT_SOURCE,
+        DR.SOURCE_APPLICATION_NUMBER,
+        DR.DELETABLE
+      FROM DOCUMENT_REFERENCES DR
+      INNER JOIN EXPORT_FILE_ATTACHMENT EFA
+        ON EFA.EXPORT_ATTACHMENT_ID = DR.EXPORT_ATTACHMENT_ID
+      LEFT JOIN EXPORT_ATTACHMENT_TYPE_CODE EATC
+        ON EATC.EXPORT_ATTACHMENT_TYPE_CODE = EFA.EXPORT_ATTACHMENT_TYPE_CODE
+      ORDER BY DR.SOURCE_ORDER, DR.SOURCE_APPLICATION_NUMBER, EFA.EXPORT_ATTACHMENT_ID
+      """;
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_ATTACHMENT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
@@ -330,6 +369,26 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         cs -> cs.setLong(1, applicationNumber),
         2,
         this::mapDocumentRow);
+  }
+
+  /** Loads exemption and linked-application document metadata in one direct query. */
+  public List<ExemptionDocumentContextRow> findExemptionDocumentContextRows(
+      String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return List.of();
+    }
+    return jdbcTemplate.query(
+        FIND_EXEMPTION_DOCUMENT_CONTEXT_ROWS,
+        (rs, rowNumber) ->
+            new ExemptionDocumentContextRow(
+                mapDocumentRow(rs),
+                getString(rs, "ATTACHMENT_TYPE_DESCRIPTION"),
+                getString(rs, "DOCUMENT_SOURCE"),
+                getLong(rs, "SOURCE_APPLICATION_NUMBER"),
+                coalesce(getLong(rs, "DELETABLE"), 0L) > 0),
+        normalized,
+        normalized);
   }
 
   public Optional<String> findAttachmentTypeDescription(String attachmentTypeCode) {
@@ -787,6 +846,13 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
   public record DocumentRow(
       long id, String fileName, String description, String attachmentTypeCode) {}
+
+  public record ExemptionDocumentContextRow(
+      DocumentRow documentRow,
+      String attachmentTypeDescription,
+      String source,
+      Long sourceApplicationNumber,
+      boolean deletable) {}
 
   public record ExemptionInsertRecord(
       String exemptionNumber,
