@@ -44,12 +44,7 @@ public class OracleNotificationRepository {
 
   private static final String ORDER_BY =
       """
-       ORDER BY CASE n.LEXIS_NOTIFICATION_LEVEL_CODE
-                  WHEN 'CRITICAL' THEN 1
-                  WHEN 'WARNING' THEN 2
-                  ELSE 3
-                END,
-                n.PUBLISH_TIMESTAMP DESC,
+       ORDER BY n.PUBLISH_TIMESTAMP DESC,
                 n.LEXIS_NOTIFICATION_ID DESC,
                 a.ROLE_NAME
       """;
