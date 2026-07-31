@@ -1,5 +1,6 @@
 import {
   Add,
+  ChevronDown,
   Edit,
   InformationFilled,
   Notification as NotificationIcon,
@@ -39,10 +40,10 @@ import {
 } from '@/service/notification-service'
 import './Notifications.scss'
 
-const RECENT_UPDATE_WINDOW_DAYS = 3
 const DEFAULT_DISPLAY_DURATION_DAYS = 7
 const MAX_NOTIFICATION_TITLE_LENGTH = 80
 const MAX_NOTIFICATION_CONTENT_LENGTH = 4_000
+const NOTIFICATION_CONTENT_CLAMP_LENGTH = 190
 
 const notificationLevels: ReadonlyArray<{
   value: NotificationLevel
@@ -142,17 +143,6 @@ const formatDate = (value: string): string => {
   return new Intl.DateTimeFormat('en-CA', { dateStyle: 'medium' }).format(date)
 }
 
-const formatDateTime = (value: string): string => {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return new Intl.DateTimeFormat('en-CA', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
-
 const roleLabel = (role: string): string =>
   role
     .replace(/^LEXIS_/, '')
@@ -183,20 +173,84 @@ const notificationStatus = (notification: LexisNotificationView): string => {
   return notification.displayEndDate < currentDate ? 'Past' : 'Active'
 }
 
-const hasRecentUpdate = (notification: LexisNotificationView): boolean => {
-  const updateTime = new Date(notification.updateTimestamp).getTime()
-  if (Number.isNaN(updateTime)) {
-    return false
-  }
-  return updateTime >= Date.now() - RECENT_UPDATE_WINDOW_DAYS * 24 * 60 * 60 * 1000
-}
-
 const contentText = (contentHtml: string): string => {
   const parsedDocument = new DOMParser().parseFromString(contentHtml, 'text/html')
   return (parsedDocument.body.textContent ?? '').replace(/\u00a0/g, ' ').trim()
 }
 
 const contentTextLength = (contentHtml: string): number => contentText(contentHtml).length
+
+const contentHtmlForDisplay = (contentHtml: string): string => {
+  const parsedDocument = new DOMParser().parseFromString(contentHtml, 'text/html')
+  parsedDocument.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((link) => {
+    link.target = '_blank'
+    link.rel = [
+      ...new Set([...link.rel.split(/\s+/).filter(Boolean), 'noopener', 'noreferrer']),
+    ].join(' ')
+  })
+  return parsedDocument.body.innerHTML
+}
+
+const truncatedContentText = (content: string): string => {
+  let truncated = content.slice(0, NOTIFICATION_CONTENT_CLAMP_LENGTH)
+  const lastSpace = truncated.lastIndexOf(' ')
+  if (lastSpace > NOTIFICATION_CONTENT_CLAMP_LENGTH - 40) {
+    truncated = truncated.slice(0, lastSpace)
+  }
+  return `${truncated.trimEnd()}…`
+}
+
+type NotificationContentProps = {
+  notificationId: number
+  contentHtml: string
+}
+
+function NotificationContent({ notificationId, contentHtml }: NotificationContentProps) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const textContent = contentText(contentHtml)
+  const canExpand = textContent.length > NOTIFICATION_CONTENT_CLAMP_LENGTH
+  const isCollapsed = canExpand && !isExpanded
+  const contentId = `notification-content-${notificationId}`
+
+  return (
+    <>
+      {isCollapsed ? (
+        <div id={contentId} className="notifications-page__notification-content">
+          {truncatedContentText(textContent)}
+        </div>
+      ) : (
+        <div
+          id={contentId}
+          className="notifications-page__notification-content"
+          // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
+          dangerouslySetInnerHTML={{ __html: contentHtmlForDisplay(contentHtml) }}
+        />
+      )}
+      {canExpand && (
+        <button
+          type="button"
+          className="notifications-page__content-toggle"
+          aria-controls={contentId}
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? 'Show less' : 'Show more'}
+          <ChevronDown
+            className="notifications-page__content-toggle-icon"
+            size={16}
+            aria-hidden="true"
+          />
+        </button>
+      )}
+    </>
+  )
+}
+
+const RequiredMarker = () => (
+  <span className="notifications-page__required-marker" aria-hidden="true">
+    *
+  </span>
+)
 
 export default function NotificationsPage() {
   const { capabilities } = useAuth()
@@ -208,7 +262,6 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<NotificationMessage | null>(null)
-  const [showRecentUpdateMessage, setShowRecentUpdateMessage] = useState(false)
   const [notificationPendingDeletion, setNotificationPendingDeletion] =
     useState<LexisNotification | null>(null)
   const editorLauncherRef = useRef<HTMLElement>(null)
@@ -226,7 +279,6 @@ export default function NotificationsPage() {
         ])
         setNotifications(loadedNotifications)
         setAudienceRoles(loadedAudienceRoles)
-        setShowRecentUpdateMessage(loadedNotifications.some(hasRecentUpdate))
       } catch {
         setMessage({
           kind: 'error',
@@ -248,10 +300,6 @@ export default function NotificationsPage() {
   const editorTitle = isEditing ? 'Edit notification' : 'New notification'
   const pageDescription =
     'Updates and bulletins from your administrators. Each notice shows until its posted end date.'
-  const recentUpdateCount = useMemo(
-    () => notifications.filter(hasRecentUpdate).length,
-    [notifications],
-  )
   const activeNotificationCount = useMemo(
     () =>
       notifications.filter((notification) => notificationStatus(notification) === 'Active').length,
@@ -422,17 +470,6 @@ export default function NotificationsPage() {
         )}
       </section>
 
-      {showRecentUpdateMessage && !showEditor && recentUpdateCount > 0 && (
-        <InlineNotification
-          className="notifications-page__message"
-          kind="info"
-          title="Recently updated notifications"
-          subtitle={`${recentUpdateCount} notification${recentUpdateCount === 1 ? ' was' : 's were'} updated in the last ${RECENT_UPDATE_WINDOW_DAYS} days.`}
-          lowContrast
-          onCloseButtonClick={() => setShowRecentUpdateMessage(false)}
-        />
-      )}
-
       {message && !showEditor && (
         <InlineNotification
           className="notifications-page__message"
@@ -488,22 +525,30 @@ export default function NotificationsPage() {
             <h3>Message</h3>
             <TextInput
               id="notification-title"
-              labelText="Title"
+              labelText={
+                <>
+                  Title <RequiredMarker />
+                </>
+              }
               value={form.title}
               maxLength={MAX_NOTIFICATION_TITLE_LENGTH}
+              required
               disabled={saving}
               onChange={(event) =>
                 setForm((current) => ({ ...current, title: event.target.value }))
               }
             />
             <div className="notifications-page__form-field">
-              <p className="cds--label">Message</p>
+              <p className="cds--label">
+                Message <RequiredMarker />
+              </p>
               <p className="notifications-page__field-help">
                 Explain what is happening and what, if anything, the reader should do.
               </p>
               <NotificationEditor
                 value={form.contentHtml}
                 disabled={saving}
+                required
                 onChange={(contentHtml) => setForm((current) => ({ ...current, contentHtml }))}
               />
               <p className="notifications-page__character-count" aria-live="polite">
@@ -549,7 +594,7 @@ export default function NotificationsPage() {
             <legend>Audience</legend>
             <Checkbox
               id="notification-audience-all"
-              labelText="All authenticated LEXIS roles"
+              labelText="All roles"
               checked={form.audienceMode === 'ALL'}
               disabled={saving}
               onChange={(_, { checked }) =>
@@ -560,7 +605,6 @@ export default function NotificationsPage() {
                 }))
               }
             />
-            <p>Choose specific roles only when the notification does not apply to everyone.</p>
             <div
               className="notifications-page__audience-options"
               aria-disabled={form.audienceMode === 'ALL'}
@@ -584,8 +628,13 @@ export default function NotificationsPage() {
               <TextInput
                 id="notification-display-start-date"
                 type="date"
-                labelText="Start date"
+                labelText={
+                  <>
+                    Start date <RequiredMarker />
+                  </>
+                }
                 value={form.displayStartDate}
+                required
                 disabled={saving}
                 readOnly={isEditing}
                 helperText={isEditing ? 'The original start date cannot be changed.' : undefined}
@@ -599,16 +648,24 @@ export default function NotificationsPage() {
               <TextInput
                 id="notification-display-end-date"
                 type="date"
-                labelText="End date"
+                labelText={
+                  <>
+                    End date <RequiredMarker />
+                  </>
+                }
                 value={form.displayEndDate}
                 min={form.displayStartDate}
+                required
                 disabled={saving}
-                helperText="The notification hides automatically after this date."
                 onChange={(event) =>
                   setForm((current) => ({ ...current, displayEndDate: event.target.value }))
                 }
               />
             </div>
+            <p className="notifications-page__display-period-help">
+              The notice appears to readers between these dates, then hides automatically. No one
+              has to dismiss it.
+            </p>
           </section>
         </Modal>
       )}
@@ -650,6 +707,7 @@ export default function NotificationsPage() {
           >
             {notifications.map((notification) => {
               const adminNotification = isAdminNotification(notification) ? notification : null
+              const status = isAdmin ? notificationStatus(notification) : null
               return (
                 <article
                   key={notification.id}
@@ -668,10 +726,8 @@ export default function NotificationsPage() {
                         >
                           {levelLabel(notification.notificationLevel)}
                         </span>
-                        {isAdmin && (
-                          <span className="notifications-page__status">
-                            {notificationStatus(notification)}
-                          </span>
+                        {status === 'Scheduled' && (
+                          <span className="notifications-page__status">{status}</span>
                         )}
                       </div>
                       {isAdmin && adminNotification && (
@@ -697,10 +753,9 @@ export default function NotificationsPage() {
                         </div>
                       )}
                     </div>
-                    <div
-                      className="notifications-page__notification-content"
-                      // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- API HTML is sanitized server-side before every write.
-                      dangerouslySetInnerHTML={{ __html: notification.contentHtml }}
+                    <NotificationContent
+                      notificationId={notification.id}
+                      contentHtml={notification.contentHtml}
                     />
                     <div className="notifications-page__notification-meta">
                       <span>Posted {formatDate(notification.displayStartDate)}</span>
@@ -713,32 +768,6 @@ export default function NotificationsPage() {
                         Shows until {formatDate(notification.displayEndDate)}
                       </span>
                     </div>
-                    {isAdmin && adminNotification && (
-                      <dl className="notifications-page__metadata">
-                        <div>
-                          <dt>Created</dt>
-                          <dd>
-                            {formatDateTime(adminNotification.createTimestamp)} by{' '}
-                            {adminNotification.createUser}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Last updated</dt>
-                          <dd>
-                            {formatDateTime(adminNotification.updateTimestamp)} by{' '}
-                            {adminNotification.updateUserId}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Audience</dt>
-                          <dd>
-                            {adminNotification.audienceRoles.length > 0
-                              ? adminNotification.audienceRoles.map(roleLabel).join(', ')
-                              : 'All authenticated LEXIS users'}
-                          </dd>
-                        </div>
-                      </dl>
-                    )}
                   </div>
                 </article>
               )

@@ -276,6 +276,7 @@ describe('AuthProvider logout', () => {
     })
     authMocks.fetchAuthSession.mockClear()
     vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:01:00Z'))
 
     window.dispatchEvent(new MouseEvent('mousemove'))
     await act(async () => {
