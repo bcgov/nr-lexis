@@ -8,7 +8,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
-import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -17,10 +16,8 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
-import java.time.Clock;
-import java.time.Instant;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository.CurrentScheduleRow;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -40,16 +37,13 @@ import org.springframework.data.domain.PageRequest;
 @DisplayName("Unit Test | OracleLexisApplicationService")
 class OracleLexisApplicationServiceTest {
 
-  private static final Clock FIXED_CLOCK =
-      Clock.fixed(Instant.parse("2026-06-25T00:00:00Z"), ZoneOffset.UTC);
-
   @Mock private LexisApplicationRepository repository;
   @Mock private LexisReportScheduleRepository scheduleRepository;
   private OracleLexisApplicationService service;
 
   @BeforeEach
   void setUp() {
-    service = new OracleLexisApplicationService(repository, scheduleRepository, FIXED_CLOCK);
+    service = new OracleLexisApplicationService(repository, scheduleRepository);
   }
 
   @Test
@@ -60,15 +54,13 @@ class OracleLexisApplicationServiceTest {
     when(repository.loadProductTypeOptions()).thenReturn(List.of(new CodeNameDto("S", "Standing")));
     when(repository.loadGrowthTypeOptions()).thenReturn(List.of(new CodeNameDto("O", "Old Growth")));
     when(repository.loadRegionOptions()).thenReturn(List.of(new CodeNameDto("12", "Coast")));
-    when(scheduleRepository.findUpcomingExportSchedules())
+    when(scheduleRepository.findCurrentSchedulesRequired())
         .thenReturn(
             List.of(
-                scheduleRow(986L, LocalDate.of(2026, 1, 11)),
-                scheduleRow(null, LocalDate.of(2026, 7, 4)),
-                scheduleRow(990L, null),
-                scheduleRow(987L, LocalDate.of(2026, 7, 11)),
-                scheduleRow(988L, LocalDate.of(2026, 7, 25)),
-                scheduleRow(989L, LocalDate.of(2026, 8, 8))));
+                new CurrentScheduleRow(null, LocalDate.of(2026, 7, 4)),
+                new CurrentScheduleRow(990L, null),
+                new CurrentScheduleRow(987L, LocalDate.of(2026, 7, 11)),
+                new CurrentScheduleRow(988L, LocalDate.of(2026, 7, 25))));
 
     LexisApplicationSearchOptionsDto response = service.searchOptions();
 
@@ -289,10 +281,6 @@ class OracleLexisApplicationServiceTest {
         95.0,
         false,
         false);
-  }
-
-  private static ExportScheduleRowDto scheduleRow(Long exportScheduleId, LocalDate advertisingDate) {
-    return new ExportScheduleRowDto(exportScheduleId, advertisingDate, null, null, null, null, null);
   }
 
   private static <T> Page<T> page(List<T> content, long total) {
