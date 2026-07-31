@@ -108,7 +108,7 @@ describe('Notifications page', () => {
     expect(within(notificationRow).getByText('Warning')).toBeVisible()
     expect(within(notificationRow).getByText('Services are available.')).toBeVisible()
     expect(within(notificationRow).queryByText(/^Posted /)).not.toBeInTheDocument()
-    expect(within(notificationRow).getByText(/Shows until Jan 8, 2026/)).toBeVisible()
+    expect(within(notificationRow).queryByText(/Shows until/)).not.toBeInTheDocument()
     expect(mockedFetchNotifications).toHaveBeenCalledOnce()
     expect(mockedFetchAdminNotifications).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'New notification' })).not.toBeInTheDocument()
@@ -236,6 +236,25 @@ describe('Notifications page', () => {
     expect(screen.getByText('Scheduled', { exact: true })).toBeVisible()
     expect(screen.queryByText('Active', { exact: true })).not.toBeInTheDocument()
     expect(screen.queryByText('Past', { exact: true })).not.toBeInTheDocument()
+  })
+
+  it('does not expose notification audit or display-period data in administrator cards', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    await screen.findByText('Winter service update')
+
+    expect(screen.queryByText(/^Posted /)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Shows until/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Created', { exact: true })).not.toBeInTheDocument()
+    expect(screen.queryByText('Last updated', { exact: true })).not.toBeInTheDocument()
+    expect(screen.queryByText('Audience', { exact: true })).not.toBeInTheDocument()
+    expect(screen.queryByText(/IDIR\\\\ADMIN/)).not.toBeInTheDocument()
   })
 
   it('opens notification content links in a new protected tab', async () => {

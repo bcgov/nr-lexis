@@ -4,7 +4,6 @@ import {
   Edit,
   InformationFilled,
   Notification as NotificationIcon,
-  Time,
   TrashCan,
   WarningAltFilled,
   WarningFilled,
@@ -134,25 +133,6 @@ const toRequest = (form: NotificationForm): NotificationUpsertRequest => ({
   displayEndDate: form.displayEndDate,
   audienceRoles: form.audienceMode === 'ALL' ? [] : form.audienceRoles,
 })
-
-const formatDate = (value: string): string => {
-  const date = new Date(`${toDateInputValue(value)}T12:00:00`)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return new Intl.DateTimeFormat('en-CA', { dateStyle: 'medium' }).format(date)
-}
-
-const formatDateTime = (value: string): string => {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return new Intl.DateTimeFormat('en-CA', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
 
 const roleLabel = (role: string): string =>
   role
@@ -768,38 +748,6 @@ export default function NotificationsPage() {
                       notificationId={notification.id}
                       contentHtml={notification.contentHtml}
                     />
-                    <div className="notifications-page__notification-meta">
-                      <span className="notifications-page__notification-window">
-                        <Time size={14} aria-hidden="true" />
-                        Shows until {formatDate(notification.displayEndDate)}
-                      </span>
-                    </div>
-                    {isAdmin && adminNotification && (
-                      <dl className="notifications-page__metadata">
-                        <div>
-                          <dt>Created</dt>
-                          <dd>
-                            {formatDateTime(adminNotification.createTimestamp)} by{' '}
-                            {adminNotification.createUser}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Last updated</dt>
-                          <dd>
-                            {formatDateTime(adminNotification.updateTimestamp)} by{' '}
-                            {adminNotification.updateUserId}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Audience</dt>
-                          <dd>
-                            {adminNotification.audienceRoles.length > 0
-                              ? adminNotification.audienceRoles.map(roleLabel).join(', ')
-                              : 'All authenticated LEXIS users'}
-                          </dd>
-                        </div>
-                      </dl>
-                    )}
                   </div>
                 </article>
               )
