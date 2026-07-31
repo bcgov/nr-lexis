@@ -44,7 +44,7 @@ public class OracleNotificationRepository {
 
   private static final String ORDER_BY =
       """
-       ORDER BY n.PUBLISH_TIMESTAMP DESC,
+       ORDER BY n.CREATE_TIMESTAMP DESC,
                 n.LEXIS_NOTIFICATION_ID DESC,
                 a.ROLE_NAME
       """;
