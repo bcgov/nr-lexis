@@ -23,7 +23,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -3130,7 +3130,15 @@ const ProvincialPermitDetailsPage = () => {
                             },
                             {
                               label: 'Exemption number',
-                              value: displayValue(detail.exemptionNumber),
+                              value: detail.exemptionNumber ? (
+                                <Link
+                                  to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                                >
+                                  {detail.exemptionNumber}
+                                </Link>
+                              ) : (
+                                displayValue(detail.exemptionNumber)
+                              ),
                             },
                             {
                               label: 'Exemption type',
@@ -3326,7 +3334,13 @@ const ProvincialPermitDetailsPage = () => {
                                   <TableBody>
                                     {associatedPermitApplications.map((applicationNumber) => (
                                       <TableRow key={applicationNumber}>
-                                        <TableCell>{applicationNumber}</TableCell>
+                                        <TableCell>
+                                          <Link
+                                            to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
+                                          >
+                                            {applicationNumber}
+                                          </Link>
+                                        </TableCell>
                                         {canEditPermitApplications && (
                                           <TableCell>
                                             <Button

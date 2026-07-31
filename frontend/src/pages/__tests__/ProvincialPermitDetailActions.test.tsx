@@ -648,6 +648,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('Package number')).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('PKG-9')).toBeInTheDocument()
+    expect(
+      within(permitSummaryTile as HTMLElement).getByRole('link', { name: 'EX-9' }),
+    ).toHaveAttribute('href', '/provincial/exemption/EX-9')
     expect(within(permitSummaryTile as HTMLElement).getByText('Submit date')).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('2026-04-10')).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('Received date')).toBeInTheDocument()
@@ -1381,7 +1384,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const applicationsTile = (
       await screen.findByRole('heading', { name: 'Associated applications' })
     ).closest('.cds--tile') as HTMLElement
-    expect(within(applicationsTile).getByText('1000456')).toBeInTheDocument()
+    expect(within(applicationsTile).getByRole('link', { name: '1000456' })).toHaveAttribute(
+      'href',
+      '/provincial/application/1000456',
+    )
     const availableApplicationsCombobox = within(applicationsTile).getByRole('combobox', {
       name: 'Available application',
     })
