@@ -102,6 +102,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const summary = within(summaryTile)
 
     expect(summary.queryByText('Application number')).not.toBeInTheDocument()
+    expect(summary.getByText('Author')).toBeInTheDocument()
+    expect(summary.getByText('idir\\application-author')).toBeInTheDocument()
     expect(summary.getByRole('button', { name: 'Edit application summary' })).toBeInTheDocument()
     expect(summary.queryByRole('button', { name: 'Save Summary' })).not.toBeInTheDocument()
     expect(summary.queryByLabelText('Location of logs')).not.toBeInTheDocument()

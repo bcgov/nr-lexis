@@ -682,6 +682,10 @@ const ProvincialOfferDetailsPage = () => {
                   <dd className="detail-field-value">{displayValue(detail.offerNumber)}</dd>
                 </div>
                 <div className="detail-field-item">
+                  <dt className="detail-field-label">Author</dt>
+                  <dd className="detail-field-value">{displayValue(detail.author)}</dd>
+                </div>
+                <div className="detail-field-item">
                   <dt className="detail-field-label">Manufacturing facility</dt>
                   <dd className="detail-field-value">
                     {displayValue(detail.manufacturingFacilityInfo)}

@@ -211,7 +211,9 @@ public class PermitRepository extends OracleRepositorySupport {
                     getLong(rs, "OIC_REQUEST_PIECES"),
                     getDouble(rs, "OIC_REQUEST_VOLUME"),
                     getLong(rs, "ORG_UNIT_NO"),
-                    firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
+                    firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")),
+                    firstNonNull(
+                        getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID"))));
     LOGGER.info(
         "event=lexis_permit_detail_oracle operation=find_permit_det_by_id outcome={} permitNumber={} durationMs={}",
         detail.isPresent() ? "found" : "not_found",

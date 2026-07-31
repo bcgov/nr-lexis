@@ -429,7 +429,9 @@ public class ExemptionRepository extends OracleRepositorySupport {
                       getString(rs, "OTHER_CONDITIONS"),
                       "B".equalsIgnoreCase(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
                       List.of(),
-                      List.of());
+                      List.of(),
+                      firstNonNull(
+                          getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID")));
               });
       LOGGER.info(
           "event=lexis_exemption_detail_oracle operation=find_exemption_by_number outcome={} exemptionNumber={} durationMs={}",

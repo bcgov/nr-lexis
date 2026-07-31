@@ -3147,6 +3147,7 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                               ),
                             },
+                            { label: 'Author', value: displayValue(detail.author) },
                             { label: 'Submit date', value: displayValue(detail.applicationDate) },
                             { label: 'Issue date', value: displayValue(detail.issueDate) },
                             { label: 'Expiry date', value: displayValue(detail.expiryDate) },

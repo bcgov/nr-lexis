@@ -458,6 +458,8 @@ class ExemptionRepositoryTest {
     ResultSet resultSet = mock(ResultSet.class);
     when(resultSet.getString("EXEMPTION_NUMBER")).thenReturn("EX-205");
     when(resultSet.getString("EXPORT_EXEMPTION_TYPE_CODE")).thenReturn("M");
+    when(resultSet.getString("ENTRY_USERID")).thenReturn("IDIR\\CREATOR");
+    when(resultSet.getString("UPDATE_USERID")).thenReturn("IDIR\\EDITOR");
     when(resultSet.getDouble("APPROVED_VOLUME")).thenReturn(500.0d);
     when(resultSet.getDouble("VOLUME_REMAINING")).thenReturn(192.8d);
     when(resultSet.wasNull()).thenReturn(false);
@@ -468,6 +470,7 @@ class ExemptionRepositoryTest {
     assertThat(detail.approvedVolume()).isEqualTo(500.0d);
     assertThat(detail.usedVolume()).isEqualTo(307.2d);
     assertThat(detail.remainingVolume()).isEqualTo(192.8d);
+    assertThat(detail.author()).isEqualTo("IDIR\\EDITOR");
   }
 
   private static ExemptionSearchResultDto exemptionResult(String exemptionNumber) {

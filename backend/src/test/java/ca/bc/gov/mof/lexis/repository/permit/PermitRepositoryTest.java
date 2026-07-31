@@ -35,12 +35,15 @@ class PermitRepositoryTest {
         .thenReturn(java.sql.Date.valueOf(LocalDate.of(2026, 6, 17)));
     when(resultSet.getDate("RECEIVED_DATE"))
         .thenReturn(java.sql.Date.valueOf(LocalDate.of(2026, 6, 19)));
+    when(resultSet.getString("ENTRY_USERID")).thenReturn("IDIR\\CREATOR");
+    when(resultSet.getString("UPDATE_USERID")).thenReturn("IDIR\\EDITOR");
     DetailPermitRepository repository = new DetailPermitRepository(resultSet);
 
     PermitDetailDto detail = repository.findByPermitNumber(700001L).orElseThrow();
 
     assertThat(detail.applicationDate()).isEqualTo(LocalDate.of(2026, 6, 17));
     assertThat(detail.receivedDate()).isEqualTo(LocalDate.of(2026, 6, 19));
+    assertThat(detail.author()).isEqualTo("IDIR\\EDITOR");
   }
 
   @Test

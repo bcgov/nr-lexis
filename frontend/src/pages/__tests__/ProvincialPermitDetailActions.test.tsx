@@ -206,6 +206,7 @@ const permitDetail: ProvincialPermitDetail = {
   exemptionNumber: 'EX-9',
   permitStatusCode: 'COM',
   permitStatusDescription: 'Completed',
+  author: 'idir\\permit-author',
   applicantClientNumber: '00012345',
   agentClientLocationCode: '01',
   ownerClientNumber: '00067890',
@@ -651,6 +652,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(permitSummaryTile as HTMLElement).getByText('2026-04-10')).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('Received date')).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('2026-04-15')).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getByText('Author')).toBeInTheDocument()
+    expect(
+      within(permitSummaryTile as HTMLElement).getByText('idir\\permit-author'),
+    ).toBeInTheDocument()
     const permitFinancialTile = screen
       .getByRole('heading', { name: 'Financial and volume' })
       .closest('.cds--tile')

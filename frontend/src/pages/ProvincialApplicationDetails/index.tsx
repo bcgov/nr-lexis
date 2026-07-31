@@ -3843,6 +3843,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 detail.statusDescription ?? detail.applicationStatusCode,
                               ),
                             ],
+                            ['Author', displayValue(detail.author)],
                             ['Product type', displayValue(summaryProductTypeDescription)],
                             ['Owner client number', displayValue(detail.ownerClientNumber)],
                             ['Agent client number', displayValue(detail.agentClientNumber)],
