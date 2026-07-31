@@ -30,6 +30,7 @@ const ProvincialPage = lazy(() => import('@/pages/Provincial'))
 const ProvincialPermitPage = lazy(() => import('@/pages/ProvincialPermit'))
 const ProvincialPermitDetailsPage = lazy(() => import('@/pages/ProvincialPermitDetails'))
 const ProvincialReviewPage = lazy(() => import('@/pages/ProvincialReview'))
+const ProvincialSummaryPage = lazy(() => import('@/pages/ProvincialSummary'))
 const ReportsPage = lazy(() => import('@/pages/Reports'))
 const RTMEmsLogAmvPage = lazy(() => import('@/pages/RTMEmsLogAmv'))
 
@@ -79,6 +80,10 @@ const canAccessRoleScope = (
 ): boolean => {
   if (!roleScope) {
     return true
+  }
+
+  if (roleScope === 'provincialSubmitter') {
+    return hasProvincialSubmitterRole(roles) && !hasRole(roles, 'ADMIN')
   }
 
   const hasAdminRole = hasRole(roles, 'ADMIN')
@@ -169,8 +174,6 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
 // The Users & Access landing page and IDIR lookup are deliberately absent from protected routes.
 // INTENTIONAL_LEGACY_DIVERGENCE(INDIGENOUS_RESERVE_MODULE_RETIREMENT):
 // Legacy Indian/Indigenous Reserve search, create, and detail pages are deliberately not routed.
-// INTENTIONAL_LEGACY_DIVERGENCE(PROVINCIAL_SUMMARY_RETIREMENT):
-// The legacy Provincial Summary page is retired; authenticated root navigation uses role defaults.
 export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/',
@@ -218,6 +221,18 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: true,
+  },
+  {
+    path: '/provincial/summary',
+    id: 'Provincial Summary',
+    roleScope: 'provincialSubmitter',
+    requiredActions: ['/summary'],
+    element: (
+      <Layout>
+        <ProvincialSummaryPage />
+      </Layout>
+    ),
+    isNavigation: false,
   },
   {
     path: '/provincial/application',

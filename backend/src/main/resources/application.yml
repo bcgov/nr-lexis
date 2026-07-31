@@ -166,6 +166,7 @@ lexis:
         - "approveExemption"
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
+        - "/summary"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/exemptionSearch"

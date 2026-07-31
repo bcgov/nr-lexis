@@ -148,6 +148,33 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: 'Review' })).not.toBeInTheDocument()
   })
 
+  it('shows Summary navigation only to provincial submitters', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER'],
+          grantedActions: ['/summary'],
+          forestClientNumber: '00012345',
+        }),
+        defaultRoute: '/provincial/summary',
+        canPerform: (action: string) => action === '/summary',
+      }),
+    )
+
+    const submitterView = renderLayout('/provincial/summary')
+    expect(screen.getByRole('link', { name: 'Summary' })).toHaveAttribute(
+      'href',
+      '/provincial/summary',
+    )
+
+    submitterView.unmount()
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    renderLayout('/provincial/review')
+
+    expect(screen.queryByRole('link', { name: 'Summary' })).not.toBeInTheDocument()
+  })
+
   it('restores persisted theme, side-nav, and collapsed sections', async () => {
     window.localStorage.setItem(THEME_PREFERENCE_KEY, 'g100')
     window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'true')

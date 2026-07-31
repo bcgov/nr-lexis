@@ -3834,6 +3834,50 @@ legend.cds--label {
   margin: 0.25rem 0 0.5rem;
 }
 
+.provincial-summary-page .detail-section-card,
+.provincial-summary-section {
+  margin-block-start: 1rem;
+}
+
+.provincial-summary-section__header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-block-end: 1rem;
+}
+
+.provincial-summary-section__header .detail-tile-title {
+  margin: 0;
+}
+
+.provincial-summary-section__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.provincial-summary-section__loading,
+.provincial-summary-section__prompt {
+  margin: 0;
+  min-block-size: 3rem;
+  padding-block: 0.75rem;
+}
+
+.provincial-summary-section__prompt {
+  color: var(--csp-text-secondary);
+}
+
+.provincial-summary-section .lexis-table-frame {
+  margin-block-end: 0;
+}
+
+.provincial-summary-section .cds--data-table {
+  min-inline-size: 48rem;
+}
+
 .detail-page-header {
   margin-bottom: 0.5rem;
 }

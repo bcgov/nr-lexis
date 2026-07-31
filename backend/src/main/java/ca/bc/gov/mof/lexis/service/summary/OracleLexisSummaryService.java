@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryApplicationItemDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryApplicationsResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryExemptionItemDto;
@@ -27,7 +28,9 @@ import ca.bc.gov.mof.lexis.dto.summary.SummaryPermitsResponseDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
@@ -49,16 +52,19 @@ public class OracleLexisSummaryService implements LexisSummaryService {
   private final PurchaseOfferService offerService;
   private final ExemptionService exemptionService;
   private final PermitService permitService;
+  private final PermitDetailsRpcService permitDetailsRpcService;
 
   public OracleLexisSummaryService(
       LexisApplicationService applicationService,
       PurchaseOfferService offerService,
       ExemptionService exemptionService,
-      PermitService permitService) {
+      PermitService permitService,
+      PermitDetailsRpcService permitDetailsRpcService) {
     this.applicationService = applicationService;
     this.offerService = offerService;
     this.exemptionService = exemptionService;
     this.permitService = permitService;
+    this.permitDetailsRpcService = permitDetailsRpcService;
   }
 
   @Override
@@ -95,6 +101,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             regions,
+            true,
             firstPresent(sortField, APPLICATION_SORT_DEFAULT),
             normalizedPage,
             normalizedSize);
@@ -221,6 +228,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
+            null,
             normalizedClientNumber,
             true,
             regions,
@@ -229,9 +237,8 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             normalizedSize);
 
     var response = permitService.search(criteria);
-    List<PermitSearchResultDto> scopedResults =
-        filterPermitResultsForClient(response.results(), normalizedClientNumber);
-    List<SummaryPermitItemDto> results = scopedResults.stream().map(this::toSummaryPermit).toList();
+    List<SummaryPermitItemDto> results =
+        response.results().stream().map(this::toSummaryPermit).toList();
 
     return new SummaryPermitsResponseDto(results, response.total(), response.page(), response.size());
   }
@@ -265,6 +272,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
+            null,
             normalizedClientNumber,
             false,
             regions,
@@ -273,9 +281,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             normalizedSize);
 
     var response = permitService.search(criteria);
-    List<PermitSearchResultDto> scopedResults =
-        filterPermitResultsForClient(response.results(), normalizedClientNumber);
-    List<SummaryFeeItemDto> results = scopedResults.stream().map(this::toSummaryFee).toList();
+    List<SummaryFeeItemDto> results = response.results().stream().map(this::toSummaryFee).toList();
 
     return new SummaryFeesResponseDto(results, response.total(), response.page(), response.size());
   }
@@ -391,12 +397,32 @@ public class OracleLexisSummaryService implements LexisSummaryService {
     Optional<PermitDetailDto> detail = permitService.findByPermitNumber(result.permitNumber());
 
     double volume = detail.map(PermitDetailDto::permitVolume).orElse(result.totalVolume());
+    Long permitNumber = detail.map(PermitDetailDto::permitNumber).orElse(result.permitNumber());
+    Double fees =
+        Optional.ofNullable(
+                permitDetailsRpcService.getTotalFeesForPermit(permitNumber, null, null))
+            .map(PermitTotalFeesRpcResponseDto::totalFees)
+            .map(this::parseCurrency)
+            .orElse(null);
     return new SummaryFeeItemDto(
-        detail.map(PermitDetailDto::permitNumber).orElse(result.permitNumber()),
+        permitNumber,
         detail.map(PermitDetailDto::permitStatusDescription).orElse(result.statusDescription()),
         volume,
-        volume,
+        fees,
         detail.map(PermitDetailDto::receiptNumber).orElse(null));
+  }
+
+  private Double parseCurrency(String value) {
+    String normalized = trimToNull(value);
+    if (normalized == null || "$".equals(normalized)) {
+      return null;
+    }
+
+    try {
+      return new BigDecimal(normalized.replace("$", "").replace(",", "").trim()).doubleValue();
+    } catch (NumberFormatException ex) {
+      return null;
+    }
   }
 
   private List<Long> toRegionNumbers(List<CodeNameDto> regions) {
@@ -447,24 +473,4 @@ public class OracleLexisSummaryService implements LexisSummaryService {
     return fallback;
   }
 
-  private List<PermitSearchResultDto> filterPermitResultsForClient(
-      List<PermitSearchResultDto> results,
-      String clientNumber) {
-    if (results == null || results.isEmpty() || clientNumber == null || clientNumber.isBlank()) {
-      return List.of();
-    }
-
-    return results.stream()
-        .filter(result -> hasClientNumber(result.ownerClientNumber(), clientNumber)
-            || hasClientNumber(result.applicantClientNumber(), clientNumber))
-        .toList();
-  }
-
-  private boolean hasClientNumber(String value, String clientNumber) {
-    String normalizedValue = trimToNull(value);
-    if (normalizedValue == null) {
-      return false;
-    }
-    return normalizedValue.equalsIgnoreCase(clientNumber);
-  }
 }

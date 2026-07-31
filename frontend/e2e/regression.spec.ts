@@ -1852,15 +1852,17 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
-  test('does not expose the retired provincial summary page', async () => {
+  test('keeps the provincial client summary unavailable to IDIR administrators', async () => {
     const page = await authenticatedIdirPage()
 
     await page.goto(new URL('/provincial/summary', E2E_BASE_URL).toString(), {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
+    await expect(
+      page.getByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
   })
 

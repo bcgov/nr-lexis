@@ -10,6 +10,10 @@ type RouteExpectation = {
 
 const EXPECTED_CORE_PAGES: RouteExpectation[] = [
   {
+    path: '/provincial/summary',
+    requiredActions: ['/summary'],
+  },
+  {
     path: '/provincial/application',
     requiredActions: ['/applicationSearch'],
   },

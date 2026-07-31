@@ -370,8 +370,8 @@ public class LexisSessionService {
 
   private enum WelcomeTarget {
     READ_ONLY("readOnly", "/provincial/application"),
-    PROVINCIAL_SUBMITTER("industryUser", "/provincial/application"),
-    INDUSTRY_USER("industryUser", "/provincial/application"),
+    PROVINCIAL_SUBMITTER("industryUser", "/provincial/summary"),
+    INDUSTRY_USER("industryUser", "/provincial/summary"),
     ADMIN_USER("adminUser", "/provincial/review"),
     EXEMPTION_APPROVER("exemptionApprover", "/provincial/exemption"),
     NO_ACCESS("noAccess", null),

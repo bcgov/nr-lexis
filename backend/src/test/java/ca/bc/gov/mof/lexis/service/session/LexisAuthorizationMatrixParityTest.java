@@ -98,7 +98,12 @@ class LexisAuthorizationMatrixParityTest {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .contains(
-            "createApplication", "createOffer", "createPermit", "savePermit", "/permitReport")
+            "/summary",
+            "createApplication",
+            "createOffer",
+            "createPermit",
+            "savePermit",
+            "/permitReport")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",
@@ -106,7 +111,6 @@ class LexisAuthorizationMatrixParityTest {
             "/fileInvoiceUpload",
             "/filePermitUpload")
         .doesNotContain(
-            "/summary",
             "/changeApplicantType",
             "/applicationRemarks",
             "/createExemption",
@@ -124,7 +128,12 @@ class LexisAuthorizationMatrixParityTest {
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .contains(
-            "createApplication", "createOffer", "createPermit", "savePermit", "/permitReport")
+            "/summary",
+            "createApplication",
+            "createOffer",
+            "createPermit",
+            "savePermit",
+            "/permitReport")
         .contains("uploadApplicationSubmission")
         .contains(
             "/fileApplicationUpload",

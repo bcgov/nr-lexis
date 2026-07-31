@@ -2326,12 +2326,12 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacySummaryRouteShouldRejectIndustryRole() throws Exception {
+  void legacySummaryRouteShouldAllowProvincialSubmitter() throws Exception {
     mockMvc.perform(
             post("/api/lexis/summary")
                 .param("actionMapping", "getApplications")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNoContent());
   }
 
   @Test

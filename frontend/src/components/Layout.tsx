@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   Close,
   DataBase,
+  Dashboard,
   DocumentAdd,
   Finance,
   Logout,
@@ -104,6 +105,13 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     label: 'Provincial',
     links: [
+      {
+        to: '/provincial/summary',
+        label: 'Summary',
+        icon: Dashboard,
+        requiredActions: ['/summary'],
+        roleScope: 'provincialSubmitter',
+      },
       {
         to: '/provincial/review',
         label: 'Application review',
@@ -365,6 +373,10 @@ const canShowRoleScopedLink = (
 ): boolean => {
   if (!link.roleScope) {
     return true
+  }
+
+  if (link.roleScope === 'provincialSubmitter') {
+    return hasProvincialSubmitterRole(roles) && !hasRole(roles, 'ADMIN')
   }
 
   if (hasRole(roles, 'ADMIN')) {

@@ -37,6 +37,12 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
     requiredActionsMatch: 'all',
   },
   {
+    path: '/provincial/summary',
+    requiredActions: ['/summary'],
+    requiredActionsMatch: 'any',
+    roleScope: 'provincialSubmitter',
+  },
+  {
     path: '/provincial/application/upload',
     requiredActions: ['uploadApplicationSubmission'],
     requiredActionsMatch: 'any',
@@ -98,15 +104,6 @@ describe('Protected route access matrix', () => {
     expect(routePaths.some((path) => path.includes('indian'))).toBe(false)
     expect(routePaths.some((path) => path.includes('reserve'))).toBe(false)
     expect(routePaths.some((path) => path.includes('advertising'))).toBe(false)
-  })
-
-  it('does not expose the replaced provincial summary route', () => {
-    const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
-      route.path.toLowerCase(),
-    )
-
-    expect(routePaths.some((path) => path === '/provincial/summary')).toBe(false)
-    expect(routePaths.some((path) => path.startsWith('/provincial/summary/'))).toBe(false)
   })
 
   it('keeps legacy dashboard URL as a redirect instead of a page', () => {

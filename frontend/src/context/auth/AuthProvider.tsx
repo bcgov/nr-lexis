@@ -227,6 +227,9 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   }
 
   if (isIndustryUser) {
+    if (isProvincialSubmitterUser && hasGrantedAction('/summary')) {
+      return '/provincial/summary'
+    }
     if (isProvincialSubmitterUser && hasGrantedAction('/applicationSearch')) {
       return '/provincial/application'
     }

@@ -103,10 +103,10 @@ describe('Auth Provider Role Matrix', () => {
     clearActiveForestClientNumber()
   })
 
-  it('does not normalize unknown submitter roles', async () => {
+  it('normalizes the scoped submitter role without normalizing unknown roles', async () => {
     mockSessionCapabilities({
       authenticated: true,
-      principal: 'idir\\tester',
+      principal: 'bceid\\tester',
       roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345', 'LEXIS_UNKNOWN_SUBMITTER'],
       welcomeTarget: null,
       legacyPath: null,
@@ -121,7 +121,7 @@ describe('Auth Provider Role Matrix', () => {
       'PROVINCIAL_SUBMITTER_00012345,LEXIS_UNKNOWN_SUBMITTER',
     )
     expect(screen.getByTestId('forest-client')).toHaveTextContent('00012345')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
   })
 
@@ -132,8 +132,8 @@ describe('Auth Provider Role Matrix', () => {
         principal: 'bceid\\submitter',
         roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
         welcomeTarget: 'provincialSubmitter',
-        legacyPath: '/provincial/application',
-        grantedActions: ['/applicationSearch'],
+        legacyPath: '/provincial/summary',
+        grantedActions: ['/summary', '/applicationSearch'],
         forestClientNumber: null,
         availableForestClientNumbers: ['00012345', '00067890'],
         forestClientSelectionRequired: true,
@@ -143,8 +143,8 @@ describe('Auth Provider Role Matrix', () => {
         principal: 'bceid\\submitter',
         roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
         welcomeTarget: 'provincialSubmitter',
-        legacyPath: '/provincial/application',
-        grantedActions: ['/applicationSearch'],
+        legacyPath: '/provincial/summary',
+        grantedActions: ['/summary', '/applicationSearch'],
         forestClientNumber: '00067890',
         availableForestClientNumbers: ['00012345', '00067890'],
         forestClientSelectionRequired: false,
@@ -394,7 +394,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('prioritizes the review queue over retired summary when both actions are granted', async () => {
+  it('keeps roleless reviewers on the review queue when both actions are granted', async () => {
     mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\reviewer',
@@ -412,7 +412,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
   })
 
-  it('routes provincial submitters with application access to application search before upload', async () => {
+  it('routes provincial submitters with summary access to their client summary', async () => {
     mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\submitter',
@@ -420,6 +420,7 @@ describe('Auth Provider Role Matrix', () => {
       welcomeTarget: null,
       legacyPath: null,
       grantedActions: [
+        '/summary',
         '/applicationSearch',
         '/applicationDetails',
         'createApplication',
@@ -427,10 +428,16 @@ describe('Auth Provider Role Matrix', () => {
       ],
     })
 
-    renderProbe(['uploadApplicationSubmission', 'createApplication', '/applicationSearch'])
+    renderProbe([
+      '/summary',
+      'uploadApplicationSubmission',
+      'createApplication',
+      '/applicationSearch',
+    ])
     await waitForAuthLoad()
 
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
     expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')

@@ -38,21 +38,21 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldRouteProvincialSubmittersToApplicationSearch() {
+  void shouldRouteProvincialSubmittersToSummary() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/summary");
   }
 
   @Test
-  void shouldRouteForestClientScopedProvincialSubmittersToApplicationSearch() {
+  void shouldRouteForestClientScopedProvincialSubmittersToSummary() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter_00001234"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/summary");
     assertThat(response.roles()).containsExactly("LEXIS_PROVINCIAL_SUBMITTER");
   }
 
