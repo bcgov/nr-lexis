@@ -15,8 +15,10 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitDocumentContextRow;
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
@@ -30,6 +32,7 @@ import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DataRetrievalFailureException;
 
 @ExtendWith(MockitoExtension.class)
@@ -443,6 +446,36 @@ class PermitRpcRepositoryTest {
     assertThat(repository.findEndUsesByApplicationNumber(1000456L)).isEmpty();
     assertThat(repository.findEndUsesByPackageNumber("PKG-1")).isEmpty();
     assertThat(repository.findCandidateExcolCodes(1, "HE", "LU", 11L)).isEmpty();
+  }
+
+  @Test
+  void feePolicyFactorShouldDefaultToZeroWhenOracleHasNoMatchingPolicy() {
+    SQLException noDataFound = new SQLException("ORA-01403: no data found", "02000", 1403);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.GET_POLICY_FACTOR(?,?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenThrow(new DataIntegrityViolationException("No matching fee policy", noDataFound));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findFeePolicyPercentIncrease(LocalDate.of(2010, 12, 2), 1905L))
+        .isEqualByComparingTo(BigDecimal.ZERO);
+  }
+
+  @Test
+  void feePolicyFactorShouldPropagateOtherOracleFailures() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.GET_POLICY_FACTOR(?,?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenThrow(failure);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(
+            () -> repository.findFeePolicyPercentIncrease(LocalDate.of(2026, 1, 15), 1905L))
+        .isSameAs(failure);
   }
 
   @Test

@@ -149,6 +149,9 @@ class ExemptionRepositoryTest {
         .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST")
         .contains("ORDER BY EE.EXEMPTION_NUMBER DESC")
         .doesNotContain(":1");
+    assertThat(repository.whereSql().chars().filter(character -> character == '(').count())
+        .isEqualTo(
+            repository.whereSql().chars().filter(character -> character == ')').count());
     assertThat(repository.pageSelectSql())
         .contains("WITH PERMIT_VOLUME_BY_EXEMPTION AS")
         .contains("SELECT DISTINCT")

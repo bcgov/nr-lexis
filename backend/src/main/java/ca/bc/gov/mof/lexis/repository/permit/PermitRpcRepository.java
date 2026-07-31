@@ -33,6 +33,7 @@ import org.springframework.stereotype.Repository;
 @Profile("oracle")
 public class PermitRpcRepository extends OracleRepositorySupport {
 
+  private static final int ORACLE_NO_DATA_FOUND = 1403;
   private static final String FIND_SCALE_DETAIL_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
@@ -1984,26 +1985,45 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return BigDecimal.ZERO;
     }
 
-    return queryCursorSingleRequired(
-            GET_POLICY_FACTOR,
-            cs -> {
-              cs.setDate(1, java.sql.Date.valueOf(applicationDate));
-              cs.setLong(2, orgUnitNo);
-            },
-            3,
-            rs -> {
-              String percent = trim(rs.getString("PERCENT_INCREASE"));
-              if (percent == null) {
-                return BigDecimal.ZERO;
-              }
-              try {
-                return new BigDecimal(percent);
-              } catch (NumberFormatException ex) {
-                throw new DataRetrievalFailureException(
-                    "Oracle fee policy factor was not numeric", ex);
-              }
-            })
-        .orElse(BigDecimal.ZERO);
+    try {
+      return queryCursorSingleRequired(
+              GET_POLICY_FACTOR,
+              cs -> {
+                cs.setDate(1, java.sql.Date.valueOf(applicationDate));
+                cs.setLong(2, orgUnitNo);
+              },
+              3,
+              rs -> {
+                String percent = trim(rs.getString("PERCENT_INCREASE"));
+                if (percent == null) {
+                  return BigDecimal.ZERO;
+                }
+                try {
+                  return new BigDecimal(percent);
+                } catch (NumberFormatException ex) {
+                  throw new DataRetrievalFailureException(
+                      "Oracle fee policy factor was not numeric", ex);
+                }
+              })
+          .orElse(BigDecimal.ZERO);
+    } catch (DataAccessException ex) {
+      if (hasDatabaseErrorCode(ex, ORACLE_NO_DATA_FOUND)) {
+        return BigDecimal.ZERO;
+      }
+      throw ex;
+    }
+  }
+
+  private boolean hasDatabaseErrorCode(Throwable failure, int expectedErrorCode) {
+    for (Throwable current = failure;
+        current != null && current.getCause() != current;
+        current = current.getCause()) {
+      if (current instanceof SQLException sqlException
+          && sqlException.getErrorCode() == expectedErrorCode) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public Optional<BigDecimal> findAverageMarketValueByScaleId(String scaleDetailId) {

@@ -440,7 +440,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
             + placeholders
             + "))"
             + (includeBlanketOic ? " OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'" : "")
-            + ")";
+            + "))";
     where.addRawWithBinds(condition, bindValues.toArray());
   }
 
