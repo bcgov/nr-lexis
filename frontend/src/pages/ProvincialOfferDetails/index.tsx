@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Column, Grid, InlineLoading, TextArea, TextInput, Tile } from '@carbon/react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -122,6 +122,10 @@ const ProvincialOfferDetailsPage = () => {
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
   const currentDetail = detail && String(detail.offerNumber) === offerNumber ? detail : null
+  const applicationNumber = form?.applicationNumber.trim() ?? ''
+  const applicationDetailPath = applicationNumber
+    ? `${currentDetail?.exportJurisdictionCode?.trim().toUpperCase() === 'F' ? '/federal/application' : '/provincial/application'}/${encodeURIComponent(applicationNumber)}`
+    : ''
   const isRefreshingDetail = loading && !!currentDetail
   const offerEditLocked = currentDetail?.locked === true
   const canEditAnyOfferField =
@@ -458,12 +462,16 @@ const ProvincialOfferDetailsPage = () => {
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Application details</legend>
               <div className="legacy-search-grid">
-                <TextInput
-                  id="offerApplicationNumber"
-                  labelText="Application number"
-                  value={form.applicationNumber}
-                  readOnly
-                />
+                <div className="offer-application-link-field">
+                  <span className="cds--label">Application number</span>
+                  {applicationDetailPath ? (
+                    <Link className="cds--link" to={applicationDetailPath}>
+                      {form.applicationNumber}
+                    </Link>
+                  ) : (
+                    <span>{displayValue(form.applicationNumber)}</span>
+                  )}
+                </div>
                 <TextInput
                   id="offerPackageNumber"
                   labelText="Package number"
