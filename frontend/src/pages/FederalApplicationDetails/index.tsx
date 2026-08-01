@@ -377,41 +377,53 @@ const FederalApplicationDetailsPage = () => {
           return
         }
 
-        try {
-          const packageScaleRows = await Promise.all(
-            response.packages.map(async (packageNumber) =>
-              (await fetchApplicationPackageScales(packageNumber)).map((row) => ({
-                ...row,
-                packageNumber,
-              })),
-            ),
-          )
-          if (isLatestRequest()) {
-            setScaleRows(packageScaleRows.flat())
-            setScaleErrorMessage('')
-          }
-        } catch (error) {
-          if (isLatestRequest()) {
-            console.error(error)
-            setScaleRows([])
-            setScaleErrorMessage('Unable to retrieve federal application scale details.')
-          }
-        }
-
-        try {
-          const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
-          if (isLatestRequest()) {
-            setDocumentRows(documentsResult.rows)
-          }
-        } catch (error) {
-          if (isLatestRequest()) {
-            console.error(error)
-            setDocumentRows([])
-            setDocumentsErrorMessage('Unable to retrieve federal application documents.')
+        const loadScaleRows = async () => {
+          try {
+            const packageScaleRows = await Promise.all(
+              response.packages.map(async (packageNumber) =>
+                (await fetchApplicationPackageScales(packageNumber)).map((row) => ({
+                  ...row,
+                  packageNumber,
+                })),
+              ),
+            )
+            if (isLatestRequest()) {
+              setScaleRows(packageScaleRows.flat())
+              setScaleErrorMessage('')
+            }
+          } catch (error) {
+            if (isLatestRequest()) {
+              console.error(error)
+              setScaleRows([])
+              setScaleErrorMessage('Unable to retrieve federal application scale details.')
+            }
           }
         }
 
-        if (canViewFederalApplication) {
+        const loadDocuments = async () => {
+          try {
+            const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
+            if (isLatestRequest()) {
+              setDocumentRows(documentsResult.rows)
+            }
+          } catch (error) {
+            if (isLatestRequest()) {
+              console.error(error)
+              setDocumentRows([])
+              setDocumentsErrorMessage('Unable to retrieve federal application documents.')
+            }
+          }
+        }
+
+        const loadRemarks = async () => {
+          if (!canViewFederalApplication) {
+            if (isLatestRequest()) {
+              setRemarkRows([])
+              setRemarksErrorMessage('')
+            }
+            return
+          }
+
           try {
             const remarks = await fetchFederalApplicationRemarks(applicationNumber)
             if (isLatestRequest()) {
@@ -425,10 +437,9 @@ const FederalApplicationDetailsPage = () => {
               setRemarksErrorMessage('Unable to retrieve federal application remarks.')
             }
           }
-        } else if (isLatestRequest()) {
-          setRemarkRows([])
-          setRemarksErrorMessage('')
         }
+
+        await Promise.all([loadScaleRows(), loadDocuments(), loadRemarks()])
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
