@@ -98,6 +98,8 @@ const parseClientContacts = (input: unknown): ApplicationClientContact[] => {
   })
 }
 
+// INTENTIONAL_LEGACY_DIVERGENCE(AUTHORITATIVE_CLIENT_LOCATION_LOOKUP):
+// Always resolve contact data with the persisted location instead of legacy's default-location view.
 export const fetchApplicationClientData = async (
   clientNumber: string,
   clientLocationCode: string,
