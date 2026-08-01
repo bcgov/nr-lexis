@@ -7,7 +7,6 @@ import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepositor
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
-import java.util.concurrent.Executor;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -16,8 +15,6 @@ class ExemptionExpiryProcessorConfigurationTest {
   private final ApplicationContextRunner contextRunner =
       new ApplicationContextRunner()
           .withPropertyValues("spring.profiles.active=oracle")
-          .withBean(
-              "oracleLegacyDynamicFetchExecutor", Executor.class, () -> Runnable::run)
           .withBean(
               ExemptionDetailsRpcRepository.class,
               () -> mock(ExemptionDetailsRpcRepository.class))
