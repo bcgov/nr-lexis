@@ -9,8 +9,6 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import org.springframework.data.domain.Page;
-import org.springframework.dao.DataAccessResourceFailureException;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -19,12 +17,19 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @DisplayName("Unit Test | PurchaseOfferRepository")
 class PurchaseOfferRepositoryTest {
 
   @Test
-  void searchShouldUsePurchaseOfferPackageAliasesForDynamicCriteria() {
+  void searchShouldUseDirectQueryForEveryFilterAndAccessConstraint() {
     TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
 
     repository.search(
@@ -37,6 +42,7 @@ class PurchaseOfferRepositoryTest {
             LocalDate.of(2026, 2, 28),
             "00055667",
             "00088999",
+            "00077777",
             true,
             true,
             List.of(1904L),
@@ -45,28 +51,46 @@ class PurchaseOfferRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("EEA.APPLICATION_NUMBER")
-        .contains("PO.PACKAGE_NUMBER")
-        .contains("ES.ADVERTISING_DATE")
-        .contains("PO.OFFER_WITHDRAWAL_DATE")
-        .contains("EEA.ORG_UNIT_NO")
+        .contains("TO_CHAR(EEA.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
+        .contains("PO.PACKAGE_NUMBER LIKE '%' || ? || '%'")
+        .contains("ES.ADVERTISING_DATE >= ?")
+        .contains("ES.ADVERTISING_DATE <= ?")
+        .contains("PO.OFFER_WITHDRAWAL_DATE >= ?")
+        .contains("PO.OFFER_WITHDRAWAL_DATE <= ?")
+        .contains("EEA.ORG_UNIT_NO IN (?)")
+        .contains("EEA.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("EEA.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("PO.OFFERING_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("EEA.OWNER_CLIENT_NUMBER = ?")
+        .contains("EEA.AGENT_CLIENT_NUMBER = ?")
+        .contains("PO.OFFERING_CLIENT_NUMBER = ?")
         .contains("PO.OFFER_WITHDRAWAL_DATE IS NULL")
         .contains("EEA.EXPORT_JURISDICTION_CODE = 'P'")
         .contains(
             "ORDER BY ES.ADVERTISING_DATE DESC, PO.EXPORT_PURCHASE_OFFER_NUMBER DESC")
-        .doesNotContain("v.");
+        .doesNotContain("v.")
+        .doesNotContain(":1");
+    assertThat(repository.pageSelectSql())
+        .contains("FROM EXPORT_PURCHASE_OFFER PO")
+        .contains("INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("LEFT JOIN EXPORT_SCHEDULE ES")
+        .contains("LEFT JOIN ORG_UNIT OU")
+        .doesNotContain("FIND_POS_BY_CRITERIA");
     assertThat(repository.bindValues())
         .containsExactly(
             "900123",
             "PKG-1",
-            "2026-01-01",
-            "2026-01-31",
-            "2026-02-01",
-            "2026-02-28",
-            "1904",
+            java.sql.Date.valueOf("2026-01-01"),
+            java.sql.Date.valueOf("2026-01-31"),
+            java.sql.Date.valueOf("2026-02-01"),
+            java.sql.Date.valueOf("2026-02-28"),
+            1904L,
             "00055667",
             "00055667",
-            "00088999");
+            "00088999",
+            "00077777",
+            "00077777",
+            "00077777");
   }
 
   @Test
@@ -131,7 +155,7 @@ class PurchaseOfferRepositoryTest {
 
     repository.search(criteria);
     String searchSql = repository.whereSql();
-    List<String> searchBinds = repository.bindValues();
+    List<Object> searchBinds = repository.bindValues();
 
     repository.count(criteria);
 
@@ -144,29 +168,135 @@ class PurchaseOfferRepositoryTest {
     assertThat(searchBinds)
         .containsExactly(
             "00099999", "00099999", "00077881", "00077881", "00077881");
-    assertThat(repository.whereSql()).isEqualTo(searchSql);
-    assertThat(repository.bindValues()).isEqualTo(searchBinds);
+    assertThat(repository.countWhereSql())
+        .isEqualTo(searchSql.substring(0, searchSql.indexOf(" ORDER BY")));
+    assertThat(repository.countBindValues()).isEqualTo(searchBinds);
   }
 
   @Test
-  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
-    List<PurchaseOfferSearchResultDto> firstPage =
-        java.util.stream.LongStream.rangeClosed(810001L, 810010L)
+  void searchShouldLoadRequestedDirectPageWithCountTotal() {
+    List<PurchaseOfferSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(810001L, 810011L)
             .mapToObj(PurchaseOfferRepositoryTest::offerResult)
             .toList();
-    TestPurchaseOfferRepository repository =
-        new TestPurchaseOfferRepository(List.<List<?>>of(firstPage, List.of(offerResult(810011L))));
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository(rows);
 
-    Page<PurchaseOfferSearchResultDto> results =
-        repository.search(
-            new PurchaseOfferSearchCriteria(
-                null, null, null, null, null, null, null, List.of(), null, 0, 10));
+    Page<PurchaseOfferSearchResultDto> results = repository.search(emptyCriteria(null, 0, 10));
 
     assertThat(results.getContent())
         .extracting(PurchaseOfferSearchResultDto::offerNumber)
         .containsExactly(810001L, 810002L, 810003L, 810004L, 810005L, 810006L, 810007L, 810008L, 810009L, 810010L);
     assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.countCalls()).isEqualTo(1);
     assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 10, 25, 50, 100, 200})
+  void searchShouldUseTwoDatabaseCallsForPageSizesThroughTwoHundred(int pageSize) {
+    List<PurchaseOfferSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(810001L, 810200L)
+            .mapToObj(PurchaseOfferRepositoryTest::offerResult)
+            .toList();
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository(rows);
+
+    Page<PurchaseOfferSearchResultDto> results =
+        repository.search(emptyCriteria(null, 0, pageSize));
+
+    assertThat(results.getNumberOfElements()).isEqualTo(pageSize);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      textBlock = """
+          applicationNumber ASC|ORDER BY EEA.APPLICATION_NUMBER ASC, PO.EXPORT_PURCHASE_OFFER_NUMBER ASC
+          packageNumber DESC|ORDER BY PO.PACKAGE_NUMBER DESC, PO.EXPORT_PURCHASE_OFFER_NUMBER DESC
+          offerNumber ASC|ORDER BY PO.EXPORT_PURCHASE_OFFER_NUMBER ASC
+          listingDate DESC|ORDER BY ES.ADVERTISING_DATE DESC, PO.EXPORT_PURCHASE_OFFER_NUMBER DESC
+          offerWithdrawalDate ASC|ORDER BY PO.OFFER_WITHDRAWAL_DATE ASC, PO.EXPORT_PURCHASE_OFFER_NUMBER ASC
+          region DESC|ORDER BY OU.ORG_UNIT_NAME DESC, PO.EXPORT_PURCHASE_OFFER_NUMBER DESC
+          offeringClientNumber ASC|ORDER BY PO.OFFERING_CLIENT_NUMBER ASC, PO.EXPORT_PURCHASE_OFFER_NUMBER ASC
+          """)
+  void searchShouldWhitelistEverySupportedSort(String sortField, String expectedOrder) {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+
+    repository.search(emptyCriteria(sortField, 0, 10));
+
+    assertThat(repository.whereSql()).contains(expectedOrder);
+  }
+
+  @Test
+  void searchShouldRejectUnrecognizedSortExpressions() {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+
+    repository.search(emptyCriteria("offerNumber DESC NULLS FIRST; DELETE", 0, 10));
+
+    assertThat(repository.whereSql())
+        .endsWith("ORDER BY PO.EXPORT_PURCHASE_OFFER_NUMBER DESC")
+        .doesNotContain("DELETE")
+        .doesNotContain("NULLS FIRST");
+  }
+
+  @Test
+  void countShouldUseDirectCountWithoutPageSort() {
+    TestPurchaseOfferRepository repository =
+        new TestPurchaseOfferRepository(List.of(offerResult(810001L)));
+    PurchaseOfferSearchCriteria criteria =
+        new PurchaseOfferSearchCriteria(
+            null,
+            "PKG-1",
+            null,
+            null,
+            null,
+            null,
+            "00099999",
+            List.of(1904L),
+            "listingDate DESC",
+            0,
+            10);
+
+    repository.search(criteria);
+    String pageWhere = repository.whereSql();
+    List<Object> pageBinds = repository.bindValues();
+    repository.count(criteria);
+
+    assertThat(repository.countSelectSql())
+        .contains("SELECT COUNT(*)")
+        .contains("FROM EXPORT_PURCHASE_OFFER PO")
+        .doesNotContain("FIND_POS_BY_CRITERIA");
+    assertThat(repository.countWhereSql())
+        .isEqualTo(pageWhere.substring(0, pageWhere.indexOf(" ORDER BY")))
+        .doesNotContain("OFFSET")
+        .doesNotContain("FETCH NEXT");
+    assertThat(repository.countBindValues()).isEqualTo(pageBinds);
+  }
+
+  @Test
+  void searchShouldUseKnownTotalWithoutCallingCount() {
+    TestPurchaseOfferRepository repository =
+        new TestPurchaseOfferRepository(
+            java.util.stream.LongStream.rangeClosed(810001L, 810011L)
+                .mapToObj(PurchaseOfferRepositoryTest::offerResult)
+                .toList());
+
+    Page<PurchaseOfferSearchResultDto> results =
+        repository.search(emptyCriteria(null, 1, 10), 11);
+
+    assertThat(results.getContent())
+        .extracting(PurchaseOfferSearchResultDto::offerNumber)
+        .containsExactly(810011L);
+    assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.countCalls()).isZero();
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static PurchaseOfferSearchCriteria emptyCriteria(
+      String sortField, int page, int size) {
+    return new PurchaseOfferSearchCriteria(
+        null, null, null, null, null, null, null, List.of(), sortField, page, size);
   }
 
   private static PurchaseOfferSearchResultDto offerResult(long offerNumber) {
@@ -356,27 +486,48 @@ class PurchaseOfferRepositoryTest {
   }
 
   private static final class TestPurchaseOfferRepository extends PurchaseOfferRepository {
-    private final List<List<?>> pages;
+    private final List<?> rows;
     private String whereSql;
-    private List<String> bindValues;
+    private List<Object> bindValues;
+    private String pageSelectSql;
+    private String countSelectSql;
+    private String countWhereSql;
+    private List<Object> countBindValues;
     private CallableStatement callableStatement;
+    private int countCalls;
     private int pageCalls;
 
     TestPurchaseOfferRepository() {
       this(List.of());
     }
 
-    TestPurchaseOfferRepository(List<List<?>> pages) {
+    TestPurchaseOfferRepository(List<?> rows) {
       super(null);
-      this.pages = pages;
+      this.rows = rows;
     }
 
     String whereSql() {
       return whereSql;
     }
 
-    List<String> bindValues() {
+    List<Object> bindValues() {
       return bindValues;
+    }
+
+    String pageSelectSql() {
+      return pageSelectSql;
+    }
+
+    String countSelectSql() {
+      return countSelectSql;
+    }
+
+    String countWhereSql() {
+      return countWhereSql;
+    }
+
+    List<Object> countBindValues() {
+      return countBindValues;
     }
 
     CallableStatement callableStatement() {
@@ -387,31 +538,39 @@ class PurchaseOfferRepositoryTest {
       return pageCalls;
     }
 
+    int countCalls() {
+      return countCalls;
+    }
+
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
-      return pages.stream().mapToInt(List::size).sum();
+    protected int queryDirectCount(String selectSql, DirectSql where) {
+      countSelectSql = selectSql;
+      countWhereSql = where.sql();
+      countBindValues = where.bindValues();
+      countCalls++;
+      return rows.size();
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
+      pageSelectSql = selectSql;
+      whereSql = whereAndOrder.sql();
+      bindValues = whereAndOrder.bindValues();
       pageCalls++;
-      if (page >= pages.size()) {
-        return List.of();
-      }
-      return (List<T>) pages.get(page);
+      int normalizedPage = Math.max(0, page);
+      int normalizedSize = Math.max(1, size);
+      int fromIndex = Math.min(rows.size(), normalizedPage * normalizedSize);
+      int toIndex = Math.min(rows.size(), fromIndex + normalizedSize);
+      List<T> content = (List<T>) rows.subList(fromIndex, toIndex);
+      return new PageImpl<>(
+          content, PageRequest.of(normalizedPage, normalizedSize), totalElements);
     }
 
     @Override
