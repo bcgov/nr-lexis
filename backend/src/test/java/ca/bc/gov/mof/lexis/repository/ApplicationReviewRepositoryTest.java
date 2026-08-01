@@ -19,9 +19,16 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.TransactionDefinition;
@@ -47,7 +54,7 @@ class ApplicationReviewRepositoryTest {
   }
 
   @Test
-  void searchShouldUseApplicationViewAliasForReviewCriteria() {
+  void searchShouldUseDirectQueryForEveryReviewFilter() {
     TestApplicationReviewRepository repository = new TestApplicationReviewRepository();
 
     repository.search(
@@ -64,36 +71,44 @@ class ApplicationReviewRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("v.APPLICATION_NUMBER")
-        .contains("v.EXPORT_PRODUCT_TYPE_CODE")
-        .contains("v.RECEIVED_DATE")
-        .contains("v.ADVERTISING_DATE")
-        .contains("v.EXPORT_APPLICATION_STATUS_CODE")
-        .contains("v.ORG_UNIT_NO")
-        .contains("ORDER BY v.REGION_CODE DESC, v.APPLICATION_NUMBER DESC")
-        .doesNotContain("v.ORG_UNIT_CODE")
-        .doesNotContain("EEA.")
-        .doesNotContain(" AND ORG_UNIT_NO");
+        .contains("TO_CHAR(EEA.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
+        .contains("EEA.EXPORT_PRODUCT_TYPE_CODE = ?")
+        .contains("EEA.RECEIVED_DATE >= ?")
+        .contains("EEA.RECEIVED_DATE <= ?")
+        .contains("ES.ADVERTISING_DATE >= ?")
+        .contains("ES.ADVERTISING_DATE <= ?")
+        .contains("EEA.EXPORT_APPLICATION_STATUS_CODE IN ('NEW', 'PND')")
+        .contains("EEA.ORG_UNIT_NO IN (?, ?)")
+        .contains("ORDER BY OU.ORG_UNIT_CODE DESC, EEA.APPLICATION_NUMBER DESC")
+        .doesNotContain(":1");
+    assertThat(repository.pageSelectSql())
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
+        .contains("FROM HAULING_AUTHORITY HA")
+        .contains("EP_INFO.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER")
+        .doesNotContain("FIND_APPLICATIONS_BY_CRITERIA");
     assertThat(repository.bindValues())
         .containsExactly(
             "45963",
             "H",
-            "2026-06-01",
-            "2026-06-30",
-            "2026-06-10",
-            "2026-06-12",
-            "1818",
-            "1834");
+            java.sql.Date.valueOf("2026-06-01"),
+            java.sql.Date.valueOf("2026-06-30"),
+            java.sql.Date.valueOf("2026-06-10"),
+            java.sql.Date.valueOf("2026-06-12"),
+            1818L,
+            1834L);
   }
 
   @Test
-  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
-    List<ReviewRowInput> firstPage =
-        java.util.stream.LongStream.rangeClosed(900101L, 900110L)
+  void searchShouldLoadRequestedDirectPageWithCountTotal() {
+    List<ReviewRowInput> rows =
+        java.util.stream.LongStream.rangeClosed(900101L, 900111L)
             .mapToObj(ApplicationReviewRepositoryTest::reviewResult)
             .toList();
     TestApplicationReviewRepository repository =
-        new TestApplicationReviewRepository(List.of(firstPage, List.of(reviewResult(900111L))));
+        new TestApplicationReviewRepository(rows);
 
     Page<ApplicationReviewSearchResultDto> results =
         repository.search(
@@ -103,7 +118,107 @@ class ApplicationReviewRepositoryTest {
         .extracting(ApplicationReviewSearchResultDto::applicationNumber)
         .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
     assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.countCalls()).isEqualTo(1);
     assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      textBlock = """
+          applicationNumber DESC|ORDER BY EEA.APPLICATION_NUMBER DESC
+          volume ASC|ORDER BY EEA.EXEMPTION_APPLICATION_VOLUME ASC, EEA.APPLICATION_NUMBER ASC
+          listingDate DESC|ORDER BY ES.ADVERTISING_DATE DESC, EEA.APPLICATION_NUMBER DESC
+          status ASC|ORDER BY EEA.EXPORT_APPLICATION_STATUS_CODE ASC, EEA.APPLICATION_NUMBER ASC
+          regionCode DESC|ORDER BY OU.ORG_UNIT_CODE DESC, EEA.APPLICATION_NUMBER DESC
+          region ASC|ORDER BY OU.ORG_UNIT_CODE ASC, EEA.APPLICATION_NUMBER ASC
+          """)
+  void searchShouldWhitelistEverySupportedSort(String sortField, String expectedOrder) {
+    TestApplicationReviewRepository repository = new TestApplicationReviewRepository();
+
+    repository.search(emptyCriteria(sortField, 0, 10));
+
+    assertThat(repository.whereSql()).contains(expectedOrder);
+  }
+
+  @Test
+  void searchShouldRejectUnrecognizedSortExpressions() {
+    TestApplicationReviewRepository repository = new TestApplicationReviewRepository();
+
+    repository.search(emptyCriteria("applicationNumber DESC; DELETE", 0, 10));
+
+    assertThat(repository.whereSql())
+        .endsWith("ORDER BY EEA.APPLICATION_NUMBER DESC")
+        .doesNotContain("DELETE");
+  }
+
+  @Test
+  void countShouldUseTheSameFiltersWithoutSortOrInfoIconJoins() {
+    TestApplicationReviewRepository repository =
+        new TestApplicationReviewRepository(List.of(reviewResult(900101L)));
+    ApplicationReviewSearchCriteria criteria =
+        new ApplicationReviewSearchCriteria(
+            "900",
+            "H",
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            LocalDate.of(2026, 2, 1),
+            LocalDate.of(2026, 2, 28),
+            List.of(1903L),
+            "listingDate DESC",
+            0,
+            10);
+
+    repository.search(criteria);
+    String pageWhere = repository.whereSql();
+    List<Object> pageBinds = repository.bindValues();
+    repository.count(criteria);
+
+    assertThat(repository.countSelectSql())
+        .contains("SELECT COUNT(*)")
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .doesNotContain("HAULING_AUTHORITY")
+        .doesNotContain("SHOW_INFO_ICON");
+    assertThat(repository.countWhereSql())
+        .isEqualTo(pageWhere.substring(0, pageWhere.indexOf(" ORDER BY")))
+        .doesNotContain("OFFSET")
+        .doesNotContain("FETCH NEXT");
+    assertThat(repository.countBindValues()).isEqualTo(pageBinds);
+  }
+
+  @Test
+  void searchShouldUseKnownTotalWithoutCallingCount() {
+    TestApplicationReviewRepository repository =
+        new TestApplicationReviewRepository(
+            java.util.stream.LongStream.rangeClosed(900101L, 900111L)
+                .mapToObj(ApplicationReviewRepositoryTest::reviewResult)
+                .toList());
+
+    Page<ApplicationReviewSearchResultDto> results =
+        repository.search(emptyCriteria(null, 1, 10), 11);
+
+    assertThat(results.getContent())
+        .extracting(ApplicationReviewSearchResultDto::applicationNumber)
+        .containsExactly(900111L);
+    assertThat(repository.countCalls()).isZero();
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void previewSliceShouldUseOneDirectPageQueryWithLookAhead() {
+    TestApplicationReviewRepository repository =
+        new TestApplicationReviewRepository(
+            java.util.stream.LongStream.rangeClosed(900101L, 900111L)
+                .mapToObj(ApplicationReviewRepositoryTest::reviewResult)
+                .toList());
+
+    Slice<ApplicationReviewSearchResultDto> results =
+        repository.slice(emptyCriteria(null, 0, 10));
+
+    assertThat(results.getContent()).hasSize(10);
+    assertThat(results.hasNext()).isTrue();
+    assertThat(repository.sliceCalls()).isEqualTo(1);
+    assertThat(repository.countCalls()).isZero();
   }
 
   @Test
@@ -158,24 +273,25 @@ class ApplicationReviewRepositoryTest {
         .containsExactly("CE/UT SH");
   }
 
-  @Test
-  void searchShouldBatchSortEnrichmentAcrossTheRequestedPage() {
+  @ParameterizedTest
+  @ValueSource(ints = {1, 10, 25, 50, 100, 200})
+  void searchShouldKeepDatabaseCallsConstantThroughTwoHundredRows(int pageSize) {
     BatchingApplicationReviewRepository repository =
-        new BatchingApplicationReviewRepository(200);
+        new BatchingApplicationReviewRepository(pageSize);
 
     Page<ApplicationReviewSearchResultDto> results =
-        repository.search(
-            new ApplicationReviewSearchCriteria(
-                null, null, null, null, null, null, List.of(), null, 0, 200));
+        repository.search(emptyCriteria(null, 0, pageSize));
 
-    assertThat(results.getContent()).hasSize(200);
+    assertThat(results.getContent()).hasSize(pageSize);
     assertThat(results.getContent())
         .extracting(ApplicationReviewSearchResultDto::speciesEndUse)
         .containsOnly("AL/PL");
-    assertThat(repository.pageCalls()).isEqualTo(20);
-    assertThat(repository.requestedApplicationCount()).isEqualTo(200);
+    assertThat(repository.countCalls()).isOne();
+    assertThat(repository.pageCalls()).isOne();
+    assertThat(repository.requestedApplicationCount()).isEqualTo(pageSize);
     assertThat(repository.endUseCalls()).isOne();
     assertThat(repository.candidateCalls()).isOne();
+    assertThat(repository.databaseCalls()).isEqualTo(4);
   }
 
   @Test
@@ -214,6 +330,12 @@ class ApplicationReviewRepositoryTest {
     assertThat(repository.batchCandidateCalls()).isOne();
     assertThat(repository.procedureEndUseCalls()).isOne();
     assertThat(repository.procedureCandidateCalls()).isOne();
+  }
+
+  private static ApplicationReviewSearchCriteria emptyCriteria(
+      String sortField, int page, int size) {
+    return new ApplicationReviewSearchCriteria(
+        null, null, null, null, null, null, List.of(), sortField, page, size);
   }
 
   private static ReviewRowInput reviewResult(long applicationNumber) {
@@ -696,23 +818,27 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature, String whereSql, List<String> bindValues) {
+    protected int queryDirectCount(String selectSql, DirectSql where) {
       return 1;
     }
 
     @Override
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      if (page > 0) {
-        return List.of();
-      }
-      return List.of(
-          mapRow(rowMapper, newReviewResultSet(new ReviewRowInput(46102L, productTypeCode, orgUnitNo))));
+      List<T> rows =
+          page > 0
+              ? List.of()
+              : List.of(
+                  mapRow(
+                      rowMapper,
+                      newReviewResultSet(
+                          new ReviewRowInput(46102L, productTypeCode, orgUnitNo))));
+      return new PageImpl<>(rows, PageRequest.of(page, size), totalElements);
     }
 
     @Override
@@ -758,6 +884,7 @@ class ApplicationReviewRepositoryTest {
   private static final class BatchingApplicationReviewRepository
       extends ApplicationReviewRepository {
     private final int resultCount;
+    private int countCalls;
     private int pageCalls;
     private int requestedApplicationCount;
     private int endUseCalls;
@@ -770,6 +897,14 @@ class ApplicationReviewRepositoryTest {
 
     int pageCalls() {
       return pageCalls;
+    }
+
+    int countCalls() {
+      return countCalls;
+    }
+
+    int databaseCalls() {
+      return countCalls + pageCalls + endUseCalls + candidateCalls;
     }
 
     int requestedApplicationCount() {
@@ -785,32 +920,32 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature, String whereSql, List<String> bindValues) {
+    protected int queryDirectCount(String selectSql, DirectSql where) {
+      countCalls++;
       return resultCount;
     }
 
     @Override
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
       pageCalls++;
-      int start = page * 10;
-      int end = Math.min(start + 10, resultCount);
-      if (start >= end) {
-        return List.of();
-      }
-      return java.util.stream.LongStream.range(start, end)
-          .mapToObj(
-              offset ->
-                  mapRow(
-                      rowMapper,
-                      newReviewResultSet(
-                          new ReviewRowInput(900001L + offset, "H", 1903L))))
-          .toList();
+      int start = Math.min(resultCount, page * size);
+      int end = Math.min(start + size, resultCount);
+      List<T> rows =
+          java.util.stream.LongStream.range(start, end)
+              .mapToObj(
+                  offset ->
+                      mapRow(
+                          rowMapper,
+                          newReviewResultSet(
+                              new ReviewRowInput(900001L + offset, "H", 1903L))))
+              .toList();
+      return new PageImpl<>(rows, PageRequest.of(page, size), totalElements);
     }
 
     @Override
@@ -871,25 +1006,26 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature, String whereSql, List<String> bindValues) {
+    protected int queryDirectCount(String selectSql, DirectSql where) {
       return 1;
     }
 
     @Override
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      if (page > 0) {
-        return List.of();
-      }
-      return List.of(
-          mapRow(
-              rowMapper,
-              newReviewResultSet(new ReviewRowInput(46102L, "H", 1903L))));
+      List<T> rows =
+          page > 0
+              ? List.of()
+              : List.of(
+                  mapRow(
+                      rowMapper,
+                      newReviewResultSet(new ReviewRowInput(46102L, "H", 1903L))));
+      return new PageImpl<>(rows, PageRequest.of(page, size), totalElements);
     }
 
     @Override
@@ -937,30 +1073,60 @@ class ApplicationReviewRepositoryTest {
   }
 
   private static final class TestApplicationReviewRepository extends ApplicationReviewRepository {
-    private final List<List<ReviewRowInput>> pages;
+    private final List<ReviewRowInput> rows;
     private String whereSql;
-    private List<String> bindValues;
+    private List<Object> bindValues;
+    private String pageSelectSql;
+    private String countSelectSql;
+    private String countWhereSql;
+    private List<Object> countBindValues;
+    private int countCalls;
     private int pageCalls;
+    private int sliceCalls;
 
     TestApplicationReviewRepository() {
       this(List.of());
     }
 
-    TestApplicationReviewRepository(List<List<ReviewRowInput>> pages) {
+    TestApplicationReviewRepository(List<ReviewRowInput> rows) {
       super(null);
-      this.pages = pages;
+      this.rows = rows;
     }
 
     String whereSql() {
       return whereSql;
     }
 
-    List<String> bindValues() {
+    List<Object> bindValues() {
       return bindValues;
+    }
+
+    String pageSelectSql() {
+      return pageSelectSql;
+    }
+
+    String countSelectSql() {
+      return countSelectSql;
+    }
+
+    String countWhereSql() {
+      return countWhereSql;
+    }
+
+    List<Object> countBindValues() {
+      return countBindValues;
+    }
+
+    int countCalls() {
+      return countCalls;
     }
 
     int pageCalls() {
       return pageCalls;
+    }
+
+    int sliceCalls() {
+      return sliceCalls;
     }
 
     @Override
@@ -978,31 +1144,61 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
-      return pages.stream().mapToInt(List::size).sum();
+    protected int queryDirectCount(String selectSql, DirectSql where) {
+      countSelectSql = selectSql;
+      countWhereSql = where.sql();
+      countBindValues = where.bindValues();
+      countCalls++;
+      return rows.size();
     }
 
     @Override
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
+      pageSelectSql = selectSql;
+      whereSql = whereAndOrder.sql();
+      bindValues = whereAndOrder.bindValues();
       pageCalls++;
-      if (page >= pages.size()) {
-        return List.of();
-      }
-      return pages.get(page).stream()
-          .map(row -> mapRow(rowMapper, newReviewResultSet(row)))
-          .toList();
+      int normalizedPage = Math.max(0, page);
+      int normalizedSize = Math.max(1, size);
+      int fromIndex = Math.min(rows.size(), normalizedPage * normalizedSize);
+      int toIndex = Math.min(rows.size(), fromIndex + normalizedSize);
+      List<T> content =
+          rows.subList(fromIndex, toIndex).stream()
+              .map(row -> mapRow(rowMapper, newReviewResultSet(row)))
+              .toList();
+      return new PageImpl<>(
+          content, PageRequest.of(normalizedPage, normalizedSize), totalElements);
+    }
+
+    @Override
+    protected <T> Slice<T> queryDirectSlice(
+        String selectSql,
+        DirectSql whereAndOrder,
+        int page,
+        int size,
+        SqlRowMapper<T> rowMapper) {
+      pageSelectSql = selectSql;
+      whereSql = whereAndOrder.sql();
+      bindValues = whereAndOrder.bindValues();
+      sliceCalls++;
+      int normalizedPage = Math.max(0, page);
+      int normalizedSize = Math.max(1, size);
+      int fromIndex = Math.min(rows.size(), normalizedPage * normalizedSize);
+      int toIndex = Math.min(rows.size(), fromIndex + normalizedSize);
+      List<T> content =
+          rows.subList(fromIndex, toIndex).stream()
+              .map(row -> mapRow(rowMapper, newReviewResultSet(row)))
+              .toList();
+      return new SliceImpl<>(
+          content,
+          PageRequest.of(normalizedPage, normalizedSize),
+          rows.size() > toIndex);
     }
 
     private <T> T mapRow(SqlRowMapper<T> rowMapper, ResultSet resultSet) {

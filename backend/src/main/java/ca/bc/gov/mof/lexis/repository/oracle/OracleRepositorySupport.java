@@ -464,6 +464,35 @@ public abstract class OracleRepositorySupport {
         normalizedTotal);
   }
 
+  /** Executes one directly paged Oracle query with one look-ahead row for slice navigation. */
+  protected <T> Slice<T> queryDirectSlice(
+      String selectSql,
+      DirectSql whereAndOrder,
+      int page,
+      int size,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    long offset = (long) normalizedPage * normalizedSize;
+    int fetchSize = normalizedSize == Integer.MAX_VALUE ? normalizedSize : normalizedSize + 1;
+
+    List<Object> bindValues = new ArrayList<>(whereAndOrder.bindValues());
+    bindValues.add(offset);
+    bindValues.add(fetchSize);
+    List<T> rows =
+        jdbcTemplate.query(
+            selectSql
+                + whereAndOrder.sql()
+                + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+            (rs, rowNumber) -> rowMapper.map(rs),
+            bindValues.toArray());
+    boolean hasNext = rows.size() > normalizedSize;
+    List<T> content =
+        hasNext ? List.copyOf(rows.subList(0, normalizedSize)) : List.copyOf(rows);
+    return new SliceImpl<>(
+        content, PageRequest.of(normalizedPage, normalizedSize), hasNext);
+  }
+
   /** Executes a lightweight direct count query using the same parameterized criteria. */
   protected int queryDirectCount(String selectSql, DirectSql where) {
     Long result =
