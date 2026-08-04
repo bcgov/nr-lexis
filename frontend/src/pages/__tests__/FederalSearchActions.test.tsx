@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import FederalPage from '@/pages/Federal'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions } from '@/service/search-options-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -356,6 +356,28 @@ describe('Federal Search Actions', () => {
       screen.queryByRole('checkbox', { name: /Select federal application/ }),
     ).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
+  })
+
+  it('keeps federal search read-only for an application approver like legacy', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['APPLICATION_APPROVER'],
+          welcomeTarget: 'applicationApprover',
+        }),
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    expect(
+      screen.queryByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: /Select federal application/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Client number')).toBeInTheDocument()
   })
 
   it('keeps repeated federal numbers linked to their distinct internal applications', async () => {

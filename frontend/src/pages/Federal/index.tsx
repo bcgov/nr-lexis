@@ -33,6 +33,7 @@ import type {
   FederalApplicationSearchResponse,
 } from '@/interfaces/FederalApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { hasRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -145,7 +146,9 @@ const FederalPage = () => {
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canFilterFederalByClient = canPerform('/createExemption')
   const canCreateFederalExemption =
-    canPerform('/createExemption') && canPerform('viewFederalApplication')
+    canPerform('/createExemption') &&
+    canPerform('viewFederalApplication') &&
+    !hasRole(capabilities.roles, 'APPLICATION_APPROVER')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
