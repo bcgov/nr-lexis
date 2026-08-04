@@ -1278,6 +1278,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (trimToNull(request.exemptionStatusCode()) == null) {
       errors.add(required("exemption status code"));
     } else {
+      // INTENTIONAL_LEGACY_DIVERGENCE(SAFE_EXEMPTION_INITIAL_STATUS):
+      // Reject unsafe initial states instead of accepting the legacy screen's user-selected status.
       String expectedStatus = initialExemptionStatus(request.exemptionTypeCode());
       if (expectedStatus != null
           && !expectedStatus.equalsIgnoreCase(request.exemptionStatusCode())) {

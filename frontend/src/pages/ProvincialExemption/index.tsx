@@ -922,6 +922,8 @@ const ProvincialExemptionPage = () => {
                   value={filters.ownerClientNumber}
                   onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
                 />
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
+                    Modern exemption search exposes approval-date criteria not shown in legacy. */}
                 <IsoDatePicker
                   id="approvalFromDate"
                   labelText="Approval from date"

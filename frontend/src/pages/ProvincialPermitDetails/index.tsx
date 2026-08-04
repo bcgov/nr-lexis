@@ -195,6 +195,8 @@ const PERMIT_DETAIL_TABS = [
   { id: 'fees', label: 'Fees' },
   { id: 'gbms', label: 'GBMS' },
   { id: 'documents', label: 'Documents' },
+  // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
+  // Modern permit detail surfaces invoice rows and invoice document actions together.
   { id: 'invoices', label: 'Invoices' },
 ] as const
 
@@ -2830,6 +2832,8 @@ const ProvincialPermitDetailsPage = () => {
                     Email review request
                   </Button>
                 )}
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_APPROVAL_EMAIL_RESEND):
+                    Modern permit detail supports previewing and resending the approval email. */}
                 {canSendPermitApproval && (
                   <Button
                     kind="secondary"

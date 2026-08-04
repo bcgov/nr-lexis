@@ -1392,6 +1392,17 @@ legend.cds--label {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.offer-application-link-field {
+  display: flex;
+  min-block-size: var(--cds-layout-size-height-lg, 4rem);
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.offer-application-link-field .cds--label {
+  color: var(--csp-text-primary);
+}
+
 .reports-page {
   row-gap: 1.5rem;
 }

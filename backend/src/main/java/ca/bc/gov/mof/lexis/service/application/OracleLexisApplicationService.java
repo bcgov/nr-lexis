@@ -47,7 +47,8 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         safeList(repository.loadProductTypeOptions()),
         safeList(repository.loadGrowthTypeOptions()),
         safeList(repository.loadRegionOptions()),
-        currentScheduleOptions());
+        currentScheduleOptions(),
+        nextScheduleOptions());
   }
 
   @Override
@@ -148,6 +149,21 @@ public class OracleLexisApplicationService implements LexisApplicationService {
     List<CodeNameDto> options = new ArrayList<>();
     options.addAll(
         safeList(scheduleRepository.findCurrentSchedulesRequired()).stream()
+            .filter(row -> row.exportScheduleId() != null && row.advertisingDate() != null)
+            .map(
+                row ->
+                    new CodeNameDto(
+                        String.valueOf(row.exportScheduleId()),
+                        row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
+            .toList());
+    options.add(new CodeNameDto("", "Blank"));
+    return options;
+  }
+
+  private List<CodeNameDto> nextScheduleOptions() {
+    List<CodeNameDto> options = new ArrayList<>();
+    options.addAll(
+        safeList(scheduleRepository.findNextSchedulesRequired()).stream()
             .filter(row -> row.exportScheduleId() != null && row.advertisingDate() != null)
             .map(
                 row ->

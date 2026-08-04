@@ -299,7 +299,8 @@ public class ExemptionController {
         detail.otherConditions(),
         detail.blanketOic(),
         List.of(),
-        detail.remarks());
+        detail.remarks(),
+        detail.author());
   }
 
   private ExemptionSearchCriteria buildCriteria(

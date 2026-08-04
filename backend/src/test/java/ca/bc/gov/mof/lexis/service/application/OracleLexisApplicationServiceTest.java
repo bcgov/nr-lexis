@@ -59,8 +59,13 @@ class OracleLexisApplicationServiceTest {
             List.of(
                 new CurrentScheduleRow(null, LocalDate.of(2026, 7, 4)),
                 new CurrentScheduleRow(990L, null),
-                new CurrentScheduleRow(987L, LocalDate.of(2026, 7, 11)),
-                new CurrentScheduleRow(988L, LocalDate.of(2026, 7, 25))));
+                new CurrentScheduleRow(987L, LocalDate.of(2026, 7, 29)),
+                new CurrentScheduleRow(988L, LocalDate.of(2026, 8, 5))));
+    when(scheduleRepository.findNextSchedulesRequired())
+        .thenReturn(
+            List.of(
+                new CurrentScheduleRow(988L, LocalDate.of(2026, 8, 5)),
+                new CurrentScheduleRow(989L, LocalDate.of(2026, 8, 12))));
 
     LexisApplicationSearchOptionsDto response = service.searchOptions();
 
@@ -72,8 +77,13 @@ class OracleLexisApplicationServiceTest {
     assertThat(response.regions()).hasSize(1);
     assertThat(response.currentSchedules())
         .containsExactly(
-            new CodeNameDto("987", "2026-07-11"),
-            new CodeNameDto("988", "2026-07-25"),
+            new CodeNameDto("987", "2026-07-29"),
+            new CodeNameDto("988", "2026-08-05"),
+            new CodeNameDto("", "Blank"));
+    assertThat(response.nextSchedules())
+        .containsExactly(
+            new CodeNameDto("988", "2026-08-05"),
+            new CodeNameDto("989", "2026-08-12"),
             new CodeNameDto("", "Blank"));
   }
 
