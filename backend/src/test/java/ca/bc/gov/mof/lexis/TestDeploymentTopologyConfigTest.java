@@ -31,12 +31,13 @@ class TestDeploymentTopologyConfigTest {
   }
 
   @Test
-  void productionShouldRetainDisabledAutoscalingAndExpiryConfiguration() throws IOException {
+  void productionShouldRetainAutoscalingAndExpiryConfiguration() throws IOException {
     String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
     String prodDeploy = workflowJob(mergeWorkflow, "deploy-prod", "monitor-prod");
+    String promote = mergeWorkflow.substring(mergeWorkflow.indexOf("  promote:"));
 
     assertThat(prodDeploy)
-        .contains("if: false")
+        .doesNotContain("if: false")
         .contains("backend_min_replicas: \"3\"")
         .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
@@ -56,6 +57,9 @@ class TestDeploymentTopologyConfigTest {
             "lexis_mail_region_rni_recipients",
             "lexis_mail_region_rsi_recipients",
             "lexis_mail_permit_request_recipients");
+    assertThat(promote)
+        .contains("needs: [deploy-prod, init]")
+        .doesNotContain("if: false");
   }
 
   @Test
