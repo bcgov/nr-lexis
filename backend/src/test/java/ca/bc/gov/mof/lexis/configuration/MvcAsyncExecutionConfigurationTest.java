@@ -30,17 +30,11 @@ class MvcAsyncExecutionConfigurationTest {
   @Qualifier("emailExecutor")
   private Executor emailExecutor;
 
-  @Autowired
-  @Qualifier(OracleLegacyDynamicFetchExecutorConfiguration.EXECUTOR_BEAN_NAME)
-  private Executor oracleLegacyDynamicFetchExecutor;
-
   @Autowired private RequestMappingHandlerAdapter handlerAdapter;
 
   @Test
   void mvcShouldUseDedicatedVirtualThreadExecutor() throws Exception {
     assertThat(applicationTaskExecutor).isNotSameAs(emailExecutor);
-    assertThat(applicationTaskExecutor).isNotSameAs(oracleLegacyDynamicFetchExecutor);
-    assertThat(emailExecutor).isNotSameAs(oracleLegacyDynamicFetchExecutor);
     assertThat(applicationTaskExecutor).isInstanceOf(SimpleAsyncTaskExecutor.class);
     SimpleAsyncTaskExecutor executor = (SimpleAsyncTaskExecutor) applicationTaskExecutor;
     assertThat(executor.getConcurrencyLimit())

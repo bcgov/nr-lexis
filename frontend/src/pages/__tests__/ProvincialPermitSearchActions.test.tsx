@@ -414,13 +414,14 @@ describe('Provincial Permit Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Issued from date'), '2026-99-99')
+    const issuedFromDate = screen.getByLabelText('Issued from date')
+    fireEvent.change(issuedFromDate, { target: { value: '2026-99-99' } })
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
     })
 
-    await userEvent.clear(screen.getByLabelText('Issued from date'))
-    await userEvent.type(screen.getByLabelText('Issued from date'), '2026-02-01')
+    fireEvent.change(issuedFromDate, { target: { value: '' } })
+    fireEvent.change(issuedFromDate, { target: { value: '2026-02-01' } })
     await waitFor(() => {
       expect(searchButton).toBeEnabled()
     })

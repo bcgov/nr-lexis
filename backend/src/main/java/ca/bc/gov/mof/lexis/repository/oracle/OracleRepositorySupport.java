@@ -1,13 +1,10 @@
 package ca.bc.gov.mof.lexis.repository.oracle;
 
-import static ca.bc.gov.mof.lexis.configuration.OracleLegacyDynamicFetchExecutorConfiguration.MAX_PARALLEL_FETCHES;
 import static ca.bc.gov.mof.lexis.util.OracleAuditUserId.encode;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
-import java.sql.Array;
 import java.sql.CallableStatement;
-import java.sql.Connection;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -22,16 +19,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executor;
 import java.util.regex.Pattern;
-import oracle.jdbc.OracleConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataRetrievalFailureException;
@@ -56,8 +47,6 @@ public abstract class OracleRepositorySupport {
   protected static final String LEXIS_GROUP_14_PACKAGE = "LEXIS_GROUP_14.";
   protected static final String LEXIS_READ_ONLY_PACKAGE = "LEXIS_READ_ONLY.";
 
-  private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
-  private static final int LEGACY_DYNAMIC_PAGE_SIZE = 10;
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
   private static final String FIND_ORG_UNIT_BY_NUMBER =
       LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
@@ -67,17 +56,9 @@ public abstract class OracleRepositorySupport {
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final JdbcTemplate jdbcTemplate;
   private final ThreadLocal<Integer> requiredCursorMappingDepth = new ThreadLocal<>();
-  // Directly constructed unit fixtures remain deterministic; Spring repositories must inject the bean.
-  private Executor legacyDynamicFetchExecutor = new SyncTaskExecutor();
 
   protected OracleRepositorySupport(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     this.jdbcTemplate = jdbcTemplate;
-  }
-
-  @Autowired
-  protected final void setLegacyDynamicFetchExecutor(
-      @Qualifier("oracleLegacyDynamicFetchExecutor") Executor legacyDynamicFetchExecutor) {
-    this.legacyDynamicFetchExecutor = legacyDynamicFetchExecutor;
   }
 
   @FunctionalInterface
@@ -311,126 +292,6 @@ public abstract class OracleRepositorySupport {
     return Optional.ofNullable(results.get(0));
   }
 
-  protected <T> List<T> queryLegacyDynamicPagedProcedure(
-      String procedureSignature,
-      String whereSql,
-      List<String> bindValues,
-      int page,
-      SqlRowMapper<T> rowMapper) {
-    String call = "{ call " + procedureSignature + " }";
-
-    try {
-      List<T> results =
-          jdbcTemplate.execute(
-              call,
-              (CallableStatementCallback<List<T>>)
-                  cs -> {
-                    cs.setString(1, whereSql);
-
-                    Array array = null;
-                    if (bindValues != null && !bindValues.isEmpty()) {
-                      Connection connection = cs.getConnection();
-                      OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
-                      array =
-                          oracleConnection.createOracleArray(
-                              STRING_ARRAY_TYPE, bindValues.toArray(String[]::new));
-                      cs.setArray(2, array);
-                    } else {
-                      cs.setNull(2, Types.ARRAY, STRING_ARRAY_TYPE);
-                    }
-
-                    cs.setInt(3, bindValues == null ? 0 : bindValues.size());
-                    cs.setInt(4, Math.max(0, page));
-                    cs.registerOutParameter(5, Types.REF_CURSOR);
-                    cs.execute();
-
-                    List<T> cursorRows = new ArrayList<>();
-                    try (ResultSet rs = (ResultSet) cs.getObject(5)) {
-                      if (rs == null) {
-                        throw missingDynamicResult(procedureSignature, "page cursor");
-                      }
-                      while (rs.next()) {
-                        cursorRows.add(rowMapper.map(rs));
-                      }
-                    } finally {
-                      if (array != null) {
-                        array.free();
-                      }
-                    }
-                    return cursorRows;
-                  });
-      if (results == null) {
-        throw missingDynamicResult(procedureSignature, "page result");
-      }
-      return results;
-    } catch (DataAccessException ex) {
-      logger.warn(
-          "event=lexis_oracle_repository operation=dynamic_page_query outcome=failed failureType={}",
-          exceptionType(ex));
-      throw ex;
-    }
-  }
-
-  protected int queryLegacyDynamicCountProcedure(
-      String procedureSignature,
-      String whereSql,
-      List<String> bindValues) {
-    String call = "{ call " + procedureSignature + " }";
-
-    try {
-      Integer total =
-          jdbcTemplate.execute(
-              call,
-              (CallableStatementCallback<Integer>) cs -> {
-                cs.setString(1, whereSql);
-
-                Array array = null;
-                if (bindValues != null && !bindValues.isEmpty()) {
-                  Connection connection = cs.getConnection();
-                  OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
-                  array =
-                      oracleConnection.createOracleArray(
-                          STRING_ARRAY_TYPE, bindValues.toArray(String[]::new));
-                  cs.setArray(2, array);
-                } else {
-                  cs.setNull(2, Types.ARRAY, STRING_ARRAY_TYPE);
-                }
-
-                cs.setInt(3, bindValues == null ? 0 : bindValues.size());
-                cs.registerOutParameter(4, Types.REF_CURSOR);
-                cs.execute();
-
-                try (ResultSet rs = (ResultSet) cs.getObject(4)) {
-                  if (rs == null) {
-                    throw missingDynamicResult(procedureSignature, "count cursor");
-                  }
-                  if (!rs.next()) {
-                    throw missingDynamicResult(procedureSignature, "count row");
-                  }
-                  long rawResultCount = rs.getLong("RESULTS_COUNT");
-                  if (rs.wasNull()) {
-                    throw missingDynamicResult(procedureSignature, "count value");
-                  }
-                  long resultCount = Math.max(0L, rawResultCount);
-                  return (int) Math.min(Integer.MAX_VALUE, resultCount);
-                } finally {
-                  if (array != null) {
-                    array.free();
-                  }
-                }
-              });
-      if (total == null) {
-        throw missingDynamicResult(procedureSignature, "count result");
-      }
-      return total;
-    } catch (DataAccessException ex) {
-      logger.warn(
-          "event=lexis_oracle_repository operation=dynamic_count_query outcome=failed failureType={}",
-          exceptionType(ex));
-      throw ex;
-    }
-  }
-
   /** Executes one directly paged Oracle query instead of stitching fixed-size procedure pages. */
   protected <T> Page<T> queryDirectPage(
       String selectSql,
@@ -462,6 +323,35 @@ public abstract class OracleRepositorySupport {
         List.copyOf(rows),
         PageRequest.of(normalizedPage, normalizedSize),
         normalizedTotal);
+  }
+
+  /** Executes one directly paged Oracle query with one look-ahead row for slice navigation. */
+  protected <T> Slice<T> queryDirectSlice(
+      String selectSql,
+      DirectSql whereAndOrder,
+      int page,
+      int size,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    long offset = (long) normalizedPage * normalizedSize;
+    int fetchSize = normalizedSize == Integer.MAX_VALUE ? normalizedSize : normalizedSize + 1;
+
+    List<Object> bindValues = new ArrayList<>(whereAndOrder.bindValues());
+    bindValues.add(offset);
+    bindValues.add(fetchSize);
+    List<T> rows =
+        jdbcTemplate.query(
+            selectSql
+                + whereAndOrder.sql()
+                + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+            (rs, rowNumber) -> rowMapper.map(rs),
+            bindValues.toArray());
+    boolean hasNext = rows.size() > normalizedSize;
+    List<T> content =
+        hasNext ? List.copyOf(rows.subList(0, normalizedSize)) : List.copyOf(rows);
+    return new SliceImpl<>(
+        content, PageRequest.of(normalizedPage, normalizedSize), hasNext);
   }
 
   /** Executes a lightweight direct count query using the same parameterized criteria. */
@@ -499,252 +389,6 @@ public abstract class OracleRepositorySupport {
       throw new DataAccessResourceFailureException(
           "Oracle procedure returned no execution result [" + procedureSignature + "]");
     }
-  }
-
-  protected <T> Page<T> queryLegacyDynamicPage(
-      String procedureSignature,
-      String whereSql,
-      List<String> bindValues,
-      int page,
-      int size,
-      SqlRowMapper<T> rowMapper) {
-    int normalizedPage = Math.max(0, page);
-    int normalizedSize = Math.max(1, size);
-    long offsetLong = (long) normalizedPage * normalizedSize;
-    if (offsetLong > Integer.MAX_VALUE) {
-      return new PageImpl<>(
-          List.of(),
-          PageRequest.of(normalizedPage, normalizedSize),
-          Integer.MAX_VALUE);
-    }
-
-    int offset = (int) offsetLong;
-    List<T> allRows = new ArrayList<>();
-    List<T> previousPage = List.of();
-
-    for (int legacyPage = 0; legacyPage < 10_000; legacyPage++) {
-      List<T> currentPage =
-          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
-      if (currentPage.isEmpty()) {
-        break;
-      }
-      if (legacyPage > 0 && currentPage.equals(previousPage)) {
-        logger.warn(
-            "event=lexis_oracle_repository operation=dynamic_pagination outcome=duplicate_page page={}",
-            legacyPage);
-        break;
-      }
-      allRows.addAll(currentPage);
-      previousPage = currentPage;
-      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
-        break;
-      }
-    }
-
-    if (offset >= allRows.size()) {
-      return new PageImpl<>(
-          List.of(),
-          PageRequest.of(normalizedPage, normalizedSize),
-          allRows.size());
-    }
-
-    int toIndex = Math.min(offset + normalizedSize, allRows.size());
-    return new PageImpl<>(
-        List.copyOf(allRows.subList(offset, toIndex)),
-        PageRequest.of(normalizedPage, normalizedSize),
-        allRows.size());
-  }
-
-  protected <T> Page<T> queryLegacyDynamicPage(
-      String procedureSignature,
-      String whereSql,
-      List<String> bindValues,
-      int page,
-      int size,
-      int totalElements,
-      SqlRowMapper<T> rowMapper) {
-    int normalizedPage = Math.max(0, page);
-    int normalizedSize = Math.max(1, size);
-    int normalizedTotal = Math.max(0, totalElements);
-    long offsetLong = (long) normalizedPage * normalizedSize;
-    if (offsetLong > Integer.MAX_VALUE || offsetLong >= normalizedTotal) {
-      return new PageImpl<>(
-          List.of(),
-          PageRequest.of(normalizedPage, normalizedSize),
-          normalizedTotal);
-    }
-
-    int offset = (int) offsetLong;
-    int firstLegacyPage = offset / LEGACY_DYNAMIC_PAGE_SIZE;
-    int firstLegacyPageOffset = offset % LEGACY_DYNAMIC_PAGE_SIZE;
-    int requestedRows = Math.min(normalizedSize, normalizedTotal - offset);
-    int lastLegacyPage = (offset + requestedRows - 1) / LEGACY_DYNAMIC_PAGE_SIZE;
-    List<T> rows = new ArrayList<>();
-    List<T> previousPage = List.of();
-    List<List<T>> legacyPages =
-        queryRequiredLegacyDynamicPages(
-            procedureSignature,
-            whereSql,
-            bindValues,
-            firstLegacyPage,
-            lastLegacyPage,
-            rowMapper);
-
-    for (int pageIndex = 0; pageIndex < legacyPages.size() && rows.size() < requestedRows; pageIndex++) {
-      int legacyPage = firstLegacyPage + pageIndex;
-      List<T> currentPage = legacyPages.get(pageIndex);
-      if (currentPage.isEmpty()) {
-        break;
-      }
-      if (legacyPage > firstLegacyPage && currentPage.equals(previousPage)) {
-        logger.warn(
-            "event=lexis_oracle_repository operation=dynamic_pagination outcome=duplicate_page page={}",
-            legacyPage);
-        break;
-      }
-
-      int fromIndex =
-          legacyPage == firstLegacyPage
-              ? Math.min(firstLegacyPageOffset, currentPage.size())
-              : 0;
-      if (fromIndex < currentPage.size()) {
-        rows.addAll(currentPage.subList(fromIndex, currentPage.size()));
-      }
-      previousPage = currentPage;
-      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
-        break;
-      }
-    }
-
-    return new PageImpl<>(
-        List.copyOf(rows.subList(0, Math.min(rows.size(), requestedRows))),
-        PageRequest.of(normalizedPage, normalizedSize),
-        normalizedTotal);
-  }
-
-  private <T> List<List<T>> queryRequiredLegacyDynamicPages(
-      String procedureSignature,
-      String whereSql,
-      List<String> bindValues,
-      int firstLegacyPage,
-      int lastLegacyPage,
-      SqlRowMapper<T> rowMapper) {
-    int normalizedFirstLegacyPage = Math.max(0, firstLegacyPage);
-    int normalizedLastLegacyPage =
-        Math.min(Math.max(normalizedFirstLegacyPage, lastLegacyPage), 9_999);
-    int pageCount = normalizedLastLegacyPage - normalizedFirstLegacyPage + 1;
-
-    if (pageCount <= 1) {
-      return List.of(
-          queryLegacyDynamicPagedProcedure(
-              procedureSignature, whereSql, bindValues, normalizedFirstLegacyPage, rowMapper));
-    }
-
-    List<List<T>> pages = new ArrayList<>(pageCount);
-    for (
-        int batchStart = normalizedFirstLegacyPage;
-        batchStart <= normalizedLastLegacyPage;
-        batchStart += MAX_PARALLEL_FETCHES) {
-      int batchEnd =
-          Math.min(batchStart + MAX_PARALLEL_FETCHES - 1, normalizedLastLegacyPage);
-      List<CompletableFuture<List<T>>> futures = new ArrayList<>();
-      for (int legacyPage = batchStart; legacyPage <= batchEnd; legacyPage++) {
-        int pageToFetch = legacyPage;
-        futures.add(
-            CompletableFuture.supplyAsync(
-                () ->
-                    queryLegacyDynamicPagedProcedure(
-                        procedureSignature, whereSql, bindValues, pageToFetch, rowMapper),
-                legacyDynamicFetchExecutor));
-      }
-
-      for (CompletableFuture<List<T>> future : futures) {
-        try {
-          pages.add(future.join());
-        } catch (CompletionException ex) {
-          logger.warn(
-              "event=lexis_oracle_repository operation=parallel_page_query outcome=failed failureType={}",
-              exceptionType(ex));
-          throw dynamicPageFailure(procedureSignature, ex);
-        }
-      }
-    }
-    return pages;
-  }
-
-  private DataAccessException dynamicPageFailure(
-      String procedureSignature, CompletionException failure) {
-    Throwable cause = failure;
-    while (cause instanceof CompletionException && cause.getCause() != null) {
-      cause = cause.getCause();
-    }
-    if (cause instanceof DataAccessException dataAccessException) {
-      return dataAccessException;
-    }
-    return new DataAccessResourceFailureException(
-        "Oracle dynamic page fetch failed [" + procedureSignature + "]", cause);
-  }
-
-  private DataAccessResourceFailureException missingDynamicResult(
-      String procedureSignature, String resultType) {
-    return new DataAccessResourceFailureException(
-        "Oracle procedure returned no " + resultType + " [" + procedureSignature + "]");
-  }
-
-  protected <T> Slice<T> queryLegacyDynamicSlice(
-      String procedureSignature,
-      String whereSql,
-      List<String> bindValues,
-      int page,
-      int size,
-      SqlRowMapper<T> rowMapper) {
-    int normalizedPage = Math.max(0, page);
-    int normalizedSize = Math.max(1, size);
-    long requiredRowsLong = ((long) normalizedPage * normalizedSize) + normalizedSize + 1L;
-    if (requiredRowsLong > Integer.MAX_VALUE) {
-      return new SliceImpl<>(
-          List.of(),
-          PageRequest.of(normalizedPage, normalizedSize),
-          false);
-    }
-
-    int offset = normalizedPage * normalizedSize;
-    int requiredRows = (int) requiredRowsLong;
-    List<T> rows = new ArrayList<>();
-    List<T> previousPage = List.of();
-
-    for (int legacyPage = 0; legacyPage < 10_000 && rows.size() < requiredRows; legacyPage++) {
-      List<T> currentPage =
-          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
-      if (currentPage.isEmpty()) {
-        break;
-      }
-      if (legacyPage > 0 && currentPage.equals(previousPage)) {
-        logger.warn(
-            "event=lexis_oracle_repository operation=dynamic_slice outcome=duplicate_page page={}",
-            legacyPage);
-        break;
-      }
-      rows.addAll(currentPage);
-      previousPage = currentPage;
-      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
-        break;
-      }
-    }
-
-    if (offset >= rows.size()) {
-      return new SliceImpl<>(
-          List.of(),
-          PageRequest.of(normalizedPage, normalizedSize),
-          false);
-    }
-
-    int toIndex = Math.min(offset + normalizedSize, rows.size());
-    boolean hasNext = rows.size() > toIndex;
-    return new SliceImpl<>(
-        List.copyOf(rows.subList(offset, toIndex)),
-        PageRequest.of(normalizedPage, normalizedSize),
-        hasNext);
   }
 
   private List<CodeNameDto> fallbackCodeNameOptions(String procedureSignature) {

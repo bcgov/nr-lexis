@@ -14,7 +14,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.mof.lexis.configuration.OracleLegacyDynamicFetchExecutorConfiguration;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
@@ -52,9 +51,7 @@ class OracleRtmEmsLogAmvServiceTest {
           OracleRtmEmsLogAmvRepository.class,
           () -> mock(OracleRtmEmsLogAmvRepository.class));
       context.registerBean(VirusScanService.class, () -> VirusScanService.NO_OP);
-      context.register(
-          OracleLegacyDynamicFetchExecutorConfiguration.class,
-          OracleRtmEmsLogAmvService.class);
+      context.register(OracleRtmEmsLogAmvService.class);
 
       context.refresh();
 

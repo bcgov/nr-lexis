@@ -45,10 +45,69 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   private static final String FIND_ALL_APPLICATION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
 
-  private static final String FIND_APPLICATIONS_BY_CRITERIA =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
-  private static final String COUNT_APPLICATIONS_BY_CRITERIA =
-      LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
+  private static final String SEARCH_APPLICATION_REVIEWS =
+      """
+      SELECT
+        EEA.APPLICATION_NUMBER,
+        EEA.EXEMPTION_APPLICATION_VOLUME,
+        EEA.EXEMPTION_APPLICATION_VOLUME AS APPLICATION_VOLUME,
+        EEA.EXPORT_PRODUCT_TYPE_CODE,
+        EEA.ORG_UNIT_NO,
+        ES.ADVERTISING_DATE,
+        EEA.EXPORT_APPLICATION_STATUS_CODE,
+        EASC.DESCRIPTION AS STATUS_DESCRIPTION,
+        OU.ORG_UNIT_CODE AS REGION_CODE,
+        OU.ORG_UNIT_NAME AS REGION,
+        CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM HAULING_AUTHORITY HA
+            INNER JOIN HARVESTING_HAULING_XREF XR
+              ON XR.TIMBER_MARK = HA.TIMBER_MARK
+            INNER JOIN HARVESTING_AUTHORITY HVA
+              ON HVA.HVA_SKEY = XR.HVA_SKEY
+             AND HVA.MGMT_UNIT_ID = '44'
+            INNER JOIN EXPORT_SCALE_DETAIL SD
+              ON SD.TIMBER_MARK = HA.TIMBER_MARK
+            INNER JOIN EXPORT_PACKAGE EP_INFO
+              ON EP_INFO.PACKAGE_NUMBER = SD.PACKAGE_NUMBER
+            WHERE EP_INFO.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+          ) THEN 'Y'
+          ELSE 'N'
+        END AS SHOW_INFO_ICON
+      FROM EXPORT_EXEMPTION_APPLICATION EEA
+      LEFT JOIN EXPORT_SCHEDULE ES
+        ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
+      INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC
+        ON EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE
+      INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC
+        ON EERC.EXPORT_EXEMPTION_REASON_CODE = EEA.EXPORT_EXEMPTION_REASON_CODE
+      INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC
+        ON EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE
+      LEFT JOIN ORG_UNIT OU
+        ON OU.ORG_UNIT_NO = EEA.ORG_UNIT_NO
+      """;
+  private static final String COUNT_APPLICATION_REVIEWS =
+      """
+      SELECT COUNT(*)
+      FROM EXPORT_EXEMPTION_APPLICATION EEA
+      LEFT JOIN EXPORT_SCHEDULE ES
+        ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
+      INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC
+        ON EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE
+      INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC
+        ON EERC.EXPORT_EXEMPTION_REASON_CODE = EEA.EXPORT_EXEMPTION_REASON_CODE
+      INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC
+        ON EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE
+      """;
+  private static final Map<String, String> SEARCH_SORT_COLUMNS =
+      Map.ofEntries(
+          Map.entry("applicationNumber", "EEA.APPLICATION_NUMBER"),
+          Map.entry("volume", "EEA.EXEMPTION_APPLICATION_VOLUME"),
+          Map.entry("listingDate", "ES.ADVERTISING_DATE"),
+          Map.entry("status", "EEA.EXPORT_APPLICATION_STATUS_CODE"),
+          Map.entry("regionCode", "OU.ORG_UNIT_CODE"),
+          Map.entry("region", "OU.ORG_UNIT_CODE"));
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_END_USE_BY_APPLICATION =
@@ -95,17 +154,16 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   public Page<ApplicationReviewSearchResultDto> search(
       ApplicationReviewSearchCriteria criteria, Integer knownTotal) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    DirectSql countCriteria = buildSearchWhere(criteria, false);
+    DirectSql pageCriteria = buildSearchWhere(criteria, true);
     int totalElements =
         knownTotal == null
-            ? queryLegacyDynamicCountProcedure(
-                COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            ? queryDirectCount(COUNT_APPLICATION_REVIEWS, countCriteria)
             : Math.max(0, knownTotal);
     Page<ReviewSearchRow> rows =
-        queryLegacyDynamicPage(
-            FIND_APPLICATIONS_BY_CRITERIA,
-            sqlWhere.sql(),
-            sqlWhere.bindValues(),
+        queryDirectPage(
+            SEARCH_APPLICATION_REVIEWS,
+            pageCriteria,
             criteria.page(),
             criteria.size(),
             totalElements,
@@ -116,17 +174,15 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   public int count(ApplicationReviewSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryDirectCount(COUNT_APPLICATION_REVIEWS, buildSearchWhere(criteria, false));
   }
 
   public Slice<ApplicationReviewSearchResultDto> slice(ApplicationReviewSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    DirectSql pageCriteria = buildSearchWhere(criteria, true);
     Slice<ReviewSearchRow> rows =
-        queryLegacyDynamicSlice(
-            FIND_APPLICATIONS_BY_CRITERIA,
-            sqlWhere.sql(),
-            sqlWhere.bindValues(),
+        queryDirectSlice(
+            SEARCH_APPLICATION_REVIEWS,
+            pageCriteria,
             criteria.page(),
             criteria.size(),
             this::toReviewSearchRow);
@@ -135,35 +191,31 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         row -> toSearchResult(row, speciesEndUseSorts.get(row.applicationNumber())));
   }
 
-  private SqlWhere buildSearchWhere(ApplicationReviewSearchCriteria criteria) {
-    SqlWhereBuilder where = newWhereBuilder();
+  private DirectSql buildSearchWhere(
+      ApplicationReviewSearchCriteria criteria, boolean includeOrderBy) {
+    DirectSqlBuilder where = newDirectSqlBuilder();
 
-    where.addLike("v.APPLICATION_NUMBER", criteria.applicationNumber());
-    where.addEquals("v.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
-    where.addDateGte("v.RECEIVED_DATE", criteria.receivedFromDate());
-    where.addDateLte("v.RECEIVED_DATE", criteria.receivedToDate());
-    where.addDateGte("v.ADVERTISING_DATE", criteria.listingFromDate());
-    where.addDateLte("v.ADVERTISING_DATE", criteria.listingToDate());
-    where.addRaw(" AND (v.EXPORT_APPLICATION_STATUS_CODE = 'NEW' OR v.EXPORT_APPLICATION_STATUS_CODE = 'PND')");
+    where.addNumberLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
+    where.addEquals("EEA.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
+    where.addDateGte("EEA.RECEIVED_DATE", criteria.receivedFromDate());
+    where.addDateLte("EEA.RECEIVED_DATE", criteria.receivedToDate());
+    where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
+    where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
+    where.addRaw(
+        " AND EEA.EXPORT_APPLICATION_STATUS_CODE IN ('NEW', 'PND')");
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
-      where.addInEqualsNumberOrNoResults("v.ORG_UNIT_NO", criteria.regionNumbers());
+      where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
     }
 
     String orderBy =
         sanitizedSort(
             criteria.sortField(),
-            mapOf(
-                "applicationNumber", "v.APPLICATION_NUMBER",
-                "volume", "v.EXEMPTION_APPLICATION_VOLUME",
-                "listingDate", "v.ADVERTISING_DATE",
-                "status", "v.EXPORT_APPLICATION_STATUS_CODE",
-                "regionCode", "v.REGION_CODE",
-                "region", "v.REGION_CODE"),
+            SEARCH_SORT_COLUMNS,
             "applicationNumber",
             "DESC",
             "applicationNumber");
 
-    return where.build(orderBy);
+    return where.build(includeOrderBy ? orderBy : "");
   }
 
   @Transactional

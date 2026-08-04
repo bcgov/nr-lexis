@@ -6,7 +6,6 @@ import static org.mockito.Mockito.mock;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
-import java.util.concurrent.Executor;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -26,10 +25,6 @@ class LexisReportServiceProfileTest {
               OracleLegacyJasperTableReportService.class,
               () -> mock(OracleLegacyJasperTableReportService.class))
           .withBean(PermitRpcRepository.class, () -> mock(PermitRpcRepository.class))
-          .withBean(
-              "oracleLegacyDynamicFetchExecutor",
-              Executor.class,
-              () -> mock(Executor.class))
           .withBean(
               LexisReportScheduleRepository.class,
               () -> mock(LexisReportScheduleRepository.class))

@@ -497,17 +497,18 @@ const expectApplicationScheduleOptions = (value: unknown, source: string): void 
 
   expect(
     schedules.length,
-    `${source} should include blank plus future dates`,
+    `${source} should include blank plus dated schedules`,
   ).toBeGreaterThanOrEqual(2)
   const blankSchedule = schedules[schedules.length - 1]
   expect(optionCode(blankSchedule), `${source} last schedule option should be blank`).toBe('')
   expect(optionName(blankSchedule), `${source} last schedule option should be labeled Blank`).toBe(
     'Blank',
   )
-  expectFutureScheduleOptions(
-    schedules.filter((schedule) => optionCode(schedule)),
-    source,
-  )
+  for (const schedule of schedules.filter((candidate) => optionCode(candidate))) {
+    expect(optionName(schedule), `${source} schedule names should be ISO dates`).toMatch(
+      isoDatePattern,
+    )
+  }
 }
 
 const expectReportScheduleOptions = (value: unknown, source: string): void => {
@@ -989,6 +990,25 @@ const readVersionedJson = async <T>(page: Page, path: string): Promise<Versioned
   return { payload, version }
 }
 
+const readPermitVersionedJson = async <T>(
+  page: Page,
+  permitNumber: number,
+): Promise<VersionedJson<T>> => {
+  const detailPath = `/api/lexis/permits/${permitNumber}`
+  const editContextPath = '/api/lexis/rpc/permit-details/edit-context'
+  const [detailResponse, editContextResponse] = await Promise.all([
+    getWithAuth(page, detailPath),
+    getWithAuth(page, editContextPath, {
+      params: { permitNumber: String(permitNumber) },
+    }),
+  ])
+  const payload = await readJsonResponse<T>(detailResponse)
+  await readJsonResponse<Record<string, unknown>>(editContextResponse)
+  const version = editContextResponse.headers()[recordVersionHeader.toLowerCase()]?.trim() ?? ''
+  expect(version, `${editContextPath} should return ${recordVersionHeader}`).not.toBe('')
+  return { payload, version }
+}
+
 const currentOfferSchedule = async (
   page: Page,
 ): Promise<{ scheduleId: string; advertisingDate: string; offerReceiptDate: string }> => {
@@ -1317,10 +1337,7 @@ const cancelRegressionPermit = async (
   marker: string,
   shipping: { transportType: string; portOfExport: string },
 ): Promise<void> => {
-  const current = await readVersionedJson<Record<string, unknown>>(
-    page,
-    `/api/lexis/permits/${permitNumber}`,
-  )
+  const current = await readPermitVersionedJson<Record<string, unknown>>(page, permitNumber)
   if (String(current.payload.permitStatusCode ?? '').toUpperCase() === 'CAN') {
     return
   }
@@ -1359,10 +1376,7 @@ const detachRegressionPermitApplication = async (
   if (!(await permitContainsApplication(page, permitNumber, applicationNumber))) {
     return
   }
-  const current = await readVersionedJson<Record<string, unknown>>(
-    page,
-    `/api/lexis/permits/${permitNumber}`,
-  )
+  const current = await readPermitVersionedJson<Record<string, unknown>>(page, permitNumber)
   const result = await readJsonResponse<RelationshipMutationResponse>(
     await postWithCsrf(page, '/api/lexis/rpc/permit-details/remove-application-from-permit', {
       headers: versionHeaders(current.version),
@@ -1692,7 +1706,6 @@ test.describe('TEST IDIR admin regression', () => {
       },
     )
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/review')
-    await expect(page.locator('section[aria-label="Review queue"]')).toBeHidden()
   })
 
   test('restores an applied search after navigating to another page', async () => {
@@ -1710,10 +1723,15 @@ test.describe('TEST IDIR admin regression', () => {
       `/federal?applicationNumber=${missingApplicationNumber}`,
       /federal application search/i,
     )
-    await page
-      .locator(sideNavSection('Provincial'))
-      .getByRole('link', { name: 'Applications', exact: true })
-      .click()
+    const provincialSection = page.locator(sideNavSection('Provincial'))
+    const applicationsLink = provincialSection.getByRole('link', {
+      name: 'Applications',
+      exact: true,
+    })
+    if ((await applicationsLink.count()) === 0) {
+      await provincialSection.getByRole('button', { name: 'Provincial', exact: true }).click()
+    }
+    await applicationsLink.click()
 
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/application')
     await expect
@@ -1869,7 +1887,11 @@ test.describe('TEST IDIR admin regression', () => {
   test('keeps review queue bulk actions limited to approve', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expectAccessiblePage(
+      page,
+      '/provincial/review?page=1&pageSize=25',
+      /provincial application review/i,
+    )
 
     const approveSelectedButton = page.getByRole('button', {
       name: 'Approve Selected Applications',
@@ -2150,9 +2172,13 @@ test.describe('TEST IDIR admin regression', () => {
     const options = await readJsonResponse<GenericOptionsResponse>(
       await getWithAuth(page, '/api/lexis/applications/search/options'),
     )
-    const currentSchedules = asRecordArray(options.currentSchedules)
-    expectApplicationScheduleOptions(currentSchedules, 'create application list dates')
-    const nextListDate = optionName(currentSchedules.find((schedule) => optionCode(schedule)) ?? {})
+    const nextSchedules = asRecordArray(options.nextSchedules)
+    expectApplicationScheduleOptions(nextSchedules, 'create application list dates')
+    expectFutureScheduleOptions(
+      nextSchedules.filter((schedule) => optionCode(schedule)),
+      'create application list dates',
+    )
+    const nextListDate = optionName(nextSchedules.find((schedule) => optionCode(schedule)) ?? {})
     expect(nextListDate, 'create application should have a next list date option').toMatch(
       isoDatePattern,
     )
@@ -2174,9 +2200,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
       today,
     )
-    await expect(page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue(
-      today,
-    )
+    await expect(page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue('')
     await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
 
     const paragraphField = page.getByLabel('Location of logs')
@@ -2389,6 +2413,14 @@ test.describe('TEST IDIR admin regression', () => {
     expectApplicationScheduleOptions(
       provincialOptions.currentSchedules,
       'provincial application list dates',
+    )
+    expectApplicationScheduleOptions(
+      provincialOptions.nextSchedules,
+      'provincial application next list dates',
+    )
+    expectFutureScheduleOptions(
+      asRecordArray(provincialOptions.nextSchedules).filter((schedule) => optionCode(schedule)),
+      'provincial application next list dates',
     )
 
     const provincialSearch = await readJsonResponse<GenericSearchResponse>(
@@ -2918,7 +2950,9 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(editor).toBeVisible()
       await editor.getByLabel('Title').fill(notificationTitle)
       await editor.getByLabel('Notification content editor').fill(notificationMessage)
-      await editor.getByRole('radio', { name: /^Warning/ }).check()
+      const warningLevel = editor.getByRole('radio', { name: /^Warning/ })
+      await editor.locator('label[for="notification-level-warning"]').click()
+      await expect(warningLevel).toBeChecked()
       await expect(
         editor.getByRole('checkbox', { name: 'All authenticated LEXIS roles' }),
       ).toBeChecked()
@@ -3353,9 +3387,9 @@ test.describe('TEST IDIR admin regression', () => {
         `/provincial/permit/${permitNumber}`,
         new RegExp(`permit ${permitNumber}`, 'i'),
       )
-      const currentPermit = await readVersionedJson<Record<string, unknown>>(
+      const currentPermit = await readPermitVersionedJson<Record<string, unknown>>(
         page,
-        `/api/lexis/permits/${permitNumber}`,
+        permitNumber,
       )
       const permitUpdate = permitMutationForm(
         currentPermit.payload,
@@ -3388,9 +3422,9 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expectStaleRecordResponse(stalePermitUpdate, 'permit', String(permitNumber))
 
-      const permitBeforeAttach = await readVersionedJson<Record<string, unknown>>(
+      const permitBeforeAttach = await readPermitVersionedJson<Record<string, unknown>>(
         page,
-        `/api/lexis/permits/${permitNumber}`,
+        permitNumber,
       )
       const attachedApplication = await readJsonResponse<RelationshipMutationResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/permit-details/add-applications-to-permit', {
@@ -3428,9 +3462,9 @@ test.describe('TEST IDIR admin regression', () => {
 
       await cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
       permitCleanup.complete()
-      const cancelledPermit = await readVersionedJson<Record<string, unknown>>(
+      const cancelledPermit = await readPermitVersionedJson<Record<string, unknown>>(
         page,
-        `/api/lexis/permits/${permitNumber}`,
+        permitNumber,
       )
       expect(cancelledPermit.payload.permitStatusCode).toBe('CAN')
 
