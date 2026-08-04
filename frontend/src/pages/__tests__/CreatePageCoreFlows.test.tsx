@@ -1392,6 +1392,7 @@ describe('Create Page Core Flows', () => {
     const statusSelect = screen.getByRole('combobox', { name: 'Exemption status' })
     expect(statusSelect).toHaveValue('New')
     expect(statusSelect).toBeDisabled()
+    expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toBeDisabled()
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -1428,6 +1429,7 @@ describe('Create Page Core Flows', () => {
 
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('Active')
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toBeDisabled()
+    expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toBeEnabled()
     expect(screen.getByLabelText('Exemption number')).toHaveAttribute('maxlength', '8')
     expect(
       screen.getByRole('combobox', { name: 'Application number (optional)' }),
