@@ -74,7 +74,7 @@ describe('FAM auth config', () => {
   it.each([
     ['dev', 'DEV-IDIR', 'DEV-BCEIDBUSINESS'],
     ['test', 'TEST-IDIR', 'TEST-BCEIDBUSINESS'],
-    ['prod', 'IDIR', 'BCEIDBUSINESS'],
+    ['prod', 'PROD-IDIR', 'PROD-BCEIDBUSINESS'],
   ])('maps %s to its deployed Cognito identity providers', async (zone, idir, businessBceid) => {
     window.config = {
       ...configuredRuntimeAuth,
