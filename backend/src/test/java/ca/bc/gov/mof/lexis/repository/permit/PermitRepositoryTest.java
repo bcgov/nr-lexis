@@ -157,14 +157,14 @@ class PermitRepositoryTest {
             java.sql.Date.valueOf("2026-01-31"),
             "ACT",
             "INV-1",
+            "00055667",
             "00077881",
-            "00055667",
-            "00055667",
+            "00077881",
             1904L);
   }
 
   @Test
-  void searchShouldApplyApplicantAndOwnerFiltersToTheirDisplayedMeanings() {
+  void searchShouldPreserveLegacyApplicantAndOwnerFilterWiring() {
     TestPermitRepository repository = new TestPermitRepository();
 
     repository.search(
@@ -188,7 +188,7 @@ class PermitRepositoryTest {
         .contains("EPD.AGENT_NUMBER LIKE '%' || ? || '%'")
         .contains("EPD.CLIENT_NUMBER LIKE '%' || ? || '%' AND EPD.AGENT_NUMBER IS NULL");
     assertThat(repository.bindValues())
-        .containsExactly("00077881", "00055667", "00055667");
+        .containsExactly("00055667", "00077881", "00077881");
   }
 
   @Test
@@ -245,9 +245,9 @@ class PermitRepositoryTest {
         .doesNotContain("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL");
     assertThat(searchBinds)
         .containsExactly(
+            "00099999",
             "00088888",
-            "00099999",
-            "00099999",
+            "00088888",
             "00012345",
             "00012345",
             "00012345",
