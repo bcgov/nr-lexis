@@ -671,6 +671,49 @@ describe('Create Page Core Flows', () => {
     })
   })
 
+  it('submits a ministerial applicant type without agent fields', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=M&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Clients')
+    expect(screen.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Ministerial')
+    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
+
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        applicantTypeCode: 'M',
+        agentClientNumber: '',
+        agentClientLocationCode: '',
+        agentContactName: '',
+      }),
+    )
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/904', {
+      state: {
+        applicationCreationNotice: {
+          applicationNumber: '904',
+        },
+      },
+    })
+  })
+
   it('debounces client lookups while an owner client number is typed', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/create']}>

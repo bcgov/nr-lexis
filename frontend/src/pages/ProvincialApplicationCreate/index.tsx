@@ -917,9 +917,11 @@ const ProvincialApplicationCreatePage = () => {
       applicantTypeCode: firstValidationError(
         () => requiredFieldError(form.applicantTypeCode, 'Applicant type'),
         () =>
-          form.applicantTypeCode === 'O' || form.applicantTypeCode === 'A'
+          form.applicantTypeCode === 'O' ||
+          form.applicantTypeCode === 'M' ||
+          form.applicantTypeCode === 'A'
             ? null
-            : 'Applicant type must be Owner or Agent.',
+            : 'Applicant type must be Owner, Ministerial, or Agent.',
       ),
       productTypeCode: firstValidationError(
         () => requiredFieldError(form.productTypeCode, 'Product type'),
@@ -1646,6 +1648,7 @@ const ProvincialApplicationCreatePage = () => {
                       placeholder="Select applicant type"
                       options={[
                         { value: 'O', label: 'Owner' },
+                        { value: 'M', label: 'Ministerial' },
                         { value: 'A', label: 'Agent' },
                       ]}
                       invalid={!!fieldError('applicantTypeCode')}
