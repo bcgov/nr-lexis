@@ -1318,7 +1318,7 @@ const permitMutationForm = (
   destinationCompanyName: 'LEXIS E2E REGRESSION',
   destinationCountry: 'CA',
   transportType: shipping.transportType,
-  transportName: marker,
+  transportName: marker.slice(0, 26),
   estimatedShippingDate: formatBusinessIsoDate(),
   portOfExport: shipping.portOfExport,
   otherPortOfExport: '',
@@ -1728,7 +1728,7 @@ test.describe('TEST IDIR admin regression', () => {
       name: 'Applications',
       exact: true,
     })
-    if ((await applicationsLink.count()) === 0) {
+    if (!(await applicationsLink.isVisible())) {
       await provincialSection.getByRole('button', { name: 'Provincial', exact: true }).click()
     }
     await applicationsLink.click()
@@ -2953,9 +2953,7 @@ test.describe('TEST IDIR admin regression', () => {
       const warningLevel = editor.getByRole('radio', { name: /^Warning/ })
       await editor.locator('label[for="notification-level-warning"]').click()
       await expect(warningLevel).toBeChecked()
-      await expect(
-        editor.getByRole('checkbox', { name: 'All authenticated LEXIS roles' }),
-      ).toBeChecked()
+      await expect(editor.getByRole('checkbox', { name: 'All roles' })).toBeChecked()
 
       const createResponsePromise = page.waitForResponse(
         (response) =>
@@ -3381,6 +3379,9 @@ test.describe('TEST IDIR admin regression', () => {
       const permitCleanup = cleanup.defer('cancel provincial permit', () =>
         cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
       )
+      const detachCleanup = cleanup.defer('detach lifecycle application from permit', () =>
+        detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber),
+      )
 
       await expectAccessiblePage(
         page,
@@ -3422,6 +3423,25 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expectStaleRecordResponse(stalePermitUpdate, 'permit', String(permitNumber))
 
+      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
+        true,
+      )
+      const applicationAfterPermitCreation = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(applicationAfterPermitCreation.payload.applicationStatusCode).toBe('PMT')
+
+      await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
+      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
+        false,
+      )
+      const applicationBeforeAttach = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(applicationBeforeAttach.payload.applicationStatusCode).toBe('EXE')
+
       const permitBeforeAttach = await readPermitVersionedJson<Record<string, unknown>>(
         page,
         permitNumber,
@@ -3437,9 +3457,6 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(attachedApplication.success).toBe(true)
       expect(asStringArray(attachedApplication.errors)).toEqual([])
-      const detachCleanup = cleanup.defer('detach lifecycle application from permit', () =>
-        detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber),
-      )
       expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
         true,
       )
