@@ -59,6 +59,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           EEA.EXPORT_SCHEDULE_ID,
           EEA.AGENT_CLIENT_NUMBER,
           EEA.OWNER_CLIENT_NUMBER,
+          CASE
+            WHEN EEA.EXPORT_APPLICANT_TYPE_CODE = 'O' THEN EEA.OWNER_CLIENT_NUMBER
+            ELSE EEA.AGENT_CLIENT_NUMBER
+          END AS APPLICANT_CLIENT_NUMBER,
           EEA.EXEMPTION_NUMBER,
           EEA.EXPORT_APPLICATION_STATUS_CODE,
           EEA.EXPORT_APPLICANT_TYPE_CODE,
@@ -126,7 +130,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       Map.ofEntries(
           Map.entry("applicationNumber", "v.APPLICATION_NUMBER"),
           Map.entry("application", "v.APPLICATION_NUMBER"),
-          Map.entry("applicantClientNumber", "v.OWNER_CLIENT_NUMBER"),
+          Map.entry("applicantClientNumber", "v.APPLICANT_CLIENT_NUMBER"),
           Map.entry("displayOwnerClientNumber", "v.OWNER_CLIENT_NUMBER"),
           Map.entry("ownerClientNumber", "v.OWNER_CLIENT_NUMBER"),
           Map.entry("exemptionNumber", "v.EXEMPTION_NUMBER"),

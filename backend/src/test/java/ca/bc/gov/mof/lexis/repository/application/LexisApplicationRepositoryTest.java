@@ -204,7 +204,7 @@ class LexisApplicationRepositoryTest {
       textBlock = """
           applicationNumber DESC|ORDER BY v.APPLICATION_NUMBER DESC
           application DESC|ORDER BY v.APPLICATION_NUMBER DESC
-          applicantClientNumber ASC|ORDER BY v.OWNER_CLIENT_NUMBER ASC, v.APPLICATION_NUMBER ASC
+          applicantClientNumber ASC|ORDER BY v.APPLICANT_CLIENT_NUMBER ASC, v.APPLICATION_NUMBER ASC
           displayOwnerClientNumber DESC|ORDER BY v.OWNER_CLIENT_NUMBER DESC, v.APPLICATION_NUMBER ASC
           ownerClientNumber ASC|ORDER BY v.OWNER_CLIENT_NUMBER ASC, v.APPLICATION_NUMBER ASC
           exemptionNumber DESC|ORDER BY v.EXEMPTION_NUMBER DESC, v.APPLICATION_NUMBER ASC
