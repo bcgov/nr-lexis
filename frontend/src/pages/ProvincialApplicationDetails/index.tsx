@@ -1041,7 +1041,7 @@ const ProvincialApplicationDetailsPage = () => {
   const needsApplicationOptions =
     Boolean(summaryForm) || canEditSummary || canEditPackages || canAddPackages || canAddScales
   const canUpdatePackageNumber = canEditPackages && !!detail?.canUpdatePackageNumber
-  const canManageRemarks = canViewRemarks && !detail?.readOnly && !detail?.locked
+  const canManageRemarks = canViewRemarks && canEditSummary
   const isProvincialSubmitter = hasProvincialSubmitterRole(capabilities?.roles)
   const requiresApplicationAccuracyAcknowledgement =
     detail?.industryUser === true || isProvincialSubmitter
