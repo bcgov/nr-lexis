@@ -370,8 +370,7 @@ public class ApplicationDetailsRpcController {
 
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     requireApplicationAccess(parsedApplicationNumber, authentication);
-    requireFederalRemarkEditIfApplicable(
-        service, parsedApplicationNumber, authentication);
+    requireRemarkEditPolicy(service, parsedApplicationNumber, authentication);
     Long parsedRemarkId = parsePositiveLong(remarkId);
     if (parsedRemarkId != null) {
       requireRemarkAccess(service, parsedRemarkId, parsedApplicationNumber, authentication);
@@ -389,8 +388,7 @@ public class ApplicationDetailsRpcController {
         parsedApplicationNumber,
         () -> {
           requireApplicationAccess(parsedApplicationNumber, authentication);
-          requireFederalRemarkEditIfApplicable(
-              service, parsedApplicationNumber, authentication);
+          requireRemarkEditPolicy(service, parsedApplicationNumber, authentication);
           if (parsedRemarkId != null) {
             requireRemarkAccess(
                 service, parsedRemarkId, parsedApplicationNumber, authentication);
@@ -1607,7 +1605,7 @@ public class ApplicationDetailsRpcController {
     provincialAuthorizationService.requireApplication(authentication, actualApplicationNumber);
   }
 
-  private void requireFederalRemarkEditIfApplicable(
+  private void requireRemarkEditPolicy(
       ApplicationDetailsRpcService service,
       Long applicationNumber,
       Authentication authentication) {
@@ -1622,7 +1620,9 @@ public class ApplicationDetailsRpcController {
           authentication,
           context.applicationStatusCode(),
           context.advertisingDate());
+      return;
     }
+    applicationEditPolicyService.requireSummaryEdit(authentication, service, applicationNumber);
   }
 
   private void requireRemarkAccess(

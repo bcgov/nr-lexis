@@ -591,6 +591,40 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void persistRemarkShouldApplyProvincialSummaryEditPolicyBeforeLocking() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationEditContext(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.ApplicationEditContext(
+                    1000456L,
+                    "PMT",
+                    "P",
+                    "H",
+                    12L,
+                    LocalDate.of(2026, 2, 26),
+                    false,
+                    false,
+                    true,
+                    null,
+                    false)));
+    doThrow(new AccessDeniedException("permitted application is read-only"))
+        .when(applicationEditPolicyService)
+        .requireSummaryEdit(authentication, service, 1000456L);
+
+    assertThatThrownBy(
+            () ->
+                controller.persistRemark(
+                    "new", "1000456", "Long remark", authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("read-only");
+
+    verify(editLockService, never()).requireEditable(any(), any(), any());
+    verify(service, never()).persistRemark(any(), any(), any(), any());
+  }
+
+  @Test
   void persistRemarkShouldRejectWithoutApplicationRemarksAction() {
     TestingAuthenticationToken authentication = unauthorized("/applicationRemarks");
 

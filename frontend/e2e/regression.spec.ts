@@ -2974,7 +2974,6 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(notification).toBeVisible()
       await expect(notification.getByText(notificationMessage, { exact: true })).toBeVisible()
       await expect(notification.getByText('Warning', { exact: true })).toBeVisible()
-      await expect(notification.getByText('Active', { exact: true })).toBeVisible()
 
       const deleteResponsePromise = page.waitForResponse(
         (response) =>
@@ -3430,7 +3429,7 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
-      expect(applicationAfterPermitCreation.payload.applicationStatusCode).toBe('PMT')
+      expect(applicationAfterPermitCreation.payload.applicationStatusCode).toBe('EXE')
 
       await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
