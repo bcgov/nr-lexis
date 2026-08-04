@@ -403,6 +403,7 @@ class ExemptionControllerTest {
     assertThat(response.getBody().exemptionNumber()).isEqualTo(dto.exemptionNumber());
     assertThat(response.getBody().permitNumbers()).isEmpty();
     assertThat(response.getBody().remarks()).isEqualTo(dto.remarks());
+    assertThat(response.getBody().author()).isEqualTo(dto.author());
     verify(service).findByExemptionNumber("EX-205");
   }
 
@@ -439,7 +440,8 @@ class ExemptionControllerTest {
         "Pending final confirmation",
         false,
         List.of("P-88009"),
-        List.of(new ExemptionDetailDto.ExemptionRemarkDto("Pending", "Awaiting documentation")));
+        List.of(new ExemptionDetailDto.ExemptionRemarkDto("Pending", "Awaiting documentation")),
+        "IDIR\\EDITOR");
   }
 
   private ResponseEntity<ExemptionSearchResponseDto> searchDefault() {

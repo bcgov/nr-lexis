@@ -1108,6 +1108,55 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('loads independent federal detail sections concurrently', async () => {
+    let resolveScales: (() => void) | undefined
+    let resolveDocuments: (() => void) | undefined
+    let resolveRemarks: (() => void) | undefined
+
+    mockedFetchApplicationPackageScales.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveScales = () => resolve([])
+        }),
+    )
+    mockedFetchFederalApplicationDocuments.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDocuments = () => resolve({ rows: [], source: 'api' })
+        }),
+    )
+    mockedFetchFederalApplicationRemarks.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRemarks = () => resolve([])
+        }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await waitFor(() => {
+      expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
+      expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledWith('888')
+      expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
+    })
+    expect(screen.getByText('Refreshing federal application detail...')).toBeInTheDocument()
+
+    resolveScales?.()
+    resolveDocuments?.()
+    resolveRemarks?.()
+
+    await waitFor(() => {
+      expect(screen.queryByText('Refreshing federal application detail...')).not.toBeInTheDocument()
+    })
+  })
+
   it('restores the federal application tab after a conflict refresh', async () => {
     render(
       <MemoryRouter
@@ -1159,6 +1208,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Application')
     expect(await screen.findByText('FED-888')).toBeInTheDocument()
+
+    await selectDetailTab('Shipping Details')
+    expect(
+      await screen.findByRole('heading', { name: 'Shipping details', level: 2 }),
+    ).toBeInTheDocument()
   })
 
   it('shows the federal lock warning and suppresses every mutation and document control', async () => {

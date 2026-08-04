@@ -129,7 +129,8 @@ public class ExemptionOracleService implements ExemptionService {
         detail.otherConditions(),
         detail.blanketOic(),
         detail.permitNumbers(),
-        detail.remarks());
+        detail.remarks(),
+        detail.author());
   }
 
   private ExemptionSearchCriteria normalizeCriteria(ExemptionSearchCriteria input) {

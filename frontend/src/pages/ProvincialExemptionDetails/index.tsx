@@ -1791,6 +1791,7 @@ const ProvincialExemptionDetailsPage = () => {
                                   detail.exemptionTypeDescription ?? detail.exemptionTypeCode,
                                 ),
                               },
+                              { label: 'Author', value: displayValue(detail.author) },
                               {
                                 label: 'Owner client number',
                                 value: displayValue(detail.ownerClientNumber),

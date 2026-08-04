@@ -55,6 +55,7 @@ export type ProvincialExemptionDetail = {
   exemptionTypeDescription: string | null
   exemptionStatusCode: string | null
   exemptionStatusDescription: string | null
+  author?: string | null
   ownerClientNumber: string | null
   agentClientNumber: string | null
   applicationNumber: number | null
@@ -99,6 +100,7 @@ export type ProvincialOfferDetail = {
   speciesGradeCode: string | null
   offerVolume: number | null
   region: string | null
+  author?: string | null
   canEditScheduleDates: boolean
   canEditOfferRemarks: boolean
   canEditOfferDetails: boolean
@@ -115,6 +117,7 @@ export type ProvincialPermitDetail = {
   exemptionNumber: string | null
   permitStatusCode: string | null
   permitStatusDescription: string | null
+  author?: string | null
   applicantClientNumber: string | null
   agentClientLocationCode: string | null
   ownerClientNumber: string | null

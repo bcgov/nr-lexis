@@ -48,7 +48,12 @@ class LexisAuthorizationMatrixParityTest {
       REPORT_ACTIONS.stream().filter(action -> !"/permitReport".equals(action)).toList();
 
   private static final List<String> APPLICATION_APPROVER_REPORT_ACTIONS =
-      REPORT_ACTIONS.stream().filter(action -> !"/applicationReport".equals(action)).toList();
+      REPORT_ACTIONS.stream()
+          .filter(
+              action ->
+                  !"/applicationReport".equals(action)
+                      && !"/approvedExemptionReport".equals(action))
+          .toList();
 
   private static final List<String> FEDERAL_READ_ACTIONS =
       List.of(
@@ -259,6 +264,7 @@ class LexisAuthorizationMatrixParityTest {
         .doesNotContain(
             "/summary",
             "/applicationReport",
+            "/approvedExemptionReport",
             "/lexisAgentAdmin",
             "/lexisFILAdmin",
             "/lexisPolicyAdmin");

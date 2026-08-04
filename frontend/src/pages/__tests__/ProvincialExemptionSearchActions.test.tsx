@@ -56,7 +56,7 @@ const exemptionSearchResponse = (
 })
 
 const renderPage = (
-  path = '/provincial/exemption?page=1&pageSize=10&sortField=exemptionNumber&sortDirection=desc',
+  path = '/provincial/exemption?region=11&page=1&pageSize=10&sortField=exemptionNumber&sortDirection=desc',
 ) => {
   render(
     <MemoryRouter initialEntries={[path]}>
@@ -686,7 +686,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
   })
 
-  it('defaults exemption approver filters without searching or using the session region', async () => {
+  it('defaults approver filters and all visible regions without using the session region', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -706,6 +706,8 @@ describe('Provincial Exemption Search Actions', () => {
     expect(
       screen.getByRole('region', { name: 'Search results table', hidden: true }),
     ).not.toBeVisible()
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -714,7 +716,7 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({
             exemptionStatusCode: 'NEW',
             exemptionTypeCode: 'M',
-            region: [],
+            region: ['11'],
           }),
         }),
         expect.objectContaining({ knownTotal: expect.any(Number) }),
@@ -799,7 +801,9 @@ describe('Provincial Exemption Search Actions', () => {
   it('restores approval date filters from the URL and clears them', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
-    renderPage('/provincial/exemption?approvalFromDate=2026-02-01&approvalToDate=2026-02-28')
+    renderPage(
+      '/provincial/exemption?approvalFromDate=2026-02-01&approvalToDate=2026-02-28&region=11',
+    )
     await screen.findByText('EX-1001')
 
     expect(screen.getByLabelText('Approval from date')).toHaveValue('2026-02-01')
@@ -824,6 +828,7 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({
             approvalFromDate: '',
             approvalToDate: '',
+            region: ['11'],
           }),
         }),
         expect.any(Object),

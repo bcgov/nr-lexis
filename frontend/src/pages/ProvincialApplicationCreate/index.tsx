@@ -218,7 +218,7 @@ const buildInitialFormFromQuery = (
       INITIAL_FORM.applicationTermDays,
     applicationTermMonths: query.get('applicationTermMonths') ?? query.get('termMonths') ?? '',
     applicationTermYears: query.get('applicationTermYears') ?? query.get('termYears') ?? '',
-    receivedDate: query.get('receivedDate') ?? today,
+    receivedDate: query.get('receivedDate') ?? INITIAL_FORM.receivedDate,
     exportScheduleId: query.get('exportScheduleId') ?? query.get('legacyExportScheduleId') ?? '',
     listingDate: query.get('listingDate') ?? '',
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
@@ -354,13 +354,14 @@ const ProvincialApplicationCreatePage = () => {
     const loadOptions = async () => {
       try {
         const options = await fetchProvincialApplicationOptions()
+        const scheduleOptions = options.nextSchedules ?? options.currentSchedules
         setProductTypes(options.productTypes)
         setGrowthTypes(options.growthTypes)
         setExemptionReasons(options.exemptionReasons)
         setRegions(options.regions)
-        setCurrentSchedules(options.currentSchedules)
+        setCurrentSchedules(scheduleOptions)
         setForm((current) => {
-          const withScheduleDefaults = applyScheduleDefaults(current, options.currentSchedules)
+          const withScheduleDefaults = applyScheduleDefaults(current, scheduleOptions)
           if (!provincialSubmitterIdentityLocked) {
             return withScheduleDefaults
           }

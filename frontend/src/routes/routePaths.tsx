@@ -194,6 +194,8 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    // INTENTIONAL_LEGACY_DIVERGENCE(NOTIFICATION_MODULE_ADDITION):
+    // Modern LEXIS provides role-targeted operational notices with no legacy screen equivalent.
     path: '/notifications',
     id: 'Notifications',
     element: (

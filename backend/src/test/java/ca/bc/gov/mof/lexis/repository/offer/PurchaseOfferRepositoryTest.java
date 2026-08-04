@@ -385,6 +385,7 @@ class PurchaseOfferRepositoryTest {
             detail -> {
               assertThat(detail.offerVolume()).isNull();
               assertThat(detail.region()).isEqualTo("Cariboo Natural Resource Region");
+              assertThat(detail.author()).isEqualTo("IDIR\\EDITOR");
             });
   }
 
@@ -648,6 +649,8 @@ class PurchaseOfferRepositoryTest {
         when(resultSet.getDouble("PURCHASE_OFFER_AMOUNT")).thenReturn(12500.25d);
         when(resultSet.getDouble("EXPORT_PURCHASE_VOLUME")).thenReturn(0.0d);
         when(resultSet.getString("REGION")).thenReturn("Cariboo Natural Resource Region");
+        when(resultSet.getString("ENTRY_USERID")).thenReturn("IDIR\\CREATOR");
+        when(resultSet.getString("UPDATE_USERID")).thenReturn("IDIR\\EDITOR");
         when(resultSet.getString("ORG_UNIT_CODE"))
             .thenThrow(new SQLException("Column is not present in the legacy detail cursor"));
         when(resultSet.wasNull()).thenReturn(false, false, false, true);

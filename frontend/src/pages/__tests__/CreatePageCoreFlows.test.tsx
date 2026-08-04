@@ -776,8 +776,13 @@ describe('Create Page Core Flows', () => {
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
       currentSchedules: [
-        { value: '1001', label: '2026-07-01' },
-        { value: '1002', label: '2026-07-15' },
+        { value: '1001', label: '2026-07-29' },
+        { value: '1002', label: '2026-08-05' },
+        { value: '', label: 'Blank' },
+      ],
+      nextSchedules: [
+        { value: '1002', label: '2026-08-05' },
+        { value: '1003', label: '2026-08-12' },
         { value: '', label: 'Blank' },
       ],
     } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
@@ -802,8 +807,8 @@ describe('Create Page Core Flows', () => {
         today,
       )
       expect(screen.getByRole('textbox', { name: 'Application term days' })).toHaveValue('180')
-      expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue(today)
-      expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-07-01')
+      expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue('')
+      expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-08-05')
     })
 
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()

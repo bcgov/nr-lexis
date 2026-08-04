@@ -23,7 +23,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -195,6 +195,8 @@ const PERMIT_DETAIL_TABS = [
   { id: 'fees', label: 'Fees' },
   { id: 'gbms', label: 'GBMS' },
   { id: 'documents', label: 'Documents' },
+  // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
+  // Modern permit detail surfaces invoice rows and invoice document actions together.
   { id: 'invoices', label: 'Invoices' },
 ] as const
 
@@ -2830,6 +2832,8 @@ const ProvincialPermitDetailsPage = () => {
                     Email review request
                   </Button>
                 )}
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_APPROVAL_EMAIL_RESEND):
+                    Modern permit detail supports previewing and resending the approval email. */}
                 {canSendPermitApproval && (
                   <Button
                     kind="secondary"
@@ -3130,7 +3134,15 @@ const ProvincialPermitDetailsPage = () => {
                             },
                             {
                               label: 'Exemption number',
-                              value: displayValue(detail.exemptionNumber),
+                              value: detail.exemptionNumber ? (
+                                <Link
+                                  to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                                >
+                                  {detail.exemptionNumber}
+                                </Link>
+                              ) : (
+                                displayValue(detail.exemptionNumber)
+                              ),
                             },
                             {
                               label: 'Exemption type',
@@ -3147,6 +3159,7 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                               ),
                             },
+                            { label: 'Author', value: displayValue(detail.author) },
                             { label: 'Submit date', value: displayValue(detail.applicationDate) },
                             { label: 'Issue date', value: displayValue(detail.issueDate) },
                             { label: 'Expiry date', value: displayValue(detail.expiryDate) },
@@ -3325,7 +3338,13 @@ const ProvincialPermitDetailsPage = () => {
                                   <TableBody>
                                     {associatedPermitApplications.map((applicationNumber) => (
                                       <TableRow key={applicationNumber}>
-                                        <TableCell>{applicationNumber}</TableCell>
+                                        <TableCell>
+                                          <Link
+                                            to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
+                                          >
+                                            {applicationNumber}
+                                          </Link>
+                                        </TableCell>
                                         {canEditPermitApplications && (
                                           <TableCell>
                                             <Button

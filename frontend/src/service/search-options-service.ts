@@ -135,6 +135,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
   growthTypes: SearchOption[]
   regions: SearchOption[]
   currentSchedules: SearchOption[]
+  nextSchedules?: SearchOption[]
 }> => {
   const data = await fetchOptions('/lexis/applications/search/options', [
     { name: 'exemptionTypes' },
@@ -154,6 +155,9 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
     growthTypes: parseOptions(data.growthTypes),
     regions: parseRegionOptions(data.regions),
     currentSchedules: parseOptions(data.currentSchedules, true),
+    nextSchedules: Array.isArray(data.nextSchedules)
+      ? parseOptions(data.nextSchedules, true)
+      : undefined,
   }
 }
 

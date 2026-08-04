@@ -146,7 +146,6 @@ lexis:
         - "/speciesGradeReport"
         - "/feeReport"
         - "/tenureReport"
-        - "/approvedExemptionReport"
         - "mofrListing"
         - "approveExemption"
         - "createApplication"
