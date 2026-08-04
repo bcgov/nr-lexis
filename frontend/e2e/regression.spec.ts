@@ -1728,9 +1728,22 @@ test.describe('TEST IDIR admin regression', () => {
       name: 'Applications',
       exact: true,
     })
-    if (!(await applicationsLink.isVisible())) {
-      await provincialSection.getByRole('button', { name: 'Provincial', exact: true }).click()
+    const expandSideNavigation = page.getByRole('button', {
+      name: 'Expand side navigation',
+      exact: true,
+    })
+    if (await expandSideNavigation.isVisible()) {
+      await expandSideNavigation.click()
     }
+    const provincialSectionToggle = provincialSection.getByRole('button', {
+      name: 'Provincial',
+      exact: true,
+    })
+    if ((await provincialSectionToggle.getAttribute('aria-expanded')) === 'false') {
+      await provincialSectionToggle.click()
+    }
+    await expect(provincialSectionToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(applicationsLink).toBeVisible()
     await applicationsLink.click()
 
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/application')
