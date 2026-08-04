@@ -62,6 +62,7 @@ describe('shipping-reference-service', () => {
     expect(shippingReferenceLabel([{ code: 'US', name: 'United States' }], 'us')).toBe(
       'United States (US)',
     )
+    expect(shippingReferenceLabel([{ code: 'AD', name: 'Andorra' }], 'AD')).toBe('Andorra (AD)')
     expect(shippingReferenceLabel([], 'ZZ')).toBe('ZZ')
   })
 })

@@ -32,6 +32,8 @@ const normalizeOptions = (
   })
 }
 
+// INTENTIONAL_LEGACY_DIVERGENCE(COMPLETE_SHIPPING_COUNTRY_OPTIONS):
+// Preserve the complete authoritative country list so valid persisted codes never render blank.
 export const fetchShippingReferenceOptions = async (): Promise<ShippingReferenceOptions> => {
   const payload = await apiService.getCachedData<ShippingReferenceOptions>(
     '/lexis/shipping-reference-options',
