@@ -414,7 +414,7 @@ function Layout({ children }: LayoutProps) {
 
   const visibleNavigationSections = useMemo(() => {
     const canShowLink = (link: NavigationLink): boolean => {
-      if (!isProdRtmOnlyPathAllowed(link.to)) {
+      if (!isProdRtmOnlyPathAllowed(link.to, capabilities.roles)) {
         return false
       }
 

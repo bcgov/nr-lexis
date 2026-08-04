@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.security;
 
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -122,7 +125,67 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
     mockMvc
         .perform(get("/api/lexis/applications/search").with(jwt().authorities(admin)))
         .andExpect(status().isForbidden());
+  }
 
+  @Test
+  void prodRtmOnlyModeShouldPreserveNormalReadOnlyAccess() throws Exception {
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities").with(jwt().authorities(readOnly)))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.grantedActions")
+                .value(
+                    hasItems(
+                        "/applicationSearch",
+                        "/applicationDetails",
+                        "/exemptionSearch",
+                        "/permitDetails",
+                        "/federalApplicationSearch",
+                        "viewFederalApplication")))
+        .andExpect(jsonPath("$.grantedActions").value(not(hasItem("/lexisAgentAdmin"))));
+
+    mockMvc
+        .perform(get("/api/lexis/applications/search").with(jwt().authorities(readOnly)))
+        .andExpect(status().is2xxSuccessful());
+    mockMvc
+        .perform(
+            get("/api/lexis/rpc/application-details/species-codes")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().is2xxSuccessful());
+    mockMvc
+        .perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "getApplications")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "addExemption")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void prodRtmOnlyModeShouldRejectOtherRolesAndKeepAdminPrecedence() throws Exception {
+    SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+    SimpleGrantedAuthority approver = new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER");
+
+    mockMvc
+        .perform(get("/api/lexis/applications/search").with(jwt().authorities(approver)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            get("/api/lexis/applications/search").with(jwt().authorities(admin, readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/rtm/emslogamv").with(jwt().authorities(admin, readOnly)))
+        .andExpect(status().isOk());
   }
 
   @Test

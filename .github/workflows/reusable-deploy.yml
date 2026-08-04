@@ -100,7 +100,7 @@ on:
         description: Oracle keystore passphrase
         required: true
       lexis_prod_rtm_only:
-        description: Enables PROD RTM-only feature restriction when set to true
+        description: Restricts admins to RTM AMV, preserves read-only users, and disables expiry
         required: false
       keycloak_sa_client_id:
         description: Keycloak service-account client id used to provision LEXIS clients/scopes
@@ -165,7 +165,7 @@ jobs:
           DATABASE_PASSWORD: ${{ secrets.database_password }}
           KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
           LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
-          LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}
+          LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}
           LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}
           LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}
           LEXIS_EXPIRY_LOCK_AT_MOST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_MOST_FOR || 'PT6H' }}

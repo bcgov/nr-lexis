@@ -245,7 +245,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
   })
 
-  it('routes non-admin users to unauthorized when PROD RTM-only mode is enabled', async () => {
+  it('preserves normal read-only routing and actions when PROD RTM-only mode is enabled', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockSessionCapabilities({
       authenticated: true,
@@ -260,8 +260,26 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
+  })
+
+  it('keeps other non-admin roles unauthorized when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockSessionCapabilities({
+      authenticated: true,
+      principal: 'idir\\approver',
+      roles: ['LEXIS_APPLICATION_APPROVER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationSearch'],
+    })
+
+    renderProbe(['/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
@@ -283,6 +301,25 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
+  })
+
+  it('keeps RTM-only admin precedence when read-only is also present during rollout', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockSessionCapabilities({
+      authenticated: true,
+      principal: 'idir\\admin',
+      roles: ['LEXIS_ADMIN', 'LEXIS_READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/lexisAgentAdmin', '/applicationSearch'],
+    })
+
+    renderProbe(['/lexisAgentAdmin', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin/rtm/emslogamv')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
   it('does not use legacyPath for default route routing anymore', async () => {

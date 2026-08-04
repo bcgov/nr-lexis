@@ -114,7 +114,7 @@ function RouteActionGuard({
 }: RouteGuardProps) {
   const { capabilities, canPerform } = useAuth()
 
-  if (!isProdRtmOnlyPathAllowed(path)) {
+  if (!isProdRtmOnlyPathAllowed(path, capabilities.roles)) {
     return <Navigate to="/unauthorized" replace />
   }
 

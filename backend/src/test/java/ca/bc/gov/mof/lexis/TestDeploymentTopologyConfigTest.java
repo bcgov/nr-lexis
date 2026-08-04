@@ -140,7 +140,9 @@ class TestDeploymentTopologyConfigTest {
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
-        .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
+        .contains(
+            "LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled"
+                + " && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}")
         .contains("LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}")
         .contains("LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}")
         .contains(
@@ -387,7 +389,9 @@ class TestDeploymentTopologyConfigTest {
         .contains("DATABASE_PASSWORD: ${{ secrets.database_password }}")
         .contains("KEYSTORE_SECRET: ${{ secrets.keystore_secret }}")
         .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}")
-        .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
+        .contains(
+            "LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled"
+                + " && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")

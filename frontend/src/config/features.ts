@@ -1,4 +1,5 @@
 import { env } from '@/env'
+import { hasRole } from '@/context/auth/role-utils'
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'y', 'on'])
 
@@ -23,10 +24,17 @@ export const isProdRtmOnlyMode = (): boolean => {
   return isEnabledConfig(env.VITE_LEXIS_PROD_RTM_ONLY)
 }
 
-export const isProdRtmOnlyPathAllowed = (path: string): boolean => {
+export const isProdRtmOnlyPathAllowed = (
+  path: string,
+  roles: string[] | null | undefined,
+): boolean => {
   if (!isProdRtmOnlyMode()) {
     return true
   }
 
-  return PROD_RTM_ONLY_ALLOWED_PATHS.has(path)
+  if (PROD_RTM_ONLY_ALLOWED_PATHS.has(path)) {
+    return true
+  }
+
+  return hasRole(roles, 'READ_ONLY') && !hasRole(roles, 'ADMIN')
 }
