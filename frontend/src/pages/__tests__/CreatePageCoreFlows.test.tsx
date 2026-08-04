@@ -1919,7 +1919,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByLabelText('Offer withdrawal date')).toHaveAttribute('readonly')
     expect(screen.getByLabelText('Offer withdrawal reason')).toHaveValue('')
     expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Offering client number')).not.toHaveAttribute('readonly')
+    expect(screen.queryByLabelText('Offering client number')).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeInTheDocument()
     expect(screen.getByLabelText('Offer remarks')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Company'), 'Example Lumber')
@@ -1941,7 +1941,7 @@ describe('Create Page Core Flows', () => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith({
         applicationNumber: '2001',
         packageNumber: 'PKG-9',
-        offeringClientNumber: '00099999',
+        offeringClientNumber: '',
         companyName: 'Example Lumber',
         contactName: 'Sample Contact',
         offerVolume: '99.9',
