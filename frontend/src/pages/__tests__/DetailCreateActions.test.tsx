@@ -260,7 +260,9 @@ describe('Detail Quick Action Smoke', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) =>
-          defaultCanPerform(action) || action === '/applicationRemarks',
+          defaultCanPerform(action) ||
+          action === 'createApplication' ||
+          action === '/applicationRemarks',
       }),
     )
     mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
